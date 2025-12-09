@@ -278,6 +278,7 @@ export default function WorkoutPage() {
 
   const handleAddExercise = async (exercise: AvailableExercise) => {
     setIsAddingExercise(true);
+    setError(null);
     
     try {
       const supabase = createUntypedClient();
@@ -306,6 +307,8 @@ export default function WorkoutPage() {
 
       // Create new exercise block
       const newOrder = blocks.length + 1;
+      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder });
+      
       const { data: newBlock, error: blockError } = await supabase
         .from('exercise_blocks')
         .insert({
@@ -323,14 +326,26 @@ export default function WorkoutPage() {
         .select()
         .single();
 
-      if (blockError || !newBlock) throw blockError;
+      console.log('Insert result:', { newBlock, blockError });
+
+      if (blockError) {
+        throw new Error(`Failed to create exercise block: ${blockError.message}`);
+      }
+      
+      if (!newBlock) {
+        throw new Error('No data returned after creating exercise block');
+      }
 
       // Fetch full exercise data
-      const { data: exerciseData } = await supabase
+      const { data: exerciseData, error: exerciseError } = await supabase
         .from('exercises')
         .select('*')
         .eq('id', exercise.id)
         .single();
+
+      if (exerciseError || !exerciseData) {
+        throw new Error(`Failed to fetch exercise data: ${exerciseError?.message || 'Not found'}`);
+      }
 
       // Add to blocks state
       const newBlockWithExercise: ExerciseBlockWithExercise = {
@@ -366,12 +381,16 @@ export default function WorkoutPage() {
         },
       };
 
-      setBlocks([...blocks, newBlockWithExercise]);
+      setBlocks(prevBlocks => [...prevBlocks, newBlockWithExercise]);
       setShowAddExercise(false);
       setExerciseSearch('');
       setSelectedMuscle('');
+      
+      // Navigate to the new exercise
+      setCurrentBlockIndex(blocks.length);
     } catch (err) {
       console.error('Failed to add exercise:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add exercise');
     } finally {
       setIsAddingExercise(false);
     }
@@ -632,6 +651,13 @@ export default function WorkoutPage() {
                   </button>
                 ))}
               </div>
+              
+              {/* Error display */}
+              {error && (
+                <div className="mt-2 p-2 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-xs">
+                  {error}
+                </div>
+              )}
             </div>
 
             {/* Exercise list */}

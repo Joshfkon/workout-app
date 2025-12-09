@@ -19,12 +19,16 @@ interface UserProfile {
   heightCm: number | null;
   goal: Goal;
   experience: Experience;
+  targetBodyFatPercent: number | null;
 }
 
 export default function BodyCompositionPage() {
   const [scans, setScans] = useState<DexaScan[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showTargetEditor, setShowTargetEditor] = useState(false);
+  const [editingTarget, setEditingTarget] = useState('');
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -39,7 +43,7 @@ export default function BodyCompositionPage() {
       // Fetch user profile for height and goal
       const { data: profile } = await supabase
         .from('users')
-        .select('height_cm, goal, experience')
+        .select('height_cm, goal, experience, target_body_fat_percent')
         .eq('id', user.id)
         .single();
 
@@ -48,7 +52,11 @@ export default function BodyCompositionPage() {
           heightCm: profile.height_cm,
           goal: profile.goal || 'maintenance',
           experience: profile.experience || 'intermediate',
+          targetBodyFatPercent: profile.target_body_fat_percent,
         });
+        if (profile.target_body_fat_percent) {
+          setEditingTarget(String(profile.target_body_fat_percent));
+        }
       }
 
       // Fetch DEXA scans
@@ -231,37 +239,142 @@ export default function BodyCompositionPage() {
           </div>
 
           {/* Targets */}
-          {targets && (
+          {latestScan && (
             <Card>
               <CardHeader>
-                <CardTitle>Your Targets</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Your Targets</CardTitle>
+                  <button
+                    onClick={() => setShowTargetEditor(!showTargetEditor)}
+                    className="text-sm text-primary-400 hover:text-primary-300"
+                  >
+                    {showTargetEditor ? 'Done' : 'Edit'}
+                  </button>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="grid sm:grid-cols-3 gap-4">
                   <div className="p-4 bg-surface-800/50 rounded-lg">
                     <p className="text-sm text-surface-400">Target Body Fat</p>
-                    <p className="text-2xl font-bold text-surface-100">{targets.targetBodyFat}%</p>
-                    <Badge variant={targets.direction === 'cut' ? 'warning' : targets.direction === 'bulk' ? 'success' : 'default'} className="mt-2">
-                      {targets.direction === 'cut' ? 'Cutting' : targets.direction === 'bulk' ? 'Bulking' : 'Maintaining'}
+                    {showTargetEditor ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="5"
+                          max="40"
+                          value={editingTarget}
+                          onChange={(e) => setEditingTarget(e.target.value)}
+                          className="w-20 px-2 py-1 bg-surface-900 border border-surface-600 rounded text-xl font-bold text-surface-100 text-center"
+                        />
+                        <span className="text-xl font-bold text-surface-100">%</span>
+                        <button
+                          onClick={async () => {
+                            setIsSavingTarget(true);
+                            const supabase = createUntypedClient();
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user) {
+                              await supabase.from('users').update({
+                                target_body_fat_percent: parseFloat(editingTarget) || null
+                              }).eq('id', user.id);
+                              setUserProfile(prev => prev ? { ...prev, targetBodyFatPercent: parseFloat(editingTarget) } : null);
+                            }
+                            setIsSavingTarget(false);
+                            setShowTargetEditor(false);
+                          }}
+                          disabled={isSavingTarget}
+                          className="px-2 py-1 bg-primary-500 text-white rounded text-sm hover:bg-primary-600 disabled:opacity-50"
+                        >
+                          {isSavingTarget ? '...' : 'Save'}
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-bold text-surface-100">
+                          {userProfile?.targetBodyFatPercent ?? targets?.targetBodyFat ?? '—'}%
+                        </p>
+                        {!userProfile?.targetBodyFatPercent && targets && (
+                          <p className="text-xs text-surface-500 mt-1">
+                            Auto: {latestScan.bodyFatPercent}% - 5%
+                          </p>
+                        )}
+                      </>
+                    )}
+                    <Badge variant={targets?.direction === 'cut' ? 'warning' : targets?.direction === 'bulk' ? 'success' : 'default'} className="mt-2">
+                      {targets?.direction === 'cut' ? 'Cutting' : targets?.direction === 'bulk' ? 'Bulking' : 'Maintaining'}
                     </Badge>
                   </div>
                   <div className="p-4 bg-surface-800/50 rounded-lg">
                     <p className="text-sm text-surface-400">Target FFMI</p>
-                    <p className="text-2xl font-bold text-surface-100">{targets.targetFfmi}</p>
+                    <p className="text-2xl font-bold text-surface-100">{targets?.targetFfmi ?? '—'}</p>
                     <p className="text-xs text-surface-500 mt-2">
-                      {targets.estimatedWeeks > 0 ? `~${targets.estimatedWeeks} weeks` : 'Maintain current'}
+                      {targets && targets.estimatedWeeks > 0 ? `~${targets.estimatedWeeks} weeks` : 'Maintain current'}
                     </p>
                   </div>
                   <div className="p-4 bg-surface-800/50 rounded-lg">
                     <p className="text-sm text-surface-400">Calorie Adjustment</p>
                     <p className="text-2xl font-bold text-surface-100">
-                      {targets.calorieAdjustment > 0 ? '+' : ''}{targets.calorieAdjustment}
+                      {targets ? (targets.calorieAdjustment > 0 ? '+' : '') + targets.calorieAdjustment : '—'}
                     </p>
                     <p className="text-xs text-surface-500 mt-2">
-                      {targets.calorieAdjustment > 0 ? 'surplus' : targets.calorieAdjustment < 0 ? 'deficit' : 'maintenance'}
+                      {targets?.calorieAdjustment && targets.calorieAdjustment > 0 ? 'surplus' : targets?.calorieAdjustment && targets.calorieAdjustment < 0 ? 'deficit' : 'maintenance'}
                     </p>
                   </div>
                 </div>
+                
+                {/* Timeline calculation */}
+                {userProfile?.targetBodyFatPercent && latestScan && (
+                  <div className="mt-4 p-3 bg-surface-800/30 rounded-lg text-sm">
+                    <p className="text-surface-400">
+                      <span className="text-surface-200 font-medium">To reach {userProfile.targetBodyFatPercent}%:</span> You need to lose{' '}
+                      <span className="text-primary-400 font-medium">
+                        {(latestScan.bodyFatPercent - userProfile.targetBodyFatPercent).toFixed(1)}%
+                      </span>{' '}
+                      body fat ({((latestScan.bodyFatPercent - userProfile.targetBodyFatPercent) / 0.5).toFixed(0)} weeks at 0.5%/week)
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* FFMI Calculation Breakdown */}
+          {ffmiResult && userProfile?.heightCm && latestScan && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">FFMI Calculation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2 text-sm font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Lean Mass:</span>
+                    <span className="text-surface-200">{latestScan.leanMassKg.toFixed(1)} kg</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-surface-400">Height:</span>
+                    <span className="text-surface-200">{userProfile.heightCm} cm ({(userProfile.heightCm / 100).toFixed(2)} m)</span>
+                  </div>
+                  <div className="border-t border-surface-700 pt-2 mt-2">
+                    <div className="flex justify-between">
+                      <span className="text-surface-400">Raw FFMI:</span>
+                      <span className="text-surface-200">
+                        {latestScan.leanMassKg.toFixed(1)} ÷ {((userProfile.heightCm / 100) ** 2).toFixed(3)} = {(latestScan.leanMassKg / ((userProfile.heightCm / 100) ** 2)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-surface-400">Normalized FFMI:</span>
+                      <span className="text-primary-400 font-bold">{ffmiResult.normalizedFfmi}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-surface-500 mt-2">
+                    Normalized = Raw FFMI + 6.1 × (1.8 - height in m)
+                  </p>
+                </div>
+                {userProfile.heightCm < 165 || userProfile.heightCm > 195 ? (
+                  <p className="text-xs text-warning-400 mt-3">
+                    ⚠️ Your height ({userProfile.heightCm} cm) seems unusual. Please verify in Settings.
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           )}
