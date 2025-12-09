@@ -109,6 +109,7 @@ export function useActiveWorkout() {
 
     // Save to database
     const supabase = createClient();
+    // @ts-ignore - Supabase types not generated for this project
     const { error } = await supabase.from('set_logs').insert({
       id: newSet.id,
       exercise_block_id: newSet.exerciseBlockId,
@@ -122,7 +123,7 @@ export function useActiveWorkout() {
       quality_reason: newSet.qualityReason,
       note: newSet.note,
       logged_at: newSet.loggedAt,
-    } as any);
+    });
 
     if (error) {
       console.error('Failed to save set:', error);
@@ -141,6 +142,7 @@ export function useActiveWorkout() {
     if (!activeSession) return;
 
     const supabase = createClient();
+    // @ts-ignore - Supabase types not generated for this project
     const { error } = await supabase
       .from('workout_sessions')
       .update({
@@ -150,7 +152,7 @@ export function useActiveWorkout() {
         pump_rating: data.pumpRating,
         session_notes: data.notes,
         completion_percent: 100,
-      } as any)
+      })
       .eq('id', activeSession.id);
 
     if (error) {
@@ -169,13 +171,14 @@ export function useActiveWorkout() {
     setCheckIn(checkIn);
 
     const supabase = createClient();
+    // @ts-ignore - Supabase types not generated for this project
     await supabase
       .from('workout_sessions')
       .update({
-        pre_workout_check_in: checkIn as any,
+        pre_workout_check_in: checkIn,
         state: 'in_progress',
         started_at: new Date().toISOString(),
-      } as any)
+      })
       .eq('id', activeSession.id);
   }, [activeSession, setCheckIn]);
 
