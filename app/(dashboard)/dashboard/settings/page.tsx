@@ -41,8 +41,13 @@ export default function SettingsPage() {
             setShowFormCues(prefs.showFormCues ?? true);
             setShowWarmupSuggestions(prefs.showWarmupSuggestions ?? true);
           }
-          if (data.volume_landmarks) {
-            setVolumeLandmarks(data.volume_landmarks as any);
+          if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
+            // Merge with defaults to ensure all muscle groups have values
+            const exp = (data.experience || 'intermediate') as Experience;
+            setVolumeLandmarks({
+              ...DEFAULT_VOLUME_LANDMARKS[exp],
+              ...(data.volume_landmarks as any),
+            });
           }
         }
       }
@@ -226,14 +231,15 @@ export default function SettingsPage() {
         <CardContent>
           <div className="space-y-4">
             {MUSCLE_GROUPS.map((muscle) => {
-              const landmarks = volumeLandmarks[muscle];
+              const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
+              const landmarks = volumeLandmarks[muscle] || defaultLandmark;
               return (
                 <div key={muscle} className="flex items-center gap-4">
                   <span className="w-24 text-sm text-surface-300 capitalize">{muscle}</span>
                   <div className="flex-1 grid grid-cols-3 gap-2">
                     <Input
                       type="number"
-                      value={landmarks.mev}
+                      value={landmarks.mev ?? 6}
                       onChange={(e) =>
                         setVolumeLandmarks({
                           ...volumeLandmarks,
@@ -244,7 +250,7 @@ export default function SettingsPage() {
                     />
                     <Input
                       type="number"
-                      value={landmarks.mav}
+                      value={landmarks.mav ?? 12}
                       onChange={(e) =>
                         setVolumeLandmarks({
                           ...volumeLandmarks,
@@ -255,7 +261,7 @@ export default function SettingsPage() {
                     />
                     <Input
                       type="number"
-                      value={landmarks.mrv}
+                      value={landmarks.mrv ?? 20}
                       onChange={(e) =>
                         setVolumeLandmarks({
                           ...volumeLandmarks,
