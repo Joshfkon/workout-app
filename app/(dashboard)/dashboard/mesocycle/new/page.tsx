@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { formatWeight } from '@/lib/utils';
-import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation } from '@/types/schema';
+import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
@@ -16,6 +16,7 @@ import {
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
+import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -222,8 +223,18 @@ export default function NewMesocyclePage() {
       );
       setWorkoutTemplates(templates);
       
-      // Generate full program with extended profile
-      const program = generateFullProgram(daysPerWeek, extendedProfile, sessionDurationMinutes);
+      // Analyze regional data for lagging areas (if available)
+      let laggingAreas: string[] = [];
+      if (latestDexa?.regionalData && latestDexa.leanMassKg) {
+        const regionalAnalysis = analyzeRegionalComposition(
+          latestDexa.regionalData as DexaRegionalData,
+          latestDexa.leanMassKg
+        );
+        laggingAreas = regionalAnalysis.laggingAreas;
+      }
+      
+      // Generate full program with extended profile and lagging areas
+      const program = generateFullProgram(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
       setFullProgram(program);
     }
   }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 

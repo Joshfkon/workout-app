@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
 import { ExerciseCard, SetInputRow, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -30,6 +30,7 @@ interface UserProfileForWeights {
   heightCm: number;
   bodyFatPercent: number;
   experience: 'novice' | 'intermediate' | 'advanced';
+  regionalData?: DexaRegionalData;
 }
 
 // Generate coach message based on workout structure
@@ -124,7 +125,8 @@ function generateCoachMessage(
           userProfile.weightKg,
           userProfile.heightCm,
           userProfile.bodyFatPercent || 20,
-          userProfile.experience
+          userProfile.experience,
+          userProfile.regionalData  // Pass regional data for personalized adjustments
         );
       } catch (e) {
         // Silently fail if weight estimation fails
@@ -280,10 +282,10 @@ export default function WorkoutPage() {
           .eq('id', sessionData.user_id)
           .single();
         
-        // Fetch latest DEXA scan for body fat if available
+        // Fetch latest DEXA scan for body fat and regional data if available
         const { data: dexaData } = await supabase
           .from('dexa_scans')
-          .select('body_fat_percentage')
+          .select('body_fat_percentage, regional_data')
           .eq('user_id', sessionData.user_id)
           .order('scan_date', { ascending: false })
           .limit(1)
@@ -293,7 +295,8 @@ export default function WorkoutPage() {
           weightKg: userData.weight_kg || 70,
           heightCm: userData.height_cm || 175,
           bodyFatPercent: dexaData?.body_fat_percentage || 20,
-          experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate'
+          experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate',
+          regionalData: dexaData?.regional_data as DexaRegionalData | undefined
         } : undefined;
         
         if (profile) {

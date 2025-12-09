@@ -699,13 +699,15 @@ export function recommendVolume(
 
 /**
  * Calculate volume distribution with frequency
+ * Optionally adjusts volume based on regional body composition analysis (lagging areas get more volume)
  */
 export function calculateVolumeDistribution(
   split: Split,
   daysPerWeek: number,
   experience: Experience,
   goal: Goal,
-  recoveryFactors: RecoveryFactors
+  recoveryFactors: RecoveryFactors,
+  laggingAreas?: string[]  // From regional analysis
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
   
   const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
@@ -739,8 +741,43 @@ export function calculateVolumeDistribution(
   
   const frequencies = frequencyMap[split];
   
+  // Map regional areas to muscle groups
+  const regionalToMuscles: Record<string, MuscleGroup[]> = {
+    'Arms': ['biceps', 'triceps'],
+    'Legs': ['quads', 'hamstrings', 'glutes', 'calves'],
+    'Trunk': ['chest', 'back', 'shoulders', 'abs'],
+  };
+  
+  // Determine which muscles need extra volume based on regional analysis
+  const laggingMuscles: Set<MuscleGroup> = new Set();
+  if (laggingAreas) {
+    for (const area of laggingAreas) {
+      // Check if it's a general area (Arms, Legs, Trunk)
+      if (regionalToMuscles[area]) {
+        regionalToMuscles[area].forEach(m => laggingMuscles.add(m));
+      }
+      // Check for specific side mentions (e.g., "Left arm", "Right leg")
+      if (area.toLowerCase().includes('arm')) {
+        laggingMuscles.add('biceps');
+        laggingMuscles.add('triceps');
+      }
+      if (area.toLowerCase().includes('leg')) {
+        laggingMuscles.add('quads');
+        laggingMuscles.add('hamstrings');
+        laggingMuscles.add('glutes');
+        laggingMuscles.add('calves');
+      }
+    }
+  }
+  
   muscles.forEach(muscle => {
-    const baseVolume = recommendVolume(experience, goal, muscle);
+    let baseVolume = recommendVolume(experience, goal, muscle);
+    
+    // Boost volume for lagging areas (10-20% extra)
+    if (laggingMuscles.has(muscle)) {
+      baseVolume = Math.round(baseVolume * 1.15);  // 15% extra sets for lagging muscles
+    }
+    
     const adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
     
@@ -1034,11 +1071,13 @@ export function buildDetailedSession(
 
 /**
  * Generate a complete training program based on user profile
+ * @param laggingAreas - Optional array of lagging muscle areas from regional DEXA analysis
  */
 export function generateFullProgram(
   daysPerWeek: number,
   profile: ExtendedUserProfile,
-  sessionMinutes: number = 60
+  sessionMinutes: number = 60,
+  laggingAreas?: string[]  // From regional body composition analysis
 ): FullProgramRecommendation {
   
   const warnings: string[] = [];
@@ -1063,14 +1102,20 @@ export function generateFullProgram(
   programNotes.push(`Mesocycle length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
   
-  // Step 4: Calculate volume distribution
+  // Step 4: Calculate volume distribution (with extra volume for lagging areas if provided)
   const volumePerMuscle = calculateVolumeDistribution(
     splitRec.split,
     daysPerWeek,
     profile.experience,
     profile.goal,
-    recoveryFactors
+    recoveryFactors,
+    laggingAreas
   );
+  
+  // Add note if lagging areas are being addressed
+  if (laggingAreas && laggingAreas.length > 0) {
+    programNotes.push(`🎯 Extra volume allocated for: ${laggingAreas.join(', ')}`);
+  }
   
   // Step 5: Build session templates
   const sessionTemplates = buildSessionTemplates(splitRec.split, daysPerWeek);
