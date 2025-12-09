@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Button, Input, Select, Slider } from '@/components/ui';
+import { createUntypedClient } from '@/lib/supabase/client';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -12,12 +13,43 @@ export default function NewMesocyclePage() {
   const [daysPerWeek, setDaysPerWeek] = useState(4);
   const [totalWeeks, setTotalWeeks] = useState(6);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setIsLoading(true);
-    // In real app, save to database
-    await new Promise((r) => setTimeout(r, 1000));
-    router.push('/dashboard/mesocycle');
+    setError(null);
+
+    try {
+      const supabase = createUntypedClient();
+      
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('You must be logged in to create a mesocycle');
+      }
+
+      // Create mesocycle
+      const { error: insertError } = await supabase
+        .from('mesocycles')
+        .insert({
+          user_id: user.id,
+          name,
+          split_type: splitType,
+          days_per_week: daysPerWeek,
+          total_weeks: totalWeeks,
+          deload_week: totalWeeks, // Last week is deload
+          current_week: 1,
+          state: 'active',
+          fatigue_score: 0,
+        });
+
+      if (insertError) throw insertError;
+
+      router.push('/dashboard/mesocycle');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create mesocycle');
+      setIsLoading(false);
+    }
   };
 
   const splitOptions = [
@@ -48,6 +80,12 @@ export default function NewMesocyclePage() {
           />
         ))}
       </div>
+
+      {error && (
+        <div className="p-4 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
+          {error}
+        </div>
+      )}
 
       <Card variant="elevated">
         {step === 1 && (
