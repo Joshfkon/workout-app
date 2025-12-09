@@ -2,15 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Button, Badge } from '@/components/ui';
+import { Card, Button, Badge, Input } from '@/components/ui';
 import { ExerciseCard, SetInputRow, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { MUSCLE_GROUPS } from '@/types/schema';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
 interface ExerciseBlockWithExercise extends ExerciseBlock {
   exercise: Exercise;
+}
+
+interface AvailableExercise {
+  id: string;
+  name: string;
+  primary_muscle: string;
+  mechanic: 'compound' | 'isolation';
 }
 
 export default function WorkoutPage() {
@@ -26,6 +35,13 @@ export default function WorkoutPage() {
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
+  
+  // Add exercise modal state
+  const [showAddExercise, setShowAddExercise] = useState(false);
+  const [availableExercises, setAvailableExercises] = useState<AvailableExercise[]>([]);
+  const [exerciseSearch, setExerciseSearch] = useState('');
+  const [selectedMuscle, setSelectedMuscle] = useState<string>('');
+  const [isAddingExercise, setIsAddingExercise] = useState(false);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -226,6 +242,139 @@ export default function WorkoutPage() {
     }
   };
 
+  // Fetch exercises when add exercise modal opens
+  const fetchExercises = async (muscle?: string) => {
+    const supabase = createUntypedClient();
+    let query = supabase
+      .from('exercises')
+      .select('id, name, primary_muscle, mechanic')
+      .order('name');
+    
+    if (muscle) {
+      query = query.eq('primary_muscle', muscle);
+    }
+    
+    const { data } = await query;
+    if (data) {
+      setAvailableExercises(data);
+    }
+  };
+
+  const handleOpenAddExercise = () => {
+    setShowAddExercise(true);
+    fetchExercises();
+  };
+
+  const handleMuscleFilter = (muscle: string) => {
+    setSelectedMuscle(muscle);
+    if (muscle) {
+      fetchExercises(muscle);
+    } else {
+      fetchExercises();
+    }
+  };
+
+  const handleAddExercise = async (exercise: AvailableExercise) => {
+    setIsAddingExercise(true);
+    
+    try {
+      const supabase = createUntypedClient();
+      const isCompound = exercise.mechanic === 'compound';
+      
+      // Generate warmup for compound exercises
+      const warmupSets = isCompound ? generateWarmupProtocol({
+        workingWeight: 60,
+        exercise: {
+          id: exercise.id,
+          name: exercise.name,
+          primaryMuscle: exercise.primary_muscle,
+          secondaryMuscles: [],
+          mechanic: exercise.mechanic,
+          defaultRepRange: [8, 12],
+          defaultRir: 2,
+          minWeightIncrementKg: 2.5,
+          formCues: [],
+          commonMistakes: [],
+          setupNote: '',
+          movementPattern: '',
+          equipmentRequired: [],
+        },
+        isFirstExercise: false,
+      }) : [];
+
+      // Create new exercise block
+      const newOrder = blocks.length + 1;
+      const { data: newBlock, error: blockError } = await supabase
+        .from('exercise_blocks')
+        .insert({
+          workout_session_id: sessionId,
+          exercise_id: exercise.id,
+          order: newOrder,
+          target_sets: isCompound ? 4 : 3,
+          target_rep_range: isCompound ? [6, 10] : [10, 15],
+          target_rir: 2,
+          target_weight_kg: 0,
+          target_rest_seconds: isCompound ? 180 : 90,
+          suggestion_reason: 'Added mid-workout',
+          warmup_protocol: { sets: warmupSets },
+        })
+        .select()
+        .single();
+
+      if (blockError || !newBlock) throw blockError;
+
+      // Fetch full exercise data
+      const { data: exerciseData } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('id', exercise.id)
+        .single();
+
+      // Add to blocks state
+      const newBlockWithExercise: ExerciseBlockWithExercise = {
+        id: newBlock.id,
+        workoutSessionId: newBlock.workout_session_id,
+        exerciseId: newBlock.exercise_id,
+        order: newBlock.order,
+        supersetGroupId: null,
+        supersetOrder: null,
+        targetSets: newBlock.target_sets,
+        targetRepRange: newBlock.target_rep_range,
+        targetRir: newBlock.target_rir,
+        targetWeightKg: newBlock.target_weight_kg,
+        targetRestSeconds: newBlock.target_rest_seconds,
+        progressionType: null,
+        suggestionReason: newBlock.suggestion_reason,
+        warmupProtocol: warmupSets,
+        note: null,
+        exercise: {
+          id: exerciseData.id,
+          name: exerciseData.name,
+          primaryMuscle: exerciseData.primary_muscle,
+          secondaryMuscles: exerciseData.secondary_muscles || [],
+          mechanic: exerciseData.mechanic,
+          defaultRepRange: exerciseData.default_rep_range || [8, 12],
+          defaultRir: exerciseData.default_rir || 2,
+          minWeightIncrementKg: exerciseData.min_weight_increment_kg || 2.5,
+          formCues: exerciseData.form_cues || [],
+          commonMistakes: exerciseData.common_mistakes || [],
+          setupNote: exerciseData.setup_note || '',
+          movementPattern: exerciseData.movement_pattern || '',
+          equipmentRequired: exerciseData.equipment_required || [],
+        },
+      };
+
+      setBlocks([...blocks, newBlockWithExercise]);
+      setShowAddExercise(false);
+      setExerciseSearch('');
+      setSelectedMuscle('');
+    } catch (err) {
+      console.error('Failed to add exercise:', err);
+    } finally {
+      setIsAddingExercise(false);
+    }
+  };
+
   const handleWorkoutComplete = () => {
     setPhase('summary');
   };
@@ -330,9 +479,17 @@ export default function WorkoutPage() {
             Exercise {currentBlockIndex + 1} of {blocks.length}
           </p>
         </div>
-        <Button variant="outline" onClick={handleWorkoutComplete}>
-          Finish Workout
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={handleOpenAddExercise}>
+            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add
+          </Button>
+          <Button variant="outline" onClick={handleWorkoutComplete}>
+            Finish
+          </Button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -407,9 +564,106 @@ export default function WorkoutPage() {
                 Next Exercise
               </Button>
             )}
+            <Button variant="ghost" onClick={handleOpenAddExercise}>
+              Add Exercise
+            </Button>
             <Button onClick={handleWorkoutComplete}>Finish Workout</Button>
           </div>
         </Card>
+      )}
+
+      {/* Add Exercise Modal */}
+      {showAddExercise && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowAddExercise(false)}
+          />
+          
+          {/* Modal */}
+          <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+              <button
+                onClick={() => setShowAddExercise(false)}
+                className="p-2 text-surface-400 hover:text-surface-200"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search and filter */}
+            <div className="p-4 space-y-3 border-b border-surface-800">
+              <Input
+                placeholder="Search exercises..."
+                value={exerciseSearch}
+                onChange={(e) => setExerciseSearch(e.target.value)}
+              />
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => handleMuscleFilter('')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                    !selectedMuscle
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  }`}
+                >
+                  All
+                </button>
+                {MUSCLE_GROUPS.map((muscle) => (
+                  <button
+                    key={muscle}
+                    onClick={() => handleMuscleFilter(muscle)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap capitalize transition-colors ${
+                      selectedMuscle === muscle
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                    }`}
+                  >
+                    {muscle}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Exercise list */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {availableExercises.length === 0 ? (
+                <p className="text-center text-surface-500 py-8">Loading exercises...</p>
+              ) : (
+                <div className="space-y-2">
+                  {availableExercises
+                    .filter(ex => 
+                      exerciseSearch === '' || 
+                      ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                    )
+                    .map((exercise) => (
+                      <button
+                        key={exercise.id}
+                        onClick={() => handleAddExercise(exercise)}
+                        disabled={isAddingExercise}
+                        className="w-full flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors text-left disabled:opacity-50"
+                      >
+                        <div>
+                          <p className="font-medium text-surface-200">{exercise.name}</p>
+                          <p className="text-xs text-surface-500 capitalize">
+                            {exercise.primary_muscle} • {exercise.mechanic}
+                          </p>
+                        </div>
+                        <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
+                          {exercise.mechanic}
+                        </Badge>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
