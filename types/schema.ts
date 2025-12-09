@@ -576,3 +576,125 @@ export const MOVEMENT_PATTERNS = [
 
 export type MovementPattern = (typeof MOVEMENT_PATTERNS)[number];
 
+// ============ DEXA SCAN & BODY COMPOSITION ============
+
+/**
+ * DEXA scan entry for body composition tracking
+ */
+export interface DexaScan {
+  id: string;
+  userId: string;
+  
+  /** Date of the scan (YYYY-MM-DD) */
+  scanDate: string;
+  
+  /** Total body weight in kg */
+  weightKg: number;
+  
+  /** Lean mass (muscle + organs) in kg */
+  leanMassKg: number;
+  
+  /** Fat mass in kg */
+  fatMassKg: number;
+  
+  /** Body fat percentage */
+  bodyFatPercent: number;
+  
+  /** Bone mineral content in kg (optional) */
+  boneMassKg: number | null;
+  
+  /** Notes about the scan */
+  notes: string | null;
+  
+  createdAt: string;
+}
+
+/**
+ * FFMI (Fat-Free Mass Index) calculation result
+ */
+export interface FFMIResult {
+  /** Raw FFMI = lean mass (kg) / height (m)² */
+  ffmi: number;
+  
+  /** Normalized FFMI (adjusted for height) = FFMI + 6.1 × (1.8 - height in m) */
+  normalizedFfmi: number;
+  
+  /** Classification based on FFMI */
+  classification: FFMIClassification;
+  
+  /** Estimated natural limit based on experience */
+  naturalLimit: number;
+  
+  /** Percentage of natural limit achieved */
+  percentOfLimit: number;
+}
+
+/** FFMI classification thresholds */
+export type FFMIClassification = 
+  | 'below_average'  // < 18
+  | 'average'        // 18-20
+  | 'above_average'  // 20-22
+  | 'excellent'      // 22-23
+  | 'superior'       // 23-25
+  | 'suspicious';    // > 25 (likely enhanced)
+
+/**
+ * Body composition trend analysis
+ */
+export interface BodyCompTrend {
+  /** Monthly rate of lean mass change (kg/month) */
+  leanMassChangeRate: number;
+  
+  /** Monthly rate of fat mass change (kg/month) */
+  fatMassChangeRate: number;
+  
+  /** Monthly rate of body fat % change */
+  bodyFatChangeRate: number;
+  
+  /** Monthly rate of FFMI change */
+  ffmiChangeRate: number;
+  
+  /** Trend direction */
+  trend: 'gaining_muscle' | 'losing_muscle' | 'gaining_fat' | 'losing_fat' | 'recomping' | 'stable';
+  
+  /** Number of data points used */
+  dataPoints: number;
+}
+
+/**
+ * Coaching recommendation based on body composition data
+ */
+export interface BodyCompRecommendation {
+  /** Type of recommendation */
+  type: 'warning' | 'suggestion' | 'achievement' | 'info';
+  
+  /** Short title */
+  title: string;
+  
+  /** Detailed recommendation */
+  message: string;
+  
+  /** Priority (higher = more important) */
+  priority: number;
+}
+
+/**
+ * Body composition targets
+ */
+export interface BodyCompTargets {
+  /** Target body fat percentage */
+  targetBodyFat: number;
+  
+  /** Target FFMI */
+  targetFfmi: number;
+  
+  /** Estimated weeks to reach target */
+  estimatedWeeks: number;
+  
+  /** Required weekly calorie adjustment */
+  calorieAdjustment: number;
+  
+  /** Target direction */
+  direction: 'bulk' | 'cut' | 'maintain';
+}
+

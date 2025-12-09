@@ -9,6 +9,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 export default function SettingsPage() {
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
+  const [heightCm, setHeightCm] = useState('');
   const [units, setUnits] = useState<WeightUnit>('kg');
   const [restTimer, setRestTimer] = useState(180);
   const [showFormCues, setShowFormCues] = useState(true);
@@ -34,6 +35,9 @@ export default function SettingsPage() {
         if (data) {
           setGoal(data.goal || 'maintenance');
           setExperience(data.experience || 'intermediate');
+          if (data.height_cm) {
+            setHeightCm(String(data.height_cm));
+          }
           if (data.preferences) {
             const prefs = data.preferences as any;
             setUnits(prefs.units || 'kg');
@@ -73,6 +77,7 @@ export default function SettingsPage() {
           email: user.email,
           goal,
           experience,
+          height_cm: heightCm ? parseFloat(heightCm) : null,
           preferences: {
             units,
             restTimer,
@@ -148,6 +153,18 @@ export default function SettingsPage() {
               { value: 'advanced', label: 'Advanced (3+ years)' },
             ]}
             hint="Changing this will reset your volume landmarks to defaults"
+          />
+
+          <Input
+            label="Height (cm)"
+            type="number"
+            step="0.1"
+            min="100"
+            max="250"
+            value={heightCm}
+            onChange={(e) => setHeightCm(e.target.value)}
+            placeholder="e.g., 175"
+            hint="Required for FFMI calculations in Body Composition"
           />
         </CardContent>
       </Card>
