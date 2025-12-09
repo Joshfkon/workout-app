@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
   const [heightCm, setHeightCm] = useState('');
+  const [weightKg, setWeightKg] = useState('');
   const [units, setUnits] = useState<WeightUnit>('kg');
   const [restTimer, setRestTimer] = useState(180);
   const [showFormCues, setShowFormCues] = useState(true);
@@ -47,6 +48,9 @@ export default function SettingsPage() {
           setExperience(data.experience || 'intermediate');
           if (data.height_cm) {
             setHeightCm(String(data.height_cm));
+          }
+          if (data.weight_kg) {
+            setWeightKg(String(data.weight_kg));
           }
           if (data.preferences) {
             const prefs = data.preferences as any;
@@ -99,6 +103,7 @@ export default function SettingsPage() {
           goal,
           experience,
           height_cm: heightCm ? parseFloat(heightCm) : null,
+          weight_kg: weightKg ? parseFloat(weightKg) : null,
           preferences: {
             units,
             restTimer,
@@ -192,7 +197,19 @@ export default function SettingsPage() {
             value={heightCm}
             onChange={(e) => setHeightCm(e.target.value)}
             placeholder="e.g., 175"
-            hint="Required for FFMI calculations in Body Composition"
+            hint="Required for FFMI and weight recommendations"
+          />
+
+          <Input
+            label="Body Weight (kg)"
+            type="number"
+            step="0.1"
+            min="30"
+            max="300"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            placeholder="e.g., 80"
+            hint="Required for AI weight recommendations in workouts"
           />
 
           <Input

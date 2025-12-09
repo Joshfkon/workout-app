@@ -111,6 +111,87 @@ interface ExerciseRelationship {
   relatedExercises: { exercise: string; ratio: number }[];
 }
 
+// Normalize exercise names for fuzzy matching
+function normalizeExerciseName(name: string): string {
+  return name.toLowerCase()
+    .replace(/bent[ -]?over/gi, '')
+    .replace(/seated/gi, '')
+    .replace(/standing/gi, '')
+    .replace(/lying/gi, '')
+    .replace(/machine/gi, '')
+    .replace(/cable/gi, '')
+    .replace(/ez[ -]?bar/gi, 'barbell')
+    .replace(/smith[ -]?machine/gi, 'barbell')
+    .replace(/dumbbell/gi, 'db')
+    .replace(/barbell/gi, 'bb')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Find matching exercise in relationships
+function findExerciseMatch(exerciseName: string): string | null {
+  const normalized = normalizeExerciseName(exerciseName);
+  const lowerName = exerciseName.toLowerCase();
+  
+  // Direct match first
+  for (const key of Object.keys(EXERCISE_RELATIONSHIPS)) {
+    if (key.toLowerCase() === lowerName) return key;
+  }
+  
+  // Fuzzy match - check if exercise name contains key parts
+  const matchPatterns: Record<string, string> = {
+    'bench press': 'Barbell Bench Press',
+    'incline press': 'Incline Barbell Press',
+    'incline bench': 'Incline Barbell Press',
+    'overhead press': 'Overhead Press',
+    'shoulder press': 'Overhead Press',
+    'military press': 'Overhead Press',
+    'squat': 'Barbell Back Squat',
+    'back squat': 'Barbell Back Squat',
+    'front squat': 'Front Squat',
+    'leg press': 'Leg Press',
+    'deadlift': 'Deadlift',
+    'rdl': 'Romanian Deadlift',
+    'romanian': 'Romanian Deadlift',
+    'row': 'Barbell Row',
+    'bent over row': 'Barbell Row',
+    'db row': 'Dumbbell Row',
+    'dumbbell row': 'Dumbbell Row',
+    'pulldown': 'Lat Pulldown',
+    'lat pull': 'Lat Pulldown',
+    'pull-up': 'Pull-Up',
+    'pullup': 'Pull-Up',
+    'chin-up': 'Pull-Up',
+    'curl': 'Barbell Curl',
+    'bicep curl': 'Barbell Curl',
+    'hammer curl': 'Hammer Curl',
+    'pushdown': 'Tricep Pushdown',
+    'tricep push': 'Tricep Pushdown',
+    'extension': 'Overhead Tricep Extension',
+    'tricep extension': 'Overhead Tricep Extension',
+    'lateral raise': 'Lateral Raise',
+    'side raise': 'Lateral Raise',
+    'face pull': 'Face Pull',
+    'leg curl': 'Lying Leg Curl',
+    'hamstring curl': 'Lying Leg Curl',
+    'leg extension': 'Leg Extension',
+    'calf raise': 'Standing Calf Raise',
+    'hip thrust': 'Hip Thrust',
+    'glute bridge': 'Hip Thrust',
+    'fly': 'Cable Fly',
+    'chest fly': 'Cable Fly',
+    'pec fly': 'Cable Fly',
+  };
+  
+  for (const [pattern, exercise] of Object.entries(matchPatterns)) {
+    if (lowerName.includes(pattern)) {
+      return exercise;
+    }
+  }
+  
+  return null;
+}
+
 const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
   // Chest exercises relative to Barbell Bench Press
   'Barbell Bench Press': {
@@ -123,6 +204,7 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
       { exercise: 'Incline Dumbbell Press', ratio: 0.65 },
       { exercise: 'Machine Chest Press', ratio: 0.90 },
       { exercise: 'Close-Grip Bench Press', ratio: 0.85 },
+      { exercise: 'Cable Fly', ratio: 0.30 },
     ]
   },
   'Dumbbell Bench Press': {
@@ -544,6 +626,7 @@ export class WeightEstimationEngine {
       'Barbell Row': 'barbellRow',
     };
     
+    // Try direct match first
     if (standardMap[exerciseName]) {
       const ratio = standards[standardMap[exerciseName]];
       return {
@@ -554,7 +637,28 @@ export class WeightEstimationEngine {
       };
     }
     
-    const relationship = EXERCISE_RELATIONSHIPS[exerciseName];
+    // Try fuzzy match
+    const matchedExercise = findExerciseMatch(exerciseName);
+    
+    // Check if matched exercise is in standards
+    if (matchedExercise && standardMap[matchedExercise]) {
+      const ratio = standards[standardMap[matchedExercise]];
+      return {
+        exercise: exerciseName,
+        estimated1RM: Math.round(this.profile.bodyComposition.totalWeightKg * ratio * 10) / 10,
+        confidence: 'low',
+        source: 'strength_standards'
+      };
+    }
+    
+    // Check direct relationship
+    let relationship = EXERCISE_RELATIONSHIPS[exerciseName];
+    
+    // If no direct relationship, try fuzzy match
+    if (!relationship && matchedExercise) {
+      relationship = EXERCISE_RELATIONSHIPS[matchedExercise];
+    }
+    
     if (relationship && standardMap[relationship.parent]) {
       const parentRatio = standards[standardMap[relationship.parent] as keyof StrengthStandards];
       const parent1RM = this.profile.bodyComposition.totalWeightKg * parentRatio;
@@ -570,19 +674,53 @@ export class WeightEstimationEngine {
   }
   
   private estimateFromBodyweight(exerciseName: string): EstimatedMax {
+    const lowerName = exerciseName.toLowerCase();
+    
+    // Muscle group based ratios as ultimate fallback
+    const muscleGroupRatios: Record<string, number> = {
+      'chest': 0.75,      // Based on bench press
+      'back': 0.60,       // Based on row
+      'shoulders': 0.45,  // Based on OHP
+      'biceps': 0.25,     // Based on curl
+      'triceps': 0.30,    // Based on pushdown
+      'quads': 0.90,      // Based on squat
+      'hamstrings': 0.50, // Based on RDL
+      'glutes': 0.80,     // Based on hip thrust
+      'calves': 0.50,     // Based on calf raise
+    };
+    
+    // Detect muscle group from exercise name
+    const getMuscleGroupRatio = (name: string): number => {
+      if (name.includes('chest') || name.includes('bench') || name.includes('fly') || name.includes('push')) return muscleGroupRatios.chest;
+      if (name.includes('back') || name.includes('row') || name.includes('pull') || name.includes('lat')) return muscleGroupRatios.back;
+      if (name.includes('shoulder') || name.includes('delt') || name.includes('raise') || name.includes('press')) return muscleGroupRatios.shoulders;
+      if (name.includes('bicep') || name.includes('curl')) return muscleGroupRatios.biceps;
+      if (name.includes('tricep') || name.includes('pushdown') || name.includes('extension')) return muscleGroupRatios.triceps;
+      if (name.includes('quad') || name.includes('squat') || name.includes('leg press') || name.includes('lunge')) return muscleGroupRatios.quads;
+      if (name.includes('hamstring') || name.includes('rdl') || name.includes('leg curl')) return muscleGroupRatios.hamstrings;
+      if (name.includes('glute') || name.includes('hip')) return muscleGroupRatios.glutes;
+      if (name.includes('calf') || name.includes('calves')) return muscleGroupRatios.calves;
+      return 0.30; // Default fallback
+    };
+    
     const bwRatios: Record<string, number> = {
       'Barbell Curl': 0.25,
       'Dumbbell Curl': 0.10,
       'Hammer Curl': 0.12,
       'Cable Curl': 0.25,
+      'Preacher Curl': 0.20,
+      'Incline Dumbbell Curl': 0.08,
       'Tricep Pushdown': 0.30,
       'Cable Tricep Pushdown': 0.30,
       'Overhead Tricep Extension': 0.20,
       'Cable Overhead Tricep Extension': 0.20,
+      'Skull Crusher': 0.35,
+      'Dips': 0.30,
       'Lateral Raise': 0.06,
       'Cable Lateral Raise': 0.08,
       'Cable Cross Body Lateral Raise': 0.08,
       'Face Pull': 0.25,
+      'Rear Delt Fly': 0.06,
       'Cable Fly': 0.15,
       'Leg Extension': 0.40,
       'Lying Leg Curl': 0.30,
@@ -593,7 +731,23 @@ export class WeightEstimationEngine {
       'Hip Abduction Machine': 0.50,
     };
     
-    const ratio = bwRatios[exerciseName] || 0.20;
+    // Try direct match first, then fuzzy match, then muscle group fallback
+    let ratio = bwRatios[exerciseName];
+    
+    if (!ratio) {
+      // Try fuzzy matching against keys
+      for (const [key, value] of Object.entries(bwRatios)) {
+        if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+          ratio = value;
+          break;
+        }
+      }
+    }
+    
+    if (!ratio) {
+      // Use muscle group based fallback
+      ratio = getMuscleGroupRatio(lowerName);
+    }
     
     return {
       exercise: exerciseName,
