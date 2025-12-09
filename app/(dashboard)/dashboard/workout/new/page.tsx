@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import { generateWarmupProtocol } from '@/services/progressionEngine';
 
 interface Exercise {
   id: string;
@@ -84,19 +85,45 @@ export default function NewWorkoutPage() {
 
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
-      // Create exercise blocks
-      const exerciseBlocks = selectedExercises.map((exerciseId, index) => ({
-        workout_session_id: session.id,
-        exercise_id: exerciseId,
-        order: index + 1,
-        target_sets: 3,
-        target_rep_range: [8, 12],
-        target_rir: 2,
-        target_weight_kg: 0, // Will be set during workout
-        target_rest_seconds: 120,
-        suggestion_reason: 'Selected by user',
-        warmup_protocol: { sets: [] },
-      }));
+      // Create exercise blocks with warmup protocols
+      const exerciseBlocks = selectedExercises.map((exerciseId, index) => {
+        const exercise = exercises.find(e => e.id === exerciseId);
+        const isCompound = exercise?.mechanic === 'compound';
+        
+        // Generate warmup for compound exercises
+        const warmupSets = isCompound ? generateWarmupProtocol({
+          workingWeight: 60, // Default starting weight, user can adjust
+          exercise: {
+            id: exerciseId,
+            name: exercise?.name || '',
+            primaryMuscle: exercise?.primary_muscle || '',
+            secondaryMuscles: [],
+            mechanic: exercise?.mechanic || 'compound',
+            defaultRepRange: [8, 12],
+            defaultRir: 2,
+            minWeightIncrementKg: 2.5,
+            formCues: [],
+            commonMistakes: [],
+            setupNote: '',
+            movementPattern: '',
+            equipmentRequired: [],
+          },
+          isFirstExercise: index === 0,
+        }) : [];
+
+        return {
+          workout_session_id: session.id,
+          exercise_id: exerciseId,
+          order: index + 1,
+          target_sets: isCompound ? 4 : 3, // More sets for compounds
+          target_rep_range: isCompound ? [6, 10] : [10, 15], // Lower reps for compounds
+          target_rir: 2,
+          target_weight_kg: 0, // Will be set during workout
+          target_rest_seconds: isCompound ? 180 : 90, // Longer rest for compounds
+          suggestion_reason: 'Selected by user',
+          warmup_protocol: { sets: warmupSets },
+        };
+      });
 
       const { error: blocksError } = await supabase
         .from('exercise_blocks')
