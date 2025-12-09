@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, Badge, SetQualityBadge } from '@/components/ui';
+import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType } from '@/types/schema';
 
@@ -10,6 +10,7 @@ interface ExerciseCardProps {
   block: ExerciseBlock;
   sets: SetLog[];
   onSetComplete?: (setData: Partial<SetLog>) => void;
+  onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   isActive?: boolean;
 }
 
@@ -18,12 +19,43 @@ export function ExerciseCard({
   block,
   sets,
   onSetComplete,
+  onSetEdit,
   isActive = false,
 }: ExerciseCardProps) {
   const [showFormCues, setShowFormCues] = useState(false);
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editWeight, setEditWeight] = useState('');
+  const [editReps, setEditReps] = useState('');
+  const [editRpe, setEditRpe] = useState('');
 
   const completedSets = sets.filter((s) => !s.isWarmup);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
+
+  const startEditing = (set: SetLog) => {
+    setEditingSetId(set.id);
+    setEditWeight(String(set.weightKg));
+    setEditReps(String(set.reps));
+    setEditRpe(String(set.rpe));
+  };
+
+  const cancelEditing = () => {
+    setEditingSetId(null);
+    setEditWeight('');
+    setEditReps('');
+    setEditRpe('');
+  };
+
+  const saveEdit = () => {
+    if (!editingSetId || !onSetEdit) return;
+    const weightNum = parseFloat(editWeight);
+    const repsNum = parseInt(editReps);
+    const rpeNum = parseFloat(editRpe);
+    
+    if (!isNaN(weightNum) && !isNaN(repsNum) && !isNaN(rpeNum)) {
+      onSetEdit(editingSetId, { weightKg: weightNum, reps: repsNum, rpe: rpeNum });
+    }
+    cancelEditing();
+  };
 
   const getProgressionIcon = (type: ProgressionType | null) => {
     switch (type) {
@@ -126,21 +158,77 @@ export function ExerciseCard({
           <tbody className="divide-y divide-surface-800">
             {/* Completed sets */}
             {completedSets.map((set) => (
-              <tr key={set.id} className="hover:bg-surface-800/30">
-                <td className="px-4 py-2.5 text-surface-300">{set.setNumber}</td>
-                <td className="px-4 py-2.5 text-center font-mono text-surface-200">
-                  {set.weightKg}kg
-                </td>
-                <td className="px-4 py-2.5 text-center font-mono text-surface-200">
-                  {set.reps}
-                </td>
-                <td className="px-4 py-2.5 text-center font-mono text-surface-200">
-                  {set.rpe}
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <SetQualityBadge quality={set.quality} />
-                </td>
-              </tr>
+              editingSetId === set.id ? (
+                <tr key={set.id} className="bg-primary-500/10">
+                  <td className="px-4 py-2 text-surface-300">{set.setNumber}</td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      type="number"
+                      value={editWeight}
+                      onChange={(e) => setEditWeight(e.target.value)}
+                      step="0.5"
+                      className="w-full px-2 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      type="number"
+                      value={editReps}
+                      onChange={(e) => setEditReps(e.target.value)}
+                      className="w-full px-2 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <input
+                      type="number"
+                      value={editRpe}
+                      onChange={(e) => setEditRpe(e.target.value)}
+                      step="0.5"
+                      className="w-full px-2 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <div className="flex gap-1 justify-end">
+                      <button
+                        onClick={saveEdit}
+                        className="p-1 text-success-400 hover:bg-success-500/20 rounded"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        className="p-1 text-surface-400 hover:bg-surface-700 rounded"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr
+                  key={set.id}
+                  onClick={() => onSetEdit && startEditing(set)}
+                  className={`hover:bg-surface-800/30 ${onSetEdit ? 'cursor-pointer' : ''}`}
+                >
+                  <td className="px-4 py-2.5 text-surface-300">{set.setNumber}</td>
+                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                    {set.weightKg}kg
+                  </td>
+                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                    {set.reps}
+                  </td>
+                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                    {set.rpe}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <SetQualityBadge quality={set.quality} />
+                  </td>
+                </tr>
+              )
             ))}
             {/* Remaining sets placeholder */}
             {Array.from({ length: block.targetSets - completedSets.length }).map((_, i) => (

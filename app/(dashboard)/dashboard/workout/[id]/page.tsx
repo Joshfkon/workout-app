@@ -190,6 +190,34 @@ export default function WorkoutPage() {
     setShowRestTimer(true);
   };
 
+  const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number }) => {
+    // Update local state
+    setCompletedSets(completedSets.map(set => 
+      set.id === setId 
+        ? { 
+            ...set, 
+            weightKg: data.weightKg, 
+            reps: data.reps, 
+            rpe: data.rpe,
+            quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const,
+          }
+        : set
+    ));
+
+    // Update in database
+    try {
+      const supabase = createUntypedClient();
+      await supabase.from('set_logs').update({
+        weight_kg: data.weightKg,
+        reps: data.reps,
+        rpe: data.rpe,
+        quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective',
+      }).eq('id', setId);
+    } catch (err) {
+      console.error('Failed to update set:', err);
+    }
+  };
+
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
@@ -315,16 +343,18 @@ export default function WorkoutPage() {
         />
       </div>
 
-      {/* Rest timer */}
+      {/* Rest timer - fixed on mobile */}
       {showRestTimer && (
-        <div className="animate-slide-down">
-          <RestTimer
-            defaultSeconds={currentBlock.targetRestSeconds}
-            autoStart
-            onComplete={() => setShowRestTimer(false)}
-          />
-        </div>
+        <RestTimer
+          defaultSeconds={currentBlock.targetRestSeconds}
+          autoStart
+          onComplete={() => setShowRestTimer(false)}
+          onDismiss={() => setShowRestTimer(false)}
+        />
       )}
+
+      {/* Spacer for fixed timer on mobile */}
+      {showRestTimer && <div className="h-40 lg:hidden" />}
 
       {/* Warmup protocol */}
       {currentBlock.warmupProtocol && currentBlock.warmupProtocol.length > 0 && (
@@ -340,6 +370,7 @@ export default function WorkoutPage() {
         exercise={currentExercise}
         block={currentBlock}
         sets={currentBlockSets}
+        onSetEdit={handleSetEdit}
         isActive
       />
 

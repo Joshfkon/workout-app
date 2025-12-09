@@ -8,12 +8,14 @@ interface RestTimerProps {
   defaultSeconds?: number;
   autoStart?: boolean;
   onComplete?: () => void;
+  onDismiss?: () => void;
 }
 
 export function RestTimer({
   defaultSeconds = 180,
   autoStart = false,
   onComplete,
+  onDismiss,
 }: RestTimerProps) {
   const [seconds, setSeconds] = useState(defaultSeconds);
   const [isRunning, setIsRunning] = useState(autoStart);
@@ -97,13 +99,25 @@ export function RestTimer({
   };
 
   return (
-    <div className="bg-surface-900 border border-surface-800 rounded-xl p-4">
-      {/* Timer display */}
-      <div className="text-center mb-4">
-        <div className={`text-4xl font-mono font-bold ${getTimerColor()}`}>
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 border-t border-surface-800 p-3 shadow-2xl lg:relative lg:rounded-xl lg:border lg:shadow-none lg:p-4">
+      {/* Dismiss button - mobile only */}
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          className="absolute top-2 right-2 p-1.5 text-surface-500 hover:text-surface-300 lg:hidden"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+
+      {/* Timer display - compact on mobile */}
+      <div className="text-center mb-3 lg:mb-4">
+        <div className={`text-3xl lg:text-4xl font-mono font-bold ${getTimerColor()}`}>
           {formatDuration(seconds)}
         </div>
-        <p className="text-sm text-surface-500 mt-1">Rest Timer</p>
+        <p className="text-xs lg:text-sm text-surface-500 mt-0.5 lg:mt-1">Rest Timer</p>
       </div>
 
       {/* Progress bar */}
@@ -160,8 +174,8 @@ export function RestTimer({
         </button>
       </div>
 
-      {/* Quick presets */}
-      <div className="flex justify-center gap-2 mt-4 pt-4 border-t border-surface-800">
+      {/* Quick presets - hidden on mobile to save space */}
+      <div className="hidden lg:flex justify-center gap-2 mt-4 pt-4 border-t border-surface-800">
         {[60, 90, 120, 180, 240].map((preset) => (
           <button
             key={preset}
