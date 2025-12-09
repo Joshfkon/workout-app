@@ -490,14 +490,28 @@ export default function WorkoutPage() {
     );
   }
 
+  // Helper to get sets for a specific block
+  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId);
+
+  // Check if a block is complete
+  const isBlockComplete = (block: ExerciseBlockWithExercise) => {
+    const blockSets = getSetsForBlock(block.id);
+    return blockSets.length >= block.targetSets;
+  };
+
+  // Calculate overall workout progress
+  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
+  const totalCompletedSets = completedSets.filter(s => !s.isWarmup).length;
+  const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 pb-8">
       {/* Workout header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
         <div>
           <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
           <p className="text-surface-400">
-            Exercise {currentBlockIndex + 1} of {blocks.length}
+            {totalCompletedSets} of {totalPlannedSets} sets completed
           </p>
         </div>
         <div className="flex gap-2">
@@ -513,11 +527,11 @@ export default function WorkoutPage() {
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* Overall progress bar */}
       <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
         <div
           className="bg-primary-500 h-full transition-all duration-300"
-          style={{ width: `${(currentBlockSets.length / currentBlock.targetSets) * 100}%` }}
+          style={{ width: `${overallProgress}%` }}
         />
       </div>
 
@@ -534,66 +548,167 @@ export default function WorkoutPage() {
       {/* Spacer for fixed timer on mobile */}
       {showRestTimer && <div className="h-40 lg:hidden" />}
 
-      {/* Warmup protocol */}
-      {currentBlock.warmupProtocol && currentBlock.warmupProtocol.length > 0 && (
-        <WarmupProtocol
-          warmupSets={currentBlock.warmupProtocol}
-          workingWeight={currentBlock.targetWeightKg}
-          minIncrement={currentExercise.minWeightIncrementKg}
-        />
-      )}
+      {/* All exercises list */}
+      <div className="space-y-4">
+        {blocks.map((block, index) => {
+          const blockSets = getSetsForBlock(block.id);
+          const isComplete = blockSets.length >= block.targetSets;
+          const isCurrent = index === currentBlockIndex;
+          const isPast = index < currentBlockIndex;
+          const isFuture = index > currentBlockIndex;
 
-      {/* Exercise card */}
-      <ExerciseCard
-        exercise={currentExercise}
-        block={currentBlock}
-        sets={currentBlockSets}
-        onSetEdit={handleSetEdit}
-        isActive
-        unit={preferences.units}
-      />
+          return (
+            <div 
+              key={block.id} 
+              id={`exercise-${index}`}
+              className={`transition-all duration-300 ${
+                isCurrent ? '' : 'opacity-80'
+              }`}
+            >
+              {/* Exercise header with status */}
+              <div 
+                className={`flex items-center gap-3 mb-2 cursor-pointer`}
+                onClick={() => {
+                  setCurrentBlockIndex(index);
+                  setCurrentSetNumber(blockSets.length + 1);
+                }}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
+                  isComplete 
+                    ? 'bg-success-500/20 text-success-400' 
+                    : isCurrent 
+                      ? 'bg-primary-500 text-white' 
+                      : 'bg-surface-800 text-surface-400'
+                }`}>
+                  {isComplete ? (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    index + 1
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
+                    {block.exercise.name}
+                  </p>
+                  <p className="text-xs text-surface-500">
+                    {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
+                  </p>
+                </div>
+                {isCurrent && (
+                  <Badge variant="info" size="sm">Current</Badge>
+                )}
+                {isComplete && !isCurrent && (
+                  <Badge variant="success" size="sm">Done</Badge>
+                )}
+              </div>
 
-      {/* Set input */}
-      {currentBlockSets.length < currentBlock.targetSets && (
-        <SetInputRow
-          setNumber={currentBlockSets.length + 1}
-          targetWeight={currentBlock.targetWeightKg}
-          targetRepRange={currentBlock.targetRepRange}
-          targetRir={currentBlock.targetRir}
-          previousSet={currentBlockSets[currentBlockSets.length - 1]}
-          isLastSet={currentBlockSets.length + 1 === currentBlock.targetSets}
-          onSubmit={handleSetComplete}
-          unit={preferences.units}
-        />
-      )}
+              {/* Expanded content for current exercise */}
+              {isCurrent && (
+                <div className="ml-11 space-y-4">
+                  {/* Warmup protocol */}
+                  {block.warmupProtocol && block.warmupProtocol.length > 0 && (
+                    <WarmupProtocol
+                      warmupSets={block.warmupProtocol}
+                      workingWeight={block.targetWeightKg}
+                      minIncrement={block.exercise.minWeightIncrementKg}
+                    />
+                  )}
 
-      {/* All sets completed for current exercise */}
-      {currentBlockSets.length >= currentBlock.targetSets && (
-        <Card className="text-center py-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <p className="text-lg font-medium text-surface-200">Exercise Complete!</p>
-          <p className="text-surface-500 mt-1">
-            {currentBlockIndex < blocks.length - 1 
-              ? 'Move to next exercise or finish workout'
-              : 'All exercises done! Finish your workout'}
-          </p>
-          <div className="flex justify-center gap-3 mt-4">
-            {currentBlockIndex < blocks.length - 1 && (
-              <Button variant="secondary" onClick={handleNextExercise}>
-                Next Exercise
-              </Button>
-            )}
-            <Button variant="ghost" onClick={handleOpenAddExercise}>
-              Add Exercise
-            </Button>
-            <Button onClick={handleWorkoutComplete}>Finish Workout</Button>
-          </div>
-        </Card>
-      )}
+                  {/* Exercise card */}
+                  <ExerciseCard
+                    exercise={block.exercise}
+                    block={block}
+                    sets={blockSets}
+                    onSetEdit={handleSetEdit}
+                    isActive
+                    unit={preferences.units}
+                  />
+
+                  {/* Set input */}
+                  {blockSets.length < block.targetSets && (
+                    <SetInputRow
+                      setNumber={blockSets.length + 1}
+                      targetWeight={block.targetWeightKg}
+                      targetRepRange={block.targetRepRange}
+                      targetRir={block.targetRir}
+                      previousSet={blockSets[blockSets.length - 1]}
+                      isLastSet={blockSets.length + 1 === block.targetSets}
+                      onSubmit={handleSetComplete}
+                      unit={preferences.units}
+                    />
+                  )}
+
+                  {/* Exercise complete actions */}
+                  {isComplete && (
+                    <div className="flex justify-center gap-3 py-4">
+                      {index < blocks.length - 1 && (
+                        <Button variant="secondary" onClick={handleNextExercise}>
+                          Next Exercise →
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Collapsed preview for non-current exercises */}
+              {!isCurrent && (
+                <div 
+                  className={`ml-11 p-3 rounded-lg cursor-pointer transition-colors ${
+                    isComplete ? 'bg-success-500/5 border border-success-500/20' : 'bg-surface-800/30 hover:bg-surface-800/50'
+                  }`}
+                  onClick={() => {
+                    setCurrentBlockIndex(index);
+                    setCurrentSetNumber(blockSets.length + 1);
+                  }}
+                >
+                  {isComplete ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex gap-3 flex-wrap">
+                        {blockSets.map((set, setIdx) => (
+                          <span key={set.id} className="text-xs text-surface-400">
+                            Set {setIdx + 1}: {set.weightKg}kg × {set.reps}
+                          </span>
+                        ))}
+                      </div>
+                      <button className="text-xs text-primary-400 hover:text-primary-300">
+                        Edit
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-surface-500">
+                      <span className="text-sm">
+                        {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
+                        {block.targetWeightKg > 0 && ` @ ${block.targetWeightKg}kg`}
+                      </span>
+                      <span className="text-xs">Tap to start</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Finish workout button at bottom */}
+      <Card className="text-center py-6 mt-8">
+        <p className="text-surface-400 mb-4">
+          {overallProgress >= 100 
+            ? '🎉 All exercises complete!' 
+            : `${Math.round(overallProgress)}% complete`}
+        </p>
+        <div className="flex justify-center gap-3">
+          <Button variant="ghost" onClick={handleOpenAddExercise}>
+            + Add Exercise
+          </Button>
+          <Button onClick={handleWorkoutComplete}>
+            Finish Workout
+          </Button>
+        </div>
+      </Card>
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
