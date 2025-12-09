@@ -38,7 +38,7 @@ export default function AnalyticsPage() {
       {/* What you'll see section */}
       <Card>
         <CardHeader>
-          <CardTitle>What You'll See Here</CardTitle>
+          <CardTitle>What You&apos;ll See Here</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-3">

@@ -61,7 +61,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip }: ReadinessCheckInProps) {
           Pre-Workout Check-In
         </h2>
         <p className="text-sm text-surface-400 mt-1">
-          Help us optimize your workout based on how you're feeling today
+          Help us optimize your workout based on how you&apos;re feeling today
         </p>
       </div>
 
@@ -144,7 +144,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip }: ReadinessCheckInProps) {
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-surface-200">
-              Today's Nutrition
+              Today&apos;s Nutrition
             </label>
             <span className="text-sm text-primary-400">
               {getRatingLabel(nutritionRating, 'nutrition')}

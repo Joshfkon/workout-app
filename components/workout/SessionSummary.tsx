@@ -137,7 +137,7 @@ export function SessionSummary({
       {/* Session RPE */}
       <Card>
         <h3 className="text-sm font-medium text-surface-200 mb-3">
-          How hard was this session overall?
+          How hard was this session?
         </h3>
         <div className="flex gap-1">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rpe) => (
