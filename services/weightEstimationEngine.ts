@@ -7,7 +7,8 @@
 // - Bodyweight ratios as fallback
 // ============================================================
 
-import type { Experience, MuscleGroup } from '@/types/schema';
+import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
+import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './regionalAnalysis';
 
 // ============================================================
 // TYPES FOR WEIGHT ESTIMATION
@@ -72,6 +73,8 @@ export interface UserStrengthProfile {
   trainingAge: number;
   exerciseHistory: ExerciseHistoryEntry[];
   knownMaxes: EstimatedMax[];
+  regionalData?: DexaRegionalData;
+  regionalAnalysis?: RegionalAnalysis;
 }
 
 // ============================================================
@@ -607,8 +610,16 @@ export class WeightEstimationEngine {
     targetRIR: number
   ): WorkingWeightRecommendation {
     const avgReps = Math.round((targetReps.min + targetReps.max) / 2);
-    const workingWeight = calculateWorkingWeight(estimatedMax.estimated1RM, avgReps, targetRIR);
+    let workingWeight = calculateWorkingWeight(estimatedMax.estimated1RM, avgReps, targetRIR);
     const variance = estimatedMax.confidence === 'high' ? 0.05 : 0.10;
+    
+    // Apply regional mass adjustment if available
+    let additionalNote = '';
+    if (this.profile.regionalData) {
+      const regionalAdj = this.adjustForRegionalMass(workingWeight, exerciseName);
+      workingWeight = regionalAdj.weight;
+      additionalNote = regionalAdj.note;
+    }
     
     return {
       exercise: exerciseName,
@@ -620,7 +631,7 @@ export class WeightEstimationEngine {
         high: this.roundToNearestPlate(workingWeight * (1 + variance))
       },
       confidence: estimatedMax.confidence as 'high' | 'medium',
-      rationale: this.buildRationale(estimatedMax, avgReps, targetRIR),
+      rationale: this.buildRationale(estimatedMax, avgReps, targetRIR) + (additionalNote ? ` ${additionalNote}` : ''),
       warmupProtocol: this.generateWarmupSets(workingWeight, exerciseName)
     };
   }
@@ -771,6 +782,95 @@ export class WeightEstimationEngine {
     return `${sourceExplanation[estimatedMax.source]}. Est. 1RM: ${estimatedMax.estimated1RM}kg → ${percentage}% for ${targetReps} reps @ ${targetRIR} RIR.`;
   }
   
+  // Adjust weight recommendation based on regional lean mass
+  private adjustForRegionalMass(
+    baseWeight: number,
+    exerciseName: string
+  ): { weight: number; note: string } {
+    if (!this.profile.regionalAnalysis || !this.profile.regionalData) {
+      return { weight: baseWeight, note: '' };
+    }
+    
+    const region = this.getExerciseRegion(exerciseName);
+    if (!region) return { weight: baseWeight, note: '' };
+    
+    const userPart = this.profile.regionalAnalysis.parts.find(p => p.name === region);
+    if (!userPart) return { weight: baseWeight, note: '' };
+    
+    // Get average regional lean mass for comparison
+    const avgRegional = getAverageRegionalLeanMass(this.profile.bodyComposition.leanMassKg);
+    const avgLean = region === 'Arms' ? avgRegional.arms :
+                    region === 'Legs' ? avgRegional.legs :
+                    avgRegional.trunk;
+    
+    // Calculate adjustment (60% carryover from lean mass to strength)
+    const leanMassRatio = userPart.leanMassKg / avgLean;
+    const adjustment = 1 + (leanMassRatio - 1) * 0.6;
+    
+    const adjustedWeight = Math.round(baseWeight * adjustment * 10) / 10;
+    
+    let note = '';
+    if (adjustment > 1.05) {
+      note = `Adjusted +${Math.round((adjustment - 1) * 100)}% based on above-average ${region.toLowerCase()} muscle mass.`;
+    } else if (adjustment < 0.95) {
+      note = `Adjusted ${Math.round((adjustment - 1) * 100)}% based on below-average ${region.toLowerCase()} muscle mass.`;
+    }
+    
+    return { weight: adjustedWeight, note };
+  }
+  
+  // Get asymmetry adjustment for unilateral exercises
+  getAsymmetryAdjustment(
+    exerciseName: string,
+    side: 'left' | 'right'
+  ): { adjustment: number; note: string } {
+    if (!this.profile.regionalAnalysis) {
+      return { adjustment: 0, note: '' };
+    }
+    
+    const isArmExercise = ['Curl', 'Tricep', 'Press', 'Raise', 'Fly'].some(k => exerciseName.includes(k));
+    const isLegExercise = ['Lunge', 'Split', 'Step', 'Leg'].some(k => exerciseName.includes(k));
+    
+    let asymmetry: number;
+    if (isArmExercise) {
+      asymmetry = this.profile.regionalAnalysis.asymmetries.arms;
+    } else if (isLegExercise) {
+      asymmetry = this.profile.regionalAnalysis.asymmetries.legs;
+    } else {
+      return { adjustment: 0, note: '' };
+    }
+    
+    // Positive asymmetry = right is stronger
+    // If doing left side and right is stronger, reduce weight
+    const adjustmentPercent = side === 'left' 
+      ? (asymmetry > 0 ? -asymmetry / 200 : 0)
+      : (asymmetry < 0 ? asymmetry / 200 : 0);
+    
+    const adjustment = adjustmentPercent;
+    
+    let note = '';
+    if (Math.abs(asymmetry) >= 5) {
+      const strongerSide = asymmetry > 0 ? 'right' : 'left';
+      const weakerSide = asymmetry > 0 ? 'left' : 'right';
+      if (side === weakerSide) {
+        note = `Your ${weakerSide} side is ${Math.abs(asymmetry).toFixed(0)}% weaker. Start with this side and match reps on your ${strongerSide}.`;
+      }
+    }
+    
+    return { adjustment, note };
+  }
+  
+  private getExerciseRegion(exerciseName: string): 'Arms' | 'Legs' | 'Trunk' | null {
+    const armKeywords = ['Curl', 'Tricep', 'Pushdown', 'Extension', 'Kickback'];
+    const legKeywords = ['Squat', 'Leg', 'Lunge', 'Calf', 'Hamstring', 'Glute', 'Hip'];
+    const trunkKeywords = ['Row', 'Pull', 'Deadlift', 'Press', 'Bench', 'Fly', 'Lat', 'Chest', 'Back'];
+    
+    if (armKeywords.some(k => exerciseName.includes(k))) return 'Arms';
+    if (legKeywords.some(k => exerciseName.includes(k))) return 'Legs';
+    if (trunkKeywords.some(k => exerciseName.includes(k))) return 'Trunk';
+    return null;
+  }
+  
   updateFromWorkout(exerciseName: string, sets: ExerciseHistoryEntry['sets']): void {
     const bestSet = this.findBestSet(sets);
     if (!bestSet) return;
@@ -803,7 +903,8 @@ export function createStrengthProfile(
   bodyFatPercentage: number,
   experience: Experience,
   trainingAge: number,
-  exerciseHistory: ExerciseHistoryEntry[] = []
+  exerciseHistory: ExerciseHistoryEntry[] = [],
+  regionalData?: DexaRegionalData
 ): UserStrengthProfile {
   const bodyComp = calculateBodyComposition(weightKg, bodyFatPercentage, heightCm);
   
@@ -841,12 +942,19 @@ export function createStrengthProfile(
     }
   }
   
+  // Calculate regional analysis if regional data provided
+  const regionalAnalysis = regionalData 
+    ? analyzeRegionalComposition(regionalData, bodyComp.leanMassKg)
+    : undefined;
+  
   return {
     bodyComposition: bodyComp,
     experience,
     trainingAge,
     exerciseHistory,
-    knownMaxes
+    knownMaxes,
+    regionalData,
+    regionalAnalysis
   };
 }
 
@@ -861,7 +969,8 @@ export function quickWeightEstimate(
   userWeightKg: number,
   heightCm: number,
   bodyFatPercent: number,
-  experience: Experience
+  experience: Experience,
+  regionalData?: DexaRegionalData
 ): WorkingWeightRecommendation {
   const profile = createStrengthProfile(
     heightCm,
@@ -869,7 +978,8 @@ export function quickWeightEstimate(
     bodyFatPercent,
     experience,
     experience === 'novice' ? 0.5 : experience === 'intermediate' ? 2 : 5,
-    []
+    [],
+    regionalData
   );
   
   const engine = new WeightEstimationEngine(profile);

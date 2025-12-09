@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateLeanMass, calculateFatMass } from '@/services/bodyCompEngine';
+import type { DexaRegionalData } from '@/types/schema';
 
 export default function AddDexaScanPage() {
   const router = useRouter();
@@ -20,6 +21,17 @@ export default function AddDexaScanPage() {
   const [boneMassKg, setBoneMassKg] = useState('');
   const [notes, setNotes] = useState('');
   const [inputMode, setInputMode] = useState<'calculated' | 'manual'>('calculated');
+  
+  // Regional data state
+  const [showRegionalData, setShowRegionalData] = useState(false);
+  const [regionalData, setRegionalData] = useState({
+    leftArmFat: '', leftArmLean: '',
+    rightArmFat: '', rightArmLean: '',
+    leftLegFat: '', leftLegLean: '',
+    rightLegFat: '', rightLegLean: '',
+    trunkFat: '', trunkLean: '',
+    androidFat: '', gynoidFat: '',
+  });
 
   // Auto-calculate lean/fat mass when weight and body fat are entered
   const handleWeightOrBfChange = (newWeight: string, newBf: string) => {
@@ -39,6 +51,36 @@ export default function AddDexaScanPage() {
     }
   };
 
+  // Build regional data object if any regional fields are filled
+  const buildRegionalData = (): DexaRegionalData | null => {
+    const { leftArmFat, leftArmLean, rightArmFat, rightArmLean,
+            leftLegFat, leftLegLean, rightLegFat, rightLegLean,
+            trunkFat, trunkLean, androidFat, gynoidFat } = regionalData;
+    
+    // Check if any regional data was entered
+    const hasAnyRegionalData = Object.values(regionalData).some(v => v !== '');
+    if (!hasAnyRegionalData) return null;
+    
+    // Validate that if regional data is entered, the essential fields are filled
+    const hasArmsData = leftArmLean && rightArmLean;
+    const hasLegsData = leftLegLean && rightLegLean;
+    const hasTrunkData = trunkLean;
+    
+    if (!hasArmsData || !hasLegsData || !hasTrunkData) {
+      return null; // Incomplete regional data
+    }
+    
+    return {
+      left_arm: { fat_g: parseFloat(leftArmFat) || 0, lean_g: parseFloat(leftArmLean) || 0 },
+      right_arm: { fat_g: parseFloat(rightArmFat) || 0, lean_g: parseFloat(rightArmLean) || 0 },
+      left_leg: { fat_g: parseFloat(leftLegFat) || 0, lean_g: parseFloat(leftLegLean) || 0 },
+      right_leg: { fat_g: parseFloat(rightLegFat) || 0, lean_g: parseFloat(rightLegLean) || 0 },
+      trunk: { fat_g: parseFloat(trunkFat) || 0, lean_g: parseFloat(trunkLean) || 0 },
+      android: { fat_g: parseFloat(androidFat) || 0 },
+      gynoid: { fat_g: parseFloat(gynoidFat) || 0 },
+    };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -55,6 +97,7 @@ export default function AddDexaScanPage() {
       const lean = parseFloat(leanMassKg);
       const fat = parseFloat(fatMassKg);
       const bone = boneMassKg ? parseFloat(boneMassKg) : null;
+      const regional = buildRegionalData();
 
       if (isNaN(weight) || isNaN(bf) || isNaN(lean) || isNaN(fat)) {
         throw new Error('Please fill in all required fields with valid numbers');
@@ -72,6 +115,7 @@ export default function AddDexaScanPage() {
         fat_mass_kg: fat,
         body_fat_percent: bf,
         bone_mass_kg: bone,
+        regional_data: regional,
         notes: notes || null,
       });
 
@@ -238,6 +282,186 @@ export default function AddDexaScanPage() {
               placeholder="e.g., 2.95"
               hint="Bone mineral content if provided by your scan"
             />
+
+            {/* Regional Data Section */}
+            <div className="border border-surface-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowRegionalData(!showRegionalData)}
+                className="w-full flex items-center justify-between p-4 bg-surface-800/50 hover:bg-surface-800 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-surface-200">Regional Body Composition</span>
+                  <Badge variant="info" size="sm">Optional</Badge>
+                </div>
+                <svg 
+                  className={`w-5 h-5 text-surface-400 transition-transform ${showRegionalData ? 'rotate-180' : ''}`}
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {showRegionalData && (
+                <div className="p-4 space-y-6 border-t border-surface-700">
+                  <p className="text-xs text-surface-500">
+                    If your DEXA report includes regional breakdown, enter it here for better exercise recommendations 
+                    and asymmetry detection. Values should be in <strong>grams (g)</strong>.
+                  </p>
+                  
+                  {/* Arms */}
+                  <div>
+                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                      💪 Arms
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <p className="text-xs text-surface-500 font-medium">Left Arm</p>
+                        <Input
+                          label="Lean (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.leftArmLean}
+                          onChange={(e) => setRegionalData({...regionalData, leftArmLean: e.target.value})}
+                          placeholder="e.g., 3500"
+                        />
+                        <Input
+                          label="Fat (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.leftArmFat}
+                          onChange={(e) => setRegionalData({...regionalData, leftArmFat: e.target.value})}
+                          placeholder="e.g., 1200"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <p className="text-xs text-surface-500 font-medium">Right Arm</p>
+                        <Input
+                          label="Lean (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.rightArmLean}
+                          onChange={(e) => setRegionalData({...regionalData, rightArmLean: e.target.value})}
+                          placeholder="e.g., 3650"
+                        />
+                        <Input
+                          label="Fat (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.rightArmFat}
+                          onChange={(e) => setRegionalData({...regionalData, rightArmFat: e.target.value})}
+                          placeholder="e.g., 1150"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Legs */}
+                  <div>
+                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                      🦵 Legs
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <p className="text-xs text-surface-500 font-medium">Left Leg</p>
+                        <Input
+                          label="Lean (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.leftLegLean}
+                          onChange={(e) => setRegionalData({...regionalData, leftLegLean: e.target.value})}
+                          placeholder="e.g., 9800"
+                        />
+                        <Input
+                          label="Fat (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.leftLegFat}
+                          onChange={(e) => setRegionalData({...regionalData, leftLegFat: e.target.value})}
+                          placeholder="e.g., 4200"
+                        />
+                      </div>
+                      <div className="space-y-3">
+                        <p className="text-xs text-surface-500 font-medium">Right Leg</p>
+                        <Input
+                          label="Lean (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.rightLegLean}
+                          onChange={(e) => setRegionalData({...regionalData, rightLegLean: e.target.value})}
+                          placeholder="e.g., 10200"
+                        />
+                        <Input
+                          label="Fat (g)"
+                          type="number"
+                          step="1"
+                          value={regionalData.rightLegFat}
+                          onChange={(e) => setRegionalData({...regionalData, rightLegFat: e.target.value})}
+                          placeholder="e.g., 4100"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trunk */}
+                  <div>
+                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                      🫁 Trunk
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="Lean (g)"
+                        type="number"
+                        step="1"
+                        value={regionalData.trunkLean}
+                        onChange={(e) => setRegionalData({...regionalData, trunkLean: e.target.value})}
+                        placeholder="e.g., 28000"
+                      />
+                      <Input
+                        label="Fat (g)"
+                        type="number"
+                        step="1"
+                        value={regionalData.trunkFat}
+                        onChange={(e) => setRegionalData({...regionalData, trunkFat: e.target.value})}
+                        placeholder="e.g., 8500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Android/Gynoid */}
+                  <div>
+                    <h4 className="text-sm font-medium text-surface-300 mb-3 flex items-center gap-2">
+                      📊 Android/Gynoid Fat Regions
+                    </h4>
+                    <p className="text-xs text-surface-500 mb-3">
+                      These measurements help assess metabolic health risk. Lower android/gynoid ratio is generally better.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <Input
+                        label="Android Fat (g)"
+                        type="number"
+                        step="1"
+                        value={regionalData.androidFat}
+                        onChange={(e) => setRegionalData({...regionalData, androidFat: e.target.value})}
+                        placeholder="e.g., 2800"
+                        hint="Abdominal region"
+                      />
+                      <Input
+                        label="Gynoid Fat (g)"
+                        type="number"
+                        step="1"
+                        value={regionalData.gynoidFat}
+                        onChange={(e) => setRegionalData({...regionalData, gynoidFat: e.target.value})}
+                        placeholder="e.g., 3200"
+                        hint="Hip/thigh region"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Notes */}
             <div>

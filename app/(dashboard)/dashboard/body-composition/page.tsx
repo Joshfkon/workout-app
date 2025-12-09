@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { FFMIGauge } from '@/components/analytics/FFMIGauge';
 import { createUntypedClient } from '@/lib/supabase/client';
-import type { DexaScan, Goal, Experience, FFMIResult, BodyCompRecommendation } from '@/types/schema';
+import type { DexaScan, Goal, Experience, FFMIResult, BodyCompRecommendation, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
 import {
   calculateFFMI,
   analyzeBodyCompTrend,
@@ -14,6 +14,12 @@ import {
   getFFMILabel,
   getTrendIndicator,
 } from '@/services/bodyCompEngine';
+import { 
+  analyzeRegionalComposition, 
+  getAsymmetryRecommendations,
+  analyzeRegionalFatDistribution,
+  getAsymmetrySeverity
+} from '@/services/regionalAnalysis';
 
 interface UserProfile {
   heightCm: number | null;
@@ -76,6 +82,7 @@ export default function BodyCompositionPage() {
           fatMassKg: scan.fat_mass_kg,
           bodyFatPercent: scan.body_fat_percent,
           boneMassKg: scan.bone_mass_kg,
+          regionalData: scan.regional_data as DexaRegionalData | null,
           notes: scan.notes,
           createdAt: scan.created_at,
         }));
@@ -127,6 +134,17 @@ export default function BodyCompositionPage() {
     : [];
   const targets = latestScan && userProfile?.heightCm
     ? calculateBodyCompTargets(latestScan, userProfile.heightCm, userProfile.goal, userProfile.experience)
+    : null;
+  
+  // Regional analysis (if regional data available)
+  const regionalAnalysis = latestScan?.regionalData
+    ? analyzeRegionalComposition(latestScan.regionalData, latestScan.leanMassKg)
+    : null;
+  const asymmetryRecs = regionalAnalysis
+    ? getAsymmetryRecommendations(regionalAnalysis.asymmetries)
+    : [];
+  const fatDistribution = latestScan?.regionalData
+    ? analyzeRegionalFatDistribution(latestScan.regionalData)
     : null;
 
   if (isLoading) {
@@ -375,6 +393,187 @@ export default function BodyCompositionPage() {
                     ⚠️ Your height ({userProfile.heightCm} cm) seems unusual. Please verify in Settings.
                   </p>
                 ) : null}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Regional Body Composition Analysis */}
+          {regionalAnalysis && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  Regional Analysis
+                  <Badge variant="info" size="sm">From DEXA</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Body Part Distribution */}
+                <div>
+                  <h4 className="text-sm font-medium text-surface-400 mb-3">Lean Mass Distribution</h4>
+                  <div className="space-y-3">
+                    {regionalAnalysis.parts.map((part) => (
+                      <div key={part.name} className="flex items-center gap-3">
+                        <div className="w-16 text-sm text-surface-400">{part.name}</div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-3 bg-surface-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${
+                                  part.status === 'lagging' ? 'bg-warning-500' :
+                                  part.status === 'dominant' ? 'bg-success-500' :
+                                  'bg-primary-500'
+                                }`}
+                                style={{ width: `${Math.min(100, (part.percentOfTotal / 50) * 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-sm font-mono text-surface-200 w-16">
+                              {part.leanMassKg.toFixed(1)} kg
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-surface-500">{part.percentOfTotal}% of total</span>
+                            {part.symmetryScore && (
+                              <span className={`text-xs ${part.symmetryScore >= 95 ? 'text-success-400' : part.symmetryScore >= 90 ? 'text-warning-400' : 'text-danger-400'}`}>
+                                • Symmetry: {part.symmetryScore.toFixed(0)}%
+                              </span>
+                            )}
+                            <Badge 
+                              variant={part.status === 'lagging' ? 'warning' : part.status === 'dominant' ? 'success' : 'default'} 
+                              size="sm"
+                            >
+                              {part.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Asymmetry Analysis */}
+                {(Math.abs(regionalAnalysis.asymmetries.arms) >= 3 || Math.abs(regionalAnalysis.asymmetries.legs) >= 3) && (
+                  <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                    <h4 className="text-sm font-medium text-warning-400 mb-2">⚠️ Asymmetry Detected</h4>
+                    <div className="space-y-2 text-sm">
+                      {Math.abs(regionalAnalysis.asymmetries.arms) >= 3 && (
+                        <p className="text-surface-300">
+                          <strong>Arms:</strong> {regionalAnalysis.asymmetries.arms > 0 ? 'Right' : 'Left'} arm is {Math.abs(regionalAnalysis.asymmetries.arms).toFixed(1)}% larger
+                          <span className={`ml-2 ${
+                            getAsymmetrySeverity(regionalAnalysis.asymmetries.arms) === 'significant' ? 'text-danger-400' :
+                            getAsymmetrySeverity(regionalAnalysis.asymmetries.arms) === 'moderate' ? 'text-warning-400' :
+                            'text-surface-500'
+                          }`}>
+                            ({getAsymmetrySeverity(regionalAnalysis.asymmetries.arms)})
+                          </span>
+                        </p>
+                      )}
+                      {Math.abs(regionalAnalysis.asymmetries.legs) >= 3 && (
+                        <p className="text-surface-300">
+                          <strong>Legs:</strong> {regionalAnalysis.asymmetries.legs > 0 ? 'Right' : 'Left'} leg is {Math.abs(regionalAnalysis.asymmetries.legs).toFixed(1)}% larger
+                          <span className={`ml-2 ${
+                            getAsymmetrySeverity(regionalAnalysis.asymmetries.legs) === 'significant' ? 'text-danger-400' :
+                            getAsymmetrySeverity(regionalAnalysis.asymmetries.legs) === 'moderate' ? 'text-warning-400' :
+                            'text-surface-500'
+                          }`}>
+                            ({getAsymmetrySeverity(regionalAnalysis.asymmetries.legs)})
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                    {asymmetryRecs.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-warning-500/20">
+                        <p className="text-xs text-warning-300 font-medium mb-1">Recommendations:</p>
+                        <ul className="text-xs text-surface-400 space-y-1">
+                          {asymmetryRecs.map((rec, i) => (
+                            <li key={i}>• {rec}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Lagging/Dominant Areas Summary */}
+                {(regionalAnalysis.laggingAreas.length > 0 || regionalAnalysis.dominantAreas.length > 0) && (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {regionalAnalysis.laggingAreas.length > 0 && (
+                      <div className="p-3 bg-surface-800/50 rounded-lg">
+                        <p className="text-xs font-medium text-warning-400 mb-2">Areas Needing Focus</p>
+                        <div className="flex flex-wrap gap-2">
+                          {regionalAnalysis.laggingAreas.map((area, i) => (
+                            <Badge key={i} variant="warning" size="sm">{area}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {regionalAnalysis.dominantAreas.length > 0 && (
+                      <div className="p-3 bg-surface-800/50 rounded-lg">
+                        <p className="text-xs font-medium text-success-400 mb-2">Strong Areas</p>
+                        <div className="flex flex-wrap gap-2">
+                          {regionalAnalysis.dominantAreas.map((area, i) => (
+                            <Badge key={i} variant="success" size="sm">{area}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Fat Distribution Health Indicator */}
+                {fatDistribution && (
+                  <div className="p-4 bg-surface-800/30 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-surface-300">Android/Gynoid Ratio</h4>
+                      <Badge 
+                        variant={
+                          fatDistribution.healthRisk === 'low' ? 'success' :
+                          fatDistribution.healthRisk === 'moderate' ? 'info' :
+                          fatDistribution.healthRisk === 'elevated' ? 'warning' :
+                          'danger'
+                        }
+                        size="sm"
+                      >
+                        {fatDistribution.healthRisk} risk
+                      </Badge>
+                    </div>
+                    <p className="text-2xl font-bold text-surface-100">{fatDistribution.androidGynoidRatio}</p>
+                    <p className="text-xs text-surface-500 mt-1">{fatDistribution.interpretation}</p>
+                  </div>
+                )}
+
+                {/* Part-specific recommendations */}
+                {regionalAnalysis.parts.some(p => p.recommendation) && (
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium text-surface-400">Training Recommendations</h4>
+                    {regionalAnalysis.parts.filter(p => p.recommendation).map((part, i) => (
+                      <div key={i} className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg text-sm text-surface-300">
+                        <strong>{part.name}:</strong> {part.recommendation}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Prompt to add regional data */}
+          {latestScan && !latestScan.regionalData && (
+            <Card className="border-dashed">
+              <CardContent className="py-8 text-center">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-800 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <p className="text-surface-300 font-medium">Unlock Regional Analysis</p>
+                <p className="text-sm text-surface-500 mt-1 max-w-sm mx-auto">
+                  Add regional data (arms, legs, trunk) from your next DEXA scan to identify weak areas and get better weight recommendations.
+                </p>
+                <Link href="/dashboard/body-composition/add">
+                  <Button variant="outline" className="mt-4">
+                    Add Regional Data
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           )}

@@ -173,6 +173,7 @@ export default function NewMesocyclePage() {
             fatMassKg: scans[0].fat_mass_kg,
             bodyFatPercent: scans[0].body_fat_percent,
             boneMassKg: scans[0].bone_mass_kg,
+            regionalData: scans[0].regional_data || null,
             notes: scans[0].notes,
             createdAt: scans[0].created_at,
           });

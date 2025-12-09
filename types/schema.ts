@@ -989,6 +989,64 @@ export type MovementPattern = (typeof MOVEMENT_PATTERNS)[number];
 // ============ DEXA SCAN & BODY COMPOSITION ============
 
 /**
+ * Regional body composition data from a single body region
+ */
+export interface RegionalBodyComp {
+  /** Fat mass in grams */
+  fat_g: number;
+  /** Lean mass in grams */
+  lean_g: number;
+}
+
+/**
+ * Complete regional body composition data from DEXA scan
+ */
+export interface DexaRegionalData {
+  left_arm: RegionalBodyComp;
+  right_arm: RegionalBodyComp;
+  left_leg: RegionalBodyComp;
+  right_leg: RegionalBodyComp;
+  trunk: RegionalBodyComp;
+  /** Android region (belly/abdominal) - fat only */
+  android: { fat_g: number };
+  /** Gynoid region (hips/thighs) - fat only */
+  gynoid: { fat_g: number };
+}
+
+/**
+ * Analysis of a single body part from regional DEXA data
+ */
+export interface BodyPartAnalysis {
+  name: string;
+  leanMassKg: number;
+  fatMassKg: number;
+  percentOfTotal: number;
+  /** Symmetry score (100 = perfect symmetry between left/right) */
+  symmetryScore?: number;
+  status: 'lagging' | 'balanced' | 'dominant';
+  recommendation?: string;
+}
+
+/**
+ * Complete regional body composition analysis
+ */
+export interface RegionalAnalysis {
+  parts: BodyPartAnalysis[];
+  asymmetries: {
+    /** % difference between arms (positive = right dominant) */
+    arms: number;
+    /** % difference between legs (positive = right dominant) */
+    legs: number;
+  };
+  /** Upper/lower body ratio (arms lean mass / legs lean mass). Ideal: 0.35-0.45 */
+  upperLowerRatio: number;
+  /** Android/Gynoid fat ratio (health marker - lower is better) */
+  androidGynoidRatio: number;
+  laggingAreas: string[];
+  dominantAreas: string[];
+}
+
+/**
  * DEXA scan entry for body composition tracking
  */
 export interface DexaScan {
@@ -1012,6 +1070,9 @@ export interface DexaScan {
   
   /** Bone mineral content in kg (optional) */
   boneMassKg: number | null;
+  
+  /** Regional body composition data (optional) */
+  regionalData: DexaRegionalData | null;
   
   /** Notes about the scan */
   notes: string | null;
