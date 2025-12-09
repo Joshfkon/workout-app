@@ -33,13 +33,23 @@ interface UserProfileForWeights {
   regionalData?: DexaRegionalData;
 }
 
-// Generate coach message based on workout structure
+interface UserContext {
+  goal?: 'bulk' | 'cut' | 'recomp' | 'maintain';
+  laggingAreas?: string[];  // From regional DEXA analysis
+  recentPlateaus?: string[];  // Exercise names with recent plateaus
+  weekInMesocycle?: number;
+  mesocycleName?: string;
+}
+
+// Generate coach message based on workout structure and user context
 function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
-  userProfile?: UserProfileForWeights
+  userProfile?: UserProfileForWeights,
+  userContext?: UserContext
 ): {
   greeting: string;
   overview: string;
+  personalizedInsight?: string;
   exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[];
   tips: string[];
 } {
@@ -67,24 +77,100 @@ function generateCoachMessage(
   else if (muscles.includes('back') && muscles.includes('biceps')) workoutType = 'Pull';
   else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
 
-  // Generate greeting based on time of day
+  // Generate greeting based on time of day and goal
   const hour = new Date().getHours();
   let timeGreeting = 'Hey';
   if (hour < 12) timeGreeting = 'Good morning';
   else if (hour < 17) timeGreeting = 'Good afternoon';
   else timeGreeting = 'Good evening';
 
-  const greetings = [
-    `${timeGreeting}! Ready to crush this ${workoutType} session? 💪`,
-    `${timeGreeting}! Today's ${workoutType} workout is designed for maximum gains.`,
-    `${timeGreeting}! Let's make this ${workoutType} session count!`,
-  ];
+  // Personalize greeting based on goal
+  let goalPhrase = '';
+  if (userContext?.goal === 'bulk') {
+    goalPhrase = 'Time to build! 💪';
+  } else if (userContext?.goal === 'cut') {
+    goalPhrase = 'Stay strong in your cut! 🔥';
+  } else if (userContext?.goal === 'recomp') {
+    goalPhrase = 'Building while leaning out! 💎';
+  }
+
+  const greetings = goalPhrase
+    ? [`${timeGreeting}! ${goalPhrase} Today's ${workoutType} workout is ready.`]
+    : [
+        `${timeGreeting}! Ready to crush this ${workoutType} session? 💪`,
+        `${timeGreeting}! Today's ${workoutType} workout is designed for maximum gains.`,
+        `${timeGreeting}! Let's make this ${workoutType} session count!`,
+      ];
+
+  // Generate personalized insight based on context
+  let personalizedInsight: string | undefined;
+  const insights: string[] = [];
+
+  // Goal-specific insights
+  if (userContext?.goal === 'bulk') {
+    insights.push(`Since you're bulking, prioritize progressive overload—try to add a rep or small weight increase today.`);
+    if (totalSets > 20) {
+      insights.push(`High volume today (${totalSets} sets) is perfect for your bulk. Make sure you're eating enough to recover!`);
+    }
+  } else if (userContext?.goal === 'cut') {
+    insights.push(`During your cut, maintaining intensity is key to preserving muscle. Don't drop the weight—keep it heavy, just manage volume.`);
+    if (compoundCount > 2) {
+      insights.push(`The compound focus helps maintain strength while in a deficit. If energy is low, prioritize these over isolation work.`);
+    }
+  }
+
+  // Lagging area insights
+  if (userContext?.laggingAreas && userContext.laggingAreas.length > 0) {
+    const laggingMusclesInWorkout = userContext.laggingAreas.filter(area => {
+      const areaLower = area.toLowerCase();
+      return muscles.some(m => {
+        if (areaLower.includes('arm')) return m === 'biceps' || m === 'triceps';
+        if (areaLower.includes('leg')) return m === 'quads' || m === 'hamstrings' || m === 'glutes' || m === 'calves';
+        if (areaLower.includes('trunk')) return m === 'chest' || m === 'back' || m === 'shoulders';
+        return areaLower.includes(m);
+      });
+    });
+    
+    if (laggingMusclesInWorkout.length > 0) {
+      insights.push(`📊 Your DEXA showed ${laggingMusclesInWorkout.join(', ')} as areas to bring up. Focus on mind-muscle connection and full ROM on those exercises today.`);
+    }
+  }
+
+  // Plateau insights
+  if (userContext?.recentPlateaus && userContext.recentPlateaus.length > 0) {
+    const plateauExercisesInWorkout = userContext.recentPlateaus.filter(ex => 
+      blocks.some(b => b.exercise.name.toLowerCase().includes(ex.toLowerCase()))
+    );
+    
+    if (plateauExercisesInWorkout.length > 0) {
+      insights.push(`⚠️ You've hit a plateau on ${plateauExercisesInWorkout.join(', ')}. Today, try a slightly different rep range or tempo to break through.`);
+    }
+  }
+
+  // Week in mesocycle insights
+  if (userContext?.weekInMesocycle) {
+    if (userContext.weekInMesocycle === 1) {
+      insights.push(`Week 1 of your ${userContext.mesocycleName || 'mesocycle'}—find your working weights and focus on form. Leave 2-3 reps in reserve.`);
+    } else if (userContext.weekInMesocycle >= 4) {
+      insights.push(`Week ${userContext.weekInMesocycle}—you should be approaching peak intensity. Push close to failure on your last sets!`);
+    }
+  }
+
+  // Combine insights
+  if (insights.length > 0) {
+    personalizedInsight = insights.slice(0, 2).join(' ');  // Max 2 insights to avoid overwhelm
+  }
 
   // Generate overview
-  const overviews = [
-    `Today you're hitting ${totalSets} total sets across ${blocks.length} exercises. ${compoundCount > 0 ? `Starting with ${compoundCount} compound movement${compoundCount > 1 ? 's' : ''} for strength and muscle activation, ` : ''}${isolationCount > 0 ? `then ${isolationCount} isolation exercise${isolationCount > 1 ? 's' : ''} to really target each muscle.` : ''}`,
-    `This session includes ${compoundCount} compound and ${isolationCount} isolation exercises (${totalSets} sets total). The order is optimized—big movements first when you're fresh, then targeted work to maximize the pump.`,
-  ];
+  let overviewBase = `${totalSets} total sets across ${blocks.length} exercises. `;
+  if (compoundCount > 0) {
+    overviewBase += `Starting with ${compoundCount} compound movement${compoundCount > 1 ? 's' : ''} for strength, `;
+  }
+  if (isolationCount > 0) {
+    overviewBase += `then ${isolationCount} isolation exercise${isolationCount > 1 ? 's' : ''} for targeted work.`;
+  }
+
+  const overviews = [overviewBase];
 
   // Generate exercise-specific notes
   const exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[] = [];
@@ -136,8 +222,15 @@ function generateCoachMessage(
     exerciseNotes.push({ name: ex.name, reason, weightRec });
   });
 
-  // Generate tips
+  // Generate tips based on goal and workout
   const tips: string[] = [];
+  
+  // Goal-specific tips
+  if (userContext?.goal === 'cut') {
+    tips.push('💡 In a cut: Keep intensity high but listen to your body. Lower energy is normal—prioritize compounds if needed.');
+  } else if (userContext?.goal === 'bulk') {
+    tips.push('💡 In a bulk: Push for progressive overload—even one extra rep counts toward gains!');
+  }
   
   if (compoundCount > 0) {
     tips.push('Take full rest (2-3 min) between compound sets to maintain strength.');
@@ -151,13 +244,24 @@ function generateCoachMessage(
   if (blocks.some(b => b.exercise.primaryMuscle === 'chest')) {
     tips.push('Squeeze at the top of each rep and control the eccentric for chest exercises.');
   }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'biceps' || b.exercise.primaryMuscle === 'triceps')) {
+    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('arm'))) {
+      tips.push('🎯 Arms are a focus area—slow eccentrics (3 sec) boost time under tension for growth.');
+    }
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'quads' || b.exercise.primaryMuscle === 'hamstrings')) {
+    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('leg'))) {
+      tips.push('🎯 Legs are a focus area—full depth and controlled negatives maximize stimulus.');
+    }
+  }
   tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
 
   return {
     greeting: greetings[Math.floor(Math.random() * greetings.length)],
-    overview: overviews[Math.floor(Math.random() * overviews.length)],
+    overview: overviews[0],  // Use the personalized overview
+    personalizedInsight,
     exerciseNotes,
-    tips: tips.slice(0, 3), // Limit to 3 tips
+    tips: tips.slice(0, 4), // Limit to 4 tips
   };
 }
 
@@ -278,17 +382,25 @@ export default function WorkoutPage() {
         // Fetch user profile for weight estimation
         const { data: userData } = await supabase
           .from('users')
-          .select('weight_kg, height_cm, experience, training_age')
+          .select('weight_kg, height_cm, experience, training_age, goal')
           .eq('id', sessionData.user_id)
           .single();
         
         // Fetch latest DEXA scan for body fat and regional data if available
         const { data: dexaData } = await supabase
           .from('dexa_scans')
-          .select('body_fat_percentage, regional_data')
+          .select('body_fat_percentage, regional_data, lean_mass_kg')
           .eq('user_id', sessionData.user_id)
           .order('scan_date', { ascending: false })
           .limit(1)
+          .single();
+        
+        // Fetch mesocycle info if this workout is part of one
+        const { data: mesocycleData } = await supabase
+          .from('mesocycles')
+          .select('name, start_date, weeks')
+          .eq('user_id', sessionData.user_id)
+          .eq('is_active', true)
           .single();
         
         const profile: UserProfileForWeights | undefined = userData ? {
@@ -303,8 +415,36 @@ export default function WorkoutPage() {
           setUserProfile(profile);
         }
         
-        // Generate coach message with profile for weight recommendations
-        setCoachMessage(generateCoachMessage(transformedBlocks, profile));
+        // Build user context for personalized coaching
+        const userContext: UserContext = {
+          goal: userData?.goal as UserContext['goal'] || undefined,
+        };
+        
+        // Analyze regional data for lagging areas
+        if (dexaData?.regional_data && dexaData?.lean_mass_kg && userData?.height_cm) {
+          try {
+            const { analyzeRegionalComposition } = await import('@/services/regionalAnalysis');
+            const regionalAnalysis = analyzeRegionalComposition(
+              dexaData.regional_data as DexaRegionalData,
+              dexaData.lean_mass_kg
+            );
+            userContext.laggingAreas = regionalAnalysis.laggingAreas;
+          } catch (e) {
+            // Regional analysis optional
+          }
+        }
+        
+        // Add mesocycle context
+        if (mesocycleData) {
+          userContext.mesocycleName = mesocycleData.name;
+          const startDate = new Date(mesocycleData.start_date);
+          const now = new Date();
+          const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+          userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.weeks);
+        }
+        
+        // Generate coach message with profile and context
+        setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
         
         // If already in progress, skip check-in
         if (sessionData.state === 'in_progress') {
@@ -742,6 +882,15 @@ export default function WorkoutPage() {
                 <p className="text-surface-200 font-medium">{coachMessage.greeting}</p>
                 <p className="text-sm text-surface-400">{coachMessage.overview}</p>
               </div>
+
+              {/* Personalized Insight */}
+              {coachMessage.personalizedInsight && (
+                <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                  <p className="text-sm text-primary-300">
+                    {coachMessage.personalizedInsight}
+                  </p>
+                </div>
+              )}
 
               {/* Exercise Breakdown */}
               <div className="space-y-2">
