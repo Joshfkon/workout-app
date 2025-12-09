@@ -165,7 +165,8 @@ export default function AddDexaScanPage() {
 
       console.log('Saving DEXA scan with regional data:', regionalResult.data);
 
-      const { error: insertError } = await supabase.from('dexa_scans').insert({
+      // Build insert object - only include regional_data if we have it
+      const insertData: Record<string, unknown> = {
         user_id: user.id,
         scan_date: scanDate,
         weight_kg: weight,
@@ -173,13 +174,57 @@ export default function AddDexaScanPage() {
         fat_mass_kg: fat,
         body_fat_percent: bf,
         bone_mass_kg: bone,
-        regional_data: regionalResult.data,
         notes: notes || null,
-      });
+      };
+      
+      // Only add regional_data if it's not null (column might not exist in older DBs)
+      if (regionalResult.data) {
+        insertData.regional_data = regionalResult.data;
+      }
+
+      const { error: insertError, data: insertedData } = await supabase
+        .from('dexa_scans')
+        .insert(insertData)
+        .select();
+
+      console.log('Insert result:', { error: insertError, data: insertedData });
 
       if (insertError) {
-        console.error('Insert error:', insertError);
-        throw insertError;
+        console.error('Insert error details:', {
+          message: insertError.message,
+          code: insertError.code,
+          details: insertError.details,
+          hint: insertError.hint,
+        });
+        
+        // Show more specific error messages
+        if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
+          throw new Error(`A scan already exists for ${scanDate}. Please choose a different date.`);
+        }
+        if (insertError.message?.includes('regional_data') || insertError.code === '42703') {
+          // Column doesn't exist - try again without regional_data
+          console.log('Retrying without regional_data...');
+          const { error: retryError } = await supabase.from('dexa_scans').insert({
+            user_id: user.id,
+            scan_date: scanDate,
+            weight_kg: weight,
+            lean_mass_kg: lean,
+            fat_mass_kg: fat,
+            body_fat_percent: bf,
+            bone_mass_kg: bone,
+            notes: notes || null,
+          });
+          if (retryError) {
+            throw new Error(retryError.message || 'Failed to save scan');
+          }
+          // Success without regional data
+          router.push('/dashboard/body-composition');
+          return;
+        }
+        if (insertError.message?.includes('violates row-level security')) {
+          throw new Error('Permission denied. Please log out and log back in.');
+        }
+        throw new Error(insertError.message || 'Failed to save scan to database');
       }
 
       router.push('/dashboard/body-composition');

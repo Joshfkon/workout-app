@@ -20,6 +20,19 @@ import {
   analyzeRegionalFatDistribution,
   getAsymmetrySeverity
 } from '@/services/regionalAnalysis';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  Area,
+  AreaChart,
+  ReferenceLine,
+} from 'recharts';
 
 interface UserProfile {
   heightCm: number | null;
@@ -637,6 +650,330 @@ export default function BodyCompositionPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Progress Charts */}
+          {scans.length >= 2 && (
+            <>
+              {/* Body Composition Trend Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Body Composition Trends</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={[...scans].reverse().map(scan => ({
+                        date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                        fullDate: scan.scanDate,
+                        weight: scan.weightKg,
+                        leanMass: scan.leanMassKg,
+                        fatMass: scan.fatMassKg,
+                      }))}>
+                        <defs>
+                          <linearGradient id="leanGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="fatGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
+                        <YAxis stroke="#9ca3af" fontSize={12} domain={['dataMin - 2', 'dataMax + 2']} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#1f2937', 
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#f3f4f6'
+                          }}
+                          formatter={(value: number, name: string) => [
+                            `${value.toFixed(1)} kg`,
+                            name === 'leanMass' ? 'Lean Mass' : name === 'fatMass' ? 'Fat Mass' : 'Total Weight'
+                          ]}
+                        />
+                        <Legend />
+                        <Area 
+                          type="monotone" 
+                          dataKey="leanMass" 
+                          name="Lean Mass"
+                          stroke="#22c55e" 
+                          fill="url(#leanGradient)"
+                          strokeWidth={2}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="fatMass" 
+                          name="Fat Mass"
+                          stroke="#f59e0b" 
+                          fill="url(#fatGradient)"
+                          strokeWidth={2}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="weight" 
+                          name="Total Weight"
+                          stroke="#8b5cf6" 
+                          strokeWidth={2}
+                          dot={{ fill: '#8b5cf6', strokeWidth: 2 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Body Fat % and FFMI Chart */}
+              <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Body Fat % Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={[...scans].reverse().map(scan => ({
+                          date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                          bodyFat: scan.bodyFatPercent,
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="date" stroke="#9ca3af" fontSize={10} />
+                          <YAxis stroke="#9ca3af" fontSize={10} domain={['dataMin - 2', 'dataMax + 2']} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1f2937', 
+                              border: '1px solid #374151',
+                              borderRadius: '8px',
+                              color: '#f3f4f6'
+                            }}
+                            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Body Fat']}
+                          />
+                          {userProfile?.targetBodyFatPercent && (
+                            <ReferenceLine 
+                              y={userProfile.targetBodyFatPercent} 
+                              stroke="#22c55e" 
+                              strokeDasharray="5 5"
+                              label={{ value: 'Target', fill: '#22c55e', fontSize: 10 }}
+                            />
+                          )}
+                          <Line 
+                            type="monotone" 
+                            dataKey="bodyFat" 
+                            stroke="#f59e0b" 
+                            strokeWidth={2}
+                            dot={{ fill: '#f59e0b', strokeWidth: 2, r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">FFMI Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-48">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={[...scans].reverse().map(scan => ({
+                          date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                          ffmi: userProfile?.heightCm 
+                            ? calculateFFMI(scan.leanMassKg, userProfile.heightCm).normalizedFfmi 
+                            : 0,
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="date" stroke="#9ca3af" fontSize={10} />
+                          <YAxis stroke="#9ca3af" fontSize={10} domain={['dataMin - 0.5', 'dataMax + 0.5']} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1f2937', 
+                              border: '1px solid #374151',
+                              borderRadius: '8px',
+                              color: '#f3f4f6'
+                            }}
+                            formatter={(value: number) => [value.toFixed(1), 'FFMI']}
+                          />
+                          <ReferenceLine 
+                            y={25} 
+                            stroke="#ef4444" 
+                            strokeDasharray="5 5"
+                            label={{ value: 'Natural Limit', fill: '#ef4444', fontSize: 10 }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="ffmi" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={2}
+                            dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Cut/Bulk Performance Analysis */}
+              {scans.length >= 2 && (() => {
+                const sortedScans = [...scans].sort((a, b) => 
+                  new Date(a.scanDate).getTime() - new Date(b.scanDate).getTime()
+                );
+                const firstScan = sortedScans[0];
+                const lastScan = sortedScans[sortedScans.length - 1];
+                
+                const daysBetween = Math.round(
+                  (new Date(lastScan.scanDate).getTime() - new Date(firstScan.scanDate).getTime()) 
+                  / (1000 * 60 * 60 * 24)
+                );
+                const weeksBetween = Math.round(daysBetween / 7);
+                
+                const weightChange = lastScan.weightKg - firstScan.weightKg;
+                const leanChange = lastScan.leanMassKg - firstScan.leanMassKg;
+                const fatChange = lastScan.fatMassKg - firstScan.fatMassKg;
+                const bfChange = lastScan.bodyFatPercent - firstScan.bodyFatPercent;
+                
+                // Determine phase type
+                let phase: 'bulk' | 'cut' | 'recomp' | 'maintenance';
+                if (weightChange > 1 && leanChange > 0) {
+                  phase = fatChange < leanChange * 0.5 ? 'bulk' : 'bulk';
+                } else if (weightChange < -1 && fatChange < 0) {
+                  phase = 'cut';
+                } else if (leanChange > 0 && fatChange < 0) {
+                  phase = 'recomp';
+                } else {
+                  phase = 'maintenance';
+                }
+                
+                // Calculate efficiency metrics
+                const leanGainRate = leanChange / Math.max(1, weeksBetween);  // kg/week
+                const fatLossRate = -fatChange / Math.max(1, weeksBetween);   // kg/week
+                const partitioningRatio = leanChange !== 0 ? (leanChange / (leanChange + Math.abs(fatChange))) * 100 : 0;
+                
+                // Grade the phase
+                let grade: 'A' | 'B' | 'C' | 'D' | 'F';
+                let analysis: string;
+                
+                if (phase === 'bulk') {
+                  // Good bulk: gain lean with minimal fat, ratio > 60%
+                  if (partitioningRatio >= 70) { grade = 'A'; analysis = 'Excellent lean gains with minimal fat accumulation!'; }
+                  else if (partitioningRatio >= 55) { grade = 'B'; analysis = 'Good progress. Most weight gained is muscle.'; }
+                  else if (partitioningRatio >= 40) { grade = 'C'; analysis = 'Decent gains, but consider a smaller calorie surplus.'; }
+                  else if (partitioningRatio >= 25) { grade = 'D'; analysis = 'Gaining too much fat. Reduce surplus or increase activity.'; }
+                  else { grade = 'F'; analysis = 'Mostly fat gain. Reassess nutrition and training.'; }
+                } else if (phase === 'cut') {
+                  // Good cut: lose fat while preserving lean mass
+                  const leanRetention = leanChange >= 0 ? 100 : 100 - Math.abs(leanChange / fatChange) * 100;
+                  if (leanRetention >= 95 && fatLossRate >= 0.3) { grade = 'A'; analysis = 'Perfect cut! Losing fat while preserving muscle.'; }
+                  else if (leanRetention >= 85) { grade = 'B'; analysis = 'Good cut with minimal muscle loss.'; }
+                  else if (leanRetention >= 70) { grade = 'C'; analysis = 'Losing some muscle. Consider more protein or slower cut.'; }
+                  else if (leanRetention >= 50) { grade = 'D'; analysis = 'Significant muscle loss. Slow down the deficit.'; }
+                  else { grade = 'F'; analysis = 'Too aggressive. Losing too much muscle.'; }
+                } else if (phase === 'recomp') {
+                  grade = 'A';
+                  analysis = 'Successful recomposition! Gained muscle while losing fat.';
+                } else {
+                  grade = 'B';
+                  analysis = 'Maintenance phase with minimal changes.';
+                }
+                
+                return (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Phase Performance Analysis</CardTitle>
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl font-bold ${
+                          grade === 'A' ? 'bg-success-500/20 text-success-400' :
+                          grade === 'B' ? 'bg-primary-500/20 text-primary-400' :
+                          grade === 'C' ? 'bg-warning-500/20 text-warning-400' :
+                          grade === 'D' ? 'bg-orange-500/20 text-orange-400' :
+                          'bg-danger-500/20 text-danger-400'
+                        }`}>
+                          {grade}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Badge 
+                          variant={phase === 'bulk' ? 'success' : phase === 'cut' ? 'warning' : phase === 'recomp' ? 'info' : 'default'}
+                          size="md"
+                        >
+                          {phase === 'bulk' ? '💪 Bulking' : 
+                           phase === 'cut' ? '🔥 Cutting' : 
+                           phase === 'recomp' ? '🔄 Recomposition' : 
+                           '⚖️ Maintenance'}
+                        </Badge>
+                        <span className="text-surface-400 text-sm">
+                          {weeksBetween} weeks ({daysBetween} days)
+                        </span>
+                      </div>
+                      
+                      <p className="text-surface-300">{analysis}</p>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="p-3 bg-surface-800/50 rounded-lg">
+                          <p className="text-xs text-surface-500">Weight Change</p>
+                          <p className={`text-xl font-bold ${weightChange > 0 ? 'text-success-400' : weightChange < 0 ? 'text-warning-400' : 'text-surface-300'}`}>
+                            {weightChange > 0 ? '+' : ''}{weightChange.toFixed(1)} kg
+                          </p>
+                        </div>
+                        <div className="p-3 bg-surface-800/50 rounded-lg">
+                          <p className="text-xs text-surface-500">Lean Mass Change</p>
+                          <p className={`text-xl font-bold ${leanChange > 0 ? 'text-success-400' : leanChange < 0 ? 'text-danger-400' : 'text-surface-300'}`}>
+                            {leanChange > 0 ? '+' : ''}{leanChange.toFixed(1)} kg
+                          </p>
+                        </div>
+                        <div className="p-3 bg-surface-800/50 rounded-lg">
+                          <p className="text-xs text-surface-500">Fat Mass Change</p>
+                          <p className={`text-xl font-bold ${fatChange < 0 ? 'text-success-400' : fatChange > 0 ? 'text-warning-400' : 'text-surface-300'}`}>
+                            {fatChange > 0 ? '+' : ''}{fatChange.toFixed(1)} kg
+                          </p>
+                        </div>
+                        <div className="p-3 bg-surface-800/50 rounded-lg">
+                          <p className="text-xs text-surface-500">Body Fat Change</p>
+                          <p className={`text-xl font-bold ${bfChange < 0 ? 'text-success-400' : bfChange > 0 ? 'text-warning-400' : 'text-surface-300'}`}>
+                            {bfChange > 0 ? '+' : ''}{bfChange.toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Detailed metrics */}
+                      <div className="pt-4 border-t border-surface-700 grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                          <p className="text-xs text-surface-500">Partitioning Ratio</p>
+                          <p className="text-lg font-semibold text-surface-200">{partitioningRatio.toFixed(0)}% muscle</p>
+                          <p className="text-xs text-surface-600">% of weight change as lean mass</p>
+                        </div>
+                        {phase === 'bulk' && (
+                          <div>
+                            <p className="text-xs text-surface-500">Lean Gain Rate</p>
+                            <p className="text-lg font-semibold text-surface-200">{(leanGainRate * 4.33).toFixed(2)} kg/mo</p>
+                            <p className="text-xs text-surface-600">Natural max ~0.5-1 kg/mo</p>
+                          </div>
+                        )}
+                        {phase === 'cut' && (
+                          <div>
+                            <p className="text-xs text-surface-500">Fat Loss Rate</p>
+                            <p className="text-lg font-semibold text-surface-200">{(fatLossRate * 4.33).toFixed(2)} kg/mo</p>
+                            <p className="text-xs text-surface-600">Ideal: 0.5-1% BW/week</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs text-surface-500">Period</p>
+                          <p className="text-lg font-semibold text-surface-200">
+                            {new Date(firstScan.scanDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })} → {new Date(lastScan.scanDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+            </>
           )}
 
           {/* Scan History */}
