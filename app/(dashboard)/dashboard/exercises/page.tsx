@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, Input, Badge, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -50,6 +51,14 @@ export default function ExercisesPage() {
             {isLoading ? 'Loading...' : `${exercises.length} exercises available`}
           </p>
         </div>
+        <Link href="/dashboard/exercises/add">
+          <Button>
+            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Custom
+          </Button>
+        </Link>
       </div>
 
       {/* Search */}
