@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, ProgressionType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit } from '@/types/schema';
+import { formatWeight, formatWeightValue, inputWeightToKg } from '@/lib/utils';
 
 interface ExerciseCardProps {
   exercise: Exercise;
@@ -12,6 +13,7 @@ interface ExerciseCardProps {
   onSetComplete?: (setData: Partial<SetLog>) => void;
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   isActive?: boolean;
+  unit?: WeightUnit;
 }
 
 export function ExerciseCard({
@@ -21,6 +23,7 @@ export function ExerciseCard({
   onSetComplete,
   onSetEdit,
   isActive = false,
+  unit = 'kg',
 }: ExerciseCardProps) {
   const [showFormCues, setShowFormCues] = useState(false);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -31,9 +34,13 @@ export function ExerciseCard({
   const completedSets = sets.filter((s) => !s.isWarmup);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
 
+  // Format weight for display
+  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
+
   const startEditing = (set: SetLog) => {
     setEditingSetId(set.id);
-    setEditWeight(String(set.weightKg));
+    setEditWeight(String(displayWeight(set.weightKg)));
     setEditReps(String(set.reps));
     setEditRpe(String(set.rpe));
   };
@@ -52,7 +59,9 @@ export function ExerciseCard({
     const rpeNum = parseFloat(editRpe);
     
     if (!isNaN(weightNum) && !isNaN(repsNum) && !isNaN(rpeNum)) {
-      onSetEdit(editingSetId, { weightKg: weightNum, reps: repsNum, rpe: rpeNum });
+      // Convert from display unit back to kg
+      const weightKg = inputWeightToKg(weightNum, unit);
+      onSetEdit(editingSetId, { weightKg, reps: repsNum, rpe: rpeNum });
     }
     cancelEditing();
   };
@@ -118,7 +127,7 @@ export function ExerciseCard({
           <div className="flex items-center gap-1.5">
             <span className="text-surface-500">Weight:</span>
             <span className="font-medium text-surface-200">
-              {block.targetWeightKg}kg
+              {displayWeight(block.targetWeightKg)} {weightLabel}
             </span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -216,7 +225,7 @@ export function ExerciseCard({
                 >
                   <td className="px-4 py-2.5 text-surface-300">{set.setNumber}</td>
                   <td className="px-4 py-2.5 text-center font-mono text-surface-200">
-                    {set.weightKg}kg
+                    {displayWeight(set.weightKg)} {weightLabel}
                   </td>
                   <td className="px-4 py-2.5 text-center font-mono text-surface-200">
                     {set.reps}

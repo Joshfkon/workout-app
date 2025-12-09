@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { Input, Button, Badge } from '@/components/ui';
-import type { SetLog, SetQuality } from '@/types/schema';
+import type { SetLog, SetQuality, WeightUnit } from '@/types/schema';
 import { calculateSetQuality } from '@/services/progressionEngine';
+import { formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
 
 interface SetInputRowProps {
   setNumber: number;
-  targetWeight: number;
+  targetWeight: number; // Always in kg
   targetRepRange: [number, number];
   targetRir: number;
   previousSet?: SetLog;
@@ -19,6 +20,7 @@ interface SetInputRowProps {
     note?: string;
   }) => void;
   disabled?: boolean;
+  unit?: WeightUnit;
 }
 
 export function SetInputRow({
@@ -30,8 +32,13 @@ export function SetInputRow({
   isLastSet,
   onSubmit,
   disabled = false,
+  unit = 'kg',
 }: SetInputRowProps) {
-  const [weight, setWeight] = useState(String(previousSet?.weightKg ?? targetWeight));
+  // Convert from kg to display unit
+  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  const initialWeight = previousSet?.weightKg ?? targetWeight;
+  
+  const [weight, setWeight] = useState(String(displayWeight(initialWeight)));
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
   const [rpe, setRpe] = useState(String(previousSet?.rpe ?? (10 - targetRir)));
   const [note, setNote] = useState('');
@@ -67,8 +74,11 @@ export function SetInputRow({
       return;
     }
 
+    // Convert from display unit to kg for storage
+    const weightKg = inputWeightToKg(weightNum, unit);
+
     onSubmit({
-      weightKg: weightNum,
+      weightKg,
       reps: repsNum,
       rpe: rpeNum,
       note: note || undefined,
@@ -105,7 +115,7 @@ export function SetInputRow({
       {/* Input row */}
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label className="block text-xs text-surface-500 mb-1">Weight (kg)</label>
+          <label className="block text-xs text-surface-500 mb-1">Weight ({unit})</label>
           <input
             type="number"
             value={weight}

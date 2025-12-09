@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
 import { ExerciseCard, SetInputRow, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -26,6 +27,7 @@ export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.id as string;
+  const { preferences } = useUserPreferences();
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -529,6 +531,7 @@ export default function WorkoutPage() {
         sets={currentBlockSets}
         onSetEdit={handleSetEdit}
         isActive
+        unit={preferences.units}
       />
 
       {/* Set input */}
@@ -541,6 +544,7 @@ export default function WorkoutPage() {
           previousSet={currentBlockSets[currentBlockSets.length - 1]}
           isLastSet={currentBlockSets.length + 1 === currentBlock.targetSets}
           onSubmit={handleSetComplete}
+          unit={preferences.units}
         />
       )}
 

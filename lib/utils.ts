@@ -39,6 +39,34 @@ export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'
 }
 
 /**
+ * Format weight with unit (always stored as kg, displayed in user preference)
+ */
+export function formatWeight(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): string {
+  if (unit === 'lb') {
+    const lbs = convertWeight(weightKg, 'kg', 'lb');
+    return `${lbs.toFixed(decimals)} lbs`;
+  }
+  return `${weightKg.toFixed(decimals)} kg`;
+}
+
+/**
+ * Format weight value only (no unit suffix)
+ */
+export function formatWeightValue(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): number {
+  if (unit === 'lb') {
+    return parseFloat(convertWeight(weightKg, 'kg', 'lb').toFixed(decimals));
+  }
+  return parseFloat(weightKg.toFixed(decimals));
+}
+
+/**
+ * Convert user input weight to kg for storage
+ */
+export function inputWeightToKg(weight: number, fromUnit: 'kg' | 'lb'): number {
+  return fromUnit === 'lb' ? convertWeight(weight, 'lb', 'kg') : weight;
+}
+
+/**
  * Round to nearest increment (for weights)
  */
 export function roundToIncrement(value: number, increment: number): number {
