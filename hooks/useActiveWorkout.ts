@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useWorkoutStore } from '@/stores';
-import { createClient } from '@/lib/supabase/client';
+import { createClient, createUntypedClient } from '@/lib/supabase/client';
 import type { WorkoutSession, ExerciseBlock, SetLog, PreWorkoutCheckIn } from '@/types/schema';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { generateId } from '@/lib/utils';
@@ -108,8 +108,7 @@ export function useActiveWorkout() {
     logSet(blockId, newSet);
 
     // Save to database
-    const supabase = createClient();
-    // @ts-ignore - Supabase types not generated for this project
+    const supabase = createUntypedClient();
     const { error } = await supabase.from('set_logs').insert({
       id: newSet.id,
       exercise_block_id: newSet.exerciseBlockId,
@@ -141,8 +140,7 @@ export function useActiveWorkout() {
   }) => {
     if (!activeSession) return;
 
-    const supabase = createClient();
-    // @ts-ignore - Supabase types not generated for this project
+    const supabase = createUntypedClient();
     const { error } = await supabase
       .from('workout_sessions')
       .update({
@@ -170,8 +168,7 @@ export function useActiveWorkout() {
 
     setCheckIn(checkIn);
 
-    const supabase = createClient();
-    // @ts-ignore - Supabase types not generated for this project
+    const supabase = createUntypedClient();
     await supabase
       .from('workout_sessions')
       .update({
