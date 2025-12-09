@@ -1,77 +1,158 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge } from '@/components/ui';
 import { ExerciseCard, SetInputRow, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
-import type { Exercise, ExerciseBlock, SetLog, WarmupSet } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession } from '@/types/schema';
+import { createUntypedClient } from '@/lib/supabase/client';
 
-// Mock data - in real app, this would come from database
-const mockExercise: Exercise = {
-  id: '1',
-  name: 'Barbell Bench Press',
-  primaryMuscle: 'chest',
-  secondaryMuscles: ['triceps', 'shoulders'],
-  mechanic: 'compound',
-  defaultRepRange: [6, 10],
-  defaultRir: 2,
-  minWeightIncrementKg: 2.5,
-  formCues: [
-    'Arch upper back, not lower',
-    'Tuck elbows 45 degrees',
-    'Touch mid-chest',
-    'Drive feet into floor',
-  ],
-  commonMistakes: [
-    'Bouncing bar off chest',
-    'Flaring elbows 90 degrees',
-    'Lifting hips off bench',
-  ],
-  setupNote: 'Set up with eyes under bar, grip slightly wider than shoulders',
-  movementPattern: 'horizontal_push',
-  equipmentRequired: ['barbell', 'bench'],
-};
+type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
-const mockBlock: ExerciseBlock = {
-  id: '1',
-  workoutSessionId: '1',
-  exerciseId: '1',
-  order: 1,
-  supersetGroupId: null,
-  supersetOrder: null,
-  targetSets: 4,
-  targetRepRange: [6, 10],
-  targetRir: 2,
-  targetWeightKg: 80,
-  targetRestSeconds: 180,
-  progressionType: 'load',
-  suggestionReason: 'Weight increased by 2.5kg based on hitting 10 reps last session',
-  warmupProtocol: [
-    { setNumber: 1, percentOfWorking: 0, targetReps: 10, purpose: 'General warmup' },
-    { setNumber: 2, percentOfWorking: 50, targetReps: 8, purpose: 'Movement groove' },
-    { setNumber: 3, percentOfWorking: 70, targetReps: 5, purpose: 'Neuromuscular preparation' },
-    { setNumber: 4, percentOfWorking: 85, targetReps: 3, purpose: 'CNS potentiation' },
-  ],
-  note: null,
-};
-
-type WorkoutPhase = 'checkin' | 'workout' | 'summary';
+interface ExerciseBlockWithExercise extends ExerciseBlock {
+  exercise: Exercise;
+}
 
 export default function WorkoutPage() {
   const params = useParams();
-  const [phase, setPhase] = useState<WorkoutPhase>('checkin');
+  const router = useRouter();
+  const sessionId = params.id as string;
+
+  const [phase, setPhase] = useState<WorkoutPhase>('loading');
+  const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<WorkoutSession | null>(null);
+  const [blocks, setBlocks] = useState<ExerciseBlockWithExercise[]>([]);
+  const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
 
-  const handleCheckInComplete = () => {
-    setPhase('workout');
+  const currentBlock = blocks[currentBlockIndex];
+  const currentExercise = currentBlock?.exercise;
+  const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
+
+  // Load workout data
+  useEffect(() => {
+    async function loadWorkout() {
+      try {
+        const supabase = createUntypedClient();
+
+        // Fetch session
+        const { data: sessionData, error: sessionError } = await supabase
+          .from('workout_sessions')
+          .select('*')
+          .eq('id', sessionId)
+          .single();
+
+        if (sessionError || !sessionData) {
+          throw new Error('Workout session not found');
+        }
+
+        // Fetch exercise blocks with exercises
+        const { data: blocksData, error: blocksError } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            *,
+            exercises (*)
+          `)
+          .eq('workout_session_id', sessionId)
+          .order('order');
+
+        if (blocksError) throw blocksError;
+
+        // Transform data
+        const transformedSession: WorkoutSession = {
+          id: sessionData.id,
+          userId: sessionData.user_id,
+          mesocycleId: sessionData.mesocycle_id,
+          state: sessionData.state,
+          plannedDate: sessionData.planned_date,
+          startedAt: sessionData.started_at,
+          completedAt: sessionData.completed_at,
+          preWorkoutCheckIn: sessionData.pre_workout_check_in,
+          sessionRpe: sessionData.session_rpe,
+          pumpRating: sessionData.pump_rating,
+          sessionNotes: sessionData.session_notes,
+          completionPercent: sessionData.completion_percent,
+        };
+
+        const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
+          .filter((block: any) => block.exercises) // Filter out blocks without exercises
+          .map((block: any) => ({
+            id: block.id,
+            workoutSessionId: block.workout_session_id,
+            exerciseId: block.exercise_id,
+            order: block.order,
+            supersetGroupId: block.superset_group_id,
+            supersetOrder: block.superset_order,
+            targetSets: block.target_sets,
+            targetRepRange: block.target_rep_range,
+            targetRir: block.target_rir,
+            targetWeightKg: block.target_weight_kg,
+            targetRestSeconds: block.target_rest_seconds,
+            progressionType: block.progression_type,
+            suggestionReason: block.suggestion_reason,
+            warmupProtocol: block.warmup_protocol?.sets || [],
+            note: block.note,
+            exercise: {
+              id: block.exercises.id,
+              name: block.exercises.name,
+              primaryMuscle: block.exercises.primary_muscle,
+              secondaryMuscles: block.exercises.secondary_muscles || [],
+              mechanic: block.exercises.mechanic,
+              defaultRepRange: block.exercises.default_rep_range || [8, 12],
+              defaultRir: block.exercises.default_rir || 2,
+              minWeightIncrementKg: block.exercises.min_weight_increment_kg || 2.5,
+              formCues: block.exercises.form_cues || [],
+              commonMistakes: block.exercises.common_mistakes || [],
+              setupNote: block.exercises.setup_note || '',
+              movementPattern: block.exercises.movement_pattern || '',
+              equipmentRequired: block.exercises.equipment_required || [],
+            },
+          }));
+
+        setSession(transformedSession);
+        setBlocks(transformedBlocks);
+        
+        // If already in progress, skip check-in
+        if (sessionData.state === 'in_progress') {
+          setPhase('workout');
+        } else {
+          setPhase('checkin');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load workout');
+        setPhase('error');
+      }
+    }
+
+    loadWorkout();
+  }, [sessionId]);
+
+  const handleCheckInComplete = async () => {
+    try {
+      const supabase = createUntypedClient();
+      await supabase
+        .from('workout_sessions')
+        .update({
+          state: 'in_progress',
+          started_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId);
+      
+      setPhase('workout');
+    } catch (err) {
+      console.error('Failed to update session:', err);
+      setPhase('workout'); // Continue anyway
+    }
   };
 
-  const handleSetComplete = (data: { weightKg: number; reps: number; rpe: number; note?: string }) => {
+  const handleSetComplete = async (data: { weightKg: number; reps: number; rpe: number; note?: string }) => {
+    if (!currentBlock) return;
+
     const newSet: SetLog = {
       id: `set-${Date.now()}`,
-      exerciseBlockId: mockBlock.id,
+      exerciseBlockId: currentBlock.id,
       setNumber: currentSetNumber,
       weightKg: data.weightKg,
       reps: data.reps,
@@ -84,20 +165,91 @@ export default function WorkoutPage() {
       loggedAt: new Date().toISOString(),
     };
 
+    // Save to database
+    try {
+      const supabase = createUntypedClient();
+      await supabase.from('set_logs').insert({
+        id: newSet.id,
+        exercise_block_id: newSet.exerciseBlockId,
+        set_number: newSet.setNumber,
+        weight_kg: newSet.weightKg,
+        reps: newSet.reps,
+        rpe: newSet.rpe,
+        is_warmup: false,
+        quality: newSet.quality,
+        quality_reason: newSet.qualityReason,
+        note: newSet.note,
+        logged_at: newSet.loggedAt,
+      });
+    } catch (err) {
+      console.error('Failed to save set:', err);
+    }
+
     setCompletedSets([...completedSets, newSet]);
     setCurrentSetNumber(currentSetNumber + 1);
     setShowRestTimer(true);
+  };
+
+  const handleNextExercise = () => {
+    if (currentBlockIndex < blocks.length - 1) {
+      setCurrentBlockIndex(currentBlockIndex + 1);
+      setCurrentSetNumber(1);
+      setShowRestTimer(false);
+    }
   };
 
   const handleWorkoutComplete = () => {
     setPhase('summary');
   };
 
-  const handleSummarySubmit = (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
-    // In real app, save to database
-    console.log('Session completed:', data);
-    // Redirect to history or dashboard
+  const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
+    try {
+      const supabase = createUntypedClient();
+      await supabase
+        .from('workout_sessions')
+        .update({
+          state: 'completed',
+          completed_at: new Date().toISOString(),
+          session_rpe: data.sessionRpe,
+          pump_rating: data.pumpRating,
+          session_notes: data.notes,
+          completion_percent: 100,
+        })
+        .eq('id', sessionId);
+
+      router.push('/dashboard/history');
+    } catch (err) {
+      console.error('Failed to complete workout:', err);
+      router.push('/dashboard/history');
+    }
   };
+
+  if (phase === 'loading') {
+    return (
+      <div className="max-w-lg mx-auto py-8 text-center">
+        <p className="text-surface-400">Loading workout...</p>
+      </div>
+    );
+  }
+
+  if (phase === 'error') {
+    return (
+      <div className="max-w-lg mx-auto py-8">
+        <Card className="text-center py-8">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <p className="text-lg font-medium text-surface-200">Error Loading Workout</p>
+          <p className="text-surface-500 mt-1">{error}</p>
+          <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
+            Go Back
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   if (phase === 'checkin') {
     return (
@@ -110,28 +262,32 @@ export default function WorkoutPage() {
     );
   }
 
-  if (phase === 'summary') {
+  if (phase === 'summary' && session) {
     return (
       <div className="py-8">
         <SessionSummary
           session={{
-            id: '1',
-            userId: '1',
-            mesocycleId: null,
+            ...session,
             state: 'completed',
-            plannedDate: new Date().toISOString().split('T')[0],
-            startedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
             completedAt: new Date().toISOString(),
-            preWorkoutCheckIn: null,
-            sessionRpe: null,
-            pumpRating: null,
-            sessionNotes: null,
-            completionPercent: 100,
           }}
-          exerciseBlocks={[mockBlock]}
+          exerciseBlocks={blocks}
           allSets={completedSets}
           onSubmit={handleSummarySubmit}
         />
+      </div>
+    );
+  }
+
+  if (!currentBlock || !currentExercise) {
+    return (
+      <div className="max-w-lg mx-auto py-8">
+        <Card className="text-center py-8">
+          <p className="text-surface-400">No exercises in this workout</p>
+          <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
+            Go Back
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -141,8 +297,10 @@ export default function WorkoutPage() {
       {/* Workout header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Push Day</h1>
-          <p className="text-surface-400">Week 3 • Day 1</p>
+          <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+          <p className="text-surface-400">
+            Exercise {currentBlockIndex + 1} of {blocks.length}
+          </p>
         </div>
         <Button variant="outline" onClick={handleWorkoutComplete}>
           Finish Workout
@@ -153,7 +311,7 @@ export default function WorkoutPage() {
       <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
         <div
           className="bg-primary-500 h-full transition-all duration-300"
-          style={{ width: `${(completedSets.length / mockBlock.targetSets) * 100}%` }}
+          style={{ width: `${(currentBlockSets.length / currentBlock.targetSets) * 100}%` }}
         />
       </div>
 
@@ -161,7 +319,7 @@ export default function WorkoutPage() {
       {showRestTimer && (
         <div className="animate-slide-down">
           <RestTimer
-            defaultSeconds={mockBlock.targetRestSeconds}
+            defaultSeconds={currentBlock.targetRestSeconds}
             autoStart
             onComplete={() => setShowRestTimer(false)}
           />
@@ -169,35 +327,37 @@ export default function WorkoutPage() {
       )}
 
       {/* Warmup protocol */}
-      <WarmupProtocol
-        warmupSets={mockBlock.warmupProtocol}
-        workingWeight={mockBlock.targetWeightKg}
-        minIncrement={mockExercise.minWeightIncrementKg}
-      />
+      {currentBlock.warmupProtocol && currentBlock.warmupProtocol.length > 0 && (
+        <WarmupProtocol
+          warmupSets={currentBlock.warmupProtocol}
+          workingWeight={currentBlock.targetWeightKg}
+          minIncrement={currentExercise.minWeightIncrementKg}
+        />
+      )}
 
       {/* Exercise card */}
       <ExerciseCard
-        exercise={mockExercise}
-        block={mockBlock}
-        sets={completedSets}
+        exercise={currentExercise}
+        block={currentBlock}
+        sets={currentBlockSets}
         isActive
       />
 
       {/* Set input */}
-      {completedSets.length < mockBlock.targetSets && (
+      {currentBlockSets.length < currentBlock.targetSets && (
         <SetInputRow
-          setNumber={currentSetNumber}
-          targetWeight={mockBlock.targetWeightKg}
-          targetRepRange={mockBlock.targetRepRange}
-          targetRir={mockBlock.targetRir}
-          previousSet={completedSets[completedSets.length - 1]}
-          isLastSet={currentSetNumber === mockBlock.targetSets}
+          setNumber={currentBlockSets.length + 1}
+          targetWeight={currentBlock.targetWeightKg}
+          targetRepRange={currentBlock.targetRepRange}
+          targetRir={currentBlock.targetRir}
+          previousSet={currentBlockSets[currentBlockSets.length - 1]}
+          isLastSet={currentBlockSets.length + 1 === currentBlock.targetSets}
           onSubmit={handleSetComplete}
         />
       )}
 
-      {/* All sets completed */}
-      {completedSets.length >= mockBlock.targetSets && (
+      {/* All sets completed for current exercise */}
+      {currentBlockSets.length >= currentBlock.targetSets && (
         <Card className="text-center py-8">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success-500/20 flex items-center justify-center">
             <svg className="w-8 h-8 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -205,9 +365,17 @@ export default function WorkoutPage() {
             </svg>
           </div>
           <p className="text-lg font-medium text-surface-200">Exercise Complete!</p>
-          <p className="text-surface-500 mt-1">Move to next exercise or finish workout</p>
+          <p className="text-surface-500 mt-1">
+            {currentBlockIndex < blocks.length - 1 
+              ? 'Move to next exercise or finish workout'
+              : 'All exercises done! Finish your workout'}
+          </p>
           <div className="flex justify-center gap-3 mt-4">
-            <Button variant="secondary">Next Exercise</Button>
+            {currentBlockIndex < blocks.length - 1 && (
+              <Button variant="secondary" onClick={handleNextExercise}>
+                Next Exercise
+              </Button>
+            )}
             <Button onClick={handleWorkoutComplete}>Finish Workout</Button>
           </div>
         </Card>
@@ -215,4 +383,3 @@ export default function WorkoutPage() {
     </div>
   );
 }
-

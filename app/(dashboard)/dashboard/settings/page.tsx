@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider } from '@/components/ui';
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit } from '@/types/schema';
+import { createUntypedClient } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
   const [goal, setGoal] = useState<Goal>('maintenance');
@@ -13,11 +14,86 @@ export default function SettingsPage() {
   const [showFormCues, setShowFormCues] = useState(true);
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleSave = () => {
-    // In real app, save to database
-    console.log('Saving settings...');
+  // Load settings on mount
+  useEffect(() => {
+    async function loadSettings() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (data) {
+          setGoal(data.goal || 'maintenance');
+          setExperience(data.experience || 'intermediate');
+          if (data.preferences) {
+            const prefs = data.preferences as any;
+            setUnits(prefs.units || 'kg');
+            setRestTimer(prefs.restTimer || 180);
+            setShowFormCues(prefs.showFormCues ?? true);
+            setShowWarmupSuggestions(prefs.showWarmupSuggestions ?? true);
+          }
+          if (data.volume_landmarks) {
+            setVolumeLandmarks(data.volume_landmarks as any);
+          }
+        }
+      }
+      setIsLoading(false);
+    }
+    loadSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) throw new Error('Not logged in');
+
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          goal,
+          experience,
+          preferences: {
+            units,
+            restTimer,
+            showFormCues,
+            showWarmupSuggestions,
+          },
+          volume_landmarks: volumeLandmarks,
+        });
+
+      if (error) throw error;
+
+      setSaveMessage({ type: 'success', text: 'Settings saved successfully!' });
+    } catch (err) {
+      setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <p className="text-surface-400">Loading settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -25,6 +101,16 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-surface-100">Settings</h1>
         <p className="text-surface-400 mt-1">Customize your training preferences</p>
       </div>
+
+      {saveMessage && (
+        <div className={`p-4 rounded-lg ${
+          saveMessage.type === 'success' 
+            ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+            : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+        }`}>
+          {saveMessage.text}
+        </div>
+      )}
 
       {/* Profile settings */}
       <Card>
@@ -196,9 +282,10 @@ export default function SettingsPage() {
 
       {/* Save button */}
       <div className="flex justify-end">
-        <Button onClick={handleSave}>Save Changes</Button>
+        <Button onClick={handleSave} isLoading={isSaving}>
+          Save Changes
+        </Button>
       </div>
     </div>
   );
 }
-

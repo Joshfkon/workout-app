@@ -1,12 +1,106 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import Link from 'next/link';
+import { createUntypedClient } from '@/lib/supabase/client';
+
+interface Stats {
+  workoutsThisWeek: number;
+  totalSets: number;
+  totalVolume: number;
+  avgRpe: number | null;
+}
 
 export default function DashboardPage() {
-  // TODO: Fetch real data from Supabase
-  const hasWorkouts = false;
-  const hasMesocycle = false;
+  const [stats, setStats] = useState<Stats>({
+    workoutsThisWeek: 0,
+    totalSets: 0,
+    totalVolume: 0,
+    avgRpe: null,
+  });
+  const [hasWorkouts, setHasWorkouts] = useState(false);
+  const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchDashboardData() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Get start of current week (Monday)
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const weekStart = new Date(now.setDate(diff));
+      weekStart.setHours(0, 0, 0, 0);
+
+      // Fetch completed workouts this week
+      const { data: workouts } = await supabase
+        .from('workout_sessions')
+        .select('*, set_logs:exercise_blocks(set_logs(*))')
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .gte('completed_at', weekStart.toISOString());
+
+      // Fetch recent workouts
+      const { data: recent } = await supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .order('completed_at', { ascending: false })
+        .limit(5);
+
+      if (workouts) {
+        let totalSets = 0;
+        let totalVolume = 0;
+        let rpeSum = 0;
+        let rpeCount = 0;
+
+        workouts.forEach((workout: any) => {
+          if (workout.session_rpe) {
+            rpeSum += workout.session_rpe;
+            rpeCount++;
+          }
+          // Count sets from nested data
+          if (workout.set_logs) {
+            workout.set_logs.forEach((block: any) => {
+              if (block.set_logs) {
+                block.set_logs.forEach((set: any) => {
+                  if (!set.is_warmup) {
+                    totalSets++;
+                    totalVolume += (set.weight_kg || 0) * (set.reps || 0);
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        setStats({
+          workoutsThisWeek: workouts.length,
+          totalSets,
+          totalVolume: Math.round(totalVolume),
+          avgRpe: rpeCount > 0 ? Math.round((rpeSum / rpeCount) * 10) / 10 : null,
+        });
+        setHasWorkouts(workouts.length > 0 || Boolean(recent && recent.length > 0));
+      }
+
+      if (recent) {
+        setRecentWorkouts(recent);
+      }
+
+      setIsLoading(false);
+    }
+
+    fetchDashboardData();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -27,7 +121,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Getting started card */}
-      {!hasWorkouts && (
+      {!isLoading && !hasWorkouts && (
         <Card variant="elevated" className="overflow-hidden">
           <div className="p-8 text-center bg-gradient-to-r from-primary-500/10 to-accent-500/10">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
@@ -51,33 +145,39 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Stats grid - empty state */}
+      {/* Stats grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-surface-500">This Week</p>
-            <p className="text-3xl font-bold text-surface-100 mt-1">0</p>
+            <p className="text-3xl font-bold text-surface-100 mt-1">{stats.workoutsThisWeek}</p>
             <p className="text-xs text-surface-400">workouts</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-surface-500">Total Sets</p>
-            <p className="text-3xl font-bold text-primary-400 mt-1">0</p>
+            <p className="text-3xl font-bold text-primary-400 mt-1">{stats.totalSets}</p>
             <p className="text-xs text-surface-400">working sets</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-surface-500">Volume</p>
-            <p className="text-3xl font-bold text-surface-100 mt-1">0</p>
+            <p className="text-3xl font-bold text-surface-100 mt-1">
+              {stats.totalVolume > 1000 
+                ? `${(stats.totalVolume / 1000).toFixed(1)}k`
+                : stats.totalVolume}
+            </p>
             <p className="text-xs text-surface-400">kg lifted</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-surface-500">Avg RPE</p>
-            <p className="text-3xl font-bold text-surface-100 mt-1">—</p>
+            <p className="text-3xl font-bold text-surface-100 mt-1">
+              {stats.avgRpe !== null ? stats.avgRpe : '—'}
+            </p>
             <p className="text-xs text-surface-400">this week</p>
           </CardContent>
         </Card>
@@ -85,23 +185,47 @@ export default function DashboardPage() {
 
       {/* Two column layout */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Recent PRs - empty */}
+        {/* Recent Workouts */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent PRs</CardTitle>
+            <CardTitle>Recent Workouts</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-800 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
+            {recentWorkouts.length > 0 ? (
+              <div className="space-y-3">
+                {recentWorkouts.map((workout) => (
+                  <div key={workout.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
+                    <div>
+                      <p className="text-surface-200 font-medium">
+                        {new Date(workout.completed_at).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </p>
+                      <p className="text-sm text-surface-500">
+                        RPE: {workout.session_rpe || '—'}
+                      </p>
+                    </div>
+                    <Link href={`/dashboard/workout/${workout.id}`}>
+                      <Button variant="ghost" size="sm">View</Button>
+                    </Link>
+                  </div>
+                ))}
               </div>
-              <p className="text-surface-400">No PRs yet</p>
-              <p className="text-sm text-surface-500 mt-1">
-                Complete workouts to see your records
-              </p>
-            </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-800 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+                <p className="text-surface-400">No workouts yet</p>
+                <p className="text-sm text-surface-500 mt-1">
+                  Complete workouts to see them here
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

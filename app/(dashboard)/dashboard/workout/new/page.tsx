@@ -20,6 +20,8 @@ export default function NewWorkoutPage() {
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Fetch exercises when muscles are selected
   useEffect(() => {
@@ -59,9 +61,55 @@ export default function NewWorkoutPage() {
   };
 
   const handleStartWorkout = async () => {
-    // TODO: Create workout session in database
-    // For now, redirect to a demo workout
-    router.push('/dashboard/workout/1');
+    setIsCreating(true);
+    setError(null);
+
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error('You must be logged in');
+
+      // Create workout session
+      const { data: session, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          state: 'planned',
+          planned_date: new Date().toISOString().split('T')[0],
+          completion_percent: 0,
+        })
+        .select()
+        .single();
+
+      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
+
+      // Create exercise blocks
+      const exerciseBlocks = selectedExercises.map((exerciseId, index) => ({
+        workout_session_id: session.id,
+        exercise_id: exerciseId,
+        order: index + 1,
+        target_sets: 3,
+        target_rep_range: [8, 12],
+        target_rir: 2,
+        target_weight_kg: 0, // Will be set during workout
+        target_rest_seconds: 120,
+        suggestion_reason: 'Selected by user',
+        warmup_protocol: { sets: [] },
+      }));
+
+      const { error: blocksError } = await supabase
+        .from('exercise_blocks')
+        .insert(exerciseBlocks);
+
+      if (blocksError) throw blocksError;
+
+      // Navigate to the workout
+      router.push(`/dashboard/workout/${session.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create workout');
+      setIsCreating(false);
+    }
   };
 
   // Group exercises by muscle
@@ -84,6 +132,12 @@ export default function NewWorkoutPage() {
         <div className={`flex-1 h-1 rounded-full ${step >= 1 ? 'bg-primary-500' : 'bg-surface-700'}`} />
         <div className={`flex-1 h-1 rounded-full ${step >= 2 ? 'bg-primary-500' : 'bg-surface-700'}`} />
       </div>
+
+      {error && (
+        <div className="p-4 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
+          {error}
+        </div>
+      )}
 
       {step === 1 && (
         <Card>
@@ -195,7 +249,8 @@ export default function NewWorkoutPage() {
                   </Button>
                   <Button
                     onClick={handleStartWorkout}
-                    disabled={selectedExercises.length === 0}
+                    disabled={selectedExercises.length === 0 || isCreating}
+                    isLoading={isCreating}
                   >
                     Start Workout
                   </Button>

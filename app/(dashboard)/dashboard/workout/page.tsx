@@ -1,20 +1,108 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
+import { createUntypedClient } from '@/lib/supabase/client';
+
+interface PlannedWorkout {
+  id: string;
+  planned_date: string;
+  state: string;
+  exercise_count: number;
+}
 
 export default function WorkoutPage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
+  const [inProgressWorkout, setInProgressWorkout] = useState<PlannedWorkout | null>(null);
+  const [plannedWorkouts, setPlannedWorkouts] = useState<PlannedWorkout[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // TODO: Fetch real planned workouts from Supabase
-  const plannedWorkouts: any[] = [];
+  useEffect(() => {
+    async function fetchWorkouts() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Fetch in-progress workout
+      const { data: inProgress } = await supabase
+        .from('workout_sessions')
+        .select(`
+          id,
+          planned_date,
+          state,
+          exercise_blocks (id)
+        `)
+        .eq('user_id', user.id)
+        .eq('state', 'in_progress')
+        .single();
+
+      if (inProgress) {
+        setInProgressWorkout({
+          id: inProgress.id,
+          planned_date: inProgress.planned_date,
+          state: inProgress.state,
+          exercise_count: inProgress.exercise_blocks?.length || 0,
+        });
+      }
+
+      // Fetch planned workouts
+      const { data: planned } = await supabase
+        .from('workout_sessions')
+        .select(`
+          id,
+          planned_date,
+          state,
+          exercise_blocks (id)
+        `)
+        .eq('user_id', user.id)
+        .eq('state', 'planned')
+        .order('planned_date', { ascending: true })
+        .limit(5);
+
+      if (planned) {
+        setPlannedWorkouts(planned.map((w: any) => ({
+          id: w.id,
+          planned_date: w.planned_date,
+          state: w.state,
+          exercise_count: w.exercise_blocks?.length || 0,
+        })));
+      }
+
+      setIsLoading(false);
+    }
+
+    fetchWorkouts();
+  }, []);
 
   const handleQuickStart = () => {
     setIsStarting(true);
     router.push('/dashboard/workout/new');
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Today';
+    } else if (date.toDateString() === tomorrow.toDateString()) {
+      return 'Tomorrow';
+    } else {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+    }
   };
 
   return (
@@ -32,8 +120,61 @@ export default function WorkoutPage() {
         </Button>
       </div>
 
+      {/* In-progress workout */}
+      {inProgressWorkout && (
+        <Card variant="elevated" className="border-2 border-warning-500/50">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="warning">In Progress</Badge>
+                  <h3 className="text-lg font-semibold text-surface-100">
+                    Continue Your Workout
+                  </h3>
+                </div>
+                <p className="text-surface-400 mt-1">
+                  {inProgressWorkout.exercise_count} exercises • Started {formatDate(inProgressWorkout.planned_date)}
+                </p>
+              </div>
+              <Link href={`/dashboard/workout/${inProgressWorkout.id}`}>
+                <Button>Continue</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Planned workouts */}
+      {plannedWorkouts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming Workouts</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {plannedWorkouts.map((workout) => (
+                <div
+                  key={workout.id}
+                  className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium text-surface-200">{formatDate(workout.planned_date)}</p>
+                    <p className="text-sm text-surface-500">
+                      {workout.exercise_count} exercises planned
+                    </p>
+                  </div>
+                  <Link href={`/dashboard/workout/${workout.id}`}>
+                    <Button variant="secondary" size="sm">Start</Button>
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Empty state */}
-      {plannedWorkouts.length === 0 && (
+      {!isLoading && !inProgressWorkout && plannedWorkouts.length === 0 && (
         <Card variant="elevated" className="overflow-hidden">
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
