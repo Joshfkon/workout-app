@@ -163,17 +163,39 @@ export default function AddDexaScanPage() {
         throw new Error('Body fat percentage must be between 0 and 100');
       }
 
+      // Validate numeric ranges to prevent database overflow
+      // DECIMAL(5,2) max is 999.99, DECIMAL(4,2) max is 99.99
+      if (weight > 999) {
+        throw new Error('Weight seems too high. Please enter weight in kg (not grams or lbs).');
+      }
+      if (lean > 999) {
+        throw new Error('Lean mass seems too high. Please enter in kg (not grams).');
+      }
+      if (fat > 999) {
+        throw new Error('Fat mass seems too high. Please enter in kg (not grams).');
+      }
+      if (bone && bone > 99) {
+        throw new Error('Bone mass seems too high. Please enter in kg (not grams).');
+      }
+
       console.log('Saving DEXA scan with regional data:', regionalResult.data);
+
+      // Round numbers to match database precision (DECIMAL(5,2) and DECIMAL(4,1))
+      const roundedWeight = Math.round(weight * 100) / 100;  // 2 decimal places
+      const roundedLean = Math.round(lean * 100) / 100;
+      const roundedFat = Math.round(fat * 100) / 100;
+      const roundedBf = Math.round(bf * 10) / 10;  // 1 decimal place
+      const roundedBone = bone ? Math.round(bone * 100) / 100 : null;
 
       // Build insert object - only include regional_data if we have it
       const insertData: Record<string, unknown> = {
         user_id: user.id,
         scan_date: scanDate,
-        weight_kg: weight,
-        lean_mass_kg: lean,
-        fat_mass_kg: fat,
-        body_fat_percent: bf,
-        bone_mass_kg: bone,
+        weight_kg: roundedWeight,
+        lean_mass_kg: roundedLean,
+        fat_mass_kg: roundedFat,
+        body_fat_percent: roundedBf,
+        bone_mass_kg: roundedBone,
         notes: notes || null,
       };
       
