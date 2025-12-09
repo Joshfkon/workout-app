@@ -24,7 +24,7 @@ export default function NewWorkoutPage() {
   // Fetch exercises when muscles are selected
   useEffect(() => {
     if (step === 2 && selectedMuscles.length > 0) {
-      async function fetchExercises() {
+      const fetchExercises = async () => {
         setIsLoading(true);
         const supabase = createClient();
         const { data, error } = await supabase
@@ -37,7 +37,7 @@ export default function NewWorkoutPage() {
           setExercises(data);
         }
         setIsLoading(false);
-      }
+      };
       fetchExercises();
     }
   }, [step, selectedMuscles]);
