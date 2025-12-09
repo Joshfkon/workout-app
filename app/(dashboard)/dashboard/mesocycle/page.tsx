@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import type { Split, MuscleGroup } from '@/types/schema';
 
 interface Mesocycle {
   id: string;
@@ -17,9 +19,79 @@ interface Mesocycle {
   created_at: string;
 }
 
+interface TodayWorkout {
+  dayName: string;
+  muscles: MuscleGroup[];
+  dayNumber: number;
+}
+
+// Get workout schedule based on split type
+function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): TodayWorkout | null {
+  const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
+    'Full Body': [
+      { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
+      { dayName: 'Full Body B', muscles: ['back', 'hamstrings', 'glutes', 'biceps', 'calves'] },
+      { dayName: 'Full Body C', muscles: ['chest', 'quads', 'shoulders', 'biceps', 'abs'] },
+    ],
+    'Upper/Lower': [
+      { dayName: 'Upper A', muscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
+      { dayName: 'Lower A', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+      { dayName: 'Upper B', muscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
+      { dayName: 'Lower B', muscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
+    ],
+    'PPL': [
+      { dayName: 'Push', muscles: ['chest', 'shoulders', 'triceps'] },
+      { dayName: 'Pull', muscles: ['back', 'biceps', 'shoulders'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+      { dayName: 'Push 2', muscles: ['chest', 'shoulders', 'triceps'] },
+      { dayName: 'Pull 2', muscles: ['back', 'biceps', 'shoulders'] },
+      { dayName: 'Legs 2', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+    ],
+    'Arnold': [
+      { dayName: 'Chest & Back', muscles: ['chest', 'back'] },
+      { dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+    ],
+    'Bro Split': [
+      { dayName: 'Chest', muscles: ['chest'] },
+      { dayName: 'Back', muscles: ['back'] },
+      { dayName: 'Shoulders', muscles: ['shoulders'] },
+      { dayName: 'Arms', muscles: ['biceps', 'triceps'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
+    ],
+  };
+
+  const schedule = splits[splitType] || splits['Upper/Lower'];
+  
+  // Typical training days (Mon=1, Tue=2, etc.)
+  const trainingDayMaps: Record<number, number[]> = {
+    2: [1, 4],        // Mon, Thu
+    3: [1, 3, 5],     // Mon, Wed, Fri
+    4: [1, 2, 4, 5],  // Mon, Tue, Thu, Fri
+    5: [1, 2, 3, 5, 6], // Mon-Wed, Fri-Sat
+    6: [1, 2, 3, 4, 5, 6], // Mon-Sat
+  };
+
+  const trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  const dayIndex = trainingDays.indexOf(dayOfWeek);
+
+  if (dayIndex === -1) {
+    return null; // Rest day
+  }
+
+  const workoutIndex = dayIndex % schedule.length;
+  return {
+    ...schedule[workoutIndex],
+    dayNumber: dayIndex + 1,
+  };
+}
+
 export default function MesocyclePage() {
+  const router = useRouter();
   const [mesocycles, setMesocycles] = useState<Mesocycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
 
   useEffect(() => {
     async function fetchMesocycles() {
@@ -31,6 +103,15 @@ export default function MesocyclePage() {
 
       if (data && !error) {
         setMesocycles(data);
+        
+        // Calculate today's workout for active mesocycle
+        const active = data.find((m: Mesocycle) => m.state === 'active');
+        if (active) {
+          const today = new Date();
+          const dayOfWeek = today.getDay() || 7; // Convert Sunday(0) to 7
+          const workout = getWorkoutForDay(active.split_type, dayOfWeek, active.days_per_week);
+          setTodayWorkout(workout);
+        }
       }
       setIsLoading(false);
     }
@@ -39,6 +120,105 @@ export default function MesocyclePage() {
 
   const activeMesocycle = mesocycles.find(m => m.state === 'active');
   const pastMesocycles = mesocycles.filter(m => m.state !== 'active');
+
+  // Start today's workout from the mesocycle
+  const handleStartWorkout = async () => {
+    if (!activeMesocycle || !todayWorkout) return;
+    
+    setIsStartingWorkout(true);
+    
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) throw new Error('Not logged in');
+
+      // Check if there's already a workout for today
+      const today = new Date().toISOString().split('T')[0];
+      const { data: existingWorkout } = await supabase
+        .from('workout_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('planned_date', today)
+        .in('state', ['planned', 'in_progress'])
+        .single();
+
+      if (existingWorkout) {
+        // Resume existing workout
+        router.push(`/dashboard/workout/${existingWorkout.id}`);
+        return;
+      }
+
+      // Create new workout session
+      const { data: session, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          mesocycle_id: activeMesocycle.id,
+          planned_date: today,
+          state: 'in_progress',
+          started_at: new Date().toISOString(),
+          completion_percent: 0,
+        })
+        .select()
+        .single();
+
+      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
+
+      // Get exercises for the target muscles
+      const { data: exercises } = await supabase
+        .from('exercises')
+        .select('*')
+        .in('primary_muscle', todayWorkout.muscles);
+
+      if (exercises && exercises.length > 0) {
+        // Group exercises by muscle and pick 1-2 per muscle
+        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+        const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
+        (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
+          if (!exercisesByMuscle[ex.primary_muscle]) {
+            exercisesByMuscle[ex.primary_muscle] = [];
+          }
+          exercisesByMuscle[ex.primary_muscle].push(ex);
+        });
+
+        // Create exercise blocks
+        const blocks = [];
+        let order = 1;
+        
+        for (const muscle of todayWorkout.muscles) {
+          const muscleExercises = exercisesByMuscle[muscle] || [];
+          // Pick up to 2 exercises per muscle
+          const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
+          
+          for (const exercise of selected) {
+            const isCompound = exercise.mechanic === 'compound';
+            blocks.push({
+              workout_session_id: session.id,
+              exercise_id: exercise.id,
+              order: order++,
+              target_sets: isCompound ? 4 : 3,
+              target_rep_range: exercise.default_rep_range || [8, 12],
+              target_rir: exercise.default_rir || 2,
+              target_weight_kg: 0, // Will be filled from history or user input
+              target_rest_seconds: isCompound ? 180 : 90,
+              suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
+              warmup_protocol: [],
+            });
+          }
+        }
+
+        if (blocks.length > 0) {
+          await supabase.from('exercise_blocks').insert(blocks);
+        }
+      }
+
+      router.push(`/dashboard/workout/${session.id}`);
+    } catch (error) {
+      console.error('Failed to start workout:', error);
+      setIsStartingWorkout(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -77,55 +257,150 @@ export default function MesocyclePage() {
           </Link>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>{activeMesocycle.name}</CardTitle>
-                <p className="text-surface-400 text-sm mt-1">{activeMesocycle.split_type}</p>
-              </div>
-              <Badge variant="success">Active</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-4">
-              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">
-                  {activeMesocycle.current_week}/{activeMesocycle.total_weeks}
+        <>
+          {/* Today's Workout Card */}
+          {todayWorkout ? (
+            <Card variant="elevated" className="border-2 border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-accent-500/5">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-3xl">🏋️</span>
+                      <div>
+                        <p className="text-sm text-primary-400 font-medium">Today&apos;s Workout</p>
+                        <h2 className="text-xl font-bold text-surface-100">{todayWorkout.dayName}</h2>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {todayWorkout.muscles.map(muscle => (
+                        <Badge key={muscle} variant="default" className="capitalize">
+                          {muscle}
+                        </Badge>
+                      ))}
+                    </div>
+                    <p className="text-sm text-surface-400 mt-3">
+                      Week {activeMesocycle.current_week} • Day {todayWorkout.dayNumber} of {activeMesocycle.days_per_week}
+                    </p>
+                  </div>
+                  <Button 
+                    size="lg" 
+                    onClick={handleStartWorkout}
+                    isLoading={isStartingWorkout}
+                    className="shrink-0"
+                  >
+                    <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Start Workout
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border border-surface-700">
+              <CardContent className="p-6 text-center">
+                <span className="text-4xl block mb-3">😴</span>
+                <h3 className="text-lg font-semibold text-surface-200">Rest Day</h3>
+                <p className="text-surface-400 mt-1">
+                  No workout scheduled for today. Recovery is part of the process!
                 </p>
-                <p className="text-sm text-surface-500">Current Week</p>
-              </div>
-              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">{activeMesocycle.days_per_week}</p>
-                <p className="text-sm text-surface-500">Days/Week</p>
-              </div>
-              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-2xl font-bold text-surface-100">{activeMesocycle.deload_week}</p>
-                <p className="text-sm text-surface-500">Deload Week</p>
-              </div>
-              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-2xl font-bold text-primary-400">
-                  {Math.round((activeMesocycle.current_week / activeMesocycle.total_weeks) * 100)}%
-                </p>
-                <p className="text-sm text-surface-500">Complete</p>
-              </div>
-            </div>
+                <Link href="/dashboard/workout/new">
+                  <Button variant="secondary" className="mt-4">
+                    Start Ad-hoc Workout
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Progress bar */}
-            <div className="mt-6">
-              <div className="flex justify-between text-sm text-surface-400 mb-2">
-                <span>Progress</span>
-                <span>Week {activeMesocycle.current_week} of {activeMesocycle.total_weeks}</span>
+          {/* Mesocycle Overview Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{activeMesocycle.name}</CardTitle>
+                  <p className="text-surface-400 text-sm mt-1">{activeMesocycle.split_type}</p>
+                </div>
+                <Badge variant="success">Active</Badge>
               </div>
-              <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all"
-                  style={{ width: `${(activeMesocycle.current_week / activeMesocycle.total_weeks) * 100}%` }}
-                />
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-4">
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">
+                    {activeMesocycle.current_week}/{activeMesocycle.total_weeks}
+                  </p>
+                  <p className="text-sm text-surface-500">Current Week</p>
+                </div>
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">{activeMesocycle.days_per_week}</p>
+                  <p className="text-sm text-surface-500">Days/Week</p>
+                </div>
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">{activeMesocycle.deload_week}</p>
+                  <p className="text-sm text-surface-500">Deload Week</p>
+                </div>
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                  <p className="text-2xl font-bold text-primary-400">
+                    {Math.round((activeMesocycle.current_week / activeMesocycle.total_weeks) * 100)}%
+                  </p>
+                  <p className="text-sm text-surface-500">Complete</p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              {/* Progress bar */}
+              <div className="mt-6">
+                <div className="flex justify-between text-sm text-surface-400 mb-2">
+                  <span>Progress</span>
+                  <span>Week {activeMesocycle.current_week} of {activeMesocycle.total_weeks}</span>
+                </div>
+                <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all"
+                    style={{ width: `${(activeMesocycle.current_week / activeMesocycle.total_weeks) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Week Schedule */}
+              <div className="mt-6 pt-6 border-t border-surface-800">
+                <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                    const dayNum = index + 1;
+                    const workout = getWorkoutForDay(activeMesocycle.split_type, dayNum, activeMesocycle.days_per_week);
+                    const isToday = (new Date().getDay() || 7) === dayNum;
+                    
+                    return (
+                      <div 
+                        key={day}
+                        className={`shrink-0 p-3 rounded-lg text-center min-w-[80px] ${
+                          isToday 
+                            ? 'bg-primary-500/20 border border-primary-500/40' 
+                            : workout 
+                              ? 'bg-surface-800/50' 
+                              : 'bg-surface-900/30'
+                        }`}
+                      >
+                        <p className={`text-xs font-medium ${isToday ? 'text-primary-400' : 'text-surface-500'}`}>
+                          {day}
+                        </p>
+                        {workout ? (
+                          <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
+                            {workout.dayName.split(' ')[0]}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-surface-600 mt-1">Rest</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       )}
 
       {/* Past mesocycles */}
