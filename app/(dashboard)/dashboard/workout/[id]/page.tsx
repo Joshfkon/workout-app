@@ -907,40 +907,53 @@ export default function WorkoutPage() {
                     />
                   )}
 
-                  {/* Exercise card */}
-                  <ExerciseCard
-                    exercise={block.exercise}
-                    block={block}
-                    sets={blockSets}
-                    onSetEdit={handleSetEdit}
-                    isActive
-                    unit={preferences.units}
-                  />
+                  {/* Get AI recommended weight for this exercise (if available) */}
+                  {(() => {
+                    const exerciseNote = coachMessage?.exerciseNotes.find(
+                      n => n.name === block.exercise.name
+                    );
+                    const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
+                    
+                    return (
+                      <>
+                        {/* Exercise card */}
+                        <ExerciseCard
+                          exercise={block.exercise}
+                          block={block}
+                          sets={blockSets}
+                          onSetEdit={handleSetEdit}
+                          isActive
+                          unit={preferences.units}
+                          recommendedWeight={aiRecommendedWeight}
+                        />
 
-                  {/* Set input */}
-                  {blockSets.length < block.targetSets && (
-                    <SetInputRow
-                      setNumber={blockSets.length + 1}
-                      targetWeight={block.targetWeightKg}
-                      targetRepRange={block.targetRepRange}
-                      targetRir={block.targetRir}
-                      previousSet={blockSets[blockSets.length - 1]}
-                      isLastSet={blockSets.length + 1 === block.targetSets}
-                      onSubmit={handleSetComplete}
-                      unit={preferences.units}
-                    />
-                  )}
+                        {/* Set input */}
+                        {blockSets.length < block.targetSets && (
+                          <SetInputRow
+                            setNumber={blockSets.length + 1}
+                            targetWeight={block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight}
+                            targetRepRange={block.targetRepRange}
+                            targetRir={block.targetRir}
+                            previousSet={blockSets[blockSets.length - 1]}
+                            isLastSet={blockSets.length + 1 === block.targetSets}
+                            onSubmit={handleSetComplete}
+                            unit={preferences.units}
+                          />
+                        )}
 
-                  {/* Exercise complete actions */}
-                  {isComplete && (
-                    <div className="flex justify-center gap-3 py-4">
-                      {index < blocks.length - 1 && (
-                        <Button variant="secondary" onClick={handleNextExercise}>
-                          Next Exercise →
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                        {/* Exercise complete actions */}
+                        {isComplete && (
+                          <div className="flex justify-center gap-3 py-4">
+                            {index < blocks.length - 1 && (
+                              <Button variant="secondary" onClick={handleNextExercise}>
+                                Next Exercise →
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 

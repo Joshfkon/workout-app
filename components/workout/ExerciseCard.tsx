@@ -14,6 +14,7 @@ interface ExerciseCardProps {
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   isActive?: boolean;
   unit?: WeightUnit;
+  recommendedWeight?: number;  // AI-suggested weight in kg
 }
 
 export function ExerciseCard({
@@ -24,6 +25,7 @@ export function ExerciseCard({
   onSetEdit,
   isActive = false,
   unit = 'kg',
+  recommendedWeight,
 }: ExerciseCardProps) {
   const [showFormCues, setShowFormCues] = useState(false);
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -125,10 +127,28 @@ export function ExerciseCard({
         {/* Targets */}
         <div className="flex flex-wrap gap-3 mt-3 text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="text-surface-500">Weight:</span>
-            <span className="font-medium text-surface-200">
-              {displayWeight(block.targetWeightKg)} {weightLabel}
-            </span>
+            {block.targetWeightKg > 0 ? (
+              <>
+                <span className="text-surface-500">Weight:</span>
+                <span className="font-medium text-surface-200">
+                  {displayWeight(block.targetWeightKg)} {weightLabel}
+                </span>
+              </>
+            ) : recommendedWeight && recommendedWeight > 0 ? (
+              <>
+                <span className="text-primary-500">💡 Suggested:</span>
+                <span className="font-medium text-primary-300">
+                  {displayWeight(recommendedWeight)} {weightLabel}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-surface-500">Weight:</span>
+                <span className="font-medium text-surface-400 italic">
+                  Enter your working weight
+                </span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-surface-500">Reps:</span>
