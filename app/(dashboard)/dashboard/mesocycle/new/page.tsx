@@ -6,11 +6,13 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { formatWeight } from '@/lib/utils';
-import type { Goal, Experience, DexaScan } from '@/types/schema';
+import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation } from '@/types/schema';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
+  generateFullProgram,
   recommendSplit,
+  calculateRecoveryFactors,
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
@@ -29,6 +31,14 @@ export default function NewMesocyclePage() {
   const [latestDexa, setLatestDexa] = useState<DexaScan | null>(null);
   const [heightCm, setHeightCm] = useState<number | null>(null);
   
+  // Extended profile data
+  const [userAge, setUserAge] = useState<number>(30);
+  const [sleepQuality, setSleepQuality] = useState<Rating>(3);
+  const [stressLevel, setStressLevel] = useState<Rating>(3);
+  const [trainingAge, setTrainingAge] = useState<number>(1);
+  const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
+  const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
+  
   // Form state
   const [name, setName] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState(4);
@@ -38,6 +48,7 @@ export default function NewMesocyclePage() {
   // AI recommendations
   const [recommendation, setRecommendation] = useState<MesocycleRecommendation | null>(null);
   const [workoutTemplates, setWorkoutTemplates] = useState<WorkoutTemplate[]>([]);
+  const [fullProgram, setFullProgram] = useState<FullProgramRecommendation | null>(null);
   
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
@@ -121,10 +132,10 @@ export default function NewMesocyclePage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
-        // Get user profile
+        // Get user profile with extended fields
         const { data: profile } = await supabase
           .from('users')
-          .select('goal, experience, height_cm')
+          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history')
           .eq('id', user.id)
           .single();
         
@@ -132,6 +143,16 @@ export default function NewMesocyclePage() {
           setUserGoal(profile.goal || 'maintenance');
           setUserExperience(profile.experience || 'intermediate');
           setHeightCm(profile.height_cm);
+          if (profile.age) setUserAge(profile.age);
+          if (profile.sleep_quality) setSleepQuality(profile.sleep_quality as Rating);
+          if (profile.stress_level) setStressLevel(profile.stress_level as Rating);
+          if (profile.training_age !== null && profile.training_age !== undefined) setTrainingAge(profile.training_age);
+          if (profile.available_equipment && Array.isArray(profile.available_equipment)) {
+            setAvailableEquipment(profile.available_equipment as Equipment[]);
+          }
+          if (profile.injury_history && Array.isArray(profile.injury_history)) {
+            setInjuryHistory(profile.injury_history as MuscleGroup[]);
+          }
         }
         
         // Get latest DEXA scan
@@ -162,9 +183,27 @@ export default function NewMesocyclePage() {
     loadUserData();
   }, []);
 
+  // Build extended profile for full program generation
+  const extendedProfile: ExtendedUserProfile = {
+    age: userAge,
+    experience: userExperience,
+    goal: userGoal,
+    sleepQuality,
+    stressLevel,
+    availableEquipment,
+    injuryHistory,
+    trainingAge,
+    heightCm,
+    latestDexa,
+  };
+
+  // Calculate recovery factors for display
+  const recoveryFactors = calculateRecoveryFactors(extendedProfile);
+
   // Generate recommendations when days change
   useEffect(() => {
     if (useAiRecommendation) {
+      // Generate legacy recommendation for backwards compatibility
       const rec = generateMesocycleRecommendation(
         { goal: userGoal, experience: userExperience, heightCm, latestDexa },
         daysPerWeek
@@ -181,8 +220,13 @@ export default function NewMesocyclePage() {
         userExperience
       );
       setWorkoutTemplates(templates);
+      
+      // Generate full program with extended profile
+      const program = generateFullProgram(daysPerWeek, extendedProfile, sessionDurationMinutes);
+      setFullProgram(program);
     }
-  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation]);
+  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes]);
 
   // Generate default name
   useEffect(() => {
@@ -298,6 +342,54 @@ export default function NewMesocyclePage() {
                 💡 Add a DEXA scan in Body Composition for personalized weight recommendations
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recovery Profile Summary */}
+      {step === 1 && (
+        <Card className="border-surface-700">
+          <CardHeader>
+            <CardTitle className="text-sm text-surface-400">Recovery Profile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-surface-500">Sleep</p>
+                <p className="font-medium text-surface-200">
+                  {sleepQuality}/5 {sleepQuality <= 2 ? '⚠️' : sleepQuality >= 4 ? '✓' : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-surface-500">Stress</p>
+                <p className="font-medium text-surface-200">
+                  {stressLevel}/5 {stressLevel >= 4 ? '⚠️' : stressLevel <= 2 ? '✓' : ''}
+                </p>
+              </div>
+              <div>
+                <p className="text-surface-500">Volume Modifier</p>
+                <p className={`font-medium ${recoveryFactors.volumeMultiplier < 0.9 ? 'text-warning-400' : 'text-success-400'}`}>
+                  {(recoveryFactors.volumeMultiplier * 100).toFixed(0)}%
+                </p>
+              </div>
+              <div>
+                <p className="text-surface-500">Deload Every</p>
+                <p className="font-medium text-surface-200">{recoveryFactors.deloadFrequencyWeeks} weeks</p>
+              </div>
+            </div>
+            {recoveryFactors.warnings.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {recoveryFactors.warnings.map((warning, i) => (
+                  <p key={i} className="text-xs text-warning-400 flex items-start gap-2">
+                    <span>⚠️</span>
+                    <span>{warning}</span>
+                  </p>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-surface-500 mt-3">
+              Update your recovery profile in <a href="/dashboard/settings" className="text-primary-400 hover:underline">Settings</a>
+            </p>
           </CardContent>
         </Card>
       )}
@@ -453,7 +545,28 @@ export default function NewMesocyclePage() {
             </div>
 
             {/* AI Recommendation */}
-            {recommendation && (
+            {fullProgram && (
+              <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span className="font-medium text-surface-200">AI Recommendation</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Badge variant="info">{fullProgram.split}</Badge>
+                  <span className="text-sm text-surface-400">{recommendation?.splitReason}</span>
+                </div>
+                {fullProgram.programNotes.length > 0 && (
+                  <div className="pt-2 border-t border-surface-700 space-y-1">
+                    {fullProgram.programNotes.slice(0, 3).map((note, i) => (
+                      <p key={i} className="text-xs text-surface-400">{note}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {!fullProgram && recommendation && (
               <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
                 <div className="flex items-center gap-2">
                   <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -625,6 +738,33 @@ export default function NewMesocyclePage() {
                 {volumeAssessment.message}
               </p>
             </div>
+
+            {/* Periodization Info */}
+            {fullProgram && (
+              <div className="p-4 bg-surface-800/50 rounded-lg space-y-2">
+                <p className="text-sm font-medium text-surface-300">Periodization</p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-surface-500">Model</p>
+                    <p className="text-surface-200 capitalize">{fullProgram.periodization.model.replace('_', ' ')}</p>
+                  </div>
+                  <div>
+                    <p className="text-surface-500">Deload Strategy</p>
+                    <p className="text-surface-200 capitalize">{fullProgram.periodization.deloadStrategy}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Warnings */}
+            {fullProgram && fullProgram.warnings.length > 0 && (
+              <div className="p-4 bg-warning-500/10 border border-warning-500/20 rounded-lg space-y-2">
+                <p className="text-sm font-medium text-warning-400">⚠️ Things to Consider</p>
+                {fullProgram.warnings.map((warning, i) => (
+                  <p key={i} className="text-xs text-warning-300">{warning}</p>
+                ))}
+              </div>
+            )}
 
             {/* Weekly Volume Preview */}
             {recommendation && (

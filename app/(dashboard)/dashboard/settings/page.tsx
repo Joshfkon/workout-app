@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider } from '@/components/ui';
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
-import type { Goal, Experience, WeightUnit } from '@/types/schema';
+import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+
+const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
 export default function SettingsPage() {
   const [goal, setGoal] = useState<Goal>('maintenance');
@@ -18,6 +20,14 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Extended profile fields
+  const [age, setAge] = useState('');
+  const [sleepQuality, setSleepQuality] = useState<Rating>(3);
+  const [stressLevel, setStressLevel] = useState<Rating>(3);
+  const [trainingAge, setTrainingAge] = useState('');
+  const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
+  const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
 
   // Load settings on mount
   useEffect(() => {
@@ -53,6 +63,17 @@ export default function SettingsPage() {
               ...(data.volume_landmarks as any),
             });
           }
+          // Extended profile fields
+          if (data.age) setAge(String(data.age));
+          if (data.sleep_quality) setSleepQuality(data.sleep_quality as Rating);
+          if (data.stress_level) setStressLevel(data.stress_level as Rating);
+          if (data.training_age !== null && data.training_age !== undefined) setTrainingAge(String(data.training_age));
+          if (data.available_equipment && Array.isArray(data.available_equipment)) {
+            setAvailableEquipment(data.available_equipment as Equipment[]);
+          }
+          if (data.injury_history && Array.isArray(data.injury_history)) {
+            setInjuryHistory(data.injury_history as MuscleGroup[]);
+          }
         }
       }
       setIsLoading(false);
@@ -85,6 +106,13 @@ export default function SettingsPage() {
             showWarmupSuggestions,
           },
           volume_landmarks: volumeLandmarks,
+          // Extended profile fields
+          age: age ? parseInt(age) : null,
+          sleep_quality: sleepQuality,
+          stress_level: stressLevel,
+          training_age: trainingAge ? parseFloat(trainingAge) : 0,
+          available_equipment: availableEquipment,
+          injury_history: injuryHistory,
         });
 
       if (error) throw error;
@@ -166,6 +194,178 @@ export default function SettingsPage() {
             placeholder="e.g., 175"
             hint="Required for FFMI calculations in Body Composition"
           />
+
+          <Input
+            label="Age"
+            type="number"
+            min="13"
+            max="100"
+            value={age}
+            onChange={(e) => setAge(e.target.value)}
+            placeholder="e.g., 30"
+            hint="Used to adjust recovery recommendations"
+          />
+
+          <Input
+            label="Training Age (years)"
+            type="number"
+            step="0.5"
+            min="0"
+            max="50"
+            value={trainingAge}
+            onChange={(e) => setTrainingAge(e.target.value)}
+            placeholder="e.g., 2.5"
+            hint="Years of consistent resistance training"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Recovery Profile */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recovery Profile</CardTitle>
+          <p className="text-sm text-surface-400 mt-1">
+            These factors affect your volume and frequency recommendations
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-2">
+              Sleep Quality
+            </label>
+            <div className="flex items-center gap-2">
+              {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
+                <button
+                  key={rating}
+                  onClick={() => setSleepQuality(rating)}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    sleepQuality === rating
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  }`}
+                >
+                  {rating}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between text-xs text-surface-500 mt-1">
+              <span>Poor</span>
+              <span>Excellent</span>
+            </div>
+            {sleepQuality <= 2 && (
+              <p className="text-xs text-warning-400 mt-2">
+                ⚠️ Poor sleep significantly impacts recovery. Volume will be reduced.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-2">
+              Life Stress Level
+            </label>
+            <div className="flex items-center gap-2">
+              {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
+                <button
+                  key={rating}
+                  onClick={() => setStressLevel(rating)}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    stressLevel === rating
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  }`}
+                >
+                  {rating}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-between text-xs text-surface-500 mt-1">
+              <span>Low stress</span>
+              <span>High stress</span>
+            </div>
+            {stressLevel >= 4 && (
+              <p className="text-xs text-warning-400 mt-2">
+                ⚠️ High life stress impairs recovery. Training should be a release, not another stressor.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Equipment & Gym */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Equipment & Gym</CardTitle>
+          <p className="text-sm text-surface-400 mt-1">
+            Select available equipment to customize exercise selection
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-3">
+              Available Equipment
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_EQUIPMENT.map((equip) => (
+                <label
+                  key={equip}
+                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                    availableEquipment.includes(equip)
+                      ? 'bg-primary-500/10 border border-primary-500/30'
+                      : 'bg-surface-800 border border-surface-700 hover:border-surface-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={availableEquipment.includes(equip)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAvailableEquipment([...availableEquipment, equip]);
+                      } else {
+                        setAvailableEquipment(availableEquipment.filter((e) => e !== equip));
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-primary-500 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-surface-200 capitalize">{equip}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-3">
+              Injury History / Cautious Areas
+            </label>
+            <p className="text-xs text-surface-500 mb-3">
+              Select muscle groups to be cautious with. The AI will avoid or modify exercises for these areas.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {MUSCLE_GROUPS.map((muscle) => (
+                <label
+                  key={muscle}
+                  className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                    injuryHistory.includes(muscle)
+                      ? 'bg-warning-500/10 border border-warning-500/30'
+                      : 'bg-surface-800 border border-surface-700 hover:border-surface-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={injuryHistory.includes(muscle)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setInjuryHistory([...injuryHistory, muscle]);
+                      } else {
+                        setInjuryHistory(injuryHistory.filter((m) => m !== muscle));
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-warning-500 focus:ring-warning-500"
+                  />
+                  <span className="text-sm text-surface-200 capitalize">{muscle}</span>
+                </label>
+              ))}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

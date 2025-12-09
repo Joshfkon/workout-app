@@ -33,6 +33,24 @@ export type BodyweightSource = 'manual' | 'pre_workout';
 /** Mesocycle state */
 export type MesocycleState = 'planned' | 'active' | 'completed';
 
+/** Equipment types available for training */
+export type Equipment = 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'kettlebell';
+
+/** Training split types */
+export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Arnold' | 'Bro Split';
+
+/** Periodization models for mesocycle planning */
+export type PeriodizationModel = 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block';
+
+/** Deload strategy types */
+export type DeloadStrategy = 'proactive' | 'reactive' | 'none';
+
+/** Exercise difficulty levels */
+export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
+
+/** Fatigue rating (1 = low CNS demand, 3 = high) */
+export type FatigueRating = 1 | 2 | 3;
+
 // ============ USER ============
 
 /**
@@ -536,6 +554,398 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   showFormCues: true,
   showWarmupSuggestions: true,
 };
+
+// ============ EXTENDED USER PROFILE (for AI mesocycle builder) ============
+
+/**
+ * Extended user profile for comprehensive program generation
+ * Includes recovery factors, equipment access, and injury history
+ */
+export interface ExtendedUserProfile {
+  /** User's age in years */
+  age: number;
+  
+  /** Training experience level */
+  experience: Experience;
+  
+  /** Primary training goal */
+  goal: Goal;
+  
+  /** Subjective sleep quality (1 = poor, 5 = excellent) */
+  sleepQuality: Rating;
+  
+  /** Current life stress level (1 = low, 5 = high) */
+  stressLevel: Rating;
+  
+  /** Equipment available at user's gym */
+  availableEquipment: Equipment[];
+  
+  /** Muscle groups with injury history to be cautious with */
+  injuryHistory: MuscleGroup[];
+  
+  /** Years of consistent training */
+  trainingAge: number;
+  
+  /** Height in cm (for FFMI calculations) */
+  heightCm: number | null;
+  
+  /** Latest DEXA scan data */
+  latestDexa: DexaScan | null;
+}
+
+/**
+ * Recovery factors calculated from user profile
+ * Used to adjust volume and frequency recommendations
+ */
+export interface RecoveryFactors {
+  /** Volume multiplier (0.5-1.3) based on recovery capacity */
+  volumeMultiplier: number;
+  
+  /** Frequency multiplier (0.7-1.2) based on recovery capacity */
+  frequencyMultiplier: number;
+  
+  /** Recommended weeks between deloads */
+  deloadFrequencyWeeks: number;
+  
+  /** Warnings about recovery limitations */
+  warnings: string[];
+}
+
+/**
+ * Weekly progression targets within a periodization plan
+ */
+export interface WeeklyProgression {
+  /** Week number (1-indexed) */
+  week: number;
+  
+  /** Intensity modifier (multiplier: 1.0 = baseline) */
+  intensityModifier: number;
+  
+  /** Volume modifier */
+  volumeModifier: number;
+  
+  /** Target RPE range */
+  rpeTarget: { min: number; max: number };
+  
+  /** Focus/theme for this week */
+  focus: string;
+}
+
+/**
+ * Complete periodization plan for a mesocycle
+ */
+export interface PeriodizationPlan {
+  /** Selected periodization model */
+  model: PeriodizationModel;
+  
+  /** Total weeks including deload */
+  mesocycleWeeks: number;
+  
+  /** Week-by-week progression targets */
+  weeklyProgression: WeeklyProgression[];
+  
+  /** Training weeks before deload */
+  deloadFrequency: number;
+  
+  /** Deload strategy */
+  deloadStrategy: DeloadStrategy;
+}
+
+/**
+ * Session template for split planning
+ */
+export interface SessionTemplate {
+  /** Day name (e.g., "Push A", "Upper") */
+  day: string;
+  
+  /** Focus description */
+  focus: string;
+  
+  /** Target muscle groups for this session */
+  targetMuscles: MuscleGroup[];
+}
+
+/**
+ * Detailed exercise entry in the exercise database
+ */
+export interface ExerciseEntry {
+  name: string;
+  primaryMuscle: MuscleGroup;
+  secondaryMuscles: MuscleGroup[];
+  pattern: MovementPattern | 'isolation' | 'carry';
+  equipment: Equipment;
+  difficulty: ExerciseDifficulty;
+  fatigueRating: FatigueRating;
+  notes?: string;
+}
+
+/**
+ * Detailed workout session with full exercise information
+ */
+export interface DetailedSession {
+  /** Day name */
+  day: string;
+  
+  /** Session focus description */
+  focus: string;
+  
+  /** Exercises with full details */
+  exercises: DetailedExercise[];
+  
+  /** Total sets in session */
+  totalSets: number;
+  
+  /** Estimated session duration in minutes */
+  estimatedMinutes: number;
+  
+  /** Warmup instructions */
+  warmup: string[];
+}
+
+/**
+ * Detailed exercise within a session
+ */
+export interface DetailedExercise {
+  exercise: ExerciseEntry;
+  sets: number;
+  repRange: string;
+  restSeconds: number;
+  notes: string;
+}
+
+/**
+ * Complete program recommendation from the AI builder
+ */
+export interface FullProgramRecommendation {
+  /** Recommended training split */
+  split: Split;
+  
+  /** Weekly schedule (e.g., ["Mon", "Wed", "Fri"]) */
+  schedule: string[];
+  
+  /** Periodization plan */
+  periodization: PeriodizationPlan;
+  
+  /** User's recovery profile */
+  recoveryProfile: RecoveryFactors;
+  
+  /** Fatigue budget configuration */
+  fatigueBudget?: FatigueBudgetConfig;
+  
+  /** Volume per muscle group with frequency */
+  volumePerMuscle: Record<MuscleGroup, { sets: number; frequency: number }>;
+  
+  /** Detailed workout sessions */
+  sessions: DetailedSession[];
+  
+  /** Full mesocycle week-by-week breakdown */
+  mesocycleWeeks?: MesocycleWeek[];
+  
+  /** Warnings about potential issues */
+  warnings: string[];
+  
+  /** Program notes and recommendations */
+  programNotes: string[];
+}
+
+// ============ REP RANGE SYSTEM ============
+
+/** Position of exercise within a workout session */
+export type ExercisePosition = 'first' | 'early' | 'mid' | 'late';
+
+/** DUP (Daily Undulating Periodization) day types */
+export type DUPDayType = 'hypertrophy' | 'strength' | 'power';
+
+/** Muscle fiber type dominance - affects optimal rep ranges */
+export type FiberType = 'fast' | 'mixed' | 'slow';
+
+/**
+ * Rep range configuration with tempo and RIR guidance
+ */
+export interface RepRangeConfig {
+  /** Minimum reps in range */
+  min: number;
+  
+  /** Maximum reps in range */
+  max: number;
+  
+  /** Target Reps in Reserve (0-4) */
+  targetRIR: number;
+  
+  /** Tempo recommendation (format: Eccentric-Pause-Concentric-Pause, e.g., "3-1-1-0") */
+  tempoRecommendation: string;
+  
+  /** Notes explaining the rep range selection */
+  notes: string;
+}
+
+/**
+ * Factors that influence rep range selection
+ */
+export interface RepRangeFactors {
+  goal: Goal;
+  experience: Experience;
+  exercisePattern: MovementPattern | 'isolation' | 'carry';
+  muscleGroup: MuscleGroup;
+  positionInWorkout: ExercisePosition;
+  weekInMesocycle: number;
+  totalMesocycleWeeks: number;
+  periodizationModel: PeriodizationModel;
+}
+
+// ============ FATIGUE BUDGET SYSTEM ============
+
+/**
+ * Fatigue profile for a single exercise
+ */
+export interface ExerciseFatigueProfile {
+  /** Systemic/CNS fatigue cost (0-50 typically) */
+  systemicCost: number;
+  
+  /** Local fatigue per muscle hit */
+  localCost: Map<MuscleGroup, number>;
+  
+  /** Stimulus-to-Fatigue Ratio (higher = more efficient, 1.0+ is good) */
+  stimulusPerFatigue: number;
+  
+  /** Days before this muscle can be trained hard again */
+  recoveryDays: number;
+}
+
+/**
+ * Configuration for session fatigue limits
+ */
+export interface FatigueBudgetConfig {
+  /** Maximum systemic fatigue per session (typically 80-120) */
+  systemicLimit: number;
+  
+  /** Maximum local fatigue per muscle group */
+  localLimit: number;
+  
+  /** Minimum SFR threshold - exercises below this are "junk volume" */
+  minSFRThreshold: number;
+  
+  /** Percentage of limit at which to warn user */
+  warningThreshold: number;
+}
+
+/** Exercise efficiency rating based on SFR */
+export type ExerciseEfficiency = 'optimal' | 'acceptable' | 'suboptimal' | 'junk';
+
+/**
+ * Result of checking if an exercise can be added to a session
+ */
+export interface ExerciseAddResult {
+  allowed: boolean;
+  reason?: string;
+  efficiency: ExerciseEfficiency;
+}
+
+/**
+ * Summary of fatigue accumulated during a session
+ */
+export interface SessionFatigueSummary {
+  totalSystemicFatigue: number;
+  systemicCapacityUsed: number;
+  localFatigueByMuscle: Record<string, number>;
+  averageSFR: number;
+  exerciseCount: number;
+  warnings: string[];
+  recommendation: string;
+}
+
+/**
+ * Muscle recovery status for weekly tracking
+ */
+export interface MuscleRecoveryStatus {
+  lastTrainedDay: number;
+  fatigueLevel: number;
+  recoveryRate: number;
+}
+
+/**
+ * Weekly volume status for a muscle group
+ */
+export interface WeeklyMuscleVolumeStatus {
+  currentSets: number;
+  targetSets: { min: number; max: number };
+  status: 'under' | 'optimal' | 'over';
+}
+
+// ============ MESOCYCLE WEEK STRUCTURE ============
+
+/**
+ * Complete week within a mesocycle
+ */
+export interface MesocycleWeek {
+  weekNumber: number;
+  focus: string;
+  intensityModifier: number;
+  volumeModifier: number;
+  rpeTarget: { min: number; max: number };
+  sessions: DetailedSessionWithFatigue[];
+  isDeload: boolean;
+}
+
+/**
+ * Detailed session with fatigue tracking information
+ */
+export interface DetailedSessionWithFatigue {
+  day: string;
+  focus: string;
+  exercises: DetailedExerciseWithFatigue[];
+  totalSets: number;
+  estimatedMinutes: number;
+  warmup: string[];
+  fatigueSummary: {
+    systemicFatigueGenerated: number;
+    systemicCapacityUsed: number;
+    averageSFR: number;
+    localFatigueByMuscle: Record<string, number>;
+  };
+}
+
+/**
+ * Detailed exercise with full fatigue and rep range information
+ */
+export interface DetailedExerciseWithFatigue {
+  exercise: ExerciseEntry;
+  sets: number;
+  reps: RepRangeConfig;
+  restSeconds: number;
+  loadGuidance: string;
+  notes: string;
+  fatigueProfile: {
+    systemicCost: number;
+    localCost: Record<string, number>;
+    sfr: number;
+    efficiency: ExerciseEfficiency;
+  };
+}
+
+// ============ REACTIVE DELOAD DETECTION ============
+
+/**
+ * Weekly performance data for deload detection
+ */
+export interface WeeklyPerformanceData {
+  weekNumber: number;
+  missedReps: number;
+  perceivedFatigue: Rating;
+  sleepQuality: Rating;
+  motivationLevel: Rating;
+  jointPain: boolean;
+  strengthDecline: boolean;
+}
+
+/**
+ * Result of checking deload triggers
+ */
+export interface DeloadTriggers {
+  shouldDeload: boolean;
+  reasons: string[];
+  suggestedDeloadType: 'volume' | 'intensity' | 'full';
+}
 
 /**
  * Muscle groups list
