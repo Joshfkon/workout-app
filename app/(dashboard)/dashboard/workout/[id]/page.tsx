@@ -23,6 +23,112 @@ interface AvailableExercise {
   mechanic: 'compound' | 'isolation';
 }
 
+// Generate coach message based on workout structure
+function generateCoachMessage(blocks: ExerciseBlockWithExercise[]): {
+  greeting: string;
+  overview: string;
+  exerciseNotes: { name: string; reason: string }[];
+  tips: string[];
+} {
+  if (blocks.length === 0) {
+    return {
+      greeting: "Let's get started!",
+      overview: "Your workout is ready.",
+      exerciseNotes: [],
+      tips: [],
+    };
+  }
+
+  // Analyze workout structure
+  const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
+  const compoundCount = blocks.filter(b => b.exercise.mechanic === 'compound').length;
+  const isolationCount = blocks.filter(b => b.exercise.mechanic === 'isolation').length;
+  const totalSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
+
+  // Determine workout type
+  let workoutType = '';
+  if (muscles.length >= 5) workoutType = 'Full Body';
+  else if (muscles.includes('chest') && muscles.includes('back')) workoutType = 'Upper Body';
+  else if (muscles.includes('quads') && muscles.includes('hamstrings')) workoutType = 'Lower Body';
+  else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) workoutType = 'Push';
+  else if (muscles.includes('back') && muscles.includes('biceps')) workoutType = 'Pull';
+  else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+
+  // Generate greeting based on time of day
+  const hour = new Date().getHours();
+  let timeGreeting = 'Hey';
+  if (hour < 12) timeGreeting = 'Good morning';
+  else if (hour < 17) timeGreeting = 'Good afternoon';
+  else timeGreeting = 'Good evening';
+
+  const greetings = [
+    `${timeGreeting}! Ready to crush this ${workoutType} session? 💪`,
+    `${timeGreeting}! Today's ${workoutType} workout is designed for maximum gains.`,
+    `${timeGreeting}! Let's make this ${workoutType} session count!`,
+  ];
+
+  // Generate overview
+  const overviews = [
+    `Today you're hitting ${totalSets} total sets across ${blocks.length} exercises. ${compoundCount > 0 ? `Starting with ${compoundCount} compound movement${compoundCount > 1 ? 's' : ''} for strength and muscle activation, ` : ''}${isolationCount > 0 ? `then ${isolationCount} isolation exercise${isolationCount > 1 ? 's' : ''} to really target each muscle.` : ''}`,
+    `This session includes ${compoundCount} compound and ${isolationCount} isolation exercises (${totalSets} sets total). The order is optimized—big movements first when you're fresh, then targeted work to maximize the pump.`,
+  ];
+
+  // Generate exercise-specific notes
+  const exerciseNotes: { name: string; reason: string }[] = [];
+  
+  blocks.forEach((block, idx) => {
+    const ex = block.exercise;
+    const repRange = block.targetRepRange;
+    const isFirst = idx === 0;
+    const isCompound = ex.mechanic === 'compound';
+    
+    let reason = '';
+    
+    if (isFirst && isCompound) {
+      reason = `Leading with this compound to maximize neural drive while fresh. ${repRange[0]}-${repRange[1]} reps keeps intensity high for strength gains.`;
+    } else if (isCompound) {
+      reason = `Heavy compound for overall ${ex.primaryMuscle} development. Rep range of ${repRange[0]}-${repRange[1]} balances strength and hypertrophy.`;
+    } else if (idx >= blocks.length - 2) {
+      reason = `Finishing with isolation to fully fatigue the ${ex.primaryMuscle}. Higher reps (${repRange[0]}-${repRange[1]}) for metabolic stress and pump.`;
+    } else {
+      reason = `Targeted ${ex.primaryMuscle} work. ${repRange[0]}-${repRange[1]} reps optimized for muscle fiber type.`;
+    }
+
+    // Add specific notes based on muscle
+    if (ex.primaryMuscle === 'calves') {
+      reason += ' Calves are slow-twitch dominant—higher reps with controlled tempo work best.';
+    } else if (ex.primaryMuscle === 'hamstrings') {
+      reason += ' Hamstrings are fast-twitch dominant—heavier loads with full stretch.';
+    }
+
+    exerciseNotes.push({ name: ex.name, reason });
+  });
+
+  // Generate tips
+  const tips: string[] = [];
+  
+  if (compoundCount > 0) {
+    tips.push('Take full rest (2-3 min) between compound sets to maintain strength.');
+  }
+  if (isolationCount > 0) {
+    tips.push('Shorter rest (60-90 sec) for isolation work to keep metabolic stress high.');
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'back')) {
+    tips.push('Focus on initiating pulls with your elbows, not your hands—better lat activation.');
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'chest')) {
+    tips.push('Squeeze at the top of each rep and control the eccentric for chest exercises.');
+  }
+  tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
+
+  return {
+    greeting: greetings[Math.floor(Math.random() * greetings.length)],
+    overview: overviews[Math.floor(Math.random() * overviews.length)],
+    exerciseNotes,
+    tips: tips.slice(0, 3), // Limit to 3 tips
+  };
+}
+
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
@@ -44,6 +150,10 @@ export default function WorkoutPage() {
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
+  
+  // Coach message state
+  const [showCoachMessage, setShowCoachMessage] = useState(true);
+  const [coachMessage, setCoachMessage] = useState<ReturnType<typeof generateCoachMessage> | null>(null);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -131,6 +241,9 @@ export default function WorkoutPage() {
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
+        
+        // Generate coach message
+        setCoachMessage(generateCoachMessage(transformedBlocks));
         
         // If already in progress, skip check-in
         if (sessionData.state === 'in_progress') {
@@ -534,6 +647,82 @@ export default function WorkoutPage() {
           style={{ width: `${overallProgress}%` }}
         />
       </div>
+
+      {/* Coach Message */}
+      {coachMessage && (
+        <Card className="overflow-hidden border-primary-500/20 bg-gradient-to-br from-primary-500/5 to-surface-900">
+          <button
+            onClick={() => setShowCoachMessage(!showCoachMessage)}
+            className="w-full p-4 flex items-center gap-3 text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-lg">🏋️</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-surface-100">Coach&apos;s Notes</p>
+              <p className="text-sm text-surface-400 truncate">
+                {showCoachMessage ? 'Tap to collapse' : coachMessage.greeting}
+              </p>
+            </div>
+            <svg 
+              className={`w-5 h-5 text-surface-400 transition-transform ${showCoachMessage ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {showCoachMessage && (
+            <div className="px-4 pb-4 space-y-4">
+              {/* Greeting & Overview */}
+              <div className="pl-13 space-y-2">
+                <p className="text-surface-200 font-medium">{coachMessage.greeting}</p>
+                <p className="text-sm text-surface-400">{coachMessage.overview}</p>
+              </div>
+
+              {/* Exercise Breakdown */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider pl-13">
+                  Exercise Breakdown
+                </p>
+                <div className="space-y-2">
+                  {coachMessage.exerciseNotes.map((note, idx) => (
+                    <div 
+                      key={idx} 
+                      className="flex gap-3 p-2 rounded-lg bg-surface-800/50"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-surface-700 flex items-center justify-center flex-shrink-0 text-xs font-bold text-surface-400">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-surface-200">{note.name}</p>
+                        <p className="text-xs text-surface-500">{note.reason}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider pl-13">
+                  Pro Tips
+                </p>
+                <div className="pl-13 space-y-1">
+                  {coachMessage.tips.map((tip, idx) => (
+                    <p key={idx} className="text-xs text-surface-400 flex gap-2">
+                      <span className="text-primary-400">•</span>
+                      {tip}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Rest timer - fixed on mobile */}
       {showRestTimer && (
