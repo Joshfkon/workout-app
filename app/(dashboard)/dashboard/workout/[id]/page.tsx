@@ -9,6 +9,8 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { quickWeightEstimate, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
+import { formatWeight } from '@/lib/utils';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -23,11 +25,21 @@ interface AvailableExercise {
   mechanic: 'compound' | 'isolation';
 }
 
+interface UserProfileForWeights {
+  weightKg: number;
+  heightCm: number;
+  bodyFatPercent: number;
+  experience: 'novice' | 'intermediate' | 'advanced';
+}
+
 // Generate coach message based on workout structure
-function generateCoachMessage(blocks: ExerciseBlockWithExercise[]): {
+function generateCoachMessage(
+  blocks: ExerciseBlockWithExercise[],
+  userProfile?: UserProfileForWeights
+): {
   greeting: string;
   overview: string;
-  exerciseNotes: { name: string; reason: string }[];
+  exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[];
   tips: string[];
 } {
   if (blocks.length === 0) {
@@ -74,7 +86,7 @@ function generateCoachMessage(blocks: ExerciseBlockWithExercise[]): {
   ];
 
   // Generate exercise-specific notes
-  const exerciseNotes: { name: string; reason: string }[] = [];
+  const exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[] = [];
   
   blocks.forEach((block, idx) => {
     const ex = block.exercise;
@@ -101,7 +113,25 @@ function generateCoachMessage(blocks: ExerciseBlockWithExercise[]): {
       reason += ' Hamstrings are fast-twitch dominant—heavier loads with full stretch.';
     }
 
-    exerciseNotes.push({ name: ex.name, reason });
+    // Get weight recommendation if user profile available
+    let weightRec: WorkingWeightRecommendation | undefined;
+    if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
+      try {
+        weightRec = quickWeightEstimate(
+          ex.name,
+          { min: repRange[0], max: repRange[1] },
+          block.targetRir || 2,
+          userProfile.weightKg,
+          userProfile.heightCm,
+          userProfile.bodyFatPercent || 20,
+          userProfile.experience
+        );
+      } catch (e) {
+        // Silently fail if weight estimation fails
+      }
+    }
+
+    exerciseNotes.push({ name: ex.name, reason, weightRec });
   });
 
   // Generate tips
@@ -154,6 +184,7 @@ export default function WorkoutPage() {
   // Coach message state
   const [showCoachMessage, setShowCoachMessage] = useState(true);
   const [coachMessage, setCoachMessage] = useState<ReturnType<typeof generateCoachMessage> | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -242,8 +273,35 @@ export default function WorkoutPage() {
         setSession(transformedSession);
         setBlocks(transformedBlocks);
         
-        // Generate coach message
-        setCoachMessage(generateCoachMessage(transformedBlocks));
+        // Fetch user profile for weight estimation
+        const { data: userData } = await supabase
+          .from('users')
+          .select('weight_kg, height_cm, experience, training_age')
+          .eq('id', sessionData.user_id)
+          .single();
+        
+        // Fetch latest DEXA scan for body fat if available
+        const { data: dexaData } = await supabase
+          .from('dexa_scans')
+          .select('body_fat_percentage')
+          .eq('user_id', sessionData.user_id)
+          .order('scan_date', { ascending: false })
+          .limit(1)
+          .single();
+        
+        const profile: UserProfileForWeights | undefined = userData ? {
+          weightKg: userData.weight_kg || 70,
+          heightCm: userData.height_cm || 175,
+          bodyFatPercent: dexaData?.body_fat_percentage || 20,
+          experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate'
+        } : undefined;
+        
+        if (profile) {
+          setUserProfile(profile);
+        }
+        
+        // Generate coach message with profile for weight recommendations
+        setCoachMessage(generateCoachMessage(transformedBlocks, profile));
         
         // If already in progress, skip check-in
         if (sessionData.state === 'in_progress') {
@@ -691,14 +749,55 @@ export default function WorkoutPage() {
                   {coachMessage.exerciseNotes.map((note, idx) => (
                     <div 
                       key={idx} 
-                      className="flex gap-3 p-2 rounded-lg bg-surface-800/50"
+                      className="p-3 rounded-lg bg-surface-800/50"
                     >
-                      <div className="w-6 h-6 rounded-full bg-surface-700 flex items-center justify-center flex-shrink-0 text-xs font-bold text-surface-400">
-                        {idx + 1}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-surface-200">{note.name}</p>
-                        <p className="text-xs text-surface-500">{note.reason}</p>
+                      <div className="flex gap-3">
+                        <div className="w-6 h-6 rounded-full bg-surface-700 flex items-center justify-center flex-shrink-0 text-xs font-bold text-surface-400">
+                          {idx + 1}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-surface-200">{note.name}</p>
+                          <p className="text-xs text-surface-500 mt-1">{note.reason}</p>
+                          
+                          {/* Weight Recommendation */}
+                          {note.weightRec && (
+                            <div className="mt-2 p-2 rounded bg-surface-900/50 border border-surface-700">
+                              {note.weightRec.confidence === 'find_working_weight' ? (
+                                <div>
+                                  <p className="text-xs font-medium text-warning-400 flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Finding Weight Protocol
+                                  </p>
+                                  <p className="text-xs text-surface-400 mt-1">
+                                    {note.weightRec.findingWeightProtocol?.instructions}
+                                  </p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-xs font-medium text-primary-400">
+                                      💡 Recommended: {formatWeight(note.weightRec.recommendedWeight, preferences.units)}
+                                    </p>
+                                    <Badge 
+                                      variant={note.weightRec.confidence === 'high' ? 'success' : note.weightRec.confidence === 'medium' ? 'info' : 'warning'} 
+                                      size="sm"
+                                    >
+                                      {note.weightRec.confidence}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-surface-500 mt-1">
+                                    Range: {formatWeight(note.weightRec.weightRange.low, preferences.units)} - {formatWeight(note.weightRec.weightRange.high, preferences.units)}
+                                  </p>
+                                  <p className="text-xs text-surface-600 mt-0.5 italic">
+                                    {note.weightRec.rationale}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
