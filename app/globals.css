@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: #fafafa;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+  --primary: #0ea5e9;
+  --primary-foreground: #082f49;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #d946ef;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #0ea5e9;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)];
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-surface-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-700 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-600;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 focus:ring-offset-surface-900;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-500 active:bg-primary-700;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface-700 text-surface-100 hover:bg-surface-600 active:bg-surface-800;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-surface-300 hover:bg-surface-800 hover:text-surface-100;
+  }
+
+  .btn-danger {
+    @apply btn bg-danger-600 text-white hover:bg-danger-500 active:bg-danger-600;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg bg-surface-800 border border-surface-700 px-4 py-2.5;
+    @apply text-surface-100 placeholder:text-surface-500;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+
+  .card {
+    @apply bg-surface-900 border border-surface-800 rounded-xl;
+  }
+
+  .card-elevated {
+    @apply card shadow-lg shadow-black/20;
+  }
+
+  /* Volume status colors */
+  .volume-below-mev {
+    @apply bg-surface-600 text-surface-300;
+  }
+
+  .volume-effective {
+    @apply bg-primary-600/20 text-primary-400;
+  }
+
+  .volume-optimal {
+    @apply bg-success-500/20 text-success-400;
+  }
+
+  .volume-approaching-mrv {
+    @apply bg-warning-500/20 text-warning-400;
+  }
+
+  .volume-exceeding-mrv {
+    @apply bg-danger-500/20 text-danger-400;
+  }
+
+  /* Set quality indicators */
+  .set-junk {
+    @apply text-surface-500;
+  }
+
+  .set-effective {
+    @apply text-primary-400;
+  }
+
+  .set-stimulative {
+    @apply text-success-400;
+  }
+
+  .set-excessive {
+    @apply text-danger-400;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass {
+    @apply bg-surface-900/80 backdrop-blur-lg;
+  }
+
+  .gradient-radial {
+    background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
+  }
+}
+
