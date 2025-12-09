@@ -70,6 +70,14 @@ export {
   analyzeFatigueTrend,
 } from './deloadEngine';
 
+export {
+  buildDetailedSessionWithFatigue,
+  buildDUPSession,
+  generateFullMesocycleWithFatigue,
+  formatSessionForDisplay,
+  formatMesocycleForDisplay,
+} from './sessionBuilderWithFatigue';
+
 // ============================================================
 // LEGACY TYPES (for backwards compatibility)
 // ============================================================
