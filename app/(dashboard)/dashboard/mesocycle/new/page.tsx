@@ -32,6 +32,7 @@ export default function NewMesocyclePage() {
   // Form state
   const [name, setName] = useState('');
   const [daysPerWeek, setDaysPerWeek] = useState(4);
+  const [sessionDurationMinutes, setSessionDurationMinutes] = useState(60);
   const [useAiRecommendation, setUseAiRecommendation] = useState(true);
   
   // AI recommendations
@@ -41,6 +42,77 @@ export default function NewMesocyclePage() {
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
+
+  // Calculate estimated exercises based on time
+  const getExerciseEstimate = (minutes: number) => {
+    // Rough estimate: 8-10 min per exercise (including rest)
+    const minExercises = Math.floor(minutes / 10);
+    const maxExercises = Math.floor(minutes / 7);
+    return { min: Math.max(3, minExercises), max: Math.min(12, maxExercises) };
+  };
+  
+  const exerciseEstimate = getExerciseEstimate(sessionDurationMinutes);
+
+  // Optimal session duration based on training frequency
+  const getOptimalSessionTime = (days: number): { min: number; optimal: number; max: number; reason: string } => {
+    switch (days) {
+      case 2:
+        return { min: 60, optimal: 75, max: 90, reason: 'Full body 2x/week needs longer sessions to hit all muscle groups' };
+      case 3:
+        return { min: 50, optimal: 60, max: 75, reason: 'Full body or PPL works well with moderate session length' };
+      case 4:
+        return { min: 45, optimal: 55, max: 70, reason: 'Upper/Lower split allows focused training per session' };
+      case 5:
+        return { min: 40, optimal: 50, max: 65, reason: 'Higher frequency allows shorter, more focused sessions' };
+      case 6:
+        return { min: 35, optimal: 45, max: 60, reason: 'PPL 2x/week - keep sessions efficient to manage recovery' };
+      default:
+        return { min: 45, optimal: 60, max: 75, reason: 'Standard recommendation' };
+    }
+  };
+
+  // Assess total weekly volume
+  const assessWeeklyVolume = (days: number, minutesPerSession: number) => {
+    const totalMinutes = days * minutesPerSession;
+    const totalHours = totalMinutes / 60;
+    
+    // Optimal ranges for hypertrophy (natural lifters)
+    const minEffective = 3; // hours/week
+    const optimalMin = 4;
+    const optimalMax = 6;
+    const maxRecoverable = 8;
+    
+    let status: 'too_low' | 'low' | 'optimal' | 'high' | 'too_high';
+    let message: string;
+    let color: string;
+    
+    if (totalHours < minEffective) {
+      status = 'too_low';
+      message = `${totalHours.toFixed(1)} hrs/week may be insufficient for optimal hypertrophy. Consider adding time or days.`;
+      color = 'text-danger-400';
+    } else if (totalHours < optimalMin) {
+      status = 'low';
+      message = `${totalHours.toFixed(1)} hrs/week is on the lower end. You'll progress, but more volume could help.`;
+      color = 'text-warning-400';
+    } else if (totalHours <= optimalMax) {
+      status = 'optimal';
+      message = `${totalHours.toFixed(1)} hrs/week is in the optimal range for hypertrophy!`;
+      color = 'text-success-400';
+    } else if (totalHours <= maxRecoverable) {
+      status = 'high';
+      message = `${totalHours.toFixed(1)} hrs/week is high volume. Make sure nutrition and sleep support this.`;
+      color = 'text-warning-400';
+    } else {
+      status = 'too_high';
+      message = `${totalHours.toFixed(1)} hrs/week exceeds typical recovery capacity. Consider reducing.`;
+      color = 'text-danger-400';
+    }
+    
+    return { status, message, color, totalHours, optimalMin, optimalMax };
+  };
+
+  const optimalTime = getOptimalSessionTime(daysPerWeek);
+  const volumeAssessment = assessWeeklyVolume(daysPerWeek, sessionDurationMinutes);
 
   // Load user data on mount
   useEffect(() => {
@@ -261,6 +333,125 @@ export default function NewMesocyclePage() {
               ]}
             />
 
+            <Slider
+              label="Time per Session"
+              min={30}
+              max={120}
+              step={15}
+              value={sessionDurationMinutes}
+              onChange={(e) => setSessionDurationMinutes(parseInt(e.target.value))}
+              valueFormatter={(v) => `${v} min`}
+              marks={[
+                { value: 30, label: '30' },
+                { value: 45, label: '45' },
+                { value: 60, label: '60' },
+                { value: 90, label: '90' },
+                { value: 120, label: '120' },
+              ]}
+            />
+
+            {/* Optimal session recommendation */}
+            <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-surface-300">Recommended for {daysPerWeek} days/week:</span>
+                <span className="text-sm text-primary-400 font-medium">{optimalTime.optimal} min</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 bg-surface-700 rounded-full overflow-hidden">
+                  {/* Optimal zone indicator */}
+                  <div 
+                    className="h-full bg-gradient-to-r from-warning-500 via-success-500 to-warning-500"
+                    style={{
+                      marginLeft: `${((optimalTime.min - 30) / 90) * 100}%`,
+                      width: `${((optimalTime.max - optimalTime.min) / 90) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-between text-xs text-surface-500">
+                <span>30 min</span>
+                <span className="text-success-400">Optimal: {optimalTime.min}-{optimalTime.max} min</span>
+                <span>120 min</span>
+              </div>
+              <p className="text-xs text-surface-400">{optimalTime.reason}</p>
+              
+              {/* Session time warning */}
+              {sessionDurationMinutes < optimalTime.min && (
+                <div className="flex items-start gap-2 p-2 bg-warning-500/10 rounded text-warning-400 text-xs">
+                  <span>⚠️</span>
+                  <span>Your session time ({sessionDurationMinutes} min) is below optimal. Consider {optimalTime.optimal} min for best results.</span>
+                </div>
+              )}
+              {sessionDurationMinutes > optimalTime.max && (
+                <div className="flex items-start gap-2 p-2 bg-warning-500/10 rounded text-warning-400 text-xs">
+                  <span>⚠️</span>
+                  <span>Long sessions ({sessionDurationMinutes} min) can impact recovery. Quality &gt; quantity!</span>
+                </div>
+              )}
+            </div>
+
+            {/* Weekly volume assessment */}
+            <div className={`p-4 rounded-lg border ${
+              volumeAssessment.status === 'optimal' 
+                ? 'bg-success-500/10 border-success-500/20' 
+                : volumeAssessment.status === 'too_low' || volumeAssessment.status === 'too_high'
+                ? 'bg-danger-500/10 border-danger-500/20'
+                : 'bg-warning-500/10 border-warning-500/20'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-surface-200">Weekly Training Volume</span>
+                <span className={`text-lg font-bold ${volumeAssessment.color}`}>
+                  {volumeAssessment.totalHours.toFixed(1)} hrs
+                </span>
+              </div>
+              
+              {/* Volume bar */}
+              <div className="relative h-3 bg-surface-700 rounded-full overflow-hidden mb-2">
+                {/* Optimal zone */}
+                <div 
+                  className="absolute h-full bg-success-500/30"
+                  style={{
+                    left: `${(volumeAssessment.optimalMin / 10) * 100}%`,
+                    width: `${((volumeAssessment.optimalMax - volumeAssessment.optimalMin) / 10) * 100}%`,
+                  }}
+                />
+                {/* Current position */}
+                <div 
+                  className={`absolute h-full w-1 ${
+                    volumeAssessment.status === 'optimal' ? 'bg-success-400' : 'bg-warning-400'
+                  }`}
+                  style={{
+                    left: `${Math.min((volumeAssessment.totalHours / 10) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              
+              <div className="flex justify-between text-xs text-surface-500 mb-2">
+                <span>0h</span>
+                <span className="text-success-400/70">Optimal: {volumeAssessment.optimalMin}-{volumeAssessment.optimalMax}h</span>
+                <span>10h</span>
+              </div>
+              
+              <p className={`text-xs ${volumeAssessment.color}`}>
+                {volumeAssessment.status === 'optimal' ? '✓ ' : ''}
+                {volumeAssessment.message}
+              </p>
+            </div>
+
+            {/* Exercise count estimate */}
+            <div className="p-3 bg-surface-800/30 rounded-lg">
+              <div className="flex items-center gap-2 text-sm">
+                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span className="text-surface-400">
+                  Estimated{' '}
+                  <span className="text-surface-200 font-medium">{exerciseEstimate.min}-{exerciseEstimate.max} exercises</span>
+                  {' '}per session
+                </span>
+              </div>
+            </div>
+
             {/* AI Recommendation */}
             {recommendation && (
               <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
@@ -402,6 +593,10 @@ export default function NewMesocyclePage() {
                 <span className="text-surface-200 font-medium">{daysPerWeek} days/week</span>
               </div>
               <div className="flex justify-between py-2 border-b border-surface-800">
+                <span className="text-surface-400">Session Length</span>
+                <span className="text-surface-200 font-medium">{sessionDurationMinutes} min ({exerciseEstimate.min}-{exerciseEstimate.max} exercises)</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-surface-800">
                 <span className="text-surface-400">Duration</span>
                 <span className="text-surface-200 font-medium">{totalWeeks} weeks</span>
               </div>
@@ -409,6 +604,26 @@ export default function NewMesocyclePage() {
                 <span className="text-surface-400">Deload</span>
                 <span className="text-surface-200 font-medium">Week {totalWeeks}</span>
               </div>
+            </div>
+            
+            {/* Weekly time commitment with status */}
+            <div className={`p-3 rounded-lg border ${
+              volumeAssessment.status === 'optimal' 
+                ? 'bg-success-500/10 border-success-500/20' 
+                : volumeAssessment.status === 'too_low' || volumeAssessment.status === 'too_high'
+                ? 'bg-danger-500/10 border-danger-500/20'
+                : 'bg-warning-500/10 border-warning-500/20'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-surface-300">Weekly Training Time</span>
+                <span className={`text-lg font-bold ${volumeAssessment.color}`}>
+                  {volumeAssessment.totalHours.toFixed(1)} hours
+                </span>
+              </div>
+              <p className={`text-xs mt-1 ${volumeAssessment.color}`}>
+                {volumeAssessment.status === 'optimal' && '✓ '}
+                {volumeAssessment.message}
+              </p>
             </div>
 
             {/* Weekly Volume Preview */}
