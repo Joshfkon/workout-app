@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card, Input, Badge, Button } from '@/components/ui';
-import { createClient } from '@/lib/supabase/client';
+import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 
 interface Exercise {
@@ -20,7 +20,7 @@ export default function ExercisesPage() {
 
   useEffect(() => {
     async function fetchExercises() {
-      const supabase = createClient();
+      const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
         .select('id, name, primary_muscle, mechanic')

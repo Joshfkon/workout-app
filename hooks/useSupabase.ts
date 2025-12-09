@@ -1,14 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import type { Database } from '@/types/database';
+import { createClient, createUntypedClient } from '@/lib/supabase/client';
 
 /**
- * Hook to get a typed Supabase client for use in client components
+ * Hook to get a Supabase client for use in client components
  */
 export function useSupabase() {
-  const supabase = useMemo(() => createClient(), []);
+  const supabase = useMemo(() => createUntypedClient(), []);
   return supabase;
 }
 

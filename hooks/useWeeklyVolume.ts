@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from '@/services/volumeTracker';
 import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
@@ -33,7 +33,7 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     setError(null);
 
     try {
-      const supabase = createClient();
+      const supabase = createUntypedClient();
 
       // Try to get pre-computed volume from database first
       const { data: storedVolume, error: volumeError } = await supabase

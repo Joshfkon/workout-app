@@ -29,7 +29,7 @@ export function useActiveWorkout() {
 
   // Load workout session from database
   const loadWorkout = useCallback(async (sessionId: string) => {
-    const supabase = createClient();
+    const supabase = createUntypedClient();
     
     // Fetch session
     const { data: session, error: sessionError } = await supabase

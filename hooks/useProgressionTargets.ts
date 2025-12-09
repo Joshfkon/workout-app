@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore, useExerciseStore } from '@/stores';
 import {
   calculateNextTargets,
@@ -42,7 +42,7 @@ export function useProgressionTargets({
       }
 
       // Fetch last session performance from database
-      const supabase = createClient();
+      const supabase = createUntypedClient();
       const { data: lastSnapshot, error: snapshotError } = await supabase
         .from('exercise_performance_snapshots')
         .select('*')

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
-import { createClient } from '@/lib/supabase/client';
+import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 
 interface Exercise {
@@ -26,7 +26,7 @@ export default function NewWorkoutPage() {
     if (step === 2 && selectedMuscles.length > 0) {
       const fetchExercises = async () => {
         setIsLoading(true);
-        const supabase = createClient();
+        const supabase = createUntypedClient();
         const { data, error } = await supabase
           .from('exercises')
           .select('id, name, primary_muscle, mechanic')

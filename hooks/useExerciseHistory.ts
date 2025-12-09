@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { createUntypedClient } from '@/lib/supabase/client';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
 import { calculateE1RM } from '@/services/plateauDetector';
 
@@ -20,7 +20,7 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
     setError(null);
 
     try {
-      const supabase = createClient();
+      const supabase = createUntypedClient();
       const { data, error: fetchError } = await supabase
         .from('exercise_performance_snapshots')
         .select('*')
