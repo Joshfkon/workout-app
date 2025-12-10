@@ -45,7 +45,7 @@ const scienceConcepts = [
   {
     title: 'Volume Landmarks (MEV, MAV, MRV)',
     source: 'Renaissance Periodization',
-    explanation: 'There&apos;s a minimum volume needed to grow (MEV), a maximum you can recover from (MRV), and a productive zone in between (MAV). Training below MEV wastes time; above MRV causes regression.',
+    explanation: 'MEV (Minimum Effective Volume) is the least you need to grow. MAV (Maximum Adaptive Volume) is the sweet spot for gains. MRV (Maximum Recoverable Volume) is the ceiling—go beyond it and you regress.',
     application: 'We track your weekly sets per muscle and keep you in the productive zone—typically 10-20 sets/week for most muscles, adjusted for your recovery capacity.',
   },
   {
