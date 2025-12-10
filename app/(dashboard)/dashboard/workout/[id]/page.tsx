@@ -41,6 +41,21 @@ interface UserContext {
   mesocycleName?: string;
 }
 
+interface ExerciseHistoryData {
+  lastWorkoutDate: string;
+  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  estimatedE1RM: number;
+  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
+  totalSessions: number;
+}
+
+// Calculate E1RM using Brzycki formula
+function calculateE1RM(weight: number, reps: number): number {
+  if (reps === 1) return weight;
+  if (reps > 12) return weight * (1 + reps / 30);
+  return weight * (36 / (37 - reps));
+}
+
 // Generate coach message based on workout structure and user context
 function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
@@ -281,6 +296,7 @@ export default function WorkoutPage() {
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
+  const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -488,6 +504,94 @@ export default function WorkoutPage() {
         
         // Generate coach message with profile and context
         setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
+        
+        // Fetch exercise history for all exercises in this workout
+        const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
+        if (exerciseIds.length > 0) {
+          const histories: Record<string, ExerciseHistoryData> = {};
+          
+          for (const exerciseId of exerciseIds) {
+            try {
+              // Get all completed workout blocks for this exercise
+              const { data: historyBlocks } = await supabase
+                .from('exercise_blocks')
+                .select(`
+                  id,
+                  workout_sessions!inner (
+                    id,
+                    completed_at,
+                    state,
+                    user_id
+                  ),
+                  set_logs (
+                    weight_kg,
+                    reps,
+                    rpe,
+                    is_warmup,
+                    logged_at
+                  )
+                `)
+                .eq('exercise_id', exerciseId)
+                .eq('workout_sessions.user_id', sessionData.user_id)
+                .eq('workout_sessions.state', 'completed')
+                .order('workout_sessions(completed_at)', { ascending: false })
+                .limit(20);
+              
+              if (historyBlocks && historyBlocks.length > 0) {
+                let bestE1RM = 0;
+                let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+                let totalSessions = 0;
+                const seenSessions = new Set<string>();
+                
+                // Get last workout data
+                const lastBlock = historyBlocks[0];
+                const lastSession = lastBlock.workout_sessions as any;
+                const lastSets = ((lastBlock.set_logs as any[]) || [])
+                  .filter((s: any) => !s.is_warmup)
+                  .map((s: any) => ({
+                    weightKg: s.weight_kg,
+                    reps: s.reps,
+                    rpe: s.rpe,
+                  }));
+                
+                // Calculate best E1RM and PR
+                historyBlocks.forEach((block: any) => {
+                  const session = block.workout_sessions;
+                  if (session && !seenSessions.has(session.id)) {
+                    seenSessions.add(session.id);
+                    totalSessions++;
+                  }
+                  
+                  const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+                  sets.forEach((set: any) => {
+                    const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                    if (e1rm > bestE1RM) {
+                      bestE1RM = e1rm;
+                      personalRecord = {
+                        weightKg: set.weight_kg,
+                        reps: set.reps,
+                        e1rm,
+                        date: session?.completed_at || set.logged_at,
+                      };
+                    }
+                  });
+                });
+                
+                histories[exerciseId] = {
+                  lastWorkoutDate: lastSession?.completed_at || '',
+                  lastWorkoutSets: lastSets,
+                  estimatedE1RM: bestE1RM,
+                  personalRecord,
+                  totalSessions,
+                };
+              }
+            } catch (histErr) {
+              console.error('Failed to fetch history for exercise:', exerciseId, histErr);
+            }
+          }
+          
+          setExerciseHistories(histories);
+        }
         
         // Set phase based on workout state
         if (sessionData.state === 'completed') {
@@ -1214,6 +1318,7 @@ export default function WorkoutPage() {
                     isActive
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
+                    exerciseHistory={exerciseHistories[block.exerciseId]}
                   />
 
                   {/* Exercise complete actions */}

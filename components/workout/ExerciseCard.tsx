@@ -7,6 +7,14 @@ import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQ
 import { formatWeight, formatWeightValue, inputWeightToKg } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 
+interface ExerciseHistory {
+  lastWorkoutDate: string;
+  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  estimatedE1RM: number;
+  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
+  totalSessions: number;
+}
+
 interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
@@ -18,6 +26,7 @@ interface ExerciseCardProps {
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number }[];  // Previous workout's sets for this exercise
+  exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
 }
 
 export function ExerciseCard({
@@ -31,8 +40,10 @@ export function ExerciseCard({
   unit = 'kg',
   recommendedWeight,
   previousSets = [],
+  exerciseHistory,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
   const [editRpe, setEditRpe] = useState('');
@@ -276,6 +287,125 @@ export function ExerciseCard({
           <p className="mt-2 text-xs text-primary-400/80 italic">
             {block.suggestionReason}
           </p>
+        )}
+
+        {/* Exercise Stats & History */}
+        {exerciseHistory && (
+          <div className="mt-3 pt-3 border-t border-surface-800">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <div className="flex items-center gap-4">
+                {/* Estimated 1RM */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-surface-500">Est 1RM:</span>
+                  <span className="text-sm font-bold text-primary-400">
+                    {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
+                  </span>
+                </div>
+                {/* PR indicator */}
+                {exerciseHistory.personalRecord && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-surface-500">PR:</span>
+                    <span className="text-sm font-medium text-success-400">
+                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}
+                    </span>
+                  </div>
+                )}
+                {/* Sessions count */}
+                <span className="text-xs text-surface-500">
+                  {exerciseHistory.totalSessions} sessions
+                </span>
+              </div>
+              <svg 
+                className={`w-4 h-4 text-surface-400 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Expanded history */}
+            {showHistory && (
+              <div className="mt-3 space-y-3">
+                {/* Last workout */}
+                {exerciseHistory.lastWorkoutSets.length > 0 && (
+                  <div className="p-3 bg-surface-800/50 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                        Last Workout
+                      </span>
+                      <span className="text-xs text-surface-500">
+                        {new Date(exerciseHistory.lastWorkoutDate).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {exerciseHistory.lastWorkoutSets.map((set, idx) => (
+                        <span 
+                          key={idx}
+                          className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
+                        >
+                          {displayWeight(set.weightKg)} × {set.reps}
+                          {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Exercise resources */}
+                <div className="flex gap-2">
+                  <a
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                    Watch Form
+                  </a>
+                  <a
+                    href={`https://exrx.net/Lists/Directory`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
+                  >
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Exercise Info
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Quick links when no history */}
+        {!exerciseHistory && (
+          <div className="mt-3 pt-3 border-t border-surface-800">
+            <div className="flex gap-2">
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
+              >
+                <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                Watch Form
+              </a>
+            </div>
+          </div>
         )}
       </div>
 
