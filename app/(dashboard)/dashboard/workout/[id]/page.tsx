@@ -527,60 +527,59 @@ export default function WorkoutPage() {
   const handleSetComplete = async (data: { weightKg: number; reps: number; rpe: number; note?: string }) => {
     if (!currentBlock) return;
 
-    const newSet: SetLog = {
-      id: `set-${Date.now()}`,
-      exerciseBlockId: currentBlock.id,
-      setNumber: currentSetNumber,
-      weightKg: data.weightKg,
-      reps: data.reps,
-      rpe: data.rpe,
-      restSeconds: null,
-      isWarmup: false,
-      quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective',
-      qualityReason: '',
-      note: data.note || null,
-      loggedAt: new Date().toISOString(),
-    };
+    const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective';
+    const loggedAt = new Date().toISOString();
 
-    // Save to database first
+    // Save to database first - let DB generate the UUID
     try {
       const supabase = createUntypedClient();
-      const { error: insertError } = await supabase.from('set_logs').insert({
-        id: newSet.id,
-        exercise_block_id: newSet.exerciseBlockId,
-        set_number: newSet.setNumber,
-        weight_kg: newSet.weightKg,
-        reps: newSet.reps,
-        rpe: newSet.rpe,
-        is_warmup: false,
-        quality: newSet.quality,
-        quality_reason: newSet.qualityReason,
-        note: newSet.note,
-        logged_at: newSet.loggedAt,
-      });
+      const { data: insertedData, error: insertError } = await supabase
+        .from('set_logs')
+        .insert({
+          exercise_block_id: currentBlock.id,
+          set_number: currentSetNumber,
+          weight_kg: data.weightKg,
+          reps: data.reps,
+          rpe: data.rpe,
+          is_warmup: false,
+          quality: quality,
+          quality_reason: '',
+          note: data.note || null,
+          logged_at: loggedAt,
+        })
+        .select('id')
+        .single();
 
       if (insertError) {
         console.error('Failed to save set:', insertError);
         setError(`Failed to save set: ${insertError.message}`);
-        // Still add to local state so user doesn't lose data, but warn them
+        return; // Don't add to local state if save failed
       }
+      
+      // Create the set object with the database-generated ID
+      const newSet: SetLog = {
+        id: insertedData.id,
+        exerciseBlockId: currentBlock.id,
+        setNumber: currentSetNumber,
+        weightKg: data.weightKg,
+        reps: data.reps,
+        rpe: data.rpe,
+        restSeconds: null,
+        isWarmup: false,
+        quality: quality,
+        qualityReason: '',
+        note: data.note || null,
+        loggedAt: loggedAt,
+      };
       
       // Update local state
       setCompletedSets([...completedSets, newSet]);
       setCurrentSetNumber(currentSetNumber + 1);
       setShowRestTimer(true);
-      
-      // Clear any previous error after successful save
-      if (!insertError) {
-        setError(null);
-      }
+      setError(null);
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
-      // Still add to local state
-      setCompletedSets([...completedSets, newSet]);
-      setCurrentSetNumber(currentSetNumber + 1);
-      setShowRestTimer(true);
     }
   };
 
