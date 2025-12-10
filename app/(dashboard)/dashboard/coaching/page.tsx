@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useSubscription } from '@/hooks/useSubscription';
+import { UpgradePrompt } from '@/components/subscription';
 import { 
   type StrengthProfile,
   type CalibrationResult,
@@ -48,6 +50,7 @@ interface CoachingSessionSummary {
 
 export default function CoachingPage() {
   const router = useRouter();
+  const { canAccess, isLoading: subLoading } = useSubscription();
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<StrengthProfile | null>(null);
   const [sessions, setSessions] = useState<CoachingSessionSummary[]>([]);
@@ -164,7 +167,20 @@ export default function CoachingPage() {
     router.push('/onboarding');
   };
   
-  if (isLoading) {
+  // Check subscription access - coaching requires Elite tier (must be after hooks)
+  if (!subLoading && !canAccess('coachingCalibration')) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">Coaching & Calibration</h1>
+          <p className="text-surface-400 mt-1">Get personalized strength assessments and identify imbalances</p>
+        </div>
+        <UpgradePrompt feature="coachingCalibration" requiredTier="elite" />
+      </div>
+    );
+  }
+  
+  if (isLoading || subLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />

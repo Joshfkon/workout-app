@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useSubscription } from '@/hooks/useSubscription';
 
 const navigation = [
   {
@@ -81,6 +82,15 @@ const navigation = [
     ),
   },
   {
+    name: 'Pricing',
+    href: '/dashboard/pricing',
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
     name: 'Settings',
     href: '/dashboard/settings',
     icon: (
@@ -109,6 +119,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { preferences, toggleUnits } = useUserPreferences();
+  const { effectiveTier, needsUpgrade, isTrialing, trialDaysRemaining } = useSubscription();
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
@@ -200,6 +211,43 @@ export default function DashboardLayout({
 
           {/* Header actions */}
           <div className="flex items-center gap-2">
+            {/* Trial/Subscription Badge */}
+            {isTrialing && trialDaysRemaining > 0 && (
+              <Link 
+                href="/dashboard/pricing"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-warning-500/10 border border-warning-500/20 text-warning-400 text-sm font-medium hover:bg-warning-500/20 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {trialDaysRemaining}d left
+              </Link>
+            )}
+            
+            {/* Upgrade button for free users */}
+            {needsUpgrade && !isTrialing && (
+              <Link 
+                href="/dashboard/pricing"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+                Upgrade
+              </Link>
+            )}
+            
+            {/* Tier badge for paid users */}
+            {!needsUpgrade && !isTrialing && effectiveTier !== 'free' && (
+              <span className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                effectiveTier === 'elite' 
+                  ? 'bg-accent-500/10 border border-accent-500/20 text-accent-400'
+                  : 'bg-primary-500/10 border border-primary-500/20 text-primary-400'
+              }`}>
+                {effectiveTier === 'elite' ? 'Elite' : 'Pro'}
+              </span>
+            )}
+            
             {/* Unit toggle button */}
             <button
               onClick={toggleUnits}

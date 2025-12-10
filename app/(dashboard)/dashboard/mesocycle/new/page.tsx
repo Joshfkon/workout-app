@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useSubscription } from '@/hooks/useSubscription';
+import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
 import {
@@ -21,6 +23,7 @@ import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 export default function NewMesocyclePage() {
   const router = useRouter();
   const { preferences, isLoading: prefsLoading } = useUserPreferences();
+  const { canAccess, isLoading: subLoading } = useSubscription();
   
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -289,7 +292,20 @@ export default function NewMesocyclePage() {
     { value: 'Bro Split', label: 'Bro Split (5-day)' },
   ];
 
-  if (prefsLoading) {
+  // Check subscription access (must be after all hooks)
+  if (!subLoading && !canAccess('mesocycleBuilder')) {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">AI Mesocycle Builder</h1>
+          <p className="text-surface-400 mt-1">Create scientifically-optimized training programs</p>
+        </div>
+        <UpgradePrompt feature="mesocycleBuilder" />
+      </div>
+    );
+  }
+
+  if (prefsLoading || subLoading) {
     return (
       <div className="max-w-2xl mx-auto py-8">
         <p className="text-surface-400 text-center">Loading your profile...</p>
