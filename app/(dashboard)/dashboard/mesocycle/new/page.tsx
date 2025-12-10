@@ -751,22 +751,211 @@ export default function NewMesocyclePage() {
               </p>
             </div>
 
-            {/* Periodization Info */}
-            {fullProgram && (
-              <div className="p-4 bg-surface-800/50 rounded-lg space-y-2">
-                <p className="text-sm font-medium text-surface-300">Periodization</p>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-surface-500">Model</p>
-                    <p className="text-surface-200 capitalize">{fullProgram.periodization.model.replace('_', ' ')}</p>
+            {/* Science Behind Your Program - Collapsible */}
+            <details className="group">
+              <summary className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-800/70 transition-colors">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span className="font-medium text-surface-200">Science Behind Your Program</span>
+                </div>
+                <svg className="w-5 h-5 text-surface-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </summary>
+              
+              <div className="mt-4 space-y-4">
+                {/* Split Selection Logic */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">1</span>
+                    Why {splitType}?
+                  </h4>
+                  <p className="text-sm text-surface-400 mb-3">
+                    {daysPerWeek <= 3 
+                      ? `With ${daysPerWeek} training days, each muscle needs to be hit in fewer sessions. ${splitType === 'Full Body' ? 'Full Body allows you to train each muscle 2-3x/week for optimal frequency.' : 'This split maximizes your limited days.'}`
+                      : daysPerWeek === 4
+                      ? `4 days is ideal for Upper/Lower splits, giving each muscle group 2x/week frequency with adequate recovery between sessions.`
+                      : `With ${daysPerWeek} training days, PPL (Push/Pull/Legs) allows higher volume per muscle group while maintaining good frequency.`
+                    }
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="p-2 bg-surface-800 rounded text-center">
+                      <p className="text-surface-500">Frequency</p>
+                      <p className="text-surface-200 font-medium">
+                        {splitType === 'Full Body' ? '2-3x' : splitType === 'Upper/Lower' ? '2x' : '1-2x'}/week per muscle
+                      </p>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded text-center">
+                      <p className="text-surface-500">Recovery</p>
+                      <p className="text-surface-200 font-medium">
+                        {splitType === 'Full Body' ? '48h' : splitType === 'Upper/Lower' ? '72h' : '96-168h'} between
+                      </p>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded text-center">
+                      <p className="text-surface-500">Volume/Session</p>
+                      <p className="text-surface-200 font-medium">
+                        {splitType === 'Full Body' ? 'Moderate' : splitType === 'Upper/Lower' ? 'Moderate' : 'High'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-surface-500">Deload Strategy</p>
-                    <p className="text-surface-200 capitalize">{fullProgram.periodization.deloadStrategy}</p>
+                </div>
+
+                {/* Rep Range Science */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">2</span>
+                    Rep Range Science
+                  </h4>
+                  <p className="text-sm text-surface-400 mb-3">
+                    Rep ranges are optimized based on muscle fiber type dominance and exercise position in the workout.
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-danger-400"></span>
+                        <span className="text-surface-300">Fast-twitch dominant</span>
+                        <span className="text-surface-500">(Hamstrings, Triceps)</span>
+                      </div>
+                      <span className="font-mono text-surface-200">4-8 reps</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-warning-400"></span>
+                        <span className="text-surface-300">Mixed fiber type</span>
+                        <span className="text-surface-500">(Chest, Back, Quads)</span>
+                      </div>
+                      <span className="font-mono text-surface-200">6-12 reps</span>
+                    </div>
+                    <div className="flex items-center justify-between p-2 bg-surface-800 rounded">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-success-400"></span>
+                        <span className="text-surface-300">Slow-twitch dominant</span>
+                        <span className="text-surface-500">(Calves, Core, Delts)</span>
+                      </div>
+                      <span className="font-mono text-surface-200">10-20 reps</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-surface-500 mt-3">
+                    💡 Compounds start sessions (heavier, 6-10 reps). Isolations finish (lighter, 10-15 reps) to maximize performance when fresh.
+                  </p>
+                </div>
+
+                {/* Volume Logic */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">3</span>
+                    Volume Recommendations
+                  </h4>
+                  <p className="text-sm text-surface-400 mb-3">
+                    Weekly sets per muscle are based on research-backed landmarks adjusted for your experience and recovery capacity.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                    <div className="p-2 bg-surface-800 rounded text-center">
+                      <p className="text-surface-500">MV (Minimum)</p>
+                      <p className="text-surface-200 font-medium">~6 sets/week</p>
+                      <p className="text-surface-600">Maintain gains</p>
+                    </div>
+                    <div className="p-2 bg-success-500/10 border border-success-500/20 rounded text-center">
+                      <p className="text-success-400">MEV-MAV</p>
+                      <p className="text-surface-200 font-medium">10-20 sets/week</p>
+                      <p className="text-surface-600">Optimal growth</p>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded text-center">
+                      <p className="text-surface-500">MRV (Maximum)</p>
+                      <p className="text-surface-200 font-medium">20+ sets/week</p>
+                      <p className="text-surface-600">Risk of overtraining</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-surface-500">
+                    Your volume is modified by: Recovery capacity ({(recoveryFactors.volumeMultiplier * 100).toFixed(0)}%) • Experience ({userExperience}) • Goal ({userGoal})
+                  </p>
+                </div>
+
+                {/* Fatigue Management */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">4</span>
+                    Fatigue Management
+                  </h4>
+                  <p className="text-sm text-surface-400 mb-3">
+                    We track both systemic fatigue (CNS, whole-body) and local fatigue (per muscle group) to prevent overtraining.
+                  </p>
+                  <div className="space-y-2 text-sm">
+                    <div className="p-2 bg-surface-800 rounded">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-surface-300">Systemic Fatigue Budget</span>
+                        <span className="text-surface-200">100 points/week</span>
+                      </div>
+                      <p className="text-xs text-surface-500">Compounds: 8-12 pts • Isolations: 3-5 pts • Depleted = auto-deload</p>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded">
+                      <div className="flex justify-between mb-1">
+                        <span className="text-surface-300">Local Muscle Recovery</span>
+                        <span className="text-surface-200">48-72 hours</span>
+                      </div>
+                      <p className="text-xs text-surface-500">We space exercises to allow full recovery before hitting the same muscle again</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Periodization */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">5</span>
+                    Periodization Model
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                    <div>
+                      <p className="text-surface-500">Model</p>
+                      <p className="text-surface-200 capitalize">{fullProgram?.periodization.model.replace('_', ' ') || 'Linear'}</p>
+                    </div>
+                    <div>
+                      <p className="text-surface-500">Deload Strategy</p>
+                      <p className="text-surface-200 capitalize">{fullProgram?.periodization.deloadStrategy || 'Volume'}</p>
+                    </div>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded text-xs">
+                    <p className="text-surface-400">
+                      <span className="text-surface-300 font-medium">Week 1-{totalWeeks - 1}:</span> Progressive overload (+sets or +weight each week)
+                    </p>
+                    <p className="text-surface-400 mt-1">
+                      <span className="text-warning-400 font-medium">Week {totalWeeks} (Deload):</span> 50% volume, same intensity to dissipate fatigue
+                    </p>
+                  </div>
+                </div>
+
+                {/* Deload Triggers */}
+                <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
+                  <h4 className="font-medium text-surface-200 flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 rounded-full bg-primary-500/20 flex items-center justify-center text-xs text-primary-400">6</span>
+                    Auto-Deload Triggers
+                  </h4>
+                  <p className="text-sm text-surface-400 mb-3">
+                    Besides scheduled deloads, we&apos;ll suggest an early deload if any of these occur:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
+                      <span className="text-danger-400">📉</span>
+                      <span className="text-surface-300">Performance drops 2+ sessions</span>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
+                      <span className="text-danger-400">😴</span>
+                      <span className="text-surface-300">Sleep quality below 2/5</span>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
+                      <span className="text-danger-400">🔴</span>
+                      <span className="text-surface-300">RPE consistently 9.5+</span>
+                    </div>
+                    <div className="p-2 bg-surface-800 rounded flex items-center gap-2">
+                      <span className="text-danger-400">💔</span>
+                      <span className="text-surface-300">Joint pain reported</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
+            </details>
 
             {/* Warnings */}
             {fullProgram && fullProgram.warnings.length > 0 && (

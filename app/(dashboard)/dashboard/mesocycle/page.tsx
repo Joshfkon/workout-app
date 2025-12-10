@@ -427,37 +427,150 @@ export default function MesocyclePage() {
         </Card>
       )}
 
-      {/* What is a mesocycle */}
-      <Card>
-        <CardHeader>
-          <CardTitle>What is a Mesocycle?</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-surface-400 mb-4">
-            A mesocycle is a training block typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="p-4 bg-surface-800/50 rounded-lg">
-              <h3 className="font-medium text-surface-200">📈 Progressive Overload</h3>
-              <p className="text-sm text-surface-500 mt-1">
-                Gradually increase volume and intensity week over week
-              </p>
+      {/* Programming Logic - show when there's an active mesocycle */}
+      {activeMesocycle && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              How Your Program Works
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* Split Logic */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">🗓️ {activeMesocycle.split_type} Split</h3>
+                <p className="text-sm text-surface-400">
+                  {activeMesocycle.split_type === 'Full Body' 
+                    ? 'Each workout hits all muscle groups. This maximizes training frequency (2-3x/week per muscle) which is great for strength and hypertrophy.'
+                    : activeMesocycle.split_type === 'Upper/Lower'
+                    ? 'Alternating between upper and lower body allows high volume per session while maintaining 2x/week frequency.'
+                    : activeMesocycle.split_type === 'PPL'
+                    ? 'Push/Pull/Legs groups muscles by movement pattern. Great for high volume training with 1-2x frequency.'
+                    : 'Your split is designed to balance volume and recovery.'}
+                </p>
+              </div>
+
+              {/* Rep Ranges */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">🎯 Smart Rep Ranges</h3>
+                <p className="text-sm text-surface-400 mb-2">
+                  Rep ranges vary based on muscle fiber composition:
+                </p>
+                <ul className="text-xs text-surface-500 space-y-1">
+                  <li>• <span className="text-danger-400">Hamstrings/Triceps:</span> Lower reps (fast-twitch)</li>
+                  <li>• <span className="text-warning-400">Chest/Back/Quads:</span> Moderate reps (mixed)</li>
+                  <li>• <span className="text-success-400">Calves/Delts/Core:</span> Higher reps (slow-twitch)</li>
+                </ul>
+              </div>
+
+              {/* Progressive Overload */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">📈 Weekly Progression</h3>
+                <p className="text-sm text-surface-400">
+                  Each week, we aim to add 1-2 reps or 2.5% weight to key lifts. This progressive overload drives adaptation.
+                </p>
+                <div className="flex gap-2 mt-2">
+                  {Array.from({ length: activeMesocycle.total_weeks }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 h-2 rounded ${
+                        i === activeMesocycle.total_weeks - 1
+                          ? 'bg-warning-500'
+                          : i < activeMesocycle.current_week
+                          ? 'bg-primary-500'
+                          : 'bg-surface-700'
+                      }`}
+                      title={i === activeMesocycle.total_weeks - 1 ? 'Deload' : `Week ${i + 1}`}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-surface-500 mt-1">
+                  Weeks 1-{activeMesocycle.total_weeks - 1}: Build • Week {activeMesocycle.total_weeks}: Deload
+                </p>
+              </div>
+
+              {/* Volume */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">💪 Volume Targets</h3>
+                <p className="text-sm text-surface-400 mb-2">
+                  Weekly sets per muscle group:
+                </p>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2 py-1 bg-surface-700 rounded">MV: 6</span>
+                  <span className="text-surface-600">→</span>
+                  <span className="px-2 py-1 bg-success-500/20 text-success-300 rounded">Target: 10-20</span>
+                  <span className="text-surface-600">→</span>
+                  <span className="px-2 py-1 bg-surface-700 rounded">MRV: 20+</span>
+                </div>
+                <p className="text-xs text-surface-500 mt-2">
+                  MV = Minimum Viable • MRV = Maximum Recoverable
+                </p>
+              </div>
+
+              {/* Fatigue */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">⚡ Fatigue Tracking</h3>
+                <p className="text-sm text-surface-400">
+                  We monitor systemic and local fatigue. High RPE, poor sleep, or missed reps trigger adaptive responses.
+                </p>
+                <div className="mt-2 p-2 bg-surface-900/50 rounded text-xs text-surface-500">
+                  <strong className="text-surface-400">Auto-deload triggers:</strong> Performance drop, RPE 9.5+, poor recovery
+                </div>
+              </div>
+
+              {/* Deload */}
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200 mb-2">😴 Deload Week</h3>
+                <p className="text-sm text-surface-400">
+                  Week {activeMesocycle.deload_week} reduces volume by 50% while maintaining intensity. This lets accumulated fatigue dissipate.
+                </p>
+                <div className="mt-2 flex gap-2 text-xs">
+                  <span className="px-2 py-1 bg-surface-700 rounded">Volume: -50%</span>
+                  <span className="px-2 py-1 bg-surface-700 rounded">Intensity: Same</span>
+                </div>
+              </div>
             </div>
-            <div className="p-4 bg-surface-800/50 rounded-lg">
-              <h3 className="font-medium text-surface-200">😴 Planned Deloads</h3>
-              <p className="text-sm text-surface-500 mt-1">
-                Scheduled recovery weeks to manage fatigue
-              </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* What is a mesocycle - only show when no active */}
+      {!activeMesocycle && (
+        <Card>
+          <CardHeader>
+            <CardTitle>What is a Mesocycle?</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-surface-400 mb-4">
+              A mesocycle is a training block typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200">📈 Progressive Overload</h3>
+                <p className="text-sm text-surface-500 mt-1">
+                  Gradually increase volume and intensity week over week
+                </p>
+              </div>
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200">😴 Planned Deloads</h3>
+                <p className="text-sm text-surface-500 mt-1">
+                  Scheduled recovery weeks to manage fatigue
+                </p>
+              </div>
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <h3 className="font-medium text-surface-200">🎯 Auto-Regulation</h3>
+                <p className="text-sm text-surface-500 mt-1">
+                  Adjust based on readiness and performance
+                </p>
+              </div>
             </div>
-            <div className="p-4 bg-surface-800/50 rounded-lg">
-              <h3 className="font-medium text-surface-200">🎯 Auto-Regulation</h3>
-              <p className="text-sm text-surface-500 mt-1">
-                Adjust based on readiness and performance
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
