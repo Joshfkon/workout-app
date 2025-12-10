@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
-import { ExerciseCard, SetInputRow, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -1196,52 +1196,43 @@ export default function WorkoutPage() {
                     />
                   )}
 
-                  {/* Exercise card */}
+                  {/* Exercise card with integrated set inputs */}
                   <ExerciseCard
-                          exercise={block.exercise}
-                          block={block}
-                          sets={blockSets}
-                          onSetEdit={handleSetEdit}
-                          onSetDelete={handleDeleteSet}
-                          isActive
-                          unit={preferences.units}
-                          recommendedWeight={aiRecommendedWeight}
-                        />
+                    exercise={block.exercise}
+                    block={addingExtraSet === block.id 
+                      ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
+                      : block
+                    }
+                    sets={blockSets}
+                    onSetComplete={(data) => {
+                      handleSetComplete(data);
+                      setAddingExtraSet(null);
+                      setShowRestTimer(true);
+                    }}
+                    onSetEdit={handleSetEdit}
+                    onSetDelete={handleDeleteSet}
+                    isActive
+                    unit={preferences.units}
+                    recommendedWeight={aiRecommendedWeight}
+                  />
 
-                        {/* Set input - show when under target OR adding extra set */}
-                        {(blockSets.length < block.targetSets || addingExtraSet === block.id) && (
-                          <SetInputRow
-                            setNumber={blockSets.length + 1}
-                            targetWeight={block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight}
-                            targetRepRange={block.targetRepRange}
-                            targetRir={block.targetRir}
-                            previousSet={blockSets[blockSets.length - 1]}
-                            isLastSet={false}
-                            onSubmit={(data) => {
-                              handleSetComplete(data);
-                              setAddingExtraSet(null);
-                            }}
-                            unit={preferences.units}
-                          />
-                        )}
-
-                        {/* Exercise complete actions */}
-                        {isComplete && addingExtraSet !== block.id && (
-                          <div className="flex justify-center gap-3 py-4">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => setAddingExtraSet(block.id)}
-                            >
-                              + Add Extra Set
-                            </Button>
-                            {index < blocks.length - 1 && (
-                              <Button variant="secondary" onClick={handleNextExercise}>
-                                Next Exercise →
-                              </Button>
-                            )}
-                          </div>
-                        )}
+                  {/* Exercise complete actions */}
+                  {isComplete && addingExtraSet !== block.id && (
+                    <div className="flex justify-center gap-3 py-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setAddingExtraSet(block.id)}
+                      >
+                        + Add Extra Set
+                      </Button>
+                      {index < blocks.length - 1 && (
+                        <Button variant="secondary" onClick={handleNextExercise}>
+                          Next Exercise →
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
                 );
               })()}
