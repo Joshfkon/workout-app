@@ -37,11 +37,14 @@ export default function RegisterPage() {
     try {
       const supabase = createClient();
       
-      // Sign up user
+      // Sign up user with redirect to production URL
+      const redirectUrl = `${window.location.origin}/auth/callback`;
+      
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             goal,
             experience,
