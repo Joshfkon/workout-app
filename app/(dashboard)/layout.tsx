@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 
 const navigation = [
   {
@@ -107,6 +108,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { preferences, toggleUnits } = useUserPreferences();
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
@@ -196,8 +198,20 @@ export default function DashboardLayout({
           {/* Page title - could be dynamic */}
           <div className="flex-1" />
 
-          {/* Header actions - placeholder for future features */}
-          <div className="flex items-center gap-4">
+          {/* Header actions */}
+          <div className="flex items-center gap-2">
+            {/* Unit toggle button */}
+            <button
+              onClick={toggleUnits}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors"
+              title={`Switch to ${preferences.units === 'kg' ? 'pounds (lb)' : 'kilograms (kg)'}`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+              </svg>
+              <span className="uppercase">{preferences.units}</span>
+            </button>
+
             {/* Sign out button for mobile - on desktop it's in sidebar */}
             <button
               onClick={handleSignOut}
