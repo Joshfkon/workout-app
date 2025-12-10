@@ -22,6 +22,18 @@ interface ActiveMesocycle {
   totalWorkouts: number;
 }
 
+interface TodaysWorkout {
+  id: string;
+  state: 'planned' | 'in_progress' | 'completed';
+  plannedDate: string;
+  completedAt: string | null;
+  sessionRpe: number | null;
+  exercises: { name: string; sets: number }[];
+  totalExercises: number;
+  completedSets: number;
+  totalSets: number;
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     workoutsThisWeek: 0,
@@ -32,6 +44,7 @@ export default function DashboardPage() {
   const [hasWorkouts, setHasWorkouts] = useState(false);
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
+  const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -118,8 +131,8 @@ export default function DashboardPage() {
       if (mesocycle) {
         // Calculate current week
         const startDate = new Date(mesocycle.start_date);
-        const now = new Date();
-        const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        const nowDate = new Date();
+        const weeksSinceStart = Math.floor((nowDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
         const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
 
         // Count completed workouts in this mesocycle
@@ -141,6 +154,61 @@ export default function DashboardPage() {
           workoutsCompleted: completedCount || 0,
           totalWorkouts,
         });
+
+        // Fetch today's workout from this mesocycle
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        const { data: todaySession } = await supabase
+          .from('workout_sessions')
+          .select(`
+            id,
+            state,
+            planned_date,
+            completed_at,
+            session_rpe,
+            exercise_blocks (
+              id,
+              target_sets,
+              exercises (
+                name
+              ),
+              set_logs (
+                id,
+                is_warmup
+              )
+            )
+          `)
+          .eq('mesocycle_id', mesocycle.id)
+          .gte('planned_date', today.toISOString().split('T')[0])
+          .lt('planned_date', tomorrow.toISOString().split('T')[0])
+          .single();
+
+        if (todaySession) {
+          const exercises = (todaySession.exercise_blocks || []).map((block: any) => ({
+            name: block.exercises?.name || 'Unknown',
+            sets: block.target_sets || 0,
+          }));
+
+          const totalSets = exercises.reduce((sum: number, ex: any) => sum + ex.sets, 0);
+          const completedSets = (todaySession.exercise_blocks || []).reduce((sum: number, block: any) => {
+            return sum + (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
+          }, 0);
+
+          setTodaysWorkout({
+            id: todaySession.id,
+            state: todaySession.state,
+            plannedDate: todaySession.planned_date,
+            completedAt: todaySession.completed_at,
+            sessionRpe: todaySession.session_rpe,
+            exercises,
+            totalExercises: exercises.length,
+            completedSets,
+            totalSets,
+          });
+        }
       }
 
       setIsLoading(false);
@@ -167,43 +235,206 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {/* Active Mesocycle */}
+      {/* Today's Workout - Most prominent */}
+      {todaysWorkout && (
+        <Card 
+          variant="elevated" 
+          className={`overflow-hidden border-2 ${
+            todaysWorkout.state === 'completed' 
+              ? 'border-success-500/50 bg-success-500/5' 
+              : todaysWorkout.state === 'in_progress'
+              ? 'border-warning-500/50 bg-warning-500/5'
+              : 'border-primary-500/50 bg-primary-500/5'
+          }`}
+        >
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  {todaysWorkout.state === 'completed' ? (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-success-500/20 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div>
+                        <Badge variant="success" size="sm">Completed</Badge>
+                        <h2 className="text-xl font-bold text-surface-100 mt-1">Today&apos;s Workout Done!</h2>
+                      </div>
+                    </>
+                  ) : todaysWorkout.state === 'in_progress' ? (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-warning-500/20 flex items-center justify-center animate-pulse">
+                        <svg className="w-6 h-6 text-warning-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <Badge variant="warning" size="sm">In Progress</Badge>
+                        <h2 className="text-xl font-bold text-surface-100 mt-1">Workout In Progress</h2>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-primary-500/20 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <Badge variant="info" size="sm">Ready</Badge>
+                        <h2 className="text-xl font-bold text-surface-100 mt-1">Today&apos;s Workout</h2>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Exercise list */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {todaysWorkout.exercises.slice(0, 5).map((ex, idx) => (
+                    <span 
+                      key={idx}
+                      className="px-3 py-1 bg-surface-800/70 rounded-full text-sm text-surface-300"
+                    >
+                      {ex.name} <span className="text-surface-500">×{ex.sets}</span>
+                    </span>
+                  ))}
+                  {todaysWorkout.exercises.length > 5 && (
+                    <span className="px-3 py-1 bg-surface-800/70 rounded-full text-sm text-surface-500">
+                      +{todaysWorkout.exercises.length - 5} more
+                    </span>
+                  )}
+                </div>
+
+                {/* Progress info */}
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-surface-400">
+                    <span className="font-semibold text-surface-200">{todaysWorkout.totalExercises}</span> exercises
+                  </span>
+                  <span className="text-surface-400">
+                    <span className="font-semibold text-surface-200">{todaysWorkout.totalSets}</span> sets
+                  </span>
+                  {todaysWorkout.state !== 'planned' && (
+                    <span className="text-surface-400">
+                      <span className={`font-semibold ${todaysWorkout.state === 'completed' ? 'text-success-400' : 'text-warning-400'}`}>
+                        {todaysWorkout.completedSets}/{todaysWorkout.totalSets}
+                      </span> completed
+                    </span>
+                  )}
+                  {todaysWorkout.sessionRpe && (
+                    <span className="text-surface-400">
+                      RPE <span className="font-semibold text-surface-200">{todaysWorkout.sessionRpe}</span>
+                    </span>
+                  )}
+                </div>
+
+                {/* Progress bar for in-progress */}
+                {todaysWorkout.state === 'in_progress' && todaysWorkout.totalSets > 0 && (
+                  <div className="mt-3 h-2 bg-surface-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-warning-500 transition-all duration-500"
+                      style={{ width: `${Math.round((todaysWorkout.completedSets / todaysWorkout.totalSets) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Action button */}
+              <div className="flex-shrink-0">
+                {todaysWorkout.state === 'completed' ? (
+                  <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                    <Button variant="outline" className="border-success-500/50 text-success-400 hover:bg-success-500/10">
+                      <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View Summary
+                    </Button>
+                  </Link>
+                ) : todaysWorkout.state === 'in_progress' ? (
+                  <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                    <Button className="bg-warning-500 hover:bg-warning-600">
+                      <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Continue Workout
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                    <Button size="lg">
+                      <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Start Workout
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Rest day card - active mesocycle but no workout today */}
+      {activeMesocycle && !todaysWorkout && (
+        <Card className="overflow-hidden border border-surface-700 bg-surface-800/30">
+          <div className="p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
+                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
+                <p className="text-sm text-surface-500">No workout scheduled for today. Recovery is part of progress!</p>
+              </div>
+              <Link href="/dashboard/workout/new">
+                <Button variant="outline" size="sm">
+                  Start Ad-hoc Workout
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Active Mesocycle - shown below today's workout */}
       {activeMesocycle && (
-        <Card variant="elevated" className="overflow-hidden border border-primary-500/30">
-          <div className="p-4 sm:p-6 bg-gradient-to-r from-primary-500/10 to-accent-500/5">
+        <Card className="overflow-hidden border border-surface-700">
+          <div className="p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="info" size="sm">Active Mesocycle</Badge>
+                  <Badge variant="default" size="sm">Mesocycle</Badge>
                   <span className="text-xs text-surface-500">Week {activeMesocycle.currentWeek} of {activeMesocycle.weeks}</span>
                 </div>
-                <h2 className="text-xl font-bold text-surface-100">{activeMesocycle.name}</h2>
-                <div className="flex items-center gap-4 mt-2 text-sm text-surface-400">
+                <h3 className="text-lg font-semibold text-surface-200">{activeMesocycle.name}</h3>
+                <div className="flex items-center gap-4 mt-1 text-sm text-surface-500">
                   <span>{activeMesocycle.workoutsCompleted} / {activeMesocycle.totalWorkouts} workouts</span>
                   <span>Started {new Date(activeMesocycle.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                 </div>
                 {/* Progress bar */}
-                <div className="mt-3 h-2 bg-surface-800 rounded-full overflow-hidden">
+                <div className="mt-2 h-1.5 bg-surface-800 rounded-full overflow-hidden">
                   <div 
-                    className="h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-500"
+                    className="h-full bg-primary-500 transition-all duration-500"
                     style={{ width: `${Math.round((activeMesocycle.currentWeek / activeMesocycle.weeks) * 100)}%` }}
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Link href="/dashboard/workout/new">
-                  <Button>
-                    <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Start Workout
-                  </Button>
-                </Link>
-                <Link href="/dashboard/mesocycle">
-                  <Button variant="outline">View Plan</Button>
-                </Link>
-              </div>
+              <Link href="/dashboard/mesocycle">
+                <Button variant="ghost" size="sm">
+                  View Plan
+                  <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Button>
+              </Link>
             </div>
           </div>
         </Card>
