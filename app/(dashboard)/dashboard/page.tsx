@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 
@@ -10,6 +10,16 @@ interface Stats {
   totalSets: number;
   totalVolume: number;
   avgRpe: number | null;
+}
+
+interface ActiveMesocycle {
+  id: string;
+  name: string;
+  startDate: string;
+  weeks: number;
+  currentWeek: number;
+  workoutsCompleted: number;
+  totalWorkouts: number;
 }
 
 export default function DashboardPage() {
@@ -21,6 +31,7 @@ export default function DashboardPage() {
   });
   const [hasWorkouts, setHasWorkouts] = useState(false);
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
+  const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -96,6 +107,42 @@ export default function DashboardPage() {
         setRecentWorkouts(recent);
       }
 
+      // Fetch active mesocycle
+      const { data: mesocycle } = await supabase
+        .from('mesocycles')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      if (mesocycle) {
+        // Calculate current week
+        const startDate = new Date(mesocycle.start_date);
+        const now = new Date();
+        const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
+
+        // Count completed workouts in this mesocycle
+        const { count: completedCount } = await supabase
+          .from('workout_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('mesocycle_id', mesocycle.id)
+          .eq('state', 'completed');
+
+        // Calculate total planned workouts (days per week * weeks)
+        const totalWorkouts = (mesocycle.days_per_week || 3) * mesocycle.weeks;
+
+        setActiveMesocycle({
+          id: mesocycle.id,
+          name: mesocycle.name,
+          startDate: mesocycle.start_date,
+          weeks: mesocycle.weeks,
+          currentWeek,
+          workoutsCompleted: completedCount || 0,
+          totalWorkouts,
+        });
+      }
+
       setIsLoading(false);
     }
 
@@ -120,8 +167,50 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* Active Mesocycle */}
+      {activeMesocycle && (
+        <Card variant="elevated" className="overflow-hidden border border-primary-500/30">
+          <div className="p-4 sm:p-6 bg-gradient-to-r from-primary-500/10 to-accent-500/5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge variant="info" size="sm">Active Mesocycle</Badge>
+                  <span className="text-xs text-surface-500">Week {activeMesocycle.currentWeek} of {activeMesocycle.weeks}</span>
+                </div>
+                <h2 className="text-xl font-bold text-surface-100">{activeMesocycle.name}</h2>
+                <div className="flex items-center gap-4 mt-2 text-sm text-surface-400">
+                  <span>{activeMesocycle.workoutsCompleted} / {activeMesocycle.totalWorkouts} workouts</span>
+                  <span>Started {new Date(activeMesocycle.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                </div>
+                {/* Progress bar */}
+                <div className="mt-3 h-2 bg-surface-800 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-primary-500 to-accent-500 transition-all duration-500"
+                    style={{ width: `${Math.round((activeMesocycle.currentWeek / activeMesocycle.weeks) * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link href="/dashboard/workout/new">
+                  <Button>
+                    <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Start Workout
+                  </Button>
+                </Link>
+                <Link href="/dashboard/mesocycle">
+                  <Button variant="outline">View Plan</Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Getting started card */}
-      {!isLoading && !hasWorkouts && (
+      {!isLoading && !hasWorkouts && !activeMesocycle && (
         <Card variant="elevated" className="overflow-hidden">
           <div className="p-8 text-center bg-gradient-to-r from-primary-500/10 to-accent-500/10">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">

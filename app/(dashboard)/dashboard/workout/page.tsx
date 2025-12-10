@@ -13,11 +13,23 @@ interface PlannedWorkout {
   exercise_count: number;
 }
 
+interface ActiveMesocycle {
+  id: string;
+  name: string;
+  startDate: string;
+  weeks: number;
+  currentWeek: number;
+  daysPerWeek: number;
+  workoutsThisWeek: number;
+  split: string;
+}
+
 export default function WorkoutPage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
   const [inProgressWorkout, setInProgressWorkout] = useState<PlannedWorkout | null>(null);
   const [plannedWorkouts, setPlannedWorkouts] = useState<PlannedWorkout[]>([]);
+  const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -75,6 +87,48 @@ export default function WorkoutPage() {
         })));
       }
 
+      // Fetch active mesocycle
+      const { data: mesocycle } = await supabase
+        .from('mesocycles')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      if (mesocycle) {
+        // Calculate current week
+        const startDate = new Date(mesocycle.start_date);
+        const now = new Date();
+        const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+        const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
+
+        // Get start of current week
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const weekStart = new Date(now);
+        weekStart.setDate(diff);
+        weekStart.setHours(0, 0, 0, 0);
+
+        // Count completed workouts this week for this mesocycle
+        const { count: weeklyCount } = await supabase
+          .from('workout_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('mesocycle_id', mesocycle.id)
+          .eq('state', 'completed')
+          .gte('completed_at', weekStart.toISOString());
+
+        setActiveMesocycle({
+          id: mesocycle.id,
+          name: mesocycle.name,
+          startDate: mesocycle.start_date,
+          weeks: mesocycle.weeks,
+          currentWeek,
+          daysPerWeek: mesocycle.days_per_week || 3,
+          workoutsThisWeek: weeklyCount || 0,
+          split: mesocycle.split || 'custom',
+        });
+      }
+
       setIsLoading(false);
     }
 
@@ -119,6 +173,46 @@ export default function WorkoutPage() {
           New Workout
         </Button>
       </div>
+
+      {/* Active Mesocycle */}
+      {activeMesocycle && (
+        <Card className="border border-primary-500/20 bg-gradient-to-r from-primary-500/5 to-transparent">
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="info" size="sm">Week {activeMesocycle.currentWeek}/{activeMesocycle.weeks}</Badge>
+                  <span className="text-sm text-surface-400 capitalize">{activeMesocycle.split.replace('_', '/')} Split</span>
+                </div>
+                <h3 className="text-lg font-semibold text-surface-100 mt-1">{activeMesocycle.name}</h3>
+                <p className="text-sm text-surface-400">
+                  {activeMesocycle.workoutsThisWeek} of {activeMesocycle.daysPerWeek} workouts this week
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Weekly progress dots */}
+                <div className="flex gap-1.5">
+                  {Array.from({ length: activeMesocycle.daysPerWeek }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`w-3 h-3 rounded-full ${
+                        i < activeMesocycle.workoutsThisWeek
+                          ? 'bg-success-500'
+                          : 'bg-surface-700'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <Link href="/dashboard/mesocycle">
+                  <Button variant="ghost" size="sm">
+                    View Plan →
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* In-progress workout */}
       {inProgressWorkout && (
