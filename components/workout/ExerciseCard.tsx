@@ -22,6 +22,7 @@ interface ExerciseCardProps {
   onSetComplete?: (setData: { weightKg: number; reps: number; rpe: number; note?: string }) => void;
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   onSetDelete?: (setId: string) => void;
+  onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   isActive?: boolean;
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
@@ -36,6 +37,7 @@ export function ExerciseCard({
   onSetComplete,
   onSetEdit,
   onSetDelete,
+  onTargetSetsChange,
   isActive = false,
   unit = 'kg',
   recommendedWeight,
@@ -243,6 +245,31 @@ export function ExerciseCard({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Set controls */}
+            {onTargetSetsChange && isActive && (
+              <div className="flex items-center gap-1 mr-2">
+                <button
+                  onClick={() => onTargetSetsChange(Math.max(1, block.targetSets - 1))}
+                  disabled={block.targetSets <= completedSets.length || block.targetSets <= 1}
+                  className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Remove a set"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => onTargetSetsChange(block.targetSets + 1)}
+                  disabled={block.targetSets >= 10}
+                  className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  title="Add a set"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
+            )}
             <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
               {completedSets.length}/{block.targetSets}
             </Badge>

@@ -756,6 +756,35 @@ export default function WorkoutPage() {
   // State for adding extra sets beyond target
   const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
 
+  // Handle changing target sets for an exercise
+  const handleTargetSetsChange = async (blockId: string, newTargetSets: number) => {
+    // Update local state immediately
+    setBlocks(prevBlocks => prevBlocks.map(block => 
+      block.id === blockId 
+        ? { ...block, targetSets: newTargetSets }
+        : block
+    ));
+
+    // Update in database
+    try {
+      const supabase = createUntypedClient();
+      const { error: updateError } = await supabase
+        .from('exercise_blocks')
+        .update({ target_sets: newTargetSets })
+        .eq('id', blockId);
+      
+      if (updateError) {
+        console.error('Failed to update target sets:', updateError);
+        setError(`Failed to update sets: ${updateError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to update target sets:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update sets');
+    }
+  };
+
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
@@ -804,9 +833,31 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const isCompound = exercise.mechanic === 'compound';
       
-      // Generate warmup for compound exercises
+      // Get weight recommendation for the new exercise
+      let suggestedWeight = 0;
+      if (userProfile) {
+        const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
+        const targetRir = 2;
+        const weightRec = quickWeightEstimate(
+          exercise.name,
+          repRange,
+          targetRir,
+          userProfile.weightKg,
+          userProfile.heightCm,
+          userProfile.bodyFatPercent,
+          userProfile.experience,
+          userProfile.regionalData,
+          preferences.units
+        );
+        if (weightRec.confidence !== 'find_working_weight') {
+          suggestedWeight = weightRec.recommendedWeight;
+        }
+      }
+      
+      // Generate warmup for compound exercises with actual weight
+      const workingWeight = suggestedWeight > 0 ? suggestedWeight : 60;
       const warmupSets = isCompound ? generateWarmupProtocol({
-        workingWeight: 60,
+        workingWeight,
         exercise: {
           id: exercise.id,
           name: exercise.name,
@@ -825,9 +876,9 @@ export default function WorkoutPage() {
         isFirstExercise: false,
       }) : [];
 
-      // Create new exercise block
+      // Create new exercise block with suggested weight
       const newOrder = blocks.length + 1;
-      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder });
+      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder, suggestedWeight });
       
       const { data: newBlock, error: blockError } = await supabase
         .from('exercise_blocks')
@@ -838,9 +889,9 @@ export default function WorkoutPage() {
           target_sets: isCompound ? 4 : 3,
           target_rep_range: isCompound ? [6, 10] : [10, 15],
           target_rir: 2,
-          target_weight_kg: 0,
+          target_weight_kg: suggestedWeight,
           target_rest_seconds: isCompound ? 180 : 90,
-          suggestion_reason: 'Added mid-workout',
+          suggestion_reason: suggestedWeight > 0 ? `Added mid-workout • Suggested ${formatWeight(suggestedWeight, preferences.units)}` : 'Added mid-workout',
           warmup_protocol: { sets: warmupSets },
         })
         .select()
@@ -867,7 +918,7 @@ export default function WorkoutPage() {
         throw new Error(`Failed to fetch exercise data: ${exerciseError?.message || 'Not found'}`);
       }
 
-      // Add to blocks state
+      // Add to blocks state with suggested weight
       const newBlockWithExercise: ExerciseBlockWithExercise = {
         id: newBlock.id,
         workoutSessionId: newBlock.workout_session_id,
@@ -878,7 +929,7 @@ export default function WorkoutPage() {
         targetSets: newBlock.target_sets,
         targetRepRange: newBlock.target_rep_range,
         targetRir: newBlock.target_rir,
-        targetWeightKg: newBlock.target_weight_kg,
+        targetWeightKg: suggestedWeight,  // Use the calculated suggested weight
         targetRestSeconds: newBlock.target_rest_seconds,
         progressionType: null,
         suggestionReason: newBlock.suggestion_reason,
@@ -1315,6 +1366,7 @@ export default function WorkoutPage() {
                     }}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
+                    onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
                     isActive
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
