@@ -5,14 +5,27 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { convertWeight } from '@/lib/utils';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
+// Helper functions for unit conversion
+const cmToInches = (cm: number) => cm / 2.54;
+const inchesToCm = (inches: number) => inches * 2.54;
+const kgToLbs = (kg: number) => kg * 2.20462;
+const lbsToKg = (lbs: number) => lbs / 2.20462;
+
 export default function SettingsPage() {
+  const { preferences, updatePreference } = useUserPreferences();
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
-  const [heightCm, setHeightCm] = useState('');
-  const [weightKg, setWeightKg] = useState('');
+  // Store values in user's display units, convert on load/save
+  const [heightDisplay, setHeightDisplay] = useState('');
+  const [weightDisplay, setWeightDisplay] = useState('');
+  // Keep track of the stored metric values for saving
+  const [storedHeightCm, setStoredHeightCm] = useState<number | null>(null);
+  const [storedWeightKg, setStoredWeightKg] = useState<number | null>(null);
   const [units, setUnits] = useState<WeightUnit>('kg');
   const [restTimer, setRestTimer] = useState(180);
   const [showFormCues, setShowFormCues] = useState(true);
@@ -30,6 +43,34 @@ export default function SettingsPage() {
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
 
+  // Convert display values when units change
+  const handleUnitsChange = (newUnits: WeightUnit) => {
+    // Convert existing display values to new units
+    if (heightDisplay) {
+      const heightVal = parseFloat(heightDisplay);
+      if (units === 'kg' && newUnits === 'lb') {
+        // cm -> inches
+        setHeightDisplay(cmToInches(heightVal).toFixed(1));
+      } else if (units === 'lb' && newUnits === 'kg') {
+        // inches -> cm
+        setHeightDisplay(inchesToCm(heightVal).toFixed(1));
+      }
+    }
+    
+    if (weightDisplay) {
+      const weightVal = parseFloat(weightDisplay);
+      if (units === 'kg' && newUnits === 'lb') {
+        // kg -> lbs
+        setWeightDisplay(kgToLbs(weightVal).toFixed(1));
+      } else if (units === 'lb' && newUnits === 'kg') {
+        // lbs -> kg
+        setWeightDisplay(lbsToKg(weightVal).toFixed(1));
+      }
+    }
+    
+    setUnits(newUnits);
+  };
+
   // Load settings on mount
   useEffect(() => {
     async function loadSettings() {
@@ -46,18 +87,32 @@ export default function SettingsPage() {
         if (data) {
           setGoal(data.goal || 'maintenance');
           setExperience(data.experience || 'intermediate');
+          
+          // Get unit preference first
+          const prefs = data.preferences as Record<string, unknown> || {};
+          const userUnits = (prefs.units as WeightUnit) || 'kg';
+          setUnits(userUnits);
+          
+          // Store metric values and convert to display units
           if (data.height_cm) {
-            setHeightCm(String(data.height_cm));
+            setStoredHeightCm(data.height_cm);
+            const displayHeight = userUnits === 'lb' 
+              ? cmToInches(data.height_cm).toFixed(1)
+              : String(data.height_cm);
+            setHeightDisplay(displayHeight);
           }
           if (data.weight_kg) {
-            setWeightKg(String(data.weight_kg));
+            setStoredWeightKg(data.weight_kg);
+            const displayWeight = userUnits === 'lb'
+              ? kgToLbs(data.weight_kg).toFixed(1)
+              : String(data.weight_kg);
+            setWeightDisplay(displayWeight);
           }
+          
           if (data.preferences) {
-            const prefs = data.preferences as any;
-            setUnits(prefs.units || 'kg');
-            setRestTimer(prefs.restTimer || 180);
-            setShowFormCues(prefs.showFormCues ?? true);
-            setShowWarmupSuggestions(prefs.showWarmupSuggestions ?? true);
+            setRestTimer((prefs.restTimer as number) || 180);
+            setShowFormCues((prefs.showFormCues as boolean) ?? true);
+            setShowWarmupSuggestions((prefs.showWarmupSuggestions as boolean) ?? true);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
             // Merge with defaults to ensure all muscle groups have values
@@ -95,6 +150,20 @@ export default function SettingsPage() {
 
       if (!user) throw new Error('Not logged in');
 
+      // Convert display values back to metric for storage
+      let heightToSave: number | null = null;
+      let weightToSave: number | null = null;
+      
+      if (heightDisplay) {
+        const heightVal = parseFloat(heightDisplay);
+        heightToSave = units === 'lb' ? inchesToCm(heightVal) : heightVal;
+      }
+      
+      if (weightDisplay) {
+        const weightVal = parseFloat(weightDisplay);
+        weightToSave = units === 'lb' ? lbsToKg(weightVal) : weightVal;
+      }
+      
       const { error } = await supabase
         .from('users')
         .upsert({
@@ -102,8 +171,8 @@ export default function SettingsPage() {
           email: user.email,
           goal,
           experience,
-          height_cm: heightCm ? parseFloat(heightCm) : null,
-          weight_kg: weightKg ? parseFloat(weightKg) : null,
+          height_cm: heightToSave,
+          weight_kg: weightToSave,
           preferences: {
             units,
             restTimer,
@@ -119,6 +188,11 @@ export default function SettingsPage() {
           available_equipment: availableEquipment,
           injury_history: injuryHistory,
         });
+      
+      // Update global preferences so header toggle stays in sync
+      if (!error) {
+        updatePreference('units', units);
+      }
 
       if (error) throw error;
 
@@ -189,26 +263,26 @@ export default function SettingsPage() {
           />
 
           <Input
-            label="Height (cm)"
+            label={`Height (${units === 'lb' ? 'inches' : 'cm'})`}
             type="number"
             step="0.1"
-            min="100"
-            max="250"
-            value={heightCm}
-            onChange={(e) => setHeightCm(e.target.value)}
-            placeholder="e.g., 175"
+            min={units === 'lb' ? '40' : '100'}
+            max={units === 'lb' ? '96' : '250'}
+            value={heightDisplay}
+            onChange={(e) => setHeightDisplay(e.target.value)}
+            placeholder={units === 'lb' ? 'e.g., 69' : 'e.g., 175'}
             hint="Required for FFMI and weight recommendations"
           />
 
           <Input
-            label="Body Weight (kg)"
+            label={`Body Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
             type="number"
             step="0.1"
-            min="30"
-            max="300"
-            value={weightKg}
-            onChange={(e) => setWeightKg(e.target.value)}
-            placeholder="e.g., 80"
+            min={units === 'lb' ? '66' : '30'}
+            max={units === 'lb' ? '660' : '300'}
+            value={weightDisplay}
+            onChange={(e) => setWeightDisplay(e.target.value)}
+            placeholder={units === 'lb' ? 'e.g., 175' : 'e.g., 80'}
             hint="Required for AI weight recommendations in workouts"
           />
 
@@ -395,11 +469,12 @@ export default function SettingsPage() {
           <Select
             label="Weight Units"
             value={units}
-            onChange={(e) => setUnits(e.target.value as WeightUnit)}
+            onChange={(e) => handleUnitsChange(e.target.value as WeightUnit)}
             options={[
-              { value: 'kg', label: 'Kilograms (kg)' },
-              { value: 'lb', label: 'Pounds (lb)' },
+              { value: 'kg', label: 'Metric (kg, cm)' },
+              { value: 'lb', label: 'Imperial (lbs, inches)' },
             ]}
+            hint="Changes how measurements are displayed throughout the app"
           />
 
           <Slider

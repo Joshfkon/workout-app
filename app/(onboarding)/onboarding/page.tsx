@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+
+// Unit conversion helpers
+const cmToInches = (cm: number) => cm / 2.54;
+const inchesToCm = (inches: number) => inches * 2.54;
+const kgToLbs = (kg: number) => kg * 2.20462;
+const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 // Body fat visual reference images descriptions
 const BODY_FAT_REFERENCES = {
@@ -24,6 +31,8 @@ const BODY_FAT_REFERENCES = {
 
 export default function OnboardingBodyCompPage() {
   const router = useRouter();
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
   const [isLoading, setIsLoading] = useState(false);
   const [existingDexa, setExistingDexa] = useState<{
     weight_kg: number;
@@ -32,12 +41,25 @@ export default function OnboardingBodyCompPage() {
     body_fat_percent: number;
   } | null>(null);
   
-  // Form state
+  // Form state - stored in display units
   const [sex, setSex] = useState<'male' | 'female'>('male');
-  const [heightCm, setHeightCm] = useState<string>('');
-  const [weightKg, setWeightKg] = useState<string>('');
+  const [heightDisplay, setHeightDisplay] = useState<string>('');
+  const [weightDisplay, setWeightDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
   const [useDexa, setUseDexa] = useState(false);
+  
+  // Convert display values to metric for calculations
+  const getHeightCm = () => {
+    if (!heightDisplay) return 0;
+    const val = parseFloat(heightDisplay);
+    return units === 'lb' ? inchesToCm(val) : val;
+  };
+  
+  const getWeightKg = () => {
+    if (!weightDisplay) return 0;
+    const val = parseFloat(weightDisplay);
+    return units === 'lb' ? lbsToKg(val) : val;
+  };
   
   // Computed values
   const [bodyComp, setBodyComp] = useState<{
@@ -74,7 +96,11 @@ export default function OnboardingBodyCompPage() {
         .single();
       
       if (userData?.height_cm) {
-        setHeightCm(String(userData.height_cm));
+        // Convert to display units
+        const displayHeight = units === 'lb' 
+          ? cmToInches(userData.height_cm).toFixed(1)
+          : String(userData.height_cm);
+        setHeightDisplay(displayHeight);
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
@@ -86,8 +112,8 @@ export default function OnboardingBodyCompPage() {
   
   // Calculate body composition when inputs change
   useEffect(() => {
-    const height = parseFloat(heightCm);
-    const weight = useDexa && existingDexa ? existingDexa.weight_kg : parseFloat(weightKg);
+    const height = getHeightCm();
+    const weight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
     const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
     
     if (height > 0 && weight > 0 && bf > 0 && bf < 100) {
@@ -101,12 +127,17 @@ export default function OnboardingBodyCompPage() {
     } else {
       setBodyComp(null);
     }
-  }, [heightCm, weightKg, bodyFatPercent, useDexa, existingDexa, sex]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heightDisplay, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units]);
   
   const handleUseDexa = () => {
     if (existingDexa) {
       setUseDexa(true);
-      setWeightKg(String(existingDexa.weight_kg));
+      // Convert DEXA weight to display units
+      const displayWeight = units === 'lb'
+        ? kgToLbs(existingDexa.weight_kg).toFixed(1)
+        : String(existingDexa.weight_kg);
+      setWeightDisplay(displayWeight);
       setBodyFatPercent(String(existingDexa.body_fat_percent));
     }
   };
@@ -119,8 +150,9 @@ export default function OnboardingBodyCompPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       
-      const height = parseFloat(heightCm);
-      const weight = useDexa && existingDexa ? existingDexa.weight_kg : parseFloat(weightKg);
+      // Convert display values to metric for storage
+      const height = getHeightCm();
+      const weight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
       const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
       
       // Create coaching session
@@ -225,26 +257,28 @@ export default function OnboardingBodyCompPage() {
             />
             
             <Input
-              label="Height (cm)"
+              label={`Height (${units === 'lb' ? 'inches' : 'cm'})`}
               type="number"
-              value={heightCm}
-              onChange={(e) => setHeightCm(e.target.value)}
-              placeholder="175"
-              min={100}
-              max={250}
+              value={heightDisplay}
+              onChange={(e) => setHeightDisplay(e.target.value)}
+              placeholder={units === 'lb' ? '69' : '175'}
+              min={units === 'lb' ? 40 : 100}
+              max={units === 'lb' ? 96 : 250}
             />
             
             <Input
-              label="Weight (kg)"
+              label={`Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
               type="number"
-              value={useDexa && existingDexa ? String(existingDexa.weight_kg) : weightKg}
+              value={useDexa && existingDexa 
+                ? (units === 'lb' ? kgToLbs(existingDexa.weight_kg).toFixed(1) : String(existingDexa.weight_kg))
+                : weightDisplay}
               onChange={(e) => {
                 setUseDexa(false);
-                setWeightKg(e.target.value);
+                setWeightDisplay(e.target.value);
               }}
-              placeholder="80"
-              min={30}
-              max={300}
+              placeholder={units === 'lb' ? '175' : '80'}
+              min={units === 'lb' ? 66 : 30}
+              max={units === 'lb' ? 660 : 300}
               disabled={useDexa}
             />
             
@@ -321,13 +355,21 @@ export default function OnboardingBodyCompPage() {
                   <div className="p-3 bg-surface-800/50 rounded-lg text-center">
                     <p className="text-xs text-surface-500">Lean Mass</p>
                     <p className="text-lg font-semibold text-surface-200">
-                      {bodyComp.leanMassKg.toFixed(1)} kg
+                      {units === 'lb' 
+                        ? `${kgToLbs(bodyComp.leanMassKg).toFixed(1)} lbs`
+                        : `${bodyComp.leanMassKg.toFixed(1)} kg`}
                     </p>
                   </div>
                   <div className="p-3 bg-surface-800/50 rounded-lg text-center">
                     <p className="text-xs text-surface-500">Fat Mass</p>
                     <p className="text-lg font-semibold text-surface-200">
-                      {((useDexa && existingDexa ? existingDexa.weight_kg : parseFloat(weightKg)) - bodyComp.leanMassKg).toFixed(1)} kg
+                      {(() => {
+                        const totalWeight = useDexa && existingDexa ? existingDexa.weight_kg : getWeightKg();
+                        const fatMass = totalWeight - bodyComp.leanMassKg;
+                        return units === 'lb' 
+                          ? `${kgToLbs(fatMass).toFixed(1)} lbs`
+                          : `${fatMass.toFixed(1)} kg`;
+                      })()}
                     </p>
                   </div>
                 </div>

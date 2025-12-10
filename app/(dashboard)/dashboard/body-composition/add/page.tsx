@@ -6,21 +6,40 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Input, Badge } from '
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateLeanMass, calculateFatMass } from '@/services/bodyCompEngine';
 import type { DexaRegionalData } from '@/types/schema';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
+
+// Unit conversion helpers
+const kgToLbs = (kg: number) => kg * 2.20462;
+const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 export default function AddDexaScanPage() {
   const router = useRouter();
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // Form state
+  // Form state - stored in display units, converted to kg on save
   const [scanDate, setScanDate] = useState(new Date().toISOString().split('T')[0]);
-  const [weightKg, setWeightKg] = useState('');
+  const [weightDisplay, setWeightDisplay] = useState('');
   const [bodyFatPercent, setBodyFatPercent] = useState('');
-  const [leanMassKg, setLeanMassKg] = useState('');
-  const [fatMassKg, setFatMassKg] = useState('');
-  const [boneMassKg, setBoneMassKg] = useState('');
+  const [leanMassDisplay, setLeanMassDisplay] = useState('');
+  const [fatMassDisplay, setFatMassDisplay] = useState('');
+  const [boneMassDisplay, setBoneMassDisplay] = useState('');
   const [notes, setNotes] = useState('');
   const [inputMode, setInputMode] = useState<'calculated' | 'manual'>('calculated');
+  
+  // Convert display value to kg
+  const toKg = (displayValue: string): number => {
+    const val = parseFloat(displayValue);
+    if (isNaN(val)) return 0;
+    return units === 'lb' ? lbsToKg(val) : val;
+  };
+  
+  // Convert kg to display value
+  const toDisplay = (kgValue: number): string => {
+    return units === 'lb' ? kgToLbs(kgValue).toFixed(2) : kgValue.toFixed(2);
+  };
   
   // Regional data state
   const [showRegionalData, setShowRegionalData] = useState(false);
@@ -41,18 +60,19 @@ export default function AddDexaScanPage() {
 
   // Auto-calculate lean/fat mass when weight and body fat are entered
   const handleWeightOrBfChange = (newWeight: string, newBf: string) => {
-    setWeightKg(newWeight);
+    setWeightDisplay(newWeight);
     setBodyFatPercent(newBf);
     
     if (inputMode === 'calculated') {
-      const weight = parseFloat(newWeight);
+      const weightInKg = toKg(newWeight);
       const bf = parseFloat(newBf);
       
-      if (!isNaN(weight) && !isNaN(bf) && bf >= 0 && bf <= 100) {
-        const lean = calculateLeanMass(weight, bf);
-        const fat = calculateFatMass(weight, bf);
-        setLeanMassKg(lean.toFixed(2));
-        setFatMassKg(fat.toFixed(2));
+      if (weightInKg > 0 && !isNaN(bf) && bf >= 0 && bf <= 100) {
+        const leanKg = calculateLeanMass(weightInKg, bf);
+        const fatKg = calculateFatMass(weightInKg, bf);
+        // Display in user's preferred units
+        setLeanMassDisplay(toDisplay(leanKg));
+        setFatMassDisplay(toDisplay(fatKg));
       }
     }
   };
@@ -143,11 +163,12 @@ export default function AddDexaScanPage() {
 
       if (!user) throw new Error('You must be logged in');
 
-      const weight = parseFloat(weightKg);
+      // Convert display values to kg for storage
+      const weight = toKg(weightDisplay);
       const bf = parseFloat(bodyFatPercent);
-      const lean = parseFloat(leanMassKg);
-      const fat = parseFloat(fatMassKg);
-      const bone = boneMassKg ? parseFloat(boneMassKg) : null;
+      const lean = toKg(leanMassDisplay);
+      const fat = toKg(fatMassDisplay);
+      const bone = boneMassDisplay ? toKg(boneMassDisplay) : null;
       
       // Build and validate regional data
       const regionalResult = buildRegionalData();
@@ -316,12 +337,12 @@ export default function AddDexaScanPage() {
                 
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label="Total Weight (kg)"
+                    label={`Total Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
                     type="number"
                     step="0.1"
-                    value={weightKg}
+                    value={weightDisplay}
                     onChange={(e) => handleWeightOrBfChange(e.target.value, bodyFatPercent)}
-                    placeholder="e.g., 80.5"
+                    placeholder={units === 'lb' ? 'e.g., 177.5' : 'e.g., 80.5'}
                     required
                   />
                   <Input
@@ -331,21 +352,21 @@ export default function AddDexaScanPage() {
                     min="0"
                     max="100"
                     value={bodyFatPercent}
-                    onChange={(e) => handleWeightOrBfChange(weightKg, e.target.value)}
+                    onChange={(e) => handleWeightOrBfChange(weightDisplay, e.target.value)}
                     placeholder="e.g., 15.0"
                     required
                   />
                 </div>
 
-                {leanMassKg && fatMassKg && (
+                {leanMassDisplay && fatMassDisplay && (
                   <div className="grid grid-cols-2 gap-4 p-4 bg-surface-800/50 rounded-lg">
                     <div>
                       <p className="text-xs text-surface-500">Calculated Lean Mass</p>
-                      <p className="text-lg font-mono text-surface-200">{leanMassKg} kg</p>
+                      <p className="text-lg font-mono text-surface-200">{leanMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-surface-500">Calculated Fat Mass</p>
-                      <p className="text-lg font-mono text-surface-200">{fatMassKg} kg</p>
+                      <p className="text-lg font-mono text-surface-200">{fatMassDisplay} {units === 'lb' ? 'lbs' : 'kg'}</p>
                     </div>
                   </div>
                 )}
@@ -357,12 +378,12 @@ export default function AddDexaScanPage() {
                 </p>
                 
                 <Input
-                  label="Total Weight (kg)"
+                  label={`Total Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
                   type="number"
                   step="0.1"
-                  value={weightKg}
-                  onChange={(e) => setWeightKg(e.target.value)}
-                  placeholder="e.g., 80.5"
+                  value={weightDisplay}
+                  onChange={(e) => setWeightDisplay(e.target.value)}
+                  placeholder={units === 'lb' ? 'e.g., 177.5' : 'e.g., 80.5'}
                   required
                 />
 
@@ -380,21 +401,21 @@ export default function AddDexaScanPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <Input
-                    label="Lean Mass (kg)"
+                    label={`Lean Mass (${units === 'lb' ? 'lbs' : 'kg'})`}
                     type="number"
                     step="0.01"
-                    value={leanMassKg}
-                    onChange={(e) => setLeanMassKg(e.target.value)}
-                    placeholder="e.g., 65.50"
+                    value={leanMassDisplay}
+                    onChange={(e) => setLeanMassDisplay(e.target.value)}
+                    placeholder={units === 'lb' ? 'e.g., 144.40' : 'e.g., 65.50'}
                     required
                   />
                   <Input
-                    label="Fat Mass (kg)"
+                    label={`Fat Mass (${units === 'lb' ? 'lbs' : 'kg'})`}
                     type="number"
                     step="0.01"
-                    value={fatMassKg}
-                    onChange={(e) => setFatMassKg(e.target.value)}
-                    placeholder="e.g., 12.10"
+                    value={fatMassDisplay}
+                    onChange={(e) => setFatMassDisplay(e.target.value)}
+                    placeholder={units === 'lb' ? 'e.g., 26.68' : 'e.g., 12.10'}
                     required
                   />
                 </div>
@@ -403,12 +424,12 @@ export default function AddDexaScanPage() {
 
             {/* Optional: Bone Mass */}
             <Input
-              label="Bone Mass (kg) - Optional"
+              label={`Bone Mass (${units === 'lb' ? 'lbs' : 'kg'}) - Optional`}
               type="number"
               step="0.01"
-              value={boneMassKg}
-              onChange={(e) => setBoneMassKg(e.target.value)}
-              placeholder="e.g., 2.95"
+              value={boneMassDisplay}
+              onChange={(e) => setBoneMassDisplay(e.target.value)}
+              placeholder={units === 'lb' ? 'e.g., 6.50' : 'e.g., 2.95'}
               hint="Bone mineral content if provided by your scan"
             />
 
