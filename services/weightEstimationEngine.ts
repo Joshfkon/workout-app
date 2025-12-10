@@ -450,9 +450,11 @@ function calculateWorkingWeight(
 export class WeightEstimationEngine {
   private profile: UserStrengthProfile;
   private estimatedMaxes: Map<string, EstimatedMax>;
+  private unit: 'kg' | 'lb';
   
-  constructor(profile: UserStrengthProfile) {
+  constructor(profile: UserStrengthProfile, unit: 'kg' | 'lb' = 'kg') {
     this.profile = profile;
+    this.unit = unit;
     this.estimatedMaxes = new Map();
     
     for (const max of profile.knownMaxes) {
@@ -779,10 +781,10 @@ export class WeightEstimationEngine {
       exercise: exerciseName,
       targetReps,
       targetRIR,
-      recommendedWeight: this.roundToNearestPlate(workingWeight),
+      recommendedWeight: this.roundToNearestPlate(this.unit, workingWeight),
       weightRange: {
-        low: this.roundToNearestPlate(workingWeight * (1 - variance)),
-        high: this.roundToNearestPlate(workingWeight * (1 + variance))
+        low: this.roundToNearestPlate(this.unit, workingWeight * (1 - variance)),
+        high: this.roundToNearestPlate(this.unit, workingWeight * (1 + variance))
       },
       confidence: estimatedMax.confidence as 'high' | 'medium',
       rationale: this.buildRationale(estimatedMax, avgReps, targetRIR) + (additionalNote ? ` ${additionalNote}` : ''),
@@ -804,20 +806,20 @@ export class WeightEstimationEngine {
       exercise: exerciseName,
       targetReps,
       targetRIR,
-      recommendedWeight: this.roundToNearestPlate(conservativeWeight),
+      recommendedWeight: this.roundToNearestPlate(this.unit, conservativeWeight),
       weightRange: {
-        low: this.roundToNearestPlate(conservativeWeight * 0.85),
-        high: this.roundToNearestPlate(workingWeight)
+        low: this.roundToNearestPlate(this.unit, conservativeWeight * 0.85),
+        high: this.roundToNearestPlate(this.unit, workingWeight)
       },
       confidence: 'low',
       rationale: `Estimated from ${estimatedMax.source.replace(/_/g, ' ')}. Start conservative and adjust based on feel.`,
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {
-        startingWeight: this.roundToNearestPlate(conservativeWeight * 0.7),
+        startingWeight: this.roundToNearestPlate(this.unit, conservativeWeight * 0.7),
         incrementKg: this.getAppropriateIncrement(exerciseName),
         targetRPE: 10 - targetRIR,
         maxAttempts: 4,
-        instructions: `Start at ${this.roundToNearestPlate(conservativeWeight * 0.7)}kg. Increase by ${this.getAppropriateIncrement(exerciseName)}kg each set until RPE ${10 - targetRIR}.`
+        instructions: `Start at ${this.roundToNearestPlate(this.unit, conservativeWeight * 0.7)}kg. Increase by ${this.getAppropriateIncrement(exerciseName)}kg each set until RPE ${10 - targetRIR}.`
       }
     };
   }
@@ -840,16 +842,25 @@ export class WeightEstimationEngine {
       confidence: 'find_working_weight',
       rationale: 'No history available. Use the ramping protocol below to find your working weight.',
       findingWeightProtocol: {
-        startingWeight: this.roundToNearestPlate(startWeight),
+        startingWeight: this.roundToNearestPlate(this.unit, startWeight),
         incrementKg: increment,
         targetRPE: 10 - targetRIR,
         maxAttempts: 5,
-        instructions: `Start with ${this.roundToNearestPlate(startWeight)}kg for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${increment}kg and try again. Stop when you hit RPE ${10 - targetRIR}.`
+        instructions: `Start with ${this.roundToNearestPlate(this.unit, startWeight)}kg for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${increment}kg and try again. Stop when you hit RPE ${10 - targetRIR}.`
       }
     };
   }
   
-  private roundToNearestPlate(weight: number): number {
+  private roundToNearestPlate(unit: 'kg' | 'lb', weight: number): number {
+    // Import would create circular dependency, so inline the logic
+    if (unit === 'lb') {
+      // Convert to lb, round to 2.5lb increments, convert back
+      const lbs = weight * 2.20462;
+      const rounded = Math.round(lbs / 2.5) * 2.5;
+      return rounded / 2.20462;
+    }
+    
+    // kg mode: 2.5kg increments
     if (weight < 20) {
       return Math.round(weight);
     }
@@ -1124,7 +1135,8 @@ export function quickWeightEstimate(
   heightCm: number,
   bodyFatPercent: number,
   experience: Experience,
-  regionalData?: DexaRegionalData
+  regionalData?: DexaRegionalData,
+  unit: 'kg' | 'lb' = 'kg'
 ): WorkingWeightRecommendation {
   const profile = createStrengthProfile(
     heightCm,
@@ -1136,7 +1148,7 @@ export function quickWeightEstimate(
     regionalData
   );
   
-  const engine = new WeightEstimationEngine(profile);
+  const engine = new WeightEstimationEngine(profile, unit);
   return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
 }
 

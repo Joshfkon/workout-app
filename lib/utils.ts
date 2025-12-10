@@ -40,13 +40,18 @@ export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'
 
 /**
  * Format weight with unit (always stored as kg, displayed in user preference)
+ * Rounds to nearest 2.5 increment for cleaner display
  */
 export function formatWeight(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): string {
   if (unit === 'lb') {
     const lbs = convertWeight(weightKg, 'kg', 'lb');
-    return `${lbs.toFixed(decimals)} lbs`;
+    // Round to nearest 2.5 lbs for cleaner display
+    const roundedLbs = Math.round(lbs / 2.5) * 2.5;
+    return `${roundedLbs.toFixed(decimals)} lbs`;
   }
-  return `${weightKg.toFixed(decimals)} kg`;
+  // Round to nearest 2.5 kg
+  const roundedKg = weightKg < 20 ? Math.round(weightKg) : Math.round(weightKg / 2.5) * 2.5;
+  return `${roundedKg.toFixed(decimals)} kg`;
 }
 
 /**
@@ -71,6 +76,36 @@ export function inputWeightToKg(weight: number, fromUnit: 'kg' | 'lb'): number {
  */
 export function roundToIncrement(value: number, increment: number): number {
   return Math.round(value / increment) * increment;
+}
+
+/**
+ * Round weight to nearest plate increment based on unit
+ * In kg mode: 2.5kg increments
+ * In lb mode: 2.5lb increments (which is ~1.13kg internally)
+ * For light weights (<20kg or <45lb), round to nearest 1
+ */
+export function roundToPlateIncrement(weightKg: number, unit: 'kg' | 'lb'): number {
+  if (unit === 'lb') {
+    // Convert to lb, round to 2.5lb increments, convert back
+    const lbs = convertWeight(weightKg, 'kg', 'lb');
+    const lightThreshold = 45; // 45lb = ~20kg
+    
+    if (lbs < lightThreshold) {
+      // For light weights, round to nearest 2.5lb
+      const rounded = Math.round(lbs / 2.5) * 2.5;
+      return convertWeight(rounded, 'lb', 'kg');
+    }
+    
+    // Standard 2.5lb increments
+    const rounded = Math.round(lbs / 2.5) * 2.5;
+    return convertWeight(rounded, 'lb', 'kg');
+  }
+  
+  // kg mode: 2.5kg increments
+  if (weightKg < 20) {
+    return Math.round(weightKg);
+  }
+  return Math.round(weightKg / 2.5) * 2.5;
 }
 
 /**

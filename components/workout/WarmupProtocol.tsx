@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui';
-import type { WarmupSet } from '@/types/schema';
-import { roundToIncrement } from '@/lib/utils';
+import type { WarmupSet, WeightUnit } from '@/types/schema';
+import { roundToIncrement, formatWeightValue } from '@/lib/utils';
 
 interface WarmupProtocolProps {
   warmupSets: WarmupSet[];
   workingWeight: number;
   minIncrement: number;
   onComplete?: () => void;
+  unit?: WeightUnit;
 }
 
 export function WarmupProtocol({
@@ -17,6 +18,7 @@ export function WarmupProtocol({
   workingWeight,
   minIncrement,
   onComplete,
+  unit = 'kg',
 }: WarmupProtocolProps) {
   const [completedSets, setCompletedSets] = useState<Set<number>>(new Set());
   const [isExpanded, setIsExpanded] = useState(true);
@@ -84,13 +86,14 @@ export function WarmupProtocol({
         <div className="border-t border-surface-800">
           <div className="divide-y divide-surface-800">
             {warmupSets.map((set) => {
+              const warmupWeightKg = workingWeight * (set.percentOfWorking / 100);
+              const roundedWeight = roundToIncrement(warmupWeightKg, minIncrement);
+              const displayWeight = formatWeightValue(roundedWeight, unit);
+              const unitLabel = unit === 'lb' ? 'lb' : 'kg';
               const warmupWeight =
-                set.percentOfWorking === 0
+                set.percentOfWorking === 0 || roundedWeight === 0
                   ? 'Empty bar'
-                  : `${roundToIncrement(
-                      workingWeight * (set.percentOfWorking / 100),
-                      minIncrement
-                    )}kg`;
+                  : `${displayWeight} ${unitLabel}`;
               const isCompleted = completedSets.has(set.setNumber);
 
               return (

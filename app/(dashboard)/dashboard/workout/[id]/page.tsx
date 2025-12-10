@@ -45,7 +45,8 @@ interface UserContext {
 function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
   userProfile?: UserProfileForWeights,
-  userContext?: UserContext
+  userContext?: UserContext,
+  unit: 'kg' | 'lb' = 'kg'
 ): {
   greeting: string;
   overview: string;
@@ -212,7 +213,8 @@ function generateCoachMessage(
           userProfile.heightCm,
           userProfile.bodyFatPercent || 20,
           userProfile.experience,
-          userProfile.regionalData  // Pass regional data for personalized adjustments
+          userProfile.regionalData,  // Pass regional data for personalized adjustments
+          unit  // Use correct unit for plate rounding
         );
       } catch (e) {
         // Silently fail if weight estimation fails
@@ -549,6 +551,31 @@ export default function WorkoutPage() {
       console.error('Failed to update set:', err);
     }
   };
+
+  const handleDeleteSet = async (setId: string) => {
+    // Remove from local state
+    const setToDelete = completedSets.find(s => s.id === setId);
+    if (!setToDelete) return;
+    
+    setCompletedSets(completedSets.filter(set => set.id !== setId));
+    
+    // Renumber remaining sets for the same block
+    const blockSets = completedSets.filter(s => s.exerciseBlockId === setToDelete.exerciseBlockId && s.id !== setId);
+    blockSets.forEach((set, idx) => {
+      set.setNumber = idx + 1;
+    });
+    
+    // Delete from database
+    try {
+      const supabase = createUntypedClient();
+      await supabase.from('set_logs').delete().eq('id', setId);
+    } catch (err) {
+      console.error('Failed to delete set:', err);
+    }
+  };
+
+  // State for adding extra sets beyond target
+  const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
 
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
@@ -1045,54 +1072,65 @@ export default function WorkoutPage() {
               </div>
 
               {/* Expanded content for current exercise */}
-              {isCurrent && (
+              {isCurrent && (() => {
+                // Calculate AI recommended weight first so it can be used for warmup
+                const exerciseNote = coachMessage?.exerciseNotes.find(
+                  n => n.name === block.exercise.name
+                );
+                const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
+                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
+                
+                return (
                 <div className="ml-11 space-y-4">
                   {/* Warmup protocol */}
-                  {block.warmupProtocol && block.warmupProtocol.length > 0 && (
+                  {block.warmupProtocol && block.warmupProtocol.length > 0 && effectiveWorkingWeight > 0 && (
                     <WarmupProtocol
                       warmupSets={block.warmupProtocol}
-                      workingWeight={block.targetWeightKg}
+                      workingWeight={effectiveWorkingWeight}
                       minIncrement={block.exercise.minWeightIncrementKg}
+                      unit={preferences.units}
                     />
                   )}
 
-                  {/* Get AI recommended weight for this exercise (if available) */}
-                  {(() => {
-                    const exerciseNote = coachMessage?.exerciseNotes.find(
-                      n => n.name === block.exercise.name
-                    );
-                    const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
-                    
-                    return (
-                      <>
-                        {/* Exercise card */}
-                        <ExerciseCard
+                  {/* Exercise card */}
+                  <ExerciseCard
                           exercise={block.exercise}
                           block={block}
                           sets={blockSets}
                           onSetEdit={handleSetEdit}
+                          onSetDelete={handleDeleteSet}
                           isActive
                           unit={preferences.units}
                           recommendedWeight={aiRecommendedWeight}
                         />
 
-                        {/* Set input */}
-                        {blockSets.length < block.targetSets && (
+                        {/* Set input - show when under target OR adding extra set */}
+                        {(blockSets.length < block.targetSets || addingExtraSet === block.id) && (
                           <SetInputRow
                             setNumber={blockSets.length + 1}
                             targetWeight={block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight}
                             targetRepRange={block.targetRepRange}
                             targetRir={block.targetRir}
                             previousSet={blockSets[blockSets.length - 1]}
-                            isLastSet={blockSets.length + 1 === block.targetSets}
-                            onSubmit={handleSetComplete}
+                            isLastSet={false}
+                            onSubmit={(data) => {
+                              handleSetComplete(data);
+                              setAddingExtraSet(null);
+                            }}
                             unit={preferences.units}
                           />
                         )}
 
                         {/* Exercise complete actions */}
-                        {isComplete && (
+                        {isComplete && addingExtraSet !== block.id && (
                           <div className="flex justify-center gap-3 py-4">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => setAddingExtraSet(block.id)}
+                            >
+                              + Add Extra Set
+                            </Button>
                             {index < blocks.length - 1 && (
                               <Button variant="secondary" onClick={handleNextExercise}>
                                 Next Exercise →
@@ -1100,11 +1138,9 @@ export default function WorkoutPage() {
                             )}
                           </div>
                         )}
-                      </>
-                    );
-                  })()}
                 </div>
-              )}
+                );
+              })()}
 
               {/* Collapsed preview for non-current exercises */}
               {!isCurrent && (

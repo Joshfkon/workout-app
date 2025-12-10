@@ -19,6 +19,44 @@ interface WorkoutHistory {
 export default function HistoryPage() {
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteWorkout = async (workoutId: string, state: string) => {
+    const action = state === 'in_progress' ? 'cancel' : 'delete';
+    if (!confirm(`Are you sure you want to ${action} this workout? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingId(workoutId);
+    try {
+      const supabase = createUntypedClient();
+      
+      // Delete associated set_logs first (via exercise_blocks)
+      const { data: blocks } = await supabase
+        .from('exercise_blocks')
+        .select('id')
+        .eq('workout_session_id', workoutId);
+      
+      if (blocks && blocks.length > 0) {
+        const blockIds = blocks.map((b: { id: string }) => b.id);
+        await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+      }
+      
+      // Delete exercise_blocks
+      await supabase.from('exercise_blocks').delete().eq('workout_session_id', workoutId);
+      
+      // Delete the workout session
+      await supabase.from('workout_sessions').delete().eq('id', workoutId);
+      
+      // Update local state
+      setWorkouts(workouts.filter(w => w.id !== workoutId));
+    } catch (err) {
+      console.error('Failed to delete workout:', err);
+      alert('Failed to delete workout. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     async function fetchHistory() {
@@ -171,6 +209,14 @@ export default function HistoryPage() {
                     <Link href={`/dashboard/workout/${workout.id}`}>
                       <Button variant="outline">View Details</Button>
                     </Link>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleDeleteWorkout(workout.id, workout.state)}
+                      disabled={deletingId === workout.id}
+                      className="text-danger-400 hover:text-danger-300 hover:border-danger-400"
+                    >
+                      {deletingId === workout.id ? 'Deleting...' : (workout.state === 'in_progress' ? 'Cancel' : 'Delete')}
+                    </Button>
                   </div>
                 </div>
               </div>

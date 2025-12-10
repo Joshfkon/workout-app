@@ -12,6 +12,7 @@ interface ExerciseCardProps {
   sets: SetLog[];
   onSetComplete?: (setData: Partial<SetLog>) => void;
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
+  onSetDelete?: (setId: string) => void;
   isActive?: boolean;
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
@@ -23,6 +24,7 @@ export function ExerciseCard({
   sets,
   onSetComplete,
   onSetEdit,
+  onSetDelete,
   isActive = false,
   unit = 'kg',
   recommendedWeight,
@@ -240,21 +242,47 @@ export function ExerciseCard({
               ) : (
                 <tr
                   key={set.id}
-                  onClick={() => onSetEdit && startEditing(set)}
-                  className={`hover:bg-surface-800/30 ${onSetEdit ? 'cursor-pointer' : ''}`}
+                  className={`hover:bg-surface-800/30 group`}
                 >
                   <td className="px-4 py-2.5 text-surface-300">{set.setNumber}</td>
-                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                  <td 
+                    className={`px-4 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer' : ''}`}
+                    onClick={() => onSetEdit && startEditing(set)}
+                  >
                     {displayWeight(set.weightKg)} {weightLabel}
                   </td>
-                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                  <td 
+                    className={`px-4 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer' : ''}`}
+                    onClick={() => onSetEdit && startEditing(set)}
+                  >
                     {set.reps}
                   </td>
-                  <td className="px-4 py-2.5 text-center font-mono text-surface-200">
+                  <td 
+                    className={`px-4 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer' : ''}`}
+                    onClick={() => onSetEdit && startEditing(set)}
+                  >
                     {set.rpe}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <SetQualityBadge quality={set.quality} />
+                    <div className="flex items-center justify-end gap-2">
+                      <SetQualityBadge quality={set.quality} />
+                      {onSetDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm('Delete this set?')) {
+                              onSetDelete(set.id);
+                            }
+                          }}
+                          className="p-1 text-surface-600 hover:text-danger-400 hover:bg-danger-500/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete set"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
