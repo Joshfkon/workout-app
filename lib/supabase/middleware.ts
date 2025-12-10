@@ -41,13 +41,23 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protected routes - allow public pages without auth
-  const publicRoutes = ['/', '/login', '/register', '/learn'];
+  const publicRoutes = ['/', '/login', '/register', '/learn', '/auth/callback'];
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     request.nextUrl.pathname.startsWith(route + '/')
   );
   
-  if (!user && !isPublicRoute) {
+  // Onboarding requires auth but is separate from dashboard
+  const isOnboardingRoute = request.nextUrl.pathname.startsWith('/onboarding');
+  
+  if (!user && !isPublicRoute && !isOnboardingRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    return NextResponse.redirect(url);
+  }
+  
+  // Require auth for onboarding
+  if (!user && isOnboardingRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

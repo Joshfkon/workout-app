@@ -63,8 +63,8 @@ export default function RegisterPage() {
         return;
       }
 
-      // Direct login successful
-      router.push('/dashboard');
+      // Direct login successful - redirect to onboarding for new users
+      router.push('/onboarding');
       router.refresh();
     } catch (err) {
       setError('An unexpected error occurred');

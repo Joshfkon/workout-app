@@ -36,7 +36,7 @@ export interface EstimatedMax {
   exercise: string;
   estimated1RM: number;
   confidence: 'high' | 'medium' | 'low' | 'extrapolated';
-  source: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio';
+  source: 'direct_history' | 'related_exercise' | 'strength_standards' | 'bodyweight_ratio' | 'calibration';
   lastUpdated?: Date;
 }
 
@@ -939,7 +939,8 @@ export class WeightEstimationEngine {
       'direct_history': 'Based on your recent training history',
       'related_exercise': 'Estimated from similar exercises you\'ve done',
       'strength_standards': 'Based on typical strength for your experience level',
-      'bodyweight_ratio': 'Rough estimate based on bodyweight'
+      'bodyweight_ratio': 'Rough estimate based on bodyweight',
+      'calibration': 'Based on your strength calibration test'
     };
     
     const percentage = Math.round(((37 - (targetReps + targetRIR)) / 36) * 100);
@@ -1147,6 +1148,68 @@ export function quickWeightEstimate(
     [],
     regionalData
   );
+  
+  const engine = new WeightEstimationEngine(profile, unit);
+  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
+}
+
+// ============================================================
+// CALIBRATED LIFTS INTEGRATION
+// ============================================================
+
+/**
+ * Creates EstimatedMax entries from calibrated lift data
+ * This is used to integrate coaching calibration results with the weight estimation engine
+ */
+export function createEstimatedMaxesFromCalibration(
+  calibratedLifts: Array<{
+    lift_name: string;
+    estimated_1rm: number;
+    tested_at: string;
+  }>
+): EstimatedMax[] {
+  return calibratedLifts.map(lift => ({
+    exercise: lift.lift_name,
+    estimated1RM: lift.estimated_1rm,
+    confidence: 'high' as const,
+    source: 'calibration' as const,
+    lastUpdated: new Date(lift.tested_at)
+  }));
+}
+
+/**
+ * Quick weight estimate that includes calibrated lifts
+ */
+export function quickWeightEstimateWithCalibration(
+  exerciseName: string,
+  targetReps: { min: number; max: number },
+  targetRIR: number,
+  userWeightKg: number,
+  heightCm: number,
+  bodyFatPercent: number,
+  experience: Experience,
+  calibratedLifts: Array<{
+    lift_name: string;
+    estimated_1rm: number;
+    tested_at: string;
+  }>,
+  regionalData?: DexaRegionalData,
+  unit: 'kg' | 'lb' = 'kg'
+): WorkingWeightRecommendation {
+  // Create estimated maxes from calibrated lifts
+  const calibratedMaxes = createEstimatedMaxesFromCalibration(calibratedLifts);
+  
+  const bodyComposition = calculateBodyComposition(userWeightKg, bodyFatPercent, heightCm);
+  
+  const profile: UserStrengthProfile = {
+    bodyComposition,
+    experience,
+    trainingAge: experience === 'novice' ? 0.5 : experience === 'intermediate' ? 2 : 5,
+    exerciseHistory: [],
+    knownMaxes: calibratedMaxes,
+    regionalData,
+    regionalAnalysis: regionalData ? analyzeRegionalComposition(regionalData, bodyComposition.leanMassKg) : undefined
+  };
   
   const engine = new WeightEstimationEngine(profile, unit);
   return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
