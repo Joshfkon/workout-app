@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -56,6 +57,15 @@ export default function DashboardPage() {
         setIsLoading(false);
         return;
       }
+
+      // Check onboarding status
+      const { data: userData } = await supabase
+        .from('users')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single();
+      
+      setOnboardingCompleted((userData as { onboarding_completed?: boolean } | null)?.onboarding_completed ?? false);
 
       // Get start of current week (Monday)
       const now = new Date();
@@ -234,6 +244,56 @@ export default function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Onboarding Prompt - Show if not completed */}
+      {onboardingCompleted === false && (
+        <Card className="overflow-hidden border-2 border-accent-500/50 bg-gradient-to-r from-accent-500/10 via-primary-500/10 to-accent-500/10">
+          <CardContent className="p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-500/30 to-primary-500/30 flex items-center justify-center flex-shrink-0">
+                <svg className="w-8 h-8 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-bold text-white mb-1">Complete Your Strength Profile</h2>
+                <p className="text-surface-400 text-sm mb-3">
+                  Calibrate your lifts to unlock personalized weight recommendations, percentile rankings, 
+                  and identify strength imbalances. Takes about 15-30 minutes.
+                </p>
+                <div className="flex flex-wrap gap-3 text-xs text-surface-500">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Accurate weight suggestions
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    See how you compare
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Find weak points
+                  </span>
+                </div>
+              </div>
+              <Link href="/onboarding">
+                <Button size="lg" className="whitespace-nowrap bg-gradient-to-r from-accent-500 to-primary-500 hover:from-accent-600 hover:to-primary-600">
+                  Start Calibration
+                  <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Today's Workout - Most prominent */}
       {todaysWorkout && (
