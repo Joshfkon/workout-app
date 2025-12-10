@@ -381,6 +381,47 @@ export default function WorkoutPage() {
         setSession(transformedSession);
         setBlocks(transformedBlocks);
         
+        // Fetch existing sets for this workout (important for viewing completed workouts or resuming)
+        const blockIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.id);
+        if (blockIds.length > 0) {
+          const { data: existingSets } = await supabase
+            .from('set_logs')
+            .select('*')
+            .in('exercise_block_id', blockIds)
+            .order('set_number');
+          
+          if (existingSets && existingSets.length > 0) {
+            const transformedSets: SetLog[] = existingSets.map((set: any) => ({
+              id: set.id,
+              exerciseBlockId: set.exercise_block_id,
+              setNumber: set.set_number,
+              weightKg: set.weight_kg,
+              reps: set.reps,
+              rpe: set.rpe,
+              restSeconds: set.rest_seconds,
+              isWarmup: set.is_warmup,
+              quality: set.quality,
+              qualityReason: set.quality_reason || '',
+              note: set.note,
+              loggedAt: set.logged_at,
+            }));
+            setCompletedSets(transformedSets);
+            
+            // Set current set number based on existing sets for the first incomplete block
+            const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
+              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup);
+              return blockSets.length < block.targetSets;
+            });
+            
+            if (firstIncompleteBlock) {
+              const blockIdx = transformedBlocks.findIndex((b: ExerciseBlockWithExercise) => b.id === firstIncompleteBlock.id);
+              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup);
+              setCurrentBlockIndex(blockIdx);
+              setCurrentSetNumber(existingBlockSets.length + 1);
+            }
+          }
+        }
+        
         // Fetch user profile for weight estimation
         const { data: userData } = await supabase
           .from('users')
@@ -448,8 +489,10 @@ export default function WorkoutPage() {
         // Generate coach message with profile and context
         setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
         
-        // If already in progress, skip check-in
-        if (sessionData.state === 'in_progress') {
+        // Set phase based on workout state
+        if (sessionData.state === 'completed') {
+          setPhase('summary');  // Show summary for completed workouts (read-only)
+        } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
           setPhase('checkin');
@@ -499,10 +542,10 @@ export default function WorkoutPage() {
       loggedAt: new Date().toISOString(),
     };
 
-    // Save to database
+    // Save to database first
     try {
       const supabase = createUntypedClient();
-      await supabase.from('set_logs').insert({
+      const { error: insertError } = await supabase.from('set_logs').insert({
         id: newSet.id,
         exercise_block_id: newSet.exerciseBlockId,
         set_number: newSet.setNumber,
@@ -515,13 +558,30 @@ export default function WorkoutPage() {
         note: newSet.note,
         logged_at: newSet.loggedAt,
       });
+
+      if (insertError) {
+        console.error('Failed to save set:', insertError);
+        setError(`Failed to save set: ${insertError.message}`);
+        // Still add to local state so user doesn't lose data, but warn them
+      }
+      
+      // Update local state
+      setCompletedSets([...completedSets, newSet]);
+      setCurrentSetNumber(currentSetNumber + 1);
+      setShowRestTimer(true);
+      
+      // Clear any previous error after successful save
+      if (!insertError) {
+        setError(null);
+      }
     } catch (err) {
       console.error('Failed to save set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
+      // Still add to local state
+      setCompletedSets([...completedSets, newSet]);
+      setCurrentSetNumber(currentSetNumber + 1);
+      setShowRestTimer(true);
     }
-
-    setCompletedSets([...completedSets, newSet]);
-    setCurrentSetNumber(currentSetNumber + 1);
-    setShowRestTimer(true);
   };
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number }) => {
@@ -541,14 +601,22 @@ export default function WorkoutPage() {
     // Update in database
     try {
       const supabase = createUntypedClient();
-      await supabase.from('set_logs').update({
+      const { error: updateError } = await supabase.from('set_logs').update({
         weight_kg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
         quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective',
       }).eq('id', setId);
+      
+      if (updateError) {
+        console.error('Failed to update set:', updateError);
+        setError(`Failed to update set: ${updateError.message}`);
+      } else {
+        setError(null);
+      }
     } catch (err) {
       console.error('Failed to update set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update set');
     }
   };
 
@@ -568,9 +636,17 @@ export default function WorkoutPage() {
     // Delete from database
     try {
       const supabase = createUntypedClient();
-      await supabase.from('set_logs').delete().eq('id', setId);
+      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
+      
+      if (deleteError) {
+        console.error('Failed to delete set:', deleteError);
+        setError(`Failed to delete set: ${deleteError.message}`);
+      } else {
+        setError(null);
+      }
     } catch (err) {
       console.error('Failed to delete set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete set');
     }
   };
 
@@ -802,18 +878,29 @@ export default function WorkoutPage() {
   }
 
   if (phase === 'summary' && session) {
+    // Check if this is a previously completed workout (viewing from history)
+    const isViewingCompleted = session.state === 'completed' && !!session.completedAt;
+    
     return (
       <div className="py-8">
         <SessionSummary
-          session={{
+          session={isViewingCompleted ? session : {
             ...session,
             state: 'completed',
             completedAt: new Date().toISOString(),
           }}
           exerciseBlocks={blocks}
           allSets={completedSets}
-          onSubmit={handleSummarySubmit}
+          onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
+          readOnly={isViewingCompleted}
         />
+        {isViewingCompleted && (
+          <div className="mt-6 text-center">
+            <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
+              ← Back to History
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
@@ -875,6 +962,24 @@ export default function WorkoutPage() {
           style={{ width: `${overallProgress}%` }}
         />
       </div>
+
+      {/* Error alert */}
+      {error && (
+        <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm text-danger-300">{error}</span>
+          <button 
+            onClick={() => setError(null)} 
+            className="ml-auto p-1 hover:bg-danger-500/20 rounded"
+          >
+            <svg className="w-4 h-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Coach Message */}
       {coachMessage && (

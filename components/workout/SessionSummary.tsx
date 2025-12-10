@@ -9,11 +9,12 @@ interface SessionSummaryProps {
   session: WorkoutSession;
   exerciseBlocks: ExerciseBlock[];
   allSets: SetLog[];
-  onSubmit: (data: {
+  onSubmit?: (data: {
     sessionRpe: number;
     pumpRating: number;
     notes: string;
   }) => void;
+  readOnly?: boolean;
 }
 
 export function SessionSummary({
@@ -21,10 +22,11 @@ export function SessionSummary({
   exerciseBlocks,
   allSets,
   onSubmit,
+  readOnly = false,
 }: SessionSummaryProps) {
-  const [sessionRpe, setSessionRpe] = useState(7);
-  const [pumpRating, setPumpRating] = useState(3);
-  const [notes, setNotes] = useState('');
+  const [sessionRpe, setSessionRpe] = useState(session.sessionRpe || 7);
+  const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
+  const [notes, setNotes] = useState(session.sessionNotes || '');
 
   // Calculate stats
   const workingSets = allSets.filter((s) => !s.isWarmup);
@@ -35,10 +37,11 @@ export function SessionSummary({
     ? Math.round((workingSets.reduce((sum, s) => sum + s.rpe, 0) / totalSets) * 10) / 10
     : 0;
 
-  // Duration
+  // Duration - use completedAt for completed workouts, otherwise current time
+  const endTime = session.completedAt ? new Date(session.completedAt).getTime() : Date.now();
   const duration = session.startedAt
     ? Math.floor(
-        (Date.now() - new Date(session.startedAt).getTime()) / 1000
+        (endTime - new Date(session.startedAt).getTime()) / 1000
       )
     : 0;
 
@@ -52,11 +55,13 @@ export function SessionSummary({
   );
 
   const handleSubmit = () => {
-    onSubmit({
-      sessionRpe,
-      pumpRating,
-      notes,
-    });
+    if (onSubmit) {
+      onSubmit({
+        sessionRpe,
+        pumpRating,
+        notes,
+      });
+    }
   };
 
   return (
@@ -69,10 +74,14 @@ export function SessionSummary({
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-surface-100">
-          Workout Complete!
+          {readOnly ? 'Workout Summary' : 'Workout Complete!'}
         </h2>
         <p className="text-surface-400 mt-1">
-          Great job finishing your session
+          {readOnly 
+            ? session.completedAt 
+              ? `Completed ${new Date(session.completedAt).toLocaleDateString()}`
+              : 'Viewing past workout'
+            : 'Great job finishing your session'}
         </p>
       </div>
 
@@ -137,79 +146,124 @@ export function SessionSummary({
       {/* Session RPE */}
       <Card>
         <h3 className="text-sm font-medium text-surface-200 mb-3">
-          How hard was this session?
+          {readOnly ? 'Session RPE' : 'How hard was this session?'}
         </h3>
-        <div className="flex gap-1">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rpe) => (
-            <button
-              key={rpe}
-              onClick={() => setSessionRpe(rpe)}
-              className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-                sessionRpe === rpe
-                  ? rpe >= 9
-                    ? 'bg-danger-500 text-white'
-                    : rpe >= 7
-                    ? 'bg-warning-500 text-white'
-                    : 'bg-primary-500 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-              }`}
-            >
-              {rpe}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-surface-500 mt-2 text-center">
-          Session RPE (1 = Very Easy, 10 = Maximum Effort)
-        </p>
+        {readOnly ? (
+          <div className="flex items-center gap-3">
+            <div className={`px-4 py-2 rounded-lg font-bold text-lg ${
+              sessionRpe >= 9
+                ? 'bg-danger-500/20 text-danger-400'
+                : sessionRpe >= 7
+                ? 'bg-warning-500/20 text-warning-400'
+                : 'bg-primary-500/20 text-primary-400'
+            }`}>
+              {sessionRpe}/10
+            </div>
+            <span className="text-surface-400 text-sm">
+              {sessionRpe >= 9 ? 'Maximum Effort' : sessionRpe >= 7 ? 'Hard' : sessionRpe >= 5 ? 'Moderate' : 'Easy'}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rpe) => (
+                <button
+                  key={rpe}
+                  onClick={() => setSessionRpe(rpe)}
+                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    sessionRpe === rpe
+                      ? rpe >= 9
+                        ? 'bg-danger-500 text-white'
+                        : rpe >= 7
+                        ? 'bg-warning-500 text-white'
+                        : 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  }`}
+                >
+                  {rpe}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-surface-500 mt-2 text-center">
+              Session RPE (1 = Very Easy, 10 = Maximum Effort)
+            </p>
+          </>
+        )}
       </Card>
 
       {/* Pump Rating */}
       <Card>
         <h3 className="text-sm font-medium text-surface-200 mb-3">
-          How was the pump/mind-muscle connection?
+          {readOnly ? 'Pump Rating' : 'How was the pump/mind-muscle connection?'}
         </h3>
-        <div className="flex gap-2">
-          {[1, 2, 3, 4, 5].map((rating) => (
-            <button
-              key={rating}
-              onClick={() => setPumpRating(rating)}
-              className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-                pumpRating === rating
-                  ? 'bg-accent-500 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-              }`}
-            >
-              {rating === 1 && '😐'}
-              {rating === 2 && '🙂'}
-              {rating === 3 && '😊'}
-              {rating === 4 && '😄'}
-              {rating === 5 && '🔥'}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-surface-500 mt-2 text-center">
-          1 = Poor Connection, 5 = Incredible Pump
-        </p>
+        {readOnly ? (
+          <div className="flex items-center gap-3">
+            <div className="px-4 py-2 rounded-lg bg-accent-500/20 text-accent-400 font-bold text-lg">
+              {pumpRating === 1 && '😐'}
+              {pumpRating === 2 && '🙂'}
+              {pumpRating === 3 && '😊'}
+              {pumpRating === 4 && '😄'}
+              {pumpRating === 5 && '🔥'}
+              {' '}{pumpRating}/5
+            </div>
+            <span className="text-surface-400 text-sm">
+              {pumpRating === 5 ? 'Incredible Pump' : pumpRating >= 3 ? 'Good Connection' : 'Weak Connection'}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <button
+                  key={rating}
+                  onClick={() => setPumpRating(rating)}
+                  className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    pumpRating === rating
+                      ? 'bg-accent-500 text-white'
+                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  }`}
+                >
+                  {rating === 1 && '😐'}
+                  {rating === 2 && '🙂'}
+                  {rating === 3 && '😊'}
+                  {rating === 4 && '😄'}
+                  {rating === 5 && '🔥'}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-surface-500 mt-2 text-center">
+              1 = Poor Connection, 5 = Incredible Pump
+            </p>
+          </>
+        )}
       </Card>
 
       {/* Notes */}
-      <Card>
-        <h3 className="text-sm font-medium text-surface-200 mb-3">
-          Session Notes (optional)
-        </h3>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="How did you feel? Any issues? Wins to celebrate?"
-          rows={3}
-          className="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-200 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-        />
-      </Card>
+      {(notes || !readOnly) && (
+        <Card>
+          <h3 className="text-sm font-medium text-surface-200 mb-3">
+            Session Notes {!readOnly && '(optional)'}
+          </h3>
+          {readOnly ? (
+            <p className="text-surface-300">{notes || 'No notes recorded'}</p>
+          ) : (
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="How did you feel? Any issues? Wins to celebrate?"
+              rows={3}
+              className="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-200 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+            />
+          )}
+        </Card>
+      )}
 
-      {/* Submit */}
-      <Button onClick={handleSubmit} size="lg" className="w-full">
-        Save & Finish
-      </Button>
+      {/* Submit - only shown when not in read-only mode */}
+      {!readOnly && (
+        <Button onClick={handleSubmit} size="lg" className="w-full">
+          Save & Finish
+        </Button>
+      )}
     </div>
   );
 }
