@@ -212,6 +212,9 @@ export interface Exercise {
   
   /** Equipment needed for this exercise */
   equipmentRequired: string[];
+  
+  /** Hypertrophy effectiveness score based on Nippard methodology (optional) */
+  hypertrophyScore?: HypertrophyScore;
 }
 
 // ============ MESOCYCLE ============

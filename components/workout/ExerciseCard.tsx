@@ -11,6 +11,19 @@ import { Input } from '@/components/ui';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
+// Get color classes for hypertrophy tier badge (compact version for workouts)
+function getTierBadgeClasses(tier: string): string {
+  switch (tier) {
+    case 'S': return 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black';
+    case 'A': return 'bg-emerald-500/30 text-emerald-400';
+    case 'B': return 'bg-blue-500/30 text-blue-400';
+    case 'C': return 'bg-surface-600 text-surface-400';
+    case 'D': return 'bg-orange-500/30 text-orange-400';
+    case 'F': return 'bg-red-500/30 text-red-400';
+    default: return 'bg-surface-700 text-surface-500';
+  }
+}
+
 interface ExerciseHistory {
   lastWorkoutDate: string;
   lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
@@ -393,6 +406,11 @@ export function ExerciseCard({
               <h3 className="font-semibold text-surface-100 truncate">
                 {exercise.name}
               </h3>
+              {exercise.hypertrophyScore?.tier && (
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
+                  {exercise.hypertrophyScore.tier}
+                </span>
+              )}
               {block.progressionType && (
                 <span className="flex items-center gap-1 text-primary-400">
                   {getProgressionIcon(block.progressionType)}

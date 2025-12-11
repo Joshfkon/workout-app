@@ -29,6 +29,46 @@ interface Exercise {
   form_cues: string[];
   common_mistakes: string[];
   equipment_required: string[];
+  // Hypertrophy scoring (Nippard methodology)
+  hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+  stretch_under_load?: number;
+  resistance_profile?: number;
+  progression_ease?: number;
+}
+
+// Get color classes for hypertrophy tier badge
+function getTierColorClasses(tier: string): string {
+  switch (tier) {
+    case 'S': return 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black font-bold';
+    case 'A': return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+    case 'B': return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
+    case 'C': return 'bg-surface-600 text-surface-300';
+    case 'D': return 'bg-orange-500/20 text-orange-400 border border-orange-500/30';
+    case 'F': return 'bg-red-500/20 text-red-400 border border-red-500/30';
+    default: return 'bg-surface-700 text-surface-400';
+  }
+}
+
+// Rating bar component
+function RatingBar({ label, value, maxValue = 5 }: { label: string; value: number; maxValue?: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-surface-500 w-20">{label}</span>
+      <div className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            className={`w-4 h-2 rounded-sm ${
+              i <= value
+                ? value >= 4 ? 'bg-emerald-500' : value >= 3 ? 'bg-blue-500' : 'bg-amber-500'
+                : 'bg-surface-700'
+            }`}
+          />
+        ))}
+      </div>
+      <span className="text-xs text-surface-400">{value}/{maxValue}</span>
+    </div>
+  );
 }
 
 interface SessionData {
@@ -74,7 +114,7 @@ export default function ExercisesPage() {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
         .order('name');
 
       if (data && !error) {
@@ -356,7 +396,14 @@ export default function ExercisesPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="font-medium text-surface-100">{exercise.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-medium text-surface-100">{exercise.name}</h3>
+                        {exercise.hypertrophy_tier && (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
+                            {exercise.hypertrophy_tier}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-sm text-surface-500 capitalize">
                           {exercise.primary_muscle}
@@ -675,6 +722,48 @@ export default function ExercisesPage() {
                         </svg>
                         <p className="text-surface-400 text-sm">No workout history for this exercise yet</p>
                         <p className="text-surface-600 text-xs mt-1">Add it to a workout to start tracking progress!</p>
+                      </div>
+                    )}
+
+                    {/* Hypertrophy Effectiveness */}
+                    {(exercise.hypertrophy_tier || exercise.stretch_under_load || exercise.resistance_profile || exercise.progression_ease) && (
+                      <div className="bg-surface-800/30 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                            Hypertrophy Effectiveness
+                          </p>
+                          {exercise.hypertrophy_tier && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-surface-500">Tier</span>
+                              <span className={`px-2 py-0.5 rounded text-sm font-bold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
+                                {exercise.hypertrophy_tier}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {exercise.stretch_under_load && (
+                            <RatingBar 
+                              label="Stretch" 
+                              value={exercise.stretch_under_load} 
+                            />
+                          )}
+                          {exercise.resistance_profile && (
+                            <RatingBar 
+                              label="Resistance" 
+                              value={exercise.resistance_profile} 
+                            />
+                          )}
+                          {exercise.progression_ease && (
+                            <RatingBar 
+                              label="Progression" 
+                              value={exercise.progression_ease} 
+                            />
+                          )}
+                        </div>
+                        <p className="text-xs text-surface-600 mt-3">
+                          Based on Jeff Nippard&apos;s evidence-based exercise rankings
+                        </p>
                       </div>
                     )}
 
