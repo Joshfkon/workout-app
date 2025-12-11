@@ -7,6 +7,9 @@ import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQ
 import { formatWeight, formatWeightValue, inputWeightToKg } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
+import { Input } from '@/components/ui';
+
+const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
 interface ExerciseHistory {
   lastWorkoutDate: string;
@@ -52,6 +55,9 @@ export function ExerciseCard({
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
+  const [swapSearch, setSwapSearch] = useState('');
+  const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
   const [editRpe, setEditRpe] = useState('');
@@ -899,11 +905,13 @@ export function ExerciseCard({
 
       {/* Swap Exercise Modal */}
       {showSwapModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setShowSwapModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowSwapModal(false)}>
+          <div className="absolute inset-0 bg-black/70" />
           <div 
-            className="w-full max-w-md bg-surface-900 rounded-xl shadow-2xl border border-surface-700 max-h-[80vh] overflow-hidden"
+            className="relative w-full max-w-lg max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-xl shadow-2xl border border-surface-700 overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header */}
             <div className="p-4 border-b border-surface-700">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-white">Swap Exercise</h3>
@@ -917,45 +925,166 @@ export function ExerciseCard({
                 </button>
               </div>
               <p className="text-sm text-surface-400 mt-1">
-                Replace <span className="text-surface-200 font-medium">{exercise.name}</span> with a similar exercise
+                Replace <span className="text-surface-200 font-medium">{exercise.name}</span>
               </p>
-            </div>
-            <div className="p-2 max-h-96 overflow-y-auto">
-              {similarExercises.map(({ exercise: alt, score }) => (
+              
+              {/* Tabs */}
+              <div className="flex gap-2 mt-3">
                 <button
-                  key={alt.id}
-                  onClick={() => {
-                    if (onExerciseSwap) {
-                      onExerciseSwap(alt);
-                      setShowSwapModal(false);
-                    }
-                  }}
-                  className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                  onClick={() => setSwapTab('similar')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    swapTab === 'similar'
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  }`}
                 >
-                  <div className="flex-1">
-                    <p className="font-medium text-surface-100">{alt.name}</p>
-                    <p className="text-xs text-surface-500">
-                      {alt.primaryMuscle} • {alt.mechanic}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        score >= 80 ? 'bg-success-500/20 text-success-400' :
-                        score >= 60 ? 'bg-warning-500/20 text-warning-400' :
-                        'bg-surface-700 text-surface-400'
+                  Similar ({similarExercises.length})
+                </button>
+                <button
+                  onClick={() => setSwapTab('browse')}
+                  className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    swapTab === 'browse'
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                  }`}
+                >
+                  Browse All
+                </button>
+              </div>
+            </div>
+            
+            {/* Search & Filter (only for Browse tab) */}
+            {swapTab === 'browse' && (
+              <div className="p-3 border-b border-surface-700 space-y-2">
+                <Input
+                  placeholder="Search exercises..."
+                  value={swapSearch}
+                  onChange={(e) => setSwapSearch(e.target.value)}
+                />
+                <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                  <button
+                    onClick={() => setSwapMuscleFilter('')}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                      !swapMuscleFilter
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {MUSCLE_GROUPS.map((muscle) => (
+                    <button
+                      key={muscle}
+                      onClick={() => setSwapMuscleFilter(muscle)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap capitalize transition-colors ${
+                        swapMuscleFilter === muscle
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
                       }`}
                     >
-                      {score}% match
+                      {muscle}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Exercise List */}
+            <div className="flex-1 overflow-y-auto p-2">
+              {swapTab === 'similar' ? (
+                // Similar exercises with match scores
+                <>
+                  {similarExercises.map(({ exercise: alt, score }) => (
+                    <button
+                      key={alt.id}
+                      onClick={() => {
+                        if (onExerciseSwap) {
+                          onExerciseSwap(alt);
+                          setShowSwapModal(false);
+                        }
+                      }}
+                      className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-surface-100 truncate">{alt.name}</p>
+                        <p className="text-xs text-surface-500 capitalize">
+                          {alt.primaryMuscle} • {alt.mechanic}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <div 
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            score >= 80 ? 'bg-success-500/20 text-success-400' :
+                            score >= 60 ? 'bg-warning-500/20 text-warning-400' :
+                            'bg-surface-700 text-surface-400'
+                          }`}
+                        >
+                          {score}%
+                        </div>
+                        <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </button>
+                  ))}
+                  {similarExercises.length === 0 && (
+                    <div className="p-8 text-center">
+                      <p className="text-surface-500">No similar exercises found</p>
+                      <button
+                        onClick={() => setSwapTab('browse')}
+                        className="mt-2 text-primary-400 text-sm hover:underline"
+                      >
+                        Browse all exercises →
+                      </button>
                     </div>
-                    <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </button>
-              ))}
-              {similarExercises.length === 0 && (
-                <p className="p-4 text-center text-surface-500">No similar exercises found</p>
+                  )}
+                </>
+              ) : (
+                // Browse all exercises with search/filter
+                <>
+                  {availableExercises
+                    .filter(ex => {
+                      // Don't show the current exercise
+                      if (ex.id === exercise.id) return false;
+                      // Search filter
+                      if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
+                      // Muscle filter
+                      if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
+                      return true;
+                    })
+                    .map((alt) => (
+                      <button
+                        key={alt.id}
+                        onClick={() => {
+                          if (onExerciseSwap) {
+                            onExerciseSwap(alt);
+                            setShowSwapModal(false);
+                          }
+                        }}
+                        className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-surface-100 truncate">{alt.name}</p>
+                          <p className="text-xs text-surface-500 capitalize">
+                            {alt.primaryMuscle} • {alt.mechanic}
+                          </p>
+                        </div>
+                        <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    ))}
+                  {availableExercises.filter(ex => {
+                    if (ex.id === exercise.id) return false;
+                    if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
+                    if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
+                    return true;
+                  }).length === 0 && (
+                    <p className="p-8 text-center text-surface-500">
+                      {swapSearch || swapMuscleFilter ? 'No matching exercises found' : 'No exercises available'}
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>
