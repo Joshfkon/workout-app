@@ -13,30 +13,74 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isValidSession, setIsValidSession] = useState<boolean | null>(null);
+  const [isProcessingToken, setIsProcessingToken] = useState(true);
   const router = useRouter();
 
-  // Check if user has a valid recovery session
   useEffect(() => {
-    const checkSession = async () => {
+    const handleRecovery = async () => {
       const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
       
-      // User should have a session from clicking the reset link
-      setIsValidSession(!!session);
+      // Check if there's a hash fragment with tokens (Supabase recovery link format)
+      if (typeof window !== 'undefined' && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const type = hashParams.get('type');
+        
+        if (type === 'recovery' && accessToken) {
+          // Set the session from the recovery tokens
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          });
+          
+          if (!error) {
+            setIsValidSession(true);
+            setIsProcessingToken(false);
+            // Clear the hash from URL for cleaner appearance
+            window.history.replaceState(null, '', window.location.pathname);
+            return;
+          }
+        }
+      }
+      
+      // Check for existing session (in case user already has one)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setIsValidSession(true);
+        setIsProcessingToken(false);
+        return;
+      }
+      
+      // Listen for PASSWORD_RECOVERY event
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY' && session) {
+          setIsValidSession(true);
+          setIsProcessingToken(false);
+        } else if (event === 'SIGNED_IN' && session) {
+          // User signed in through recovery
+          setIsValidSession(true);
+          setIsProcessingToken(false);
+        }
+      });
+      
+      // Give it a moment to process any auth events
+      setTimeout(() => {
+        setIsProcessingToken(false);
+      }, 2000);
+      
+      return () => subscription.unsubscribe();
     };
     
-    checkSession();
-    
-    // Listen for auth state changes (when user clicks reset link)
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setIsValidSession(true);
-      }
-    });
-    
-    return () => subscription.unsubscribe();
+    handleRecovery();
   }, []);
+
+  // Update isValidSession when processing is done
+  useEffect(() => {
+    if (!isProcessingToken && isValidSession === null) {
+      setIsValidSession(false);
+    }
+  }, [isProcessingToken, isValidSession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,15 +120,19 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // Loading state while checking session
-  if (isValidSession === null) {
+  // Loading state while processing token
+  if (isProcessingToken || isValidSession === null) {
     return (
       <div className="w-full max-w-md animate-fade-in">
         <Card variant="elevated" className="p-6 text-center">
-          <div className="animate-pulse">
-            <div className="w-12 h-12 mx-auto rounded-full bg-surface-700 mb-4"></div>
-            <div className="h-6 bg-surface-700 rounded w-3/4 mx-auto mb-2"></div>
-            <div className="h-4 bg-surface-800 rounded w-1/2 mx-auto"></div>
+          <div className="space-y-4">
+            <div className="w-12 h-12 mx-auto rounded-full bg-primary-500/20 flex items-center justify-center">
+              <svg className="w-6 h-6 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+            <p className="text-surface-400">Verifying reset link...</p>
           </div>
         </Card>
       </div>
@@ -187,4 +235,3 @@ export default function ResetPasswordPage() {
     </div>
   );
 }
-
