@@ -39,6 +39,20 @@ export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'
 }
 
 /**
+ * Convert kg to lbs (convenience function)
+ */
+export function kgToLbs(kg: number): number {
+  return kg * 2.20462;
+}
+
+/**
+ * Convert lbs to kg (convenience function)
+ */
+export function lbsToKg(lbs: number): number {
+  return lbs / 2.20462;
+}
+
+/**
  * Format weight with unit (always stored as kg, displayed in user preference)
  * Rounds to nearest 2.5 increment for cleaner display
  */

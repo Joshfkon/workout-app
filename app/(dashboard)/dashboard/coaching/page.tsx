@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { 
   type StrengthProfile,
@@ -17,6 +18,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
+import { kgToLbs, roundToIncrement } from '@/lib/utils';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
@@ -86,6 +88,7 @@ const INJURY_OPTIONS = [
 export default function CoachingPage() {
   const router = useRouter();
   const { canAccess, isLoading: subLoading } = useSubscription();
+  const { preferences } = useUserPreferences();
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<StrengthProfile | null>(null);
   const [sessions, setSessions] = useState<CoachingSessionSummary[]>([]);
@@ -101,6 +104,14 @@ export default function CoachingPage() {
     injuries: [],
   });
   const [hasSetPrefs, setHasSetPrefs] = useState(false);
+  
+  // Unit display helpers
+  const units = preferences?.units || 'lb';
+  const displayWeight = (kg: number) => {
+    const value = units === 'lb' ? kgToLbs(kg) : kg;
+    return roundToIncrement(value, 2.5);
+  };
+  const weightUnit = units === 'lb' ? 'lbs' : 'kg';
   
   useEffect(() => {
     async function fetchData() {
@@ -569,7 +580,7 @@ export default function CoachingPage() {
                     </div>
                     <div className="p-3 bg-surface-900/50 rounded-lg">
                       <p className="text-xs text-surface-500">Lean Mass</p>
-                      <p className="text-2xl font-bold text-white">{profile.bodyComposition.leanMassKg.toFixed(1)}kg</p>
+                      <p className="text-2xl font-bold text-white">{displayWeight(profile.bodyComposition.leanMassKg)} {weightUnit}</p>
                     </div>
                   </div>
                 </div>
@@ -593,7 +604,7 @@ export default function CoachingPage() {
                           <p className="text-sm text-surface-500">
                             {lift.benchmarkId === 'pullup' 
                               ? `${lift.testedReps} reps`
-                              : `E1RM: ${lift.estimated1RM.toFixed(1)}kg`}
+                              : `E1RM: ${displayWeight(lift.estimated1RM)} ${weightUnit}`}
                           </p>
                         </div>
                         <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>

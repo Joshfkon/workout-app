@@ -14,6 +14,8 @@ import {
   getStrengthLevelBadgeVariant,
   generatePercentileSegments
 } from '@/services/coachingEngine';
+import { kgToLbs, lbsToKg, roundToIncrement } from '@/lib/utils';
+import type { WeightUnit } from '@/types/schema';
 
 function PercentileBar({ percentile, label }: { percentile: number; label: string }) {
   const segments = generatePercentileSegments(percentile);
@@ -44,6 +46,7 @@ function CalibrateContent() {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [units, setUnits] = useState<WeightUnit>('lb'); // Default to imperial
   const [session, setSession] = useState<{
     bodyComposition: BodyComposition;
     selectedBenchmarks: string[];
@@ -53,11 +56,23 @@ function CalibrateContent() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completedResults, setCompletedResults] = useState<CalibrationResult[]>([]);
   
-  // Current lift input state
+  // Current lift input state (stored in display units)
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('5');
   const [rpe, setRpe] = useState('8');
   const [currentResult, setCurrentResult] = useState<CalibrationResult | null>(null);
+  
+  // Helper functions for unit conversion
+  const displayWeight = (kg: number) => {
+    const value = units === 'lb' ? kgToLbs(kg) : kg;
+    return roundToIncrement(value, units === 'lb' ? 2.5 : 2.5);
+  };
+  
+  const toKg = (displayValue: number) => {
+    return units === 'lb' ? lbsToKg(displayValue) : displayValue;
+  };
+  
+  const weightUnit = units === 'lb' ? 'lbs' : 'kg';
   
   // Fetch session data
   useEffect(() => {
@@ -80,13 +95,24 @@ function CalibrateContent() {
         return;
       }
       
-      // Get user's sex
+      // Get user's sex and preferences
       const { data: { user } } = await supabase.auth.getUser();
       const { data: userData } = await supabase
         .from('users')
         .select('sex')
         .eq('id', user?.id)
         .single();
+      
+      // Get user preferences for units
+      const { data: prefsData } = await supabase
+        .from('user_preferences')
+        .select('units')
+        .eq('user_id', user?.id)
+        .single();
+      
+      if (prefsData?.units) {
+        setUnits(prefsData.units as WeightUnit);
+      }
       
       // Fetch any existing calibrated lifts for this session
       const { data: existingLifts } = await supabase
@@ -144,7 +170,7 @@ function CalibrateContent() {
   const currentBenchmark = orderedBenchmarks[currentIndex];
   const isComplete = currentIndex >= orderedBenchmarks.length;
   
-  // Get suggested start weight
+  // Get suggested start weight (returns value in display units)
   const getSuggestedWeight = () => {
     if (!currentBenchmark || !session) return 0;
     
@@ -159,7 +185,8 @@ function CalibrateContent() {
       'pullup': 0
     };
     
-    return Math.round((bw * (startingRatios[currentBenchmark.id] || 0.5)) / 2.5) * 2.5;
+    const weightKg = bw * (startingRatios[currentBenchmark.id] || 0.5);
+    return displayWeight(weightKg);
   };
   
   // Calculate result when inputs change
@@ -170,6 +197,7 @@ function CalibrateContent() {
     }
     
     const w = parseFloat(weight);
+    const wKg = toKg(w); // Convert display units to kg for calculation
     const r = parseInt(reps);
     const rpeVal = parseFloat(rpe);
     
@@ -184,7 +212,7 @@ function CalibrateContent() {
       
       const result = manager.recordBenchmarkResult(
         currentBenchmark.id,
-        currentBenchmark.id === 'pullup' ? session.bodyComposition.totalWeightKg : w,
+        currentBenchmark.id === 'pullup' ? session.bodyComposition.totalWeightKg : wKg,
         r,
         rpeVal || undefined,
         session.sex
@@ -194,7 +222,8 @@ function CalibrateContent() {
     } else {
       setCurrentResult(null);
     }
-  }, [weight, reps, rpe, currentBenchmark, session]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weight, reps, rpe, currentBenchmark, session, units]);
   
   // Save result and move to next
   const handleSaveAndNext = async () => {
@@ -345,7 +374,7 @@ function CalibrateContent() {
                     <div>
                       <p className="font-medium text-surface-200">{result.lift}</p>
                       <p className="text-sm text-surface-500">
-                        {result.testedWeight}kg × {result.testedReps} = {result.estimated1RM.toFixed(1)}kg E1RM
+                        {displayWeight(result.testedWeight)} {weightUnit} × {result.testedReps} = {displayWeight(result.estimated1RM)} {weightUnit} E1RM
                       </p>
                     </div>
                     <Badge variant={getStrengthLevelBadgeVariant(result.strengthLevel)}>
@@ -396,15 +425,16 @@ function CalibrateContent() {
               <div>
                 <h4 className="font-medium text-surface-200 mb-2">Warmup Sets</h4>
                 <p className="text-xs text-surface-500 mb-2">
-                  Based on suggested working weight of ~{getSuggestedWeight()}kg
+                  Based on suggested working weight of ~{getSuggestedWeight()} {weightUnit}
                 </p>
                 <div className="space-y-2">
                   {currentBenchmark.testingProtocol.warmupProtocol.map((warmup, i) => {
-                    const warmupWeight = Math.round(getSuggestedWeight() * warmup.percentOfWorking / 2.5) * 2.5;
+                    const increment = units === 'lb' ? 5 : 2.5;
+                    const warmupWeight = Math.round(getSuggestedWeight() * warmup.percentOfWorking / increment) * increment;
                     return (
                       <div key={i} className="flex items-center justify-between p-2 bg-surface-800 rounded text-sm">
                         <span className="text-surface-300">
-                          Set {i + 1}: {warmupWeight > 0 ? `${warmupWeight}kg` : 'Bar only'} × {warmup.reps}
+                          Set {i + 1}: {warmupWeight > 0 ? `${warmupWeight} ${weightUnit}` : 'Bar only'} × {warmup.reps}
                         </span>
                         <span className="text-surface-500">Rest {warmup.rest}s</span>
                       </div>
@@ -449,14 +479,14 @@ function CalibrateContent() {
                 // Standard weight/reps input
                 <>
                   <Input
-                    label="Weight (kg)"
+                    label={`Weight (${weightUnit})`}
                     type="number"
                     value={weight}
                     onChange={(e) => setWeight(e.target.value)}
                     placeholder={String(getSuggestedWeight())}
                     min={0}
-                    step={2.5}
-                    hint={`Suggested starting weight: ${getSuggestedWeight()}kg`}
+                    step={units === 'lb' ? 5 : 2.5}
+                    hint={`Suggested starting weight: ${getSuggestedWeight()} ${weightUnit}`}
                   />
                   
                   <Input
@@ -508,7 +538,7 @@ function CalibrateContent() {
                     <p className="text-4xl font-bold text-white">
                       {currentBenchmark.id === 'pullup' 
                         ? `${currentResult.testedReps} reps`
-                        : `${currentResult.estimated1RM.toFixed(1)}kg`}
+                        : `${displayWeight(currentResult.estimated1RM)} ${weightUnit}`}
                     </p>
                     <Badge 
                       variant={getStrengthLevelBadgeVariant(currentResult.strengthLevel)}

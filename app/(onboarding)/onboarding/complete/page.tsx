@@ -15,6 +15,8 @@ import {
   generatePercentileSegments,
   analyzeStrengthBalance
 } from '@/services/coachingEngine';
+import { kgToLbs, roundToIncrement } from '@/lib/utils';
+import type { WeightUnit } from '@/types/schema';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
@@ -46,6 +48,15 @@ function CompleteContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<StrengthProfile | null>(null);
   const [sex, setSex] = useState<'male' | 'female'>('male');
+  const [units, setUnits] = useState<WeightUnit>('lb');
+  
+  // Helper functions for unit conversion
+  const displayWeight = (kg: number) => {
+    const value = units === 'lb' ? kgToLbs(kg) : kg;
+    return roundToIncrement(value, units === 'lb' ? 2.5 : 2.5);
+  };
+  
+  const weightUnit = units === 'lb' ? 'lbs' : 'kg';
   
   useEffect(() => {
     async function fetchProfile() {
@@ -82,6 +93,17 @@ function CompleteContent() {
       
       const userSex = (userData?.sex as 'male' | 'female') || 'male';
       setSex(userSex);
+      
+      // Get user preferences for units
+      const { data: prefsData } = await supabase
+        .from('user_preferences')
+        .select('units')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (prefsData?.units) {
+        setUnits(prefsData.units as WeightUnit);
+      }
       
       // Get calibrated lifts
       const { data: liftsData } = await supabase
@@ -278,7 +300,7 @@ function CompleteContent() {
                     <p className="text-sm text-surface-500">
                       {lift.benchmarkId === 'pullup' 
                         ? `${lift.testedReps} reps`
-                        : `${lift.testedWeight}kg × ${lift.testedReps} = ${lift.estimated1RM.toFixed(1)}kg E1RM`}
+                        : `${displayWeight(lift.testedWeight)} ${weightUnit} × ${lift.testedReps} = ${displayWeight(lift.estimated1RM)} ${weightUnit} E1RM`}
                     </p>
                   </div>
                   <Badge variant={getStrengthLevelBadgeVariant(lift.strengthLevel)}>
