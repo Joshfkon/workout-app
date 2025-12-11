@@ -48,6 +48,41 @@ interface CoachingSessionSummary {
   lift_count: number;
 }
 
+interface CoachingPreferences {
+  primaryGoal: string;
+  daysPerWeek: number;
+  sessionDuration: number;
+  experience: string;
+  equipment: string[];
+  injuries: string[];
+}
+
+const GOAL_OPTIONS = [
+  { value: 'hypertrophy', label: 'Build Muscle', description: 'Maximize muscle size and aesthetics' },
+  { value: 'strength', label: 'Get Stronger', description: 'Increase 1RM on major lifts' },
+  { value: 'recomp', label: 'Body Recomp', description: 'Build muscle while losing fat' },
+  { value: 'endurance', label: 'Muscular Endurance', description: 'Improve stamina and work capacity' },
+  { value: 'maintenance', label: 'Maintain', description: 'Keep current fitness level' },
+];
+
+const EQUIPMENT_OPTIONS = [
+  { value: 'full_gym', label: 'Full Commercial Gym' },
+  { value: 'home_basic', label: 'Home Gym (Basic)' },
+  { value: 'home_full', label: 'Home Gym (Full)' },
+  { value: 'dumbbells_only', label: 'Dumbbells Only' },
+  { value: 'bodyweight', label: 'Bodyweight Only' },
+];
+
+const INJURY_OPTIONS = [
+  { value: 'none', label: 'No injuries' },
+  { value: 'lower_back', label: 'Lower back issues' },
+  { value: 'shoulder', label: 'Shoulder issues' },
+  { value: 'knee', label: 'Knee issues' },
+  { value: 'wrist', label: 'Wrist issues' },
+  { value: 'neck', label: 'Neck issues' },
+  { value: 'elbow', label: 'Elbow issues' },
+];
+
 export default function CoachingPage() {
   const router = useRouter();
   const { canAccess, isLoading: subLoading } = useSubscription();
@@ -55,6 +90,17 @@ export default function CoachingPage() {
   const [profile, setProfile] = useState<StrengthProfile | null>(null);
   const [sessions, setSessions] = useState<CoachingSessionSummary[]>([]);
   const [sex, setSex] = useState<'male' | 'female'>('male');
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+  const [coachingPrefs, setCoachingPrefs] = useState<CoachingPreferences>({
+    primaryGoal: 'hypertrophy',
+    daysPerWeek: 4,
+    sessionDuration: 60,
+    experience: 'intermediate',
+    equipment: ['full_gym'],
+    injuries: [],
+  });
+  const [hasSetPrefs, setHasSetPrefs] = useState(false);
   
   useEffect(() => {
     async function fetchData() {
@@ -66,14 +112,35 @@ export default function CoachingPage() {
         return;
       }
       
-      // Get user sex
+      // Get user data including coaching preferences
       const { data: userData } = await supabase
         .from('users')
-        .select('sex')
+        .select('sex, goal, experience, preferences')
         .eq('id', user.id)
         .single();
       
       setSex((userData?.sex as 'male' | 'female') || 'male');
+      
+      // Load coaching preferences
+      const prefs = userData?.preferences as Record<string, unknown> | null;
+      if (prefs?.coaching) {
+        const coaching = prefs.coaching as CoachingPreferences;
+        setCoachingPrefs({
+          primaryGoal: coaching.primaryGoal || userData?.goal || 'hypertrophy',
+          daysPerWeek: coaching.daysPerWeek || 4,
+          sessionDuration: coaching.sessionDuration || 60,
+          experience: coaching.experience || userData?.experience || 'intermediate',
+          equipment: coaching.equipment || ['full_gym'],
+          injuries: coaching.injuries || [],
+        });
+        setHasSetPrefs(true);
+      } else if (userData?.goal || userData?.experience) {
+        setCoachingPrefs(prev => ({
+          ...prev,
+          primaryGoal: userData.goal || prev.primaryGoal,
+          experience: userData.experience || prev.experience,
+        }));
+      }
       
       // Get all coaching sessions
       const { data: sessionsData } = await supabase
@@ -167,6 +234,46 @@ export default function CoachingPage() {
     router.push('/onboarding');
   };
   
+  const saveCoachingPrefs = async () => {
+    setIsSavingPrefs(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Get current preferences
+      const { data: userData } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', user.id)
+        .single();
+      
+      const existingPrefs = (userData?.preferences as Record<string, unknown>) || {};
+      
+      // Update with coaching preferences
+      const { error } = await supabase
+        .from('users')
+        .update({
+          preferences: {
+            ...existingPrefs,
+            coaching: coachingPrefs,
+          },
+          goal: coachingPrefs.primaryGoal,
+          experience: coachingPrefs.experience,
+        })
+        .eq('id', user.id);
+      
+      if (!error) {
+        setHasSetPrefs(true);
+        setShowQuestionnaire(false);
+      }
+    } catch (err) {
+      console.error('Failed to save coaching preferences:', err);
+    } finally {
+      setIsSavingPrefs(false);
+    }
+  };
+  
   // Check subscription access - coaching requires Elite tier (must be after hooks)
   if (!subLoading && !canAccess('coachingCalibration')) {
     return (
@@ -195,10 +302,210 @@ export default function CoachingPage() {
           <h1 className="text-2xl font-bold text-white">Strength Coaching</h1>
           <p className="text-surface-400">Track your strength calibration and percentile rankings</p>
         </div>
-        <Button onClick={handleStartCalibration}>
-          {profile ? 'Re-Calibrate' : 'Start Calibration'}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowQuestionnaire(true)}>
+            {hasSetPrefs ? 'Edit Goals' : 'Set Goals'}
+          </Button>
+          <Button onClick={handleStartCalibration}>
+            {profile ? 'Re-Calibrate' : 'Strength Test'}
+          </Button>
+        </div>
       </div>
+      
+      {/* Coaching Questionnaire Modal */}
+      {showQuestionnaire && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setShowQuestionnaire(false)}>
+          <div 
+            className="w-full max-w-2xl bg-surface-900 rounded-xl shadow-2xl border border-surface-700 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 border-b border-surface-700">
+              <h3 className="text-xl font-bold text-white">Your Training Profile</h3>
+              <p className="text-sm text-surface-400 mt-1">
+                Help us personalize your coaching recommendations
+              </p>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Primary Goal */}
+              <div>
+                <label className="block text-sm font-medium text-surface-300 mb-3">Primary Training Goal</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {GOAL_OPTIONS.map((goal) => (
+                    <button
+                      key={goal.value}
+                      onClick={() => setCoachingPrefs(p => ({ ...p, primaryGoal: goal.value }))}
+                      className={`p-4 rounded-lg border text-left transition-all ${
+                        coachingPrefs.primaryGoal === goal.value
+                          ? 'border-primary-500 bg-primary-500/10'
+                          : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                      }`}
+                    >
+                      <p className="font-medium text-surface-100">{goal.label}</p>
+                      <p className="text-xs text-surface-500 mt-1">{goal.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Schedule */}
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-2">Days per Week</label>
+                  <div className="flex gap-2">
+                    {[2, 3, 4, 5, 6].map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setCoachingPrefs(p => ({ ...p, daysPerWeek: d }))}
+                        className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          coachingPrefs.daysPerWeek === d
+                            ? 'border-primary-500 bg-primary-500/20 text-primary-300'
+                            : 'border-surface-700 text-surface-400 hover:border-surface-600'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-2">Session Duration</label>
+                  <div className="flex gap-2">
+                    {[45, 60, 75, 90].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setCoachingPrefs(p => ({ ...p, sessionDuration: m }))}
+                        className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          coachingPrefs.sessionDuration === m
+                            ? 'border-primary-500 bg-primary-500/20 text-primary-300'
+                            : 'border-surface-700 text-surface-400 hover:border-surface-600'
+                        }`}
+                      >
+                        {m}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Experience */}
+              <div>
+                <label className="block text-sm font-medium text-surface-300 mb-2">Training Experience</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'novice', label: 'Novice', desc: '<1 year' },
+                    { value: 'intermediate', label: 'Intermediate', desc: '1-3 years' },
+                    { value: 'advanced', label: 'Advanced', desc: '3+ years' },
+                  ].map((exp) => (
+                    <button
+                      key={exp.value}
+                      onClick={() => setCoachingPrefs(p => ({ ...p, experience: exp.value }))}
+                      className={`flex-1 py-3 rounded-lg border text-sm font-medium transition-all ${
+                        coachingPrefs.experience === exp.value
+                          ? 'border-primary-500 bg-primary-500/20 text-primary-300'
+                          : 'border-surface-700 text-surface-400 hover:border-surface-600'
+                      }`}
+                    >
+                      <p>{exp.label}</p>
+                      <p className="text-xs opacity-60">{exp.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Equipment */}
+              <div>
+                <label className="block text-sm font-medium text-surface-300 mb-2">Available Equipment</label>
+                <div className="flex flex-wrap gap-2">
+                  {EQUIPMENT_OPTIONS.map((eq) => (
+                    <button
+                      key={eq.value}
+                      onClick={() => setCoachingPrefs(p => ({ 
+                        ...p, 
+                        equipment: p.equipment.includes(eq.value)
+                          ? p.equipment.filter(e => e !== eq.value)
+                          : [...p.equipment, eq.value]
+                      }))}
+                      className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+                        coachingPrefs.equipment.includes(eq.value)
+                          ? 'border-primary-500 bg-primary-500/20 text-primary-300'
+                          : 'border-surface-700 text-surface-400 hover:border-surface-600'
+                      }`}
+                    >
+                      {eq.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Injuries */}
+              <div>
+                <label className="block text-sm font-medium text-surface-300 mb-2">Any Limitations or Injuries?</label>
+                <div className="flex flex-wrap gap-2">
+                  {INJURY_OPTIONS.map((inj) => (
+                    <button
+                      key={inj.value}
+                      onClick={() => {
+                        if (inj.value === 'none') {
+                          setCoachingPrefs(p => ({ ...p, injuries: [] }));
+                        } else {
+                          setCoachingPrefs(p => ({ 
+                            ...p, 
+                            injuries: p.injuries.includes(inj.value)
+                              ? p.injuries.filter(i => i !== inj.value)
+                              : [...p.injuries.filter(i => i !== 'none'), inj.value]
+                          }));
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-lg border text-sm transition-all ${
+                        (inj.value === 'none' && coachingPrefs.injuries.length === 0) || 
+                        coachingPrefs.injuries.includes(inj.value)
+                          ? 'border-warning-500 bg-warning-500/20 text-warning-300'
+                          : 'border-surface-700 text-surface-400 hover:border-surface-600'
+                      }`}
+                    >
+                      {inj.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-surface-700 flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowQuestionnaire(false)}>
+                Cancel
+              </Button>
+              <Button onClick={saveCoachingPrefs} isLoading={isSavingPrefs}>
+                Save Preferences
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Show prompt if no preferences set */}
+      {!hasSetPrefs && !profile && (
+        <Card className="border-2 border-dashed border-accent-500/30 bg-gradient-to-r from-accent-500/5 to-primary-500/5">
+          <CardContent className="p-6 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-accent-500/20 flex items-center justify-center">
+              <svg className="w-8 h-8 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-surface-100">Set Your Training Goals</h3>
+            <p className="text-sm text-surface-400 mt-2 max-w-md mx-auto">
+              Answer a few quick questions to help us personalize your training recommendations, 
+              exercise selection, and coaching insights.
+            </p>
+            <Button className="mt-4" onClick={() => setShowQuestionnaire(true)}>
+              Get Started
+              <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
       
       {profile ? (
         <>

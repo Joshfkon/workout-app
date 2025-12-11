@@ -303,16 +303,16 @@ export default function WorkoutPage() {
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { name: 'Push', muscles: 'Chest, Shoulders, Triceps', icon: '💪' },
-              { name: 'Pull', muscles: 'Back, Biceps, Rear Delts', icon: '🏋️' },
-              { name: 'Legs', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '🦵' },
-              { name: 'Upper Body', muscles: 'Chest, Back, Shoulders, Arms', icon: '👆' },
-              { name: 'Lower Body', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '👇' },
-              { name: 'Full Body', muscles: 'All muscle groups', icon: '🔥' },
+              { name: 'Push', muscles: 'Chest, Shoulders, Triceps', icon: '💪', muscleIds: 'chest,shoulders,triceps' },
+              { name: 'Pull', muscles: 'Back, Biceps, Rear Delts', icon: '🏋️', muscleIds: 'back,biceps,shoulders' },
+              { name: 'Legs', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '🦵', muscleIds: 'quads,hamstrings,glutes,calves' },
+              { name: 'Upper Body', muscles: 'Chest, Back, Shoulders, Arms', icon: '👆', muscleIds: 'chest,back,shoulders,biceps,triceps' },
+              { name: 'Lower Body', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '👇', muscleIds: 'quads,hamstrings,glutes,calves' },
+              { name: 'Full Body', muscles: 'All muscle groups', icon: '🔥', muscleIds: 'chest,back,shoulders,quads,biceps,triceps' },
             ].map((template) => (
               <Link
                 key={template.name}
-                href="/dashboard/workout/new"
+                href={`/dashboard/workout/new?template=${encodeURIComponent(template.name)}&muscles=${template.muscleIds}`}
                 className="p-4 bg-surface-800/50 rounded-lg text-left hover:bg-surface-800 transition-colors group"
               >
                 <span className="text-2xl mb-2 block">{template.icon}</span>

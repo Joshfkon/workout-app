@@ -55,13 +55,20 @@ export function formatWeight(weightKg: number, unit: 'kg' | 'lb', decimals: numb
 }
 
 /**
- * Format weight value only (no unit suffix)
+ * Format weight value only (no unit suffix), rounded to plate increments
+ * - lb: 2.5lb increments (or 1lb for weights < 45lb)
+ * - kg: 2.5kg increments (or 1kg for weights < 20kg)
  */
 export function formatWeightValue(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): number {
   if (unit === 'lb') {
-    return parseFloat(convertWeight(weightKg, 'kg', 'lb').toFixed(decimals));
+    const lbs = convertWeight(weightKg, 'kg', 'lb');
+    // Round to 2.5lb increments
+    const rounded = Math.round(lbs / 2.5) * 2.5;
+    return parseFloat(rounded.toFixed(decimals));
   }
-  return parseFloat(weightKg.toFixed(decimals));
+  // Round to 2.5kg increments (or 1kg for light weights)
+  const rounded = weightKg < 20 ? Math.round(weightKg) : Math.round(weightKg / 2.5) * 2.5;
+  return parseFloat(rounded.toFixed(decimals));
 }
 
 /**

@@ -142,8 +142,9 @@ export default function DashboardPage() {
         // Calculate current week
         const startDate = new Date(mesocycle.start_date);
         const nowDate = new Date();
+        const totalWeeks = mesocycle.total_weeks || mesocycle.weeks || 6;
         const weeksSinceStart = Math.floor((nowDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-        const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
+        const currentWeek = Math.min(Math.max(1, weeksSinceStart), totalWeeks);
 
         // Count completed workouts in this mesocycle
         const { count: completedCount } = await supabase
@@ -153,13 +154,13 @@ export default function DashboardPage() {
           .eq('state', 'completed');
 
         // Calculate total planned workouts (days per week * weeks)
-        const totalWorkouts = (mesocycle.days_per_week || 3) * mesocycle.weeks;
+        const totalWorkouts = (mesocycle.days_per_week || 3) * totalWeeks;
 
         setActiveMesocycle({
           id: mesocycle.id,
           name: mesocycle.name,
           startDate: mesocycle.start_date,
-          weeks: mesocycle.weeks,
+          weeks: totalWeeks,
           currentWeek,
           workoutsCompleted: completedCount || 0,
           totalWorkouts,
@@ -557,7 +558,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Getting started card */}
+      {/* Getting started card - no workouts at all */}
       {!isLoading && !hasWorkouts && !activeMesocycle && (
         <Card variant="elevated" className="overflow-hidden">
           <div className="p-8 text-center bg-gradient-to-r from-primary-500/10 to-accent-500/10">
@@ -570,14 +571,55 @@ export default function DashboardPage() {
             <p className="text-surface-400 mt-2 max-w-md mx-auto">
               Log your first workout to start tracking your progress, volume, and gains.
             </p>
-            <Link href="/dashboard/workout/new">
-              <Button size="lg" className="mt-6">
-                Start Your First Workout
-                <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+            <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
+              <Link href="/dashboard/workout/new">
+                <Button size="lg">
+                  Quick Workout
+                  <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </Button>
+              </Link>
+              <Link href="/dashboard/mesocycle/new">
+                <Button size="lg" variant="secondary">
+                  Create Training Plan
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* No mesocycle CTA - shown when user has workouts but no program */}
+      {!isLoading && hasWorkouts && !activeMesocycle && (
+        <Card className="overflow-hidden border-2 border-dashed border-primary-500/30 bg-gradient-to-r from-primary-500/5 to-accent-500/5">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                 </svg>
-              </Button>
-            </Link>
+              </div>
+              <div className="flex-1 text-center sm:text-left">
+                <h3 className="text-lg font-semibold text-surface-100">Level Up Your Training</h3>
+                <p className="text-sm text-surface-400 mt-1">
+                  Create an AI-powered mesocycle to optimize your workouts with smart progression, fatigue management, and personalized recommendations.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2 justify-center sm:justify-start">
+                  <span className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400">Auto-progression</span>
+                  <span className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400">Volume tracking</span>
+                  <span className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400">Deload timing</span>
+                </div>
+              </div>
+              <Link href="/dashboard/mesocycle/new">
+                <Button className="whitespace-nowrap">
+                  Create Program
+                  <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Button>
+              </Link>
+            </div>
           </div>
         </Card>
       )}

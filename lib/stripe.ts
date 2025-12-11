@@ -54,12 +54,12 @@ export const TIER_FEATURES = {
     name: 'Free',
     description: '14-day trial, then basic tracking',
     features: [
-      'Manual workout logging',
+      'Unlimited workout logging',
       'Exercise history',
       'Basic progress tracking',
     ],
     limits: {
-      workoutsPerWeek: 3,
+      workoutsPerWeek: Infinity,
       aiFeatures: false,
       mesocycleBuilder: false,
       coachingCalibration: false,

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui';
 import type { WarmupSet, WeightUnit } from '@/types/schema';
-import { roundToIncrement, formatWeightValue } from '@/lib/utils';
+import { roundToPlateIncrement, formatWeightValue } from '@/lib/utils';
 
 interface WarmupProtocolProps {
   warmupSets: WarmupSet[];
@@ -87,7 +87,8 @@ export function WarmupProtocol({
           <div className="divide-y divide-surface-800">
             {warmupSets.map((set) => {
               const warmupWeightKg = workingWeight * (set.percentOfWorking / 100);
-              const roundedWeight = roundToIncrement(warmupWeightKg, minIncrement);
+              // Round to 2.5lb/2.5kg increments based on user unit preference
+              const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
               const displayWeight = formatWeightValue(roundedWeight, unit);
               const unitLabel = unit === 'lb' ? 'lb' : 'kg';
               const warmupWeight =
