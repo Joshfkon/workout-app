@@ -75,14 +75,23 @@ function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
 // ============================================================
 
 /**
- * Select exercises for a muscle group considering equipment, experience, injury, and SFR
+ * Hypertrophy tier ranking for sorting (S = best = 0, F = worst = 5)
+ */
+const HYPERTROPHY_TIER_RANK: Record<string, number> = {
+  'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5
+};
+
+/**
+ * Select exercises for a muscle group considering equipment, experience, injury, SFR,
+ * and hypertrophy effectiveness (Nippard methodology)
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
   setsNeeded: number,
   profile: ExtendedUserProfile,
   fatigueManager: SessionFatigueManager,
-  startingPosition: number
+  startingPosition: number,
+  prioritizeHypertrophy: boolean = true
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
@@ -112,19 +121,26 @@ function selectExercisesWithFatigue(
     candidates = allExercises.filter((e) => e.primaryMuscle === muscle);
   }
 
-  // Sort by SFR (stimulus-to-fatigue ratio) - prefer more efficient exercises
+  // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound/isolation, 3) SFR
   candidates.sort((a, b) => {
-    const sfrA = BASE_SFR[a.pattern]?.[a.equipment] ?? 1.0;
-    const sfrB = BASE_SFR[b.pattern]?.[b.equipment] ?? 1.0;
-
-    // Compounds first for early positions
+    // First: Hypertrophy tier (S-tier exercises first)
+    if (prioritizeHypertrophy) {
+      const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
+      const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
+      if (aTier !== bTier) return aTier - bTier;
+    }
+    
+    // Second: Compounds first for early positions (when fresher)
     if (startingPosition <= 2) {
       const aCompound = a.pattern !== 'isolation' ? 0 : 1;
       const bCompound = b.pattern !== 'isolation' ? 0 : 1;
       if (aCompound !== bCompound) return aCompound - bCompound;
     }
 
-    return sfrB - sfrA; // Higher SFR first
+    // Third: Higher SFR first (more stimulus per fatigue)
+    const sfrA = BASE_SFR[a.pattern]?.[a.equipment] ?? 1.0;
+    const sfrB = BASE_SFR[b.pattern]?.[b.equipment] ?? 1.0;
+    return sfrB - sfrA;
   });
 
   const selected: { exercise: ExerciseEntry; sets: number }[] = [];

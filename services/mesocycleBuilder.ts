@@ -142,6 +142,7 @@ function getExerciseDatabase(): ExerciseEntry[] {
     difficulty: e.difficulty,
     fatigueRating: e.fatigueRating,
     notes: e.notes,
+    hypertrophyScore: e.hypertrophyScore,
   }));
 }
 
@@ -673,13 +674,22 @@ export function calculateVolumeDistribution(
 // ============================================================
 
 /**
- * Select exercises for a muscle group considering equipment, experience, and fatigue
+ * Hypertrophy tier ranking for sorting (S = best = 0, F = worst = 5)
+ */
+const HYPERTROPHY_TIER_RANK: Record<string, number> = {
+  'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5
+};
+
+/**
+ * Select exercises for a muscle group considering equipment, experience, fatigue,
+ * and hypertrophy effectiveness (Nippard methodology)
  */
 export function selectExercises(
   muscle: MuscleGroup,
   setsNeeded: number,
   profile: ExtendedUserProfile,
-  sessionFatigueBudget: number
+  sessionFatigueBudget: number,
+  prioritizeHypertrophy: boolean = true
 ): { exercises: ExerciseEntry[]; setsPerExercise: number[]; remainingFatigueBudget: number } {
   
   // Filter available exercises
@@ -710,11 +720,21 @@ export function selectExercises(
     candidates = EXERCISE_DATABASE.filter(e => e.primaryMuscle === muscle);
   }
   
-  // Sort by fatigue rating (prefer compounds first, then by fatigue)
+  // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound vs isolation, 3) Fatigue rating
   candidates.sort((a, b) => {
+    // First: Hypertrophy tier (S-tier first)
+    if (prioritizeHypertrophy) {
+      const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
+      const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
+      if (aTier !== bTier) return aTier - bTier;
+    }
+    
+    // Second: Compounds first (for first half of workout)
     const aCompound = a.pattern !== 'isolation' ? 0 : 1;
     const bCompound = b.pattern !== 'isolation' ? 0 : 1;
     if (aCompound !== bCompound) return aCompound - bCompound;
+    
+    // Third: Lower fatigue rating preferred (better SFR)
     return a.fatigueRating - b.fatigueRating;
   });
   

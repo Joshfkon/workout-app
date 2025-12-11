@@ -33,6 +33,7 @@ export default function SettingsPage() {
   const [restTimer, setRestTimer] = useState(180);
   const [showFormCues, setShowFormCues] = useState(true);
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
+  const [prioritizeHypertrophy, setPrioritizeHypertrophy] = useState(true);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -116,6 +117,7 @@ export default function SettingsPage() {
             setRestTimer((prefs.restTimer as number) || 180);
             setShowFormCues((prefs.showFormCues as boolean) ?? true);
             setShowWarmupSuggestions((prefs.showWarmupSuggestions as boolean) ?? true);
+            setPrioritizeHypertrophy((prefs.prioritizeHypertrophy as boolean) ?? true);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
             // Merge with defaults to ensure all muscle groups have values
@@ -181,6 +183,7 @@ export default function SettingsPage() {
             restTimer,
             showFormCues,
             showWarmupSuggestions,
+            prioritizeHypertrophy,
           },
           volume_landmarks: volumeLandmarks,
           // Extended profile fields
@@ -524,6 +527,25 @@ export default function SettingsPage() {
                 <span
                   className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
                     showWarmupSuggestions ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+
+            <label className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Prioritize Hypertrophy</p>
+                <p className="text-xs text-surface-500">Select S-tier exercises first (Nippard methodology)</p>
+              </div>
+              <button
+                onClick={() => setPrioritizeHypertrophy(!prioritizeHypertrophy)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  prioritizeHypertrophy ? 'bg-primary-500' : 'bg-surface-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                    prioritizeHypertrophy ? 'translate-x-7' : 'translate-x-1'
                   }`}
                 />
               </button>

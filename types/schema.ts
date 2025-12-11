@@ -51,6 +51,44 @@ export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
 /** Fatigue rating (1 = low CNS demand, 3 = high) */
 export type FatigueRating = 1 | 2 | 3;
 
+/** Hypertrophy tier rating (S = best, F = worst) */
+export type HypertrophyTier = 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+
+/** Rating scale for hypertrophy metrics (1-5) */
+export type HypertrophyRating = 1 | 2 | 3 | 4 | 5;
+
+// ============ HYPERTROPHY SCORING ============
+
+/**
+ * Hypertrophy score for an exercise based on Jeff Nippard's methodology
+ * Higher scores indicate better hypertrophy potential
+ */
+export interface HypertrophyScore {
+  /** Overall tier ranking (S = best for hypertrophy, F = worst) */
+  tier: HypertrophyTier;
+  
+  /** 
+   * Stretch under load rating (1-5)
+   * How well the exercise provides tension at the lengthened/stretched position
+   * Higher = better for muscle growth (lengthened partials principle)
+   */
+  stretchUnderLoad: HypertrophyRating;
+  
+  /**
+   * Resistance profile rating (1-5)
+   * How smooth/consistent the resistance is throughout the range of motion
+   * Higher = more even muscle tension (cables/machines score higher)
+   */
+  resistanceProfile: HypertrophyRating;
+  
+  /**
+   * Progression ease rating (1-5)
+   * How easy it is to progressively overload the exercise
+   * Higher = easier to add weight/reps consistently
+   */
+  progressionEase: HypertrophyRating;
+}
+
 // ============ USER ============
 
 /**
@@ -88,6 +126,13 @@ export interface UserPreferences {
   
   /** Show warmup set suggestions */
   showWarmupSuggestions: boolean;
+  
+  /** 
+   * Prioritize hypertrophy-optimal exercises in program generation
+   * When true, S-tier exercises are preferred over lower tiers
+   * Default: true
+   */
+  prioritizeHypertrophy?: boolean;
 }
 
 /**
@@ -688,6 +733,10 @@ export interface ExerciseEntry {
   minWeightIncrementKg?: number;
   /** Mechanic type for progression engine */
   mechanic?: Mechanic;
+  
+  // Hypertrophy scoring (Nippard methodology)
+  /** Hypertrophy effectiveness score for exercise selection prioritization */
+  hypertrophyScore?: HypertrophyScore;
 }
 
 /**
