@@ -12,12 +12,12 @@ import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, Extend
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
-  generateFullProgram,
   recommendSplit,
   calculateRecoveryFactors,
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
+import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 
 export default function NewMesocyclePage() {
@@ -237,7 +237,8 @@ export default function NewMesocyclePage() {
       }
       
       // Generate full program with extended profile and lagging areas
-      const program = generateFullProgram(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
+      // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
+      const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
       setFullProgram(program);
     }
   }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 

@@ -46,7 +46,7 @@ import {
   BASE_SFR,
 } from './fatigueBudgetEngine';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, EXERCISE_DATABASE } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, EXERCISE_DATABASE } from './mesocycleBuilder';
 
 // ============================================================
 // WARMUP GENERATION
@@ -747,7 +747,8 @@ function calculateVolumeDistribution(
 export function generateFullMesocycleWithFatigue(
   daysPerWeek: number,
   profile: ExtendedUserProfile,
-  sessionMinutes: number = 60
+  sessionMinutes: number = 60,
+  laggingAreas?: string[]
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -774,8 +775,13 @@ export function generateFullMesocycleWithFatigue(
   programNotes.push(`Mesocycle: ${periodization.mesocycleWeeks} weeks`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
-  // Step 5: Calculate volume distribution
-  const volumePerMuscle = calculateVolumeDistribution(split, daysPerWeek, profile.experience, profile.goal, recoveryFactors);
+  // Step 5: Calculate volume distribution (with extra volume for lagging areas if provided)
+  const volumePerMuscle = calculateVolumeDistributionWithLagging(split, daysPerWeek, profile.experience, profile.goal, recoveryFactors, laggingAreas);
+  
+  // Add note if lagging areas are being addressed
+  if (laggingAreas && laggingAreas.length > 0) {
+    programNotes.push(`🎯 Extra volume allocated for: ${laggingAreas.join(', ')}`);
+  }
 
   // Step 6: Build session templates
   const sessionTemplates = buildSessionTemplates(split, daysPerWeek);
