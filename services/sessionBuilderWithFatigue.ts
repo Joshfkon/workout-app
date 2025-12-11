@@ -46,46 +46,9 @@ import {
   BASE_SFR,
 } from './fatigueBudgetEngine';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, EXERCISE_DATABASE } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, EXERCISE_DATABASE, generateWarmup } from './mesocycleBuilder';
 
-// ============================================================
-// WARMUP GENERATION
-// ============================================================
-
-/**
- * Generate warmup instructions based on primary muscle
- */
-function generateWarmup(primaryMuscle: MuscleGroup): string[] {
-  const warmups: Record<string, string[]> = {
-    lower: [
-      '5 min bike or walking',
-      'Leg swings (front/back, side to side) x 10 each',
-      'Goblet squat x 10 (bodyweight or light)',
-      'Glute bridges x 10',
-    ],
-    upper: [
-      '5 min rowing or arm circles',
-      'Band pull-aparts x 15',
-      'Push-ups x 10',
-      'Face pulls x 10 (light)',
-    ],
-    full: [
-      '5 min cardio',
-      "World's greatest stretch x 5 each side",
-      'Arm circles and leg swings',
-      'Bodyweight squats x 10',
-      'Push-ups x 10',
-    ],
-  };
-
-  if (['quads', 'hamstrings', 'glutes', 'calves'].includes(primaryMuscle)) {
-    return warmups.lower;
-  }
-  if (['chest', 'back', 'shoulders', 'biceps', 'triceps'].includes(primaryMuscle)) {
-    return warmups.upper;
-  }
-  return warmups.full;
-}
+// NOTE: generateWarmup imported from mesocycleBuilder.ts
 
 // ============================================================
 // REST PERIOD CALCULATION

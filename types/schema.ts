@@ -667,6 +667,7 @@ export interface SessionTemplate {
 
 /**
  * Detailed exercise entry in the exercise database
+ * Includes both builder fields and progression fields
  */
 export interface ExerciseEntry {
   name: string;
@@ -677,6 +678,16 @@ export interface ExerciseEntry {
   difficulty: ExerciseDifficulty;
   fatigueRating: FatigueRating;
   notes?: string;
+  
+  // Progression-related fields (optional for backwards compatibility)
+  /** Default rep range [min, max] - derived from pattern if not set */
+  defaultRepRange?: [number, number];
+  /** Default RIR target - derived from difficulty if not set */
+  defaultRir?: number;
+  /** Smallest weight increment in kg */
+  minWeightIncrementKg?: number;
+  /** Mechanic type for progression engine */
+  mechanic?: Mechanic;
 }
 
 /**

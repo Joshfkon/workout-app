@@ -914,7 +914,7 @@ function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
 /**
  * Generate warmup instructions based on primary muscle
  */
-function generateWarmup(primaryMuscle: MuscleGroup): string[] {
+export function generateWarmup(primaryMuscle: MuscleGroup): string[] {
   const warmups: Record<string, string[]> = {
     lower: [
       '5 min bike or walking',

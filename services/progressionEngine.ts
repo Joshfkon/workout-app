@@ -7,6 +7,7 @@
 
 import type {
   Exercise,
+  ExerciseEntry,
   SetLog,
   SetQuality,
   ProgressionType,
@@ -14,8 +15,100 @@ import type {
   LastSessionPerformance,
   WarmupSet,
   Experience,
+  MovementPattern,
+  Equipment,
 } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
+
+// ============================================
+// TYPE ADAPTERS
+// ============================================
+
+/**
+ * Convert ExerciseEntry (from mesocycle builder) to Exercise (for progression engine)
+ * Derives missing progression fields from pattern and equipment
+ */
+export function exerciseEntryToExercise(entry: ExerciseEntry): Exercise {
+  // Derive mechanic from pattern
+  const mechanic = entry.mechanic || (entry.pattern === 'isolation' ? 'isolation' : 'compound');
+  
+  // Derive default rep range from pattern/equipment/difficulty
+  const defaultRepRange = entry.defaultRepRange || getDefaultRepRangeForPattern(entry.pattern, mechanic);
+  
+  // Derive default RIR from difficulty
+  const defaultRir = entry.defaultRir ?? (entry.difficulty === 'advanced' ? 2 : entry.difficulty === 'intermediate' ? 3 : 4);
+  
+  // Derive minimum weight increment from equipment
+  const minWeightIncrementKg = entry.minWeightIncrementKg ?? getMinIncrementForEquipment(entry.equipment);
+  
+  // Map pattern to movement pattern string
+  const movementPattern = typeof entry.pattern === 'string' ? entry.pattern : 'compound';
+  
+  return {
+    id: entry.name.toLowerCase().replace(/\s+/g, '-'),
+    name: entry.name,
+    primaryMuscle: entry.primaryMuscle,
+    secondaryMuscles: entry.secondaryMuscles,
+    mechanic,
+    defaultRepRange,
+    defaultRir,
+    minWeightIncrementKg,
+    // Additional required fields with defaults
+    formCues: [],
+    commonMistakes: [],
+    setupNote: entry.notes || '',
+    movementPattern,
+    equipmentRequired: [entry.equipment],
+  };
+}
+
+/**
+ * Get default rep range based on movement pattern
+ */
+function getDefaultRepRangeForPattern(
+  pattern: MovementPattern | 'isolation' | 'carry',
+  mechanic: 'compound' | 'isolation'
+): [number, number] {
+  if (mechanic === 'isolation') return [10, 15];
+  
+  // Compound movements
+  switch (pattern) {
+    case 'squat':
+    case 'hip_hinge':
+      return [5, 8]; // Heavy compounds
+    case 'horizontal_push':
+    case 'horizontal_pull':
+    case 'vertical_push':
+    case 'vertical_pull':
+      return [6, 10];
+    case 'lunge':
+      return [8, 12];
+    default:
+      return [8, 12];
+  }
+}
+
+/**
+ * Get minimum weight increment based on equipment type
+ */
+function getMinIncrementForEquipment(equipment: Equipment): number {
+  switch (equipment) {
+    case 'barbell':
+      return 2.5; // Standard barbell plates
+    case 'dumbbell':
+      return 2.0; // Most gyms have 1kg increments per hand
+    case 'kettlebell':
+      return 4.0; // Kettlebells have larger jumps
+    case 'cable':
+      return 2.5; // Cable stacks vary
+    case 'machine':
+      return 2.5; // Machine stacks vary
+    case 'bodyweight':
+      return 0; // No external load
+    default:
+      return 2.5;
+  }
+}
 
 // ============================================
 // CONSTANTS
@@ -43,6 +136,37 @@ const REP_PROGRESSION_THRESHOLD = 2; // Hit top of rep range for this many sets
 const MAX_WEEKLY_WEIGHT_INCREASE = 0.025; // 2.5%
 
 // ============================================
+// PERIODIZATION PHASES
+// ============================================
+
+export type PeriodizationPhase = 'hypertrophy' | 'strength' | 'peaking' | 'deload';
+
+/**
+ * Determine periodization phase based on week and model
+ */
+export function getPeriodizationPhase(
+  weekInMeso: number,
+  totalWeeks: number,
+  model: 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block' = 'linear'
+): PeriodizationPhase {
+  const progress = weekInMeso / totalWeeks;
+  
+  // Deload is always the last week
+  if (weekInMeso === totalWeeks) return 'deload';
+  
+  if (model === 'block') {
+    if (progress < 0.5) return 'hypertrophy';
+    if (progress < 0.85) return 'strength';
+    return 'peaking';
+  }
+  
+  // Linear and undulating use progressive approach
+  if (progress < 0.4) return 'hypertrophy';
+  if (progress < 0.8) return 'strength';
+  return 'peaking';
+}
+
+// ============================================
 // MAIN PROGRESSION LOGIC
 // ============================================
 
@@ -51,8 +175,26 @@ export interface CalculateNextTargetsInput {
   lastPerformance: LastSessionPerformance | null;
   experience: Experience;
   weekInMeso: number;
+  totalWeeksInMeso?: number;
   isDeloadWeek: boolean;
   readinessScore?: number; // 0-100
+  
+  // Periodization awareness
+  periodizationPhase?: PeriodizationPhase;
+  periodizationModel?: 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block';
+  weeklyModifiers?: {
+    intensityModifier: number;
+    volumeModifier: number;
+    rpeTarget: { min: number; max: number };
+  };
+  
+  // Calibration data integration
+  calibratedE1RM?: number;  // From coaching calibration
+  estimatedFromRelated?: number;  // From exercise relationships
+  
+  // Fatigue tracking
+  systemicFatiguePercent?: number;  // Current systemic fatigue level (0-100)
+  weeklyFatigueScore?: number;  // Accumulated weekly fatigue (1-10)
 }
 
 /**
@@ -70,23 +212,56 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
     lastPerformance,
     experience,
     weekInMeso,
+    totalWeeksInMeso = 6,
     isDeloadWeek,
     readinessScore = 80,
+    periodizationPhase,
+    periodizationModel = 'linear',
+    weeklyModifiers,
+    calibratedE1RM,
+    estimatedFromRelated,
+    systemicFatiguePercent = 0,
+    weeklyFatigueScore = 0,
   } = input;
+
+  // Determine current phase if not provided
+  const currentPhase = periodizationPhase || getPeriodizationPhase(weekInMeso, totalWeeksInMeso, periodizationModel);
+  
+  // Adjust rep range based on periodization phase
+  const phaseRepRange = getPhaseAdjustedRepRange(exercise.defaultRepRange, currentPhase, exercise.mechanic);
+  const phaseRir = getPhaseAdjustedRIR(exercise.defaultRir, currentPhase, weekInMeso, totalWeeksInMeso);
 
   // Default starting targets
   const baseTargets: ProgressionTargets = {
     weightKg: lastPerformance?.weightKg ?? 0,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: 3,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'technique',
     reason: 'Starting weights - focus on form and technique',
   };
 
-  // First time doing this exercise
+  // First time doing this exercise - use calibration data if available
   if (!lastPerformance) {
+    if (calibratedE1RM) {
+      const workingWeight = calculateWorkingWeightFromE1RM(calibratedE1RM, phaseRepRange, phaseRir);
+      return {
+        ...baseTargets,
+        weightKg: workingWeight,
+        reason: 'Starting weight based on calibrated strength test',
+      };
+    }
+    
+    if (estimatedFromRelated) {
+      const workingWeight = calculateWorkingWeightFromE1RM(estimatedFromRelated, phaseRepRange, phaseRir);
+      return {
+        ...baseTargets,
+        weightKg: workingWeight * 0.9, // 10% conservative for estimated
+        reason: 'Starting weight estimated from related exercises - starting conservative',
+      };
+    }
+    
     return {
       ...baseTargets,
       reason: 'New exercise - start light and focus on form',
@@ -94,7 +269,7 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   }
 
   // Deload week - reduce volume and intensity
-  if (isDeloadWeek) {
+  if (isDeloadWeek || currentPhase === 'deload') {
     return calculateDeloadTargets(lastPerformance, exercise);
   }
 
@@ -106,29 +281,200 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   // Analyze last performance to determine progression type
   const analysis = analyzePerformance(lastPerformance, exercise);
   
-  // Determine progression based on analysis
-  if (analysis.readyForLoadProgression) {
-    return calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+  // Phase-specific progression logic
+  let targets: ProgressionTargets;
+  
+  if (currentPhase === 'hypertrophy') {
+    // Hypertrophy phase: prioritize rep and volume progression over load
+    if (analysis.readyForRepProgression) {
+      targets = calculateRepProgression(lastPerformance, exercise);
+    } else if (analysis.readyForSetProgression && weekInMeso > 1) {
+      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
+    } else if (analysis.readyForLoadProgression) {
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+    } else {
+      targets = {
+        weightKg: lastPerformance.weightKg,
+        repRange: phaseRepRange,
+        targetRir: phaseRir,
+        sets: lastPerformance.sets,
+        restSeconds: getRestSecondsForMechanic(exercise.mechanic),
+        progressionType: 'technique',
+        reason: 'Hypertrophy phase - accumulate quality volume',
+      };
+    }
+  } else if (currentPhase === 'strength' || currentPhase === 'peaking') {
+    // Strength/Peaking phase: prioritize load progression
+    if (analysis.readyForLoadProgression) {
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+    } else if (analysis.readyForRepProgression) {
+      targets = calculateRepProgression(lastPerformance, exercise);
+    } else {
+      targets = {
+        weightKg: lastPerformance.weightKg,
+        repRange: phaseRepRange,
+        targetRir: phaseRir,
+        sets: Math.max(2, lastPerformance.sets - 1), // Slightly lower volume in strength phase
+        restSeconds: getRestSecondsForMechanic(exercise.mechanic) + 30, // More rest
+        progressionType: 'technique',
+        reason: `${currentPhase === 'peaking' ? 'Peaking' : 'Strength'} phase - focus on quality over quantity`,
+      };
+    }
+  } else {
+    // Default progression logic
+    if (analysis.readyForLoadProgression) {
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+    } else if (analysis.readyForRepProgression) {
+      targets = calculateRepProgression(lastPerformance, exercise);
+    } else if (analysis.readyForSetProgression && weekInMeso > 1) {
+      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
+    } else {
+      targets = {
+        weightKg: lastPerformance.weightKg,
+        repRange: phaseRepRange,
+        targetRir: phaseRir,
+        sets: lastPerformance.sets,
+        restSeconds: getRestSecondsForMechanic(exercise.mechanic),
+        progressionType: 'technique',
+        reason: analysis.reason || 'Consolidate technique at current weight',
+      };
+    }
   }
   
-  if (analysis.readyForRepProgression) {
-    return calculateRepProgression(lastPerformance, exercise);
+  // Apply weekly modifiers if provided
+  if (weeklyModifiers) {
+    targets.weightKg = Math.round(targets.weightKg * weeklyModifiers.intensityModifier * 10) / 10;
+    targets.sets = Math.round(targets.sets * weeklyModifiers.volumeModifier);
+    targets.targetRir = Math.max(0, Math.min(4, 10 - weeklyModifiers.rpeTarget.max));
   }
   
-  if (analysis.readyForSetProgression && weekInMeso > 1) {
-    return calculateSetProgression(lastPerformance, exercise, weekInMeso);
-  }
+  // Adjust for accumulated fatigue
+  targets = adjustForFatigue(targets, weeklyFatigueScore, systemicFatiguePercent);
+  
+  return targets;
+}
 
-  // Default: maintain current targets (technique consolidation)
-  return {
-    weightKg: lastPerformance.weightKg,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
-    sets: lastPerformance.sets,
-    restSeconds: getRestSecondsForMechanic(exercise.mechanic),
-    progressionType: 'technique',
-    reason: analysis.reason || 'Consolidate technique at current weight',
-  };
+/**
+ * Calculate working weight from estimated 1RM
+ */
+function calculateWorkingWeightFromE1RM(
+  e1rm: number,
+  repRange: [number, number],
+  targetRir: number
+): number {
+  const avgReps = Math.round((repRange[0] + repRange[1]) / 2);
+  const effectiveReps = avgReps + targetRir;
+  const percentage = (37 - effectiveReps) / 36;
+  const safetyMargin = 0.95;
+  return roundToIncrement(e1rm * percentage * safetyMargin, 2.5);
+}
+
+/**
+ * Adjust rep range based on periodization phase
+ */
+function getPhaseAdjustedRepRange(
+  baseRange: [number, number],
+  phase: PeriodizationPhase,
+  mechanic: 'compound' | 'isolation'
+): [number, number] {
+  const isCompound = mechanic === 'compound';
+  
+  switch (phase) {
+    case 'hypertrophy':
+      // Higher reps for hypertrophy
+      return isCompound 
+        ? [Math.max(6, baseRange[0]), Math.min(12, baseRange[1] + 2)]
+        : [Math.max(10, baseRange[0] + 2), Math.min(15, baseRange[1] + 3)];
+        
+    case 'strength':
+      // Lower reps for strength
+      return isCompound
+        ? [Math.max(3, baseRange[0] - 2), Math.min(6, baseRange[1] - 2)]
+        : [Math.max(6, baseRange[0]), Math.min(10, baseRange[1])];
+        
+    case 'peaking':
+      // Very low reps for peaking
+      return isCompound
+        ? [1, 5]
+        : [Math.max(4, baseRange[0] - 2), Math.min(8, baseRange[1] - 2)];
+        
+    case 'deload':
+      // Moderate reps, reduced intensity
+      return baseRange;
+      
+    default:
+      return baseRange;
+  }
+}
+
+/**
+ * Adjust RIR based on periodization phase and week
+ */
+function getPhaseAdjustedRIR(
+  baseRir: number,
+  phase: PeriodizationPhase,
+  weekInMeso: number,
+  totalWeeks: number
+): number {
+  const progress = weekInMeso / totalWeeks;
+  
+  switch (phase) {
+    case 'hypertrophy':
+      // Start conservative, gradually decrease RIR
+      return Math.max(1, Math.min(4, Math.round(baseRir - progress * 2)));
+      
+    case 'strength':
+      // Lower RIR for strength
+      return Math.max(1, baseRir - 1);
+      
+    case 'peaking':
+      // Very low RIR for peaking
+      return Math.max(0, baseRir - 2);
+      
+    case 'deload':
+      // Higher RIR for deload
+      return Math.min(5, baseRir + 2);
+      
+    default:
+      return baseRir;
+  }
+}
+
+/**
+ * Adjust progression based on accumulated fatigue
+ */
+export function adjustForFatigue(
+  targets: ProgressionTargets,
+  weeklyFatigueScore: number,
+  systemicFatiguePercent: number
+): ProgressionTargets {
+  // High systemic fatigue = more conservative progression
+  if (systemicFatiguePercent > 80) {
+    return {
+      ...targets,
+      targetRir: Math.min(4, targets.targetRir + 1),
+      reason: targets.reason + ' (adjusted for high systemic fatigue)',
+    };
+  }
+  
+  // If weekly fatigue trending up, hold back
+  if (weeklyFatigueScore > 7) {
+    return {
+      ...targets,
+      progressionType: 'technique',
+      reason: 'High fatigue score - maintaining to allow recovery',
+    };
+  }
+  
+  // Moderate fatigue warning
+  if (systemicFatiguePercent > 60 || weeklyFatigueScore > 5) {
+    return {
+      ...targets,
+      reason: targets.reason + ' (monitor fatigue levels)',
+    };
+  }
+  
+  return targets;
 }
 
 // ============================================
