@@ -6,6 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from 
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import type { WeightUnit } from '@/types/schema';
 
 // Unit conversion helpers
 const cmToInches = (cm: number) => cm / 2.54;
@@ -31,8 +32,13 @@ const BODY_FAT_REFERENCES = {
 
 export default function OnboardingBodyCompPage() {
   const router = useRouter();
-  const { preferences } = useUserPreferences();
-  const units = preferences.units;
+  const { preferences, updatePreference } = useUserPreferences();
+  
+  // Step state: 'units' -> 'body-comp'
+  const [step, setStep] = useState<'units' | 'body-comp'>('units');
+  const [selectedUnits, setSelectedUnits] = useState<WeightUnit>(preferences.units || 'lb');
+  const units = selectedUnits;
+  
   const [isLoading, setIsLoading] = useState(false);
   const [existingDexa, setExistingDexa] = useState<{
     weight_kg: number;
@@ -47,6 +53,12 @@ export default function OnboardingBodyCompPage() {
   const [weightDisplay, setWeightDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
   const [useDexa, setUseDexa] = useState(false);
+  
+  // Save unit preference and proceed
+  const handleUnitsConfirm = async () => {
+    await updatePreference('units', selectedUnits);
+    setStep('body-comp');
+  };
   
   // Convert display values to metric for calculations
   const getHeightCm = () => {
@@ -192,30 +204,109 @@ export default function OnboardingBodyCompPage() {
   
   const canContinue = bodyComp !== null && bodyComp.ffmi > 0;
   
+  // Unit selection step
+  if (step === 'units') {
+    return (
+      <div className="max-w-md mx-auto space-y-8 animate-fade-in">
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {[1, 2, 3, 4].map((s) => (
+            <div key={s} className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                s === 1 
+                  ? 'bg-primary-500 text-white' 
+                  : 'bg-surface-800 text-surface-500'
+              }`}>
+                {s}
+              </div>
+              {s < 4 && (
+                <div className="w-12 h-0.5 bg-surface-800" />
+              )}
+            </div>
+          ))}
+        </div>
+        
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-white mb-2">Welcome to HyperTrack!</h1>
+          <p className="text-surface-400">
+            First, which measurement system do you prefer?
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => setSelectedUnits('lb')}
+                className={`p-6 rounded-xl border-2 transition-all ${
+                  selectedUnits === 'lb'
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-2">🇺🇸</div>
+                  <div className="text-xl font-bold text-white">Imperial</div>
+                  <div className="text-sm text-surface-400 mt-1">lbs, inches</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedUnits('kg')}
+                className={`p-6 rounded-xl border-2 transition-all ${
+                  selectedUnits === 'kg'
+                    ? 'border-primary-500 bg-primary-500/10'
+                    : 'border-surface-700 hover:border-surface-600 bg-surface-800/50'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-4xl mb-2">🌍</div>
+                  <div className="text-xl font-bold text-white">Metric</div>
+                  <div className="text-sm text-surface-400 mt-1">kg, cm</div>
+                </div>
+              </button>
+            </div>
+            
+            <p className="text-xs text-surface-500 text-center mt-4">
+              You can change this anytime in Settings
+            </p>
+          </CardContent>
+        </Card>
+        
+        <Button onClick={handleUnitsConfirm} className="w-full" size="lg">
+          Continue
+          <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+          </svg>
+        </Button>
+      </div>
+    );
+  }
+  
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Progress indicator */}
       <div className="flex items-center justify-center gap-2 mb-8">
-        {[1, 2, 3, 4].map((step) => (
-          <div key={step} className="flex items-center">
+        {[1, 2, 3, 4].map((s) => (
+          <div key={s} className="flex items-center">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-              step === 1 
+              s <= 2 
                 ? 'bg-primary-500 text-white' 
                 : 'bg-surface-800 text-surface-500'
             }`}>
-              {step}
+              {s}
             </div>
-            {step < 4 && (
-              <div className={`w-12 h-0.5 ${step < 1 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+            {s < 4 && (
+              <div className={`w-12 h-0.5 ${s < 2 ? 'bg-primary-500' : 'bg-surface-800'}`} />
             )}
           </div>
         ))}
       </div>
       
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Welcome to HyperTrack!</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">Body Composition</h1>
         <p className="text-surface-400">
-          Let&apos;s start by understanding your body composition. This helps us calibrate your strength profile.
+          Let&apos;s understand your body composition. This helps us calibrate your strength profile.
         </p>
       </div>
       

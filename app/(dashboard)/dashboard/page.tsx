@@ -171,6 +171,32 @@ export default function DashboardPage() {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
 
+        // First, check for any in-progress workout
+        const { data: inProgressSession } = await supabase
+          .from('workout_sessions')
+          .select(`
+            id,
+            state,
+            planned_date,
+            completed_at,
+            session_rpe,
+            exercise_blocks (
+              id,
+              target_sets,
+              exercises (
+                name
+              ),
+              set_logs (
+                id,
+                is_warmup
+              )
+            )
+          `)
+          .eq('mesocycle_id', mesocycle.id)
+          .eq('state', 'in_progress')
+          .single();
+
+        // Then check for today's planned workout
         const { data: todaySession } = await supabase
           .from('workout_sessions')
           .select(`
@@ -196,23 +222,54 @@ export default function DashboardPage() {
           .lt('planned_date', tomorrow.toISOString().split('T')[0])
           .single();
 
-        if (todaySession) {
-          const exercises = (todaySession.exercise_blocks || []).map((block: any) => ({
+        // If no in-progress or today's session, check for next upcoming
+        const { data: nextSession } = !inProgressSession && !todaySession ? await supabase
+          .from('workout_sessions')
+          .select(`
+            id,
+            state,
+            planned_date,
+            completed_at,
+            session_rpe,
+            exercise_blocks (
+              id,
+              target_sets,
+              exercises (
+                name
+              ),
+              set_logs (
+                id,
+                is_warmup
+              )
+            )
+          `)
+          .eq('mesocycle_id', mesocycle.id)
+          .in('state', ['planned', 'in_progress'])
+          .gte('planned_date', today.toISOString().split('T')[0])
+          .order('planned_date', { ascending: true })
+          .limit(1)
+          .single() : { data: null };
+
+        // Use in-progress first, then today's, then next upcoming
+        const activeSession = inProgressSession || todaySession || nextSession;
+
+        if (activeSession) {
+          const exercises = (activeSession.exercise_blocks || []).map((block: any) => ({
             name: block.exercises?.name || 'Unknown',
             sets: block.target_sets || 0,
           }));
 
           const totalSets = exercises.reduce((sum: number, ex: any) => sum + ex.sets, 0);
-          const completedSets = (todaySession.exercise_blocks || []).reduce((sum: number, block: any) => {
+          const completedSets = (activeSession.exercise_blocks || []).reduce((sum: number, block: any) => {
             return sum + (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
           }, 0);
 
           setTodaysWorkout({
-            id: todaySession.id,
-            state: todaySession.state,
-            plannedDate: todaySession.planned_date,
-            completedAt: todaySession.completed_at,
-            sessionRpe: todaySession.session_rpe,
+            id: activeSession.id,
+            state: activeSession.state,
+            plannedDate: activeSession.planned_date,
+            completedAt: activeSession.completed_at,
+            sessionRpe: activeSession.session_rpe,
             exercises,
             totalExercises: exercises.length,
             completedSets,

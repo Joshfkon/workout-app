@@ -11,6 +11,32 @@ export default async function Home() {
   }
   return (
     <div className="min-h-screen bg-surface-950 relative overflow-hidden">
+      {/* Top navigation */}
+      <nav className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-4 md:p-6">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </div>
+          <span className="text-xl font-bold text-white tracking-tight hidden sm:inline">HyperTrack</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-white transition-colors"
+          >
+            Login
+          </Link>
+          <Link
+            href="/register"
+            className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+          >
+            Sign Up
+          </Link>
+        </div>
+      </nav>
+
       {/* Background gradient effects */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-primary-900/20 via-transparent to-transparent" />

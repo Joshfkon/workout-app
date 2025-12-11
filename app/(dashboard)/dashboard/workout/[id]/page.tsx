@@ -9,7 +9,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { quickWeightEstimate, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
+import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { formatWeight } from '@/lib/utils';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
@@ -25,12 +25,19 @@ interface AvailableExercise {
   mechanic: 'compound' | 'isolation';
 }
 
+interface CalibratedLift {
+  lift_name: string;
+  estimated_1rm: number;
+  tested_at: string;
+}
+
 interface UserProfileForWeights {
   weightKg: number;
   heightCm: number;
   bodyFatPercent: number;
   experience: 'novice' | 'intermediate' | 'advanced';
   regionalData?: DexaRegionalData;
+  calibratedLifts?: CalibratedLift[];
 }
 
 interface UserContext {
@@ -220,17 +227,33 @@ function generateCoachMessage(
     let weightRec: WorkingWeightRecommendation | undefined;
     if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
       try {
-        weightRec = quickWeightEstimate(
-          ex.name,
-          { min: repRange[0], max: repRange[1] },
-          block.targetRir || 2,
-          userProfile.weightKg,
-          userProfile.heightCm,
-          userProfile.bodyFatPercent || 20,
-          userProfile.experience,
-          userProfile.regionalData,  // Pass regional data for personalized adjustments
-          unit  // Use correct unit for plate rounding
-        );
+        // Use calibration data if available for more accurate estimates
+        if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
+          weightRec = quickWeightEstimateWithCalibration(
+            ex.name,
+            { min: repRange[0], max: repRange[1] },
+            block.targetRir || 2,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent || 20,
+            userProfile.experience,
+            userProfile.calibratedLifts,
+            userProfile.regionalData,
+            unit
+          );
+        } else {
+          weightRec = quickWeightEstimate(
+            ex.name,
+            { min: repRange[0], max: repRange[1] },
+            block.targetRir || 2,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent || 20,
+            userProfile.experience,
+            userProfile.regionalData,
+            unit
+          );
+        }
       } catch (e) {
         // Silently fail if weight estimation fails
       }
@@ -454,6 +477,13 @@ export default function WorkoutPage() {
           .limit(1)
           .single();
         
+        // Fetch calibrated lifts for weight estimation
+        const { data: calibratedLifts } = await supabase
+          .from('calibrated_lifts')
+          .select('lift_name, estimated_1rm, tested_at')
+          .eq('user_id', sessionData.user_id)
+          .order('tested_at', { ascending: false });
+        
         // Fetch mesocycle info if this workout is part of one
         const { data: mesocycleData } = await supabase
           .from('mesocycles')
@@ -467,7 +497,8 @@ export default function WorkoutPage() {
           heightCm: userData.height_cm || 175,
           bodyFatPercent: dexaData?.body_fat_percentage || 20,
           experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate',
-          regionalData: dexaData?.regional_data as DexaRegionalData | undefined
+          regionalData: dexaData?.regional_data as DexaRegionalData | undefined,
+          calibratedLifts: calibratedLifts as CalibratedLift[] | undefined,
         } : undefined;
         
         if (profile) {
@@ -785,6 +816,34 @@ export default function WorkoutPage() {
     }
   };
 
+  const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
+    // Update local state immediately
+    setBlocks(prevBlocks => prevBlocks.map(block => 
+      block.id === blockId 
+        ? { ...block, exerciseId: newExercise.id, exercise: newExercise }
+        : block
+    ));
+
+    // Update in database
+    try {
+      const supabase = createUntypedClient();
+      const { error: updateError } = await supabase
+        .from('exercise_blocks')
+        .update({ exercise_id: newExercise.id })
+        .eq('id', blockId);
+      
+      if (updateError) {
+        console.error('Failed to swap exercise:', updateError);
+        setError(`Failed to swap exercise: ${updateError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to swap exercise:', err);
+      setError(err instanceof Error ? err.message : 'Failed to swap exercise');
+    }
+  };
+
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
@@ -838,17 +897,36 @@ export default function WorkoutPage() {
       if (userProfile) {
         const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
         const targetRir = 2;
-        const weightRec = quickWeightEstimate(
-          exercise.name,
-          repRange,
-          targetRir,
-          userProfile.weightKg,
-          userProfile.heightCm,
-          userProfile.bodyFatPercent,
-          userProfile.experience,
-          userProfile.regionalData,
-          preferences.units
-        );
+        let weightRec: WorkingWeightRecommendation;
+        
+        // Use calibration data if available
+        if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
+          weightRec = quickWeightEstimateWithCalibration(
+            exercise.name,
+            repRange,
+            targetRir,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent,
+            userProfile.experience,
+            userProfile.calibratedLifts,
+            userProfile.regionalData,
+            preferences.units
+          );
+        } else {
+          weightRec = quickWeightEstimate(
+            exercise.name,
+            repRange,
+            targetRir,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent,
+            userProfile.experience,
+            userProfile.regionalData,
+            preferences.units
+          );
+        }
+        
         if (weightRec.confidence !== 'find_working_weight') {
           suggestedWeight = weightRec.recommendedWeight;
         }
@@ -1367,6 +1445,24 @@ export default function WorkoutPage() {
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
+                    onExerciseSwap={(newEx) => handleExerciseSwap(block.id, newEx)}
+                    availableExercises={blocks.map(b => b.exercise).concat(
+                      availableExercises.map(ex => ({
+                        id: ex.id,
+                        name: ex.name,
+                        primaryMuscle: ex.primary_muscle,
+                        secondaryMuscles: [],
+                        mechanic: ex.mechanic,
+                        defaultRepRange: [8, 12] as [number, number],
+                        defaultRir: 2,
+                        minWeightIncrementKg: 2.5,
+                        formCues: [],
+                        commonMistakes: [],
+                        setupNote: '',
+                        movementPattern: '',
+                        equipmentRequired: [],
+                      }))
+                    )}
                     isActive
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}

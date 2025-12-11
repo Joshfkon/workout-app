@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
 import { formatWeight, formatWeightValue, inputWeightToKg } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
+import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 
 interface ExerciseHistory {
   lastWorkoutDate: string;
@@ -23,6 +24,8 @@ interface ExerciseCardProps {
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   onSetDelete?: (setId: string) => void;
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
+  onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
+  availableExercises?: Exercise[];  // All exercises for swap suggestions
   isActive?: boolean;
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
@@ -38,6 +41,8 @@ export function ExerciseCard({
   onSetEdit,
   onSetDelete,
   onTargetSetsChange,
+  onExerciseSwap,
+  availableExercises = [],
   isActive = false,
   unit = 'kg',
   recommendedWeight,
@@ -46,9 +51,29 @@ export function ExerciseCard({
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
   const [editRpe, setEditRpe] = useState('');
+  
+  // Swipe to delete state
+  const [swipeState, setSwipeState] = useState<{
+    setId: string | null;
+    startX: number;
+    currentX: number;
+    isSwiping: boolean;
+  }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
+
+  // Calculate similar exercises for swap suggestions
+  const similarExercises = useMemo(() => {
+    if (availableExercises.length === 0) return [];
+    return findSimilarExercises(exercise, availableExercises)
+      .slice(0, 8)
+      .map(ex => ({
+        exercise: ex,
+        score: calculateSimilarityScore(exercise, ex)
+      }));
+  }, [exercise, availableExercises]);
 
   // State for pending set inputs (one per pending set)
   const [pendingInputs, setPendingInputs] = useState<{
@@ -73,6 +98,7 @@ export function ExerciseCard({
   // Initialize pending inputs when sets change
   useEffect(() => {
     const newPendingInputs: { weight: string; reps: string; rpe: string }[] = [];
+    const targetRpe = 10 - block.targetRir;
     
     for (let i = 0; i < pendingSetsCount; i++) {
       const setIndex = completedSets.length + i;
@@ -86,14 +112,21 @@ export function ExerciseCard({
       let defaultWeight: number;
       let defaultReps: number;
       
-      if (prevSet) {
+      if (lastCompleted) {
+        // Use last completed set from current workout
+        // Adjust weight based on RPE feedback
+        const lastRpe = lastCompleted.rpe;
+        if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
+          // RPE was off target, suggest adjusted weight
+          defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
+        } else {
+          defaultWeight = lastCompleted.weightKg;
+        }
+        defaultReps = lastCompleted.reps;
+      } else if (prevSet) {
         // Use previous workout's data
         defaultWeight = prevSet.weightKg;
         defaultReps = prevSet.reps;
-      } else if (lastCompleted) {
-        // Use last completed set from current workout
-        defaultWeight = lastCompleted.weightKg;
-        defaultReps = lastCompleted.reps;
       } else {
         // Use suggested weight and middle of rep range
         defaultWeight = suggestedWeight;
@@ -103,18 +136,136 @@ export function ExerciseCard({
       newPendingInputs.push({
         weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
         reps: String(defaultReps),
-        rpe: String(10 - block.targetRir),
+        rpe: String(targetRpe),
       });
     }
     
     setPendingInputs(newPendingInputs);
   }, [completedSets.length, pendingSetsCount, suggestedWeight, block.targetRepRange, block.targetRir]);
 
+  // Swipe to delete handlers
+  const handleTouchStart = (setId: string, e: React.TouchEvent) => {
+    setSwipeState({
+      setId,
+      startX: e.touches[0].clientX,
+      currentX: e.touches[0].clientX,
+      isSwiping: false,
+    });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swipeState.setId) return;
+    const diff = swipeState.startX - e.touches[0].clientX;
+    // Only allow left swipe
+    if (diff > 10) {
+      setSwipeState(prev => ({
+        ...prev,
+        currentX: e.touches[0].clientX,
+        isSwiping: true,
+      }));
+    }
+  };
+
+  const handleTouchEnd = (setId: string, isCompleted: boolean) => {
+    if (!swipeState.isSwiping) {
+      setSwipeState({ setId: null, startX: 0, currentX: 0, isSwiping: false });
+      return;
+    }
+    
+    const swipeDistance = swipeState.startX - swipeState.currentX;
+    const threshold = 100; // pixels to trigger delete
+    
+    if (swipeDistance > threshold) {
+      if (isCompleted && onSetDelete) {
+        onSetDelete(setId);
+      } else if (!isCompleted) {
+        // Remove pending set by reducing target sets
+        if (onTargetSetsChange && block.targetSets > completedSets.length) {
+          onTargetSetsChange(block.targetSets - 1);
+        }
+      }
+    }
+    
+    setSwipeState({ setId: null, startX: 0, currentX: 0, isSwiping: false });
+  };
+
+  const getSwipeTransform = (setId: string) => {
+    if (swipeState.setId !== setId || !swipeState.isSwiping) return {};
+    const diff = Math.min(120, Math.max(0, swipeState.startX - swipeState.currentX));
+    return {
+      transform: `translateX(-${diff}px)`,
+      transition: 'none',
+    };
+  };
+
+  // Calculate reps based on weight change using percentage of 1RM
+  // Uses Epley formula: 1RM = weight × (1 + reps/30)
+  const calculateRepsFromWeight = (newWeightKg: number, referenceWeightKg: number, referenceReps: number): number => {
+    if (referenceWeightKg <= 0 || newWeightKg <= 0 || referenceReps <= 0) return referenceReps;
+    
+    // Estimate 1RM from reference
+    const e1rm = referenceWeightKg * (1 + referenceReps / 30);
+    
+    // Calculate what reps we can do at new weight
+    // reps = 30 × (1RM/weight - 1)
+    const estimatedReps = Math.round(30 * (e1rm / newWeightKg - 1));
+    
+    // Clamp to reasonable range
+    return Math.max(1, Math.min(30, estimatedReps));
+  };
+
+  // Get RPE adjustment for next set based on last set's RPE
+  const getRpeAdjustedWeight = (lastRpe: number, targetRpe: number, lastWeightKg: number): number => {
+    // If last RPE was higher than target, suggest slightly lower weight
+    // If last RPE was lower than target, suggest slightly higher weight
+    const rpeDiff = targetRpe - lastRpe;
+    // Roughly 2.5-5% adjustment per RPE point
+    const adjustmentPercent = rpeDiff * 0.025;
+    return lastWeightKg * (1 + adjustmentPercent);
+  };
+
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
     setPendingInputs(prev => {
       const updated = [...prev];
       if (updated[index]) {
         updated[index] = { ...updated[index], [field]: value };
+        
+        // If weight changed, auto-adjust recommended reps
+        if (field === 'weight' && value) {
+          const newWeightDisplay = parseFloat(value);
+          if (!isNaN(newWeightDisplay) && newWeightDisplay > 0) {
+            const newWeightKg = inputWeightToKg(newWeightDisplay, unit);
+            
+            // Get reference data
+            const lastCompleted = completedSets[completedSets.length - 1];
+            const prevSet = previousSets[completedSets.length + index];
+            
+            let refWeight = 0;
+            let refReps = 0;
+            
+            if (lastCompleted) {
+              refWeight = lastCompleted.weightKg;
+              refReps = lastCompleted.reps;
+            } else if (prevSet) {
+              refWeight = prevSet.weightKg;
+              refReps = prevSet.reps;
+            } else if (suggestedWeight > 0) {
+              refWeight = suggestedWeight;
+              refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+            }
+            
+            if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
+              // Weight changed significantly, recalculate reps
+              const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
+              // Clamp to target rep range
+              const clampedReps = Math.max(
+                block.targetRepRange[0],
+                Math.min(block.targetRepRange[1], newReps)
+              );
+              updated[index].reps = String(clampedReps);
+            }
+          }
+        }
       }
       return updated;
     });
@@ -269,6 +420,18 @@ export function ExerciseCard({
                   </svg>
                 </button>
               </div>
+            )}
+            {/* Swap exercise button */}
+            {onExerciseSwap && isActive && similarExercises.length > 0 && (
+              <button
+                onClick={() => setShowSwapModal(true)}
+                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors mr-2"
+                title="Swap exercise"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+              </button>
             )}
             <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
               {completedSets.length}/{block.targetSets}
@@ -460,6 +623,7 @@ export function ExerciseCard({
                       type="number"
                       value={editWeight}
                       onChange={(e) => setEditWeight(e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       step="0.5"
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                     />
@@ -469,6 +633,7 @@ export function ExerciseCard({
                       type="number"
                       value={editReps}
                       onChange={(e) => setEditReps(e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                     />
                   </td>
@@ -477,6 +642,7 @@ export function ExerciseCard({
                       type="number"
                       value={editRpe}
                       onChange={(e) => setEditRpe(e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       step="0.5"
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                     />
@@ -508,8 +674,23 @@ export function ExerciseCard({
               ) : (
                 <tr
                   key={set.id}
-                  className="hover:bg-surface-800/30 group bg-success-500/5"
+                  className="hover:bg-surface-800/30 group bg-success-500/5 relative"
+                  onTouchStart={(e) => handleTouchStart(set.id, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={() => handleTouchEnd(set.id, true)}
+                  style={getSwipeTransform(set.id)}
                 >
+                  {/* Delete reveal background for swipe */}
+                  {swipeState.setId === set.id && swipeState.isSwiping && (
+                    <td 
+                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white"
+                      style={{ right: 0, position: 'absolute', height: '100%' }}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 text-surface-300 font-medium">
                     <div className="flex items-center gap-2">
                       <svg className="w-4 h-4 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -567,13 +748,32 @@ export function ExerciseCard({
               const qualityPreview = getQualityPreview(input);
               
               return (
-                <tr key={`pending-${index}`} className="bg-surface-800/30">
+                <tr 
+                  key={`pending-${index}`} 
+                  className="bg-surface-800/30 relative"
+                  onTouchStart={(e) => handleTouchStart(`pending-${index}`, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={() => handleTouchEnd(`pending-${index}`, false)}
+                  style={getSwipeTransform(`pending-${index}`)}
+                >
+                  {/* Delete reveal background */}
+                  {swipeState.setId === `pending-${index}` && swipeState.isSwiping && (
+                    <td 
+                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500/20 text-danger-400"
+                      style={{ right: 0, position: 'absolute', height: '100%' }}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
                   <td className="px-1 py-1.5">
                     <input
                       type="number"
                       value={input.weight}
                       onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       step="0.5"
                       min="0"
                       placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—'}
@@ -585,6 +785,7 @@ export function ExerciseCard({
                       type="number"
                       value={input.reps}
                       onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       min="0"
                       max="100"
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -595,6 +796,7 @@ export function ExerciseCard({
                       type="number"
                       value={input.rpe}
                       onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       step="0.5"
                       min="1"
                       max="10"
@@ -692,6 +894,71 @@ export function ExerciseCard({
               </div>
             </AccordionItem>
           </Accordion>
+        </div>
+      )}
+
+      {/* Swap Exercise Modal */}
+      {showSwapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setShowSwapModal(false)}>
+          <div 
+            className="w-full max-w-md bg-surface-900 rounded-xl shadow-2xl border border-surface-700 max-h-[80vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-surface-700">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-white">Swap Exercise</h3>
+                <button
+                  onClick={() => setShowSwapModal(false)}
+                  className="p-1 text-surface-400 hover:text-surface-200 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-sm text-surface-400 mt-1">
+                Replace <span className="text-surface-200 font-medium">{exercise.name}</span> with a similar exercise
+              </p>
+            </div>
+            <div className="p-2 max-h-96 overflow-y-auto">
+              {similarExercises.map(({ exercise: alt, score }) => (
+                <button
+                  key={alt.id}
+                  onClick={() => {
+                    if (onExerciseSwap) {
+                      onExerciseSwap(alt);
+                      setShowSwapModal(false);
+                    }
+                  }}
+                  className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-surface-100">{alt.name}</p>
+                    <p className="text-xs text-surface-500">
+                      {alt.primaryMuscle} • {alt.mechanic}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        score >= 80 ? 'bg-success-500/20 text-success-400' :
+                        score >= 60 ? 'bg-warning-500/20 text-warning-400' :
+                        'bg-surface-700 text-surface-400'
+                      }`}
+                    >
+                      {score}% match
+                    </div>
+                    <svg className="w-4 h-4 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </button>
+              ))}
+              {similarExercises.length === 0 && (
+                <p className="p-4 text-center text-surface-500">No similar exercises found</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </Card>

@@ -18,7 +18,7 @@ interface UserPreferences {
 const defaultPreferences: UserPreferences = {
   goal: 'maintenance',
   experience: 'intermediate',
-  units: 'kg',
+  units: 'lb', // Default to imperial
   heightCm: null,
   weightKg: null,
   restTimerDefault: 180,
@@ -67,7 +67,7 @@ export function useUserPreferences() {
             const newPrefs: UserPreferences = {
               goal: (data.goal as Goal) || 'maintenance',
               experience: (data.experience as Experience) || 'intermediate',
-              units: (prefs.units as WeightUnit) || 'kg',
+              units: (prefs.units as WeightUnit) || 'lb', // Default to imperial
               heightCm: data.height_cm as number | null,
               weightKg: data.weight_kg as number | null,
               restTimerDefault: (prefs.restTimer as number) || 180,
