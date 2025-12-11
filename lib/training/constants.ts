@@ -451,9 +451,20 @@ Some body movement is fine, but shouldn't be swinging wildly.`,
 
 // ============================================================
 // EXERCISE DATABASE
-// Core exercises for program generation
 // ============================================================
-
+/**
+ * @deprecated Use exerciseService.ts instead!
+ * 
+ * This is FALLBACK/SEED DATA only.
+ * The source of truth is the Supabase `exercises` table.
+ * 
+ * For runtime data, use:
+ *   import { getExercises, getExercisesForMuscle } from '@/services/exerciseService';
+ * 
+ * To add new exercises:
+ *   1. Add to supabase/seed.sql (for database)
+ *   2. Add here (for fallback/offline mode only)
+ */
 export const EXERCISE_DATABASE: Exercise[] = [
   // Chest
   { name: 'Barbell Bench Press', primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'shoulders'], pattern: 'horizontal_push', equipment: 'barbell', difficulty: 'intermediate', fatigueRating: 2 },

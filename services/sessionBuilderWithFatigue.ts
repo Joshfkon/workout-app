@@ -46,7 +46,8 @@ import {
   BASE_SFR,
 } from './fatigueBudgetEngine';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, EXERCISE_DATABASE, generateWarmup } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup } from './mesocycleBuilder';
+import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
 
 // NOTE: generateWarmup imported from mesocycleBuilder.ts
 
@@ -83,8 +84,11 @@ function selectExercisesWithFatigue(
   fatigueManager: SessionFatigueManager,
   startingPosition: number
 ): { exercise: ExerciseEntry; sets: number }[] {
+  // Get exercises from unified service (DB-backed with fallback)
+  const allExercises = getExercisesSync();
+  
   // Filter available exercises
-  let candidates = EXERCISE_DATABASE.filter(
+  let candidates = allExercises.filter(
     (e) =>
       e.primaryMuscle === muscle &&
       profile.availableEquipment.includes(e.equipment) &&
@@ -99,13 +103,13 @@ function selectExercisesWithFatigue(
   }
 
   if (candidates.length === 0) {
-    candidates = EXERCISE_DATABASE.filter(
+    candidates = allExercises.filter(
       (e) => e.primaryMuscle === muscle && profile.availableEquipment.includes(e.equipment)
     );
   }
 
   if (candidates.length === 0) {
-    candidates = EXERCISE_DATABASE.filter((e) => e.primaryMuscle === muscle);
+    candidates = allExercises.filter((e) => e.primaryMuscle === muscle);
   }
 
   // Sort by SFR (stimulus-to-fatigue ratio) - prefer more efficient exercises
