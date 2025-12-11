@@ -41,7 +41,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Protected routes - allow public pages without auth
-  const publicRoutes = ['/', '/login', '/register', '/learn', '/auth/callback'];
+  const publicRoutes = ['/', '/login', '/register', '/learn', '/auth/callback', '/forgot-password', '/reset-password'];
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname === route || 
     request.nextUrl.pathname.startsWith(route + '/')
