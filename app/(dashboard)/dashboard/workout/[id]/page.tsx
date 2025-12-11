@@ -852,6 +852,52 @@ export default function WorkoutPage() {
     }
   };
 
+  // Handle deleting an exercise from the workout
+  const handleExerciseDelete = async (blockId: string) => {
+    try {
+      const supabase = createUntypedClient();
+      
+      // First delete any set logs for this block
+      const { error: setsError } = await supabase
+        .from('set_logs')
+        .delete()
+        .eq('exercise_block_id', blockId);
+      
+      if (setsError) {
+        console.error('Failed to delete set logs:', setsError);
+      }
+      
+      // Then delete the exercise block
+      const { error: blockError } = await supabase
+        .from('exercise_blocks')
+        .delete()
+        .eq('id', blockId);
+      
+      if (blockError) {
+        console.error('Failed to delete exercise block:', blockError);
+        setError(`Failed to delete exercise: ${blockError.message}`);
+        return;
+      }
+      
+      // Update local state - remove the block and update set logs
+      setBlocks(prevBlocks => {
+        const newBlocks = prevBlocks.filter(b => b.id !== blockId);
+        // Adjust current block index if needed
+        if (currentBlockIndex >= newBlocks.length) {
+          setCurrentBlockIndex(Math.max(0, newBlocks.length - 1));
+        }
+        return newBlocks;
+      });
+      
+      setCompletedSets(prevSets => prevSets.filter(s => s.exerciseBlockId !== blockId));
+      setError(null);
+      
+    } catch (err) {
+      console.error('Failed to delete exercise:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete exercise');
+    }
+  };
+
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
@@ -1462,6 +1508,7 @@ export default function WorkoutPage() {
                     onSetDelete={handleDeleteSet}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
                     onExerciseSwap={(newEx) => handleExerciseSwap(block.id, newEx)}
+                    onExerciseDelete={() => handleExerciseDelete(block.id)}
                     availableExercises={blocks.map(b => b.exercise).concat(
                       availableExercises.map(ex => ({
                         id: ex.id,
