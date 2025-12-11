@@ -259,12 +259,34 @@ export default function NewMesocyclePage() {
       
       if (!user) throw new Error('You must be logged in');
 
-      // Create mesocycle
+      // Deactivate any existing active mesocycles
+      await supabase
+        .from('mesocycles')
+        .update({ state: 'completed', is_active: false })
+        .eq('user_id', user.id)
+        .eq('state', 'active');
+
+      // Calculate recovery factors for program data
+      const userProfile: ExtendedUserProfile = {
+        age: userAge,
+        experience: userExperience,
+        goal: userGoal,
+        sleepQuality,
+        stressLevel,
+        availableEquipment,
+        injuryHistory,
+        trainingAge,
+        heightCm: heightCm || null,
+        latestDexa: latestDexa || null,
+      };
+      const recoveryFactors = calculateRecoveryFactors(userProfile);
+
+      // Create mesocycle with full program data
       const { data: mesocycle, error: insertError } = await supabase
         .from('mesocycles')
         .insert({
           user_id: user.id,
-          name,
+          name: name || `${splitType} - ${new Date().toLocaleDateString()}`,
           split_type: splitType,
           days_per_week: daysPerWeek,
           total_weeks: totalWeeks,
@@ -272,6 +294,14 @@ export default function NewMesocyclePage() {
           current_week: 1,
           state: 'active',
           fatigue_score: 0,
+          is_active: true,
+          start_date: new Date().toISOString().split('T')[0],
+          // New fields for training science integration
+          periodization_model: fullProgram?.periodization?.model || 'linear',
+          program_data: fullProgram,
+          fatigue_budget_config: fullProgram?.fatigueBudget || null,
+          volume_per_muscle: recommendation?.volumePerMuscle || null,
+          recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
         })
         .select()
         .single();
