@@ -8,7 +8,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { UpgradePrompt } from '@/components/subscription';
-import { 
+import {
   type StrengthProfile,
   type CalibrationResult,
   type BodyComposition,
@@ -18,11 +18,11 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement } from '@/lib/utils';
+import { kgToLbs, roundToIncrement, formatWeight, formatDuration } from '@/lib/utils';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
   const segments = generatePercentileSegments(percentile);
-  
+
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-surface-400">
@@ -31,7 +31,7 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
       </div>
       <div className="flex gap-0.5">
         {segments.map((seg, i) => (
-          <div 
+          <div
             key={i}
             className="h-2 flex-1 rounded-sm transition-colors"
             style={{ backgroundColor: seg.color }}
@@ -57,6 +57,45 @@ interface CoachingPreferences {
   experience: string;
   equipment: string[];
   injuries: string[];
+}
+
+interface WorkoutSummary {
+  id: string;
+  date: string;
+  duration: number;
+  totalSets: number;
+  totalReps: number;
+  totalVolume: number;
+  sessionRpe: number | null;
+  pumpRating: number | null;
+}
+
+interface MuscleVolumeData {
+  muscle: string;
+  sets: number;
+  workouts: number;
+}
+
+interface ExercisePerformance {
+  exerciseId: string;
+  exerciseName: string;
+  bestWeight: number;
+  bestReps: number;
+  estimatedE1RM: number;
+  totalSets: number;
+  lastPerformed: string;
+}
+
+interface AnalyticsData {
+  totalWorkouts: number;
+  totalSets: number;
+  totalVolume: number;
+  avgWorkoutDuration: number;
+  avgSessionRpe: number;
+  recentWorkouts: WorkoutSummary[];
+  weeklyMuscleVolume: MuscleVolumeData[];
+  topExercises: ExercisePerformance[];
+  currentStreak: number;
 }
 
 const GOAL_OPTIONS = [
@@ -85,6 +124,13 @@ const INJURY_OPTIONS = [
   { value: 'elbow', label: 'Elbow issues' },
 ];
 
+// Calculate estimated 1RM using Brzycki formula
+function calculateE1RM(weight: number, reps: number): number {
+  if (reps === 1) return weight;
+  if (reps > 12) return weight * (1 + reps / 30);
+  return weight * (36 / (37 - reps));
+}
+
 export default function CoachingPage() {
   const router = useRouter();
   const { canAccess, isLoading: subLoading } = useSubscription();
@@ -104,7 +150,9 @@ export default function CoachingPage() {
     injuries: [],
   });
   const [hasSetPrefs, setHasSetPrefs] = useState(false);
-  
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('30d');
+
   // Unit display helpers
   const units = preferences?.units || 'lb';
   const displayWeight = (kg: number) => {
@@ -112,26 +160,26 @@ export default function CoachingPage() {
     return roundToIncrement(value, 2.5);
   };
   const weightUnit = units === 'lb' ? 'lbs' : 'kg';
-  
+
   useEffect(() => {
     async function fetchData() {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         router.push('/login');
         return;
       }
-      
+
       // Get user data including coaching preferences
       const { data: userData } = await supabase
         .from('users')
         .select('sex, goal, experience, preferences')
         .eq('id', user.id)
         .single();
-      
+
       setSex((userData?.sex as 'male' | 'female') || 'male');
-      
+
       // Load coaching preferences
       const prefs = userData?.preferences as Record<string, unknown> | null;
       if (prefs?.coaching) {
@@ -152,27 +200,27 @@ export default function CoachingPage() {
           experience: userData.experience || prev.experience,
         }));
       }
-      
+
       // Get all coaching sessions
       const { data: sessionsData } = await supabase
         .from('coaching_sessions')
         .select('id, status, created_at, completed_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      
+
       // Get most recent completed session with lifts
       const completedSessions = sessionsData?.filter((s: { status: string }) => s.status === 'completed') || [];
-      
+
       if (completedSessions.length > 0) {
         const latestSession = completedSessions[0];
-        
+
         // Get the strength profile from session
         const { data: sessionWithProfile } = await supabase
           .from('coaching_sessions')
           .select('*, calibrated_lifts:calibrated_lifts(*)')
           .eq('id', latestSession.id)
           .single();
-        
+
         if (sessionWithProfile?.strength_profile) {
           setProfile(sessionWithProfile.strength_profile as StrengthProfile);
         } else if (sessionWithProfile?.calibrated_lifts?.length > 0) {
@@ -203,20 +251,20 @@ export default function CoachingPage() {
             },
             strengthLevel: lift.strength_level
           }));
-          
+
           const manager = new CoachingSessionManager();
           manager.loadSession({
             bodyComposition: bodyComp,
             completedBenchmarks: calibratedLifts
           });
-          
+
           const generatedProfile = manager.generateStrengthProfile(sex);
           if (generatedProfile) {
             setProfile(generatedProfile);
           }
         }
       }
-      
+
       // Get lift counts for sessions
       if (sessionsData) {
         const sessionsWithCounts = await Promise.all(
@@ -225,7 +273,7 @@ export default function CoachingPage() {
               .from('calibrated_lifts')
               .select('*', { count: 'exact', head: true })
               .eq('coaching_session_id', s.id);
-            
+
             return {
               ...s,
               lift_count: count || 0
@@ -234,34 +282,271 @@ export default function CoachingPage() {
         );
         setSessions(sessionsWithCounts);
       }
-      
+
       setIsLoading(false);
     }
-    
+
     fetchData();
   }, [router, sex]);
-  
+
+  // Fetch analytics data
+  useEffect(() => {
+    async function fetchAnalytics() {
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Calculate date range
+        const now = new Date();
+        let startDate: Date | null = null;
+        if (timeRange === '7d') {
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        } else if (timeRange === '30d') {
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+
+        // Fetch workout data
+        let query = supabase
+          .from('workout_sessions')
+          .select(`
+            id,
+            started_at,
+            completed_at,
+            session_rpe,
+            pump_rating,
+            planned_date,
+            exercise_blocks!inner (
+              id,
+              workout_session_id,
+              exercises!inner (
+                id,
+                name,
+                primary_muscle
+              ),
+              set_logs!inner (
+                id,
+                exercise_block_id,
+                weight_kg,
+                reps,
+                is_warmup,
+                logged_at
+              )
+            )
+          `)
+          .eq('user_id', user.id)
+          .eq('state', 'completed')
+          .order('completed_at', { ascending: false });
+
+        if (startDate) {
+          query = query.gte('completed_at', startDate.toISOString());
+        }
+
+        const { data: workoutSessions, error } = await query;
+
+        if (error) throw error;
+
+        if (!workoutSessions || workoutSessions.length === 0) {
+          setAnalytics(null);
+          return;
+        }
+
+        // Process analytics data
+        let totalSets = 0;
+        let totalVolume = 0;
+        let totalRpeSum = 0;
+        let rpeCount = 0;
+        const durations: number[] = [];
+        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string> }>();
+        const exercisePerformanceMap = new Map<string, ExercisePerformance>();
+
+        workoutSessions.forEach((session: any) => {
+          if (session.started_at && session.completed_at) {
+            const duration = Math.floor(
+              (new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000
+            );
+            durations.push(duration);
+          }
+
+          if (session.session_rpe) {
+            totalRpeSum += session.session_rpe;
+            rpeCount++;
+          }
+
+          if (session.exercise_blocks) {
+            session.exercise_blocks.forEach((block: any) => {
+              if (!block.exercises || !block.set_logs) return;
+
+              const muscle = block.exercises.primary_muscle;
+              const exerciseId = block.exercises.id;
+              const exerciseName = block.exercises.name;
+
+              const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
+
+              if (!muscleVolumeMap.has(muscle)) {
+                muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set() });
+              }
+              const muscleData = muscleVolumeMap.get(muscle)!;
+              muscleData.sets += workingSets.length;
+              muscleData.workouts.add(session.id);
+
+              workingSets.forEach((set: any) => {
+                totalSets++;
+                totalVolume += set.weight_kg * set.reps;
+
+                const e1rm = calculateE1RM(set.weight_kg, set.reps);
+
+                if (!exercisePerformanceMap.has(exerciseId)) {
+                  exercisePerformanceMap.set(exerciseId, {
+                    exerciseId,
+                    exerciseName,
+                    bestWeight: set.weight_kg,
+                    bestReps: set.reps,
+                    estimatedE1RM: e1rm,
+                    totalSets: 0,
+                    lastPerformed: set.logged_at,
+                  });
+                }
+
+                const exData = exercisePerformanceMap.get(exerciseId)!;
+                exData.totalSets++;
+                if (e1rm > exData.estimatedE1RM) {
+                  exData.estimatedE1RM = e1rm;
+                  exData.bestWeight = set.weight_kg;
+                  exData.bestReps = set.reps;
+                }
+                if (new Date(set.logged_at) > new Date(exData.lastPerformed)) {
+                  exData.lastPerformed = set.logged_at;
+                }
+              });
+            });
+          }
+        });
+
+        const totalWorkouts = workoutSessions.length;
+        const avgWorkoutDuration = durations.length > 0
+          ? Math.floor(durations.reduce((a, b) => a + b, 0) / durations.length)
+          : 0;
+        const avgSessionRpe = rpeCount > 0
+          ? Math.round((totalRpeSum / rpeCount) * 10) / 10
+          : 0;
+
+        const recentWorkouts: WorkoutSummary[] = workoutSessions.slice(0, 5).map((session: any) => {
+          let sessionSets = 0;
+          let sessionReps = 0;
+          let sessionVolume = 0;
+
+          if (session.exercise_blocks) {
+            session.exercise_blocks.forEach((block: any) => {
+              if (block.set_logs) {
+                block.set_logs.forEach((set: any) => {
+                  if (!set.is_warmup) {
+                    sessionSets++;
+                    sessionReps += set.reps;
+                    sessionVolume += set.weight_kg * set.reps;
+                  }
+                });
+              }
+            });
+          }
+
+          const duration = session.started_at && session.completed_at
+            ? Math.floor((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000)
+            : 0;
+
+          return {
+            id: session.id,
+            date: session.completed_at || session.planned_date,
+            duration,
+            totalSets: sessionSets,
+            totalReps: sessionReps,
+            totalVolume: sessionVolume,
+            sessionRpe: session.session_rpe,
+            pumpRating: session.pump_rating,
+          };
+        });
+
+        const weeklyMuscleVolume: MuscleVolumeData[] = Array.from(muscleVolumeMap.entries())
+          .map(([muscle, data]) => ({
+            muscle,
+            sets: data.sets,
+            workouts: data.workouts.size,
+          }))
+          .sort((a, b) => b.sets - a.sets);
+
+        const topExercises = Array.from(exercisePerformanceMap.values())
+          .sort((a, b) => b.estimatedE1RM - a.estimatedE1RM)
+          .slice(0, 10);
+
+        // Calculate streak
+        let currentStreak = 0;
+        if (workoutSessions.length > 0) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          let lastWorkoutDate = new Date(workoutSessions[0].completed_at);
+          lastWorkoutDate.setHours(0, 0, 0, 0);
+
+          const daysSinceLastWorkout = Math.floor((today.getTime() - lastWorkoutDate.getTime()) / (24 * 60 * 60 * 1000));
+
+          if (daysSinceLastWorkout <= 2) {
+            currentStreak = 1;
+
+            for (let i = 1; i < workoutSessions.length; i++) {
+              const prevDate = new Date(workoutSessions[i - 1].completed_at);
+              const currDate = new Date(workoutSessions[i].completed_at);
+              prevDate.setHours(0, 0, 0, 0);
+              currDate.setHours(0, 0, 0, 0);
+
+              const gap = Math.floor((prevDate.getTime() - currDate.getTime()) / (24 * 60 * 60 * 1000));
+
+              if (gap <= 3) {
+                currentStreak++;
+              } else {
+                break;
+              }
+            }
+          }
+        }
+
+        setAnalytics({
+          totalWorkouts,
+          totalSets,
+          totalVolume,
+          avgWorkoutDuration,
+          avgSessionRpe,
+          recentWorkouts,
+          weeklyMuscleVolume,
+          topExercises,
+          currentStreak,
+        });
+      } catch (error) {
+        console.error('Failed to fetch analytics:', error);
+      }
+    }
+
+    fetchAnalytics();
+  }, [timeRange]);
+
   const handleStartCalibration = () => {
     router.push('/onboarding');
   };
-  
+
   const saveCoachingPrefs = async () => {
     setIsSavingPrefs(true);
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      
-      // Get current preferences
+
       const { data: userData } = await supabase
         .from('users')
         .select('preferences')
         .eq('id', user.id)
         .single();
-      
+
       const existingPrefs = (userData?.preferences as Record<string, unknown>) || {};
-      
-      // Update with coaching preferences
+
       const { error } = await supabase
         .from('users')
         .update({
@@ -273,7 +558,7 @@ export default function CoachingPage() {
           experience: coachingPrefs.experience,
         })
         .eq('id', user.id);
-      
+
       if (!error) {
         setHasSetPrefs(true);
         setShowQuestionnaire(false);
@@ -284,20 +569,20 @@ export default function CoachingPage() {
       setIsSavingPrefs(false);
     }
   };
-  
-  // Check subscription access - coaching requires Elite tier (must be after hooks)
+
+  // Check subscription access
   if (!subLoading && !canAccess('coachingCalibration')) {
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Coaching & Calibration</h1>
-          <p className="text-surface-400 mt-1">Get personalized strength assessments and identify imbalances</p>
+          <h1 className="text-2xl font-bold text-surface-100">Strength & Analytics</h1>
+          <p className="text-surface-400 mt-1">Track your strength calibration, percentile rankings, and workout analytics</p>
         </div>
         <UpgradePrompt feature="coachingCalibration" requiredTier="elite" />
       </div>
     );
   }
-  
+
   if (isLoading || subLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -305,28 +590,44 @@ export default function CoachingPage() {
       </div>
     );
   }
-  
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Strength Coaching</h1>
-          <p className="text-surface-400">Track your strength calibration and percentile rankings</p>
+          <h1 className="text-2xl font-bold text-white">Strength & Analytics</h1>
+          <p className="text-surface-400">Track your calibration, percentile rankings, and workout progress</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowQuestionnaire(true)}>
+          {/* Time range selector for analytics */}
+          <div className="flex gap-1 bg-surface-800 p-1 rounded-lg">
+            {(['7d', '30d', 'all'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                  timeRange === range
+                    ? 'bg-primary-500 text-white'
+                    : 'text-surface-400 hover:text-surface-200'
+                }`}
+              >
+                {range === '7d' ? '7d' : range === '30d' ? '30d' : 'All'}
+              </button>
+            ))}
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => setShowQuestionnaire(true)}>
             {hasSetPrefs ? 'Edit Goals' : 'Set Goals'}
           </Button>
-          <Button onClick={handleStartCalibration}>
+          <Button size="sm" onClick={handleStartCalibration}>
             {profile ? 'Re-Calibrate' : 'Strength Test'}
           </Button>
         </div>
       </div>
-      
+
       {/* Coaching Questionnaire Modal */}
       {showQuestionnaire && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setShowQuestionnaire(false)}>
-          <div 
+          <div
             className="w-full max-w-2xl bg-surface-900 rounded-xl shadow-2xl border border-surface-700 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
@@ -336,7 +637,7 @@ export default function CoachingPage() {
                 Help us personalize your coaching recommendations
               </p>
             </div>
-            
+
             <div className="p-6 space-y-6">
               {/* Primary Goal */}
               <div>
@@ -358,7 +659,7 @@ export default function CoachingPage() {
                   ))}
                 </div>
               </div>
-              
+
               {/* Schedule */}
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
@@ -398,7 +699,7 @@ export default function CoachingPage() {
                   </div>
                 </div>
               </div>
-              
+
               {/* Experience */}
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-2">Training Experience</label>
@@ -423,7 +724,7 @@ export default function CoachingPage() {
                   ))}
                 </div>
               </div>
-              
+
               {/* Equipment */}
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-2">Available Equipment</label>
@@ -431,8 +732,8 @@ export default function CoachingPage() {
                   {EQUIPMENT_OPTIONS.map((eq) => (
                     <button
                       key={eq.value}
-                      onClick={() => setCoachingPrefs(p => ({ 
-                        ...p, 
+                      onClick={() => setCoachingPrefs(p => ({
+                        ...p,
                         equipment: p.equipment.includes(eq.value)
                           ? p.equipment.filter(e => e !== eq.value)
                           : [...p.equipment, eq.value]
@@ -448,7 +749,7 @@ export default function CoachingPage() {
                   ))}
                 </div>
               </div>
-              
+
               {/* Injuries */}
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-2">Any Limitations or Injuries?</label>
@@ -460,8 +761,8 @@ export default function CoachingPage() {
                         if (inj.value === 'none') {
                           setCoachingPrefs(p => ({ ...p, injuries: [] }));
                         } else {
-                          setCoachingPrefs(p => ({ 
-                            ...p, 
+                          setCoachingPrefs(p => ({
+                            ...p,
                             injuries: p.injuries.includes(inj.value)
                               ? p.injuries.filter(i => i !== inj.value)
                               : [...p.injuries.filter(i => i !== 'none'), inj.value]
@@ -469,7 +770,7 @@ export default function CoachingPage() {
                         }
                       }}
                       className={`px-3 py-2 rounded-lg border text-sm transition-all ${
-                        (inj.value === 'none' && coachingPrefs.injuries.length === 0) || 
+                        (inj.value === 'none' && coachingPrefs.injuries.length === 0) ||
                         coachingPrefs.injuries.includes(inj.value)
                           ? 'border-warning-500 bg-warning-500/20 text-warning-300'
                           : 'border-surface-700 text-surface-400 hover:border-surface-600'
@@ -481,7 +782,7 @@ export default function CoachingPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-surface-700 flex justify-end gap-3">
               <Button variant="ghost" onClick={() => setShowQuestionnaire(false)}>
                 Cancel
@@ -493,7 +794,7 @@ export default function CoachingPage() {
           </div>
         </div>
       )}
-      
+
       {/* Show prompt if no preferences set */}
       {!hasSetPrefs && !profile && (
         <Card className="border-2 border-dashed border-accent-500/30 bg-gradient-to-r from-accent-500/5 to-primary-500/5">
@@ -505,7 +806,7 @@ export default function CoachingPage() {
             </div>
             <h3 className="text-lg font-semibold text-surface-100">Set Your Training Goals</h3>
             <p className="text-sm text-surface-400 mt-2 max-w-md mx-auto">
-              Answer a few quick questions to help us personalize your training recommendations, 
+              Answer a few quick questions to help us personalize your training recommendations,
               exercise selection, and coaching insights.
             </p>
             <Button className="mt-4" onClick={() => setShowQuestionnaire(true)}>
@@ -517,7 +818,51 @@ export default function CoachingPage() {
           </CardContent>
         </Card>
       )}
-      
+
+      {/* Analytics Quick Stats */}
+      {analytics && analytics.totalWorkouts > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <Card className="p-4">
+            <p className="text-xs text-surface-500 uppercase tracking-wider">Workouts</p>
+            <p className="text-2xl font-bold text-primary-400 mt-1">{analytics.totalWorkouts}</p>
+            {analytics.currentStreak > 1 && (
+              <p className="text-xs text-success-400 mt-1">🔥 {analytics.currentStreak} workout streak</p>
+            )}
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-surface-500 uppercase tracking-wider">Total Sets</p>
+            <p className="text-2xl font-bold text-primary-400 mt-1">{analytics.totalSets}</p>
+            <p className="text-xs text-surface-500 mt-1">
+              ~{Math.round(analytics.totalSets / analytics.totalWorkouts)} per workout
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-surface-500 uppercase tracking-wider">Total Volume</p>
+            <p className="text-2xl font-bold text-primary-400 mt-1">
+              {formatWeight(analytics.totalVolume / 1000, units, 0)}k
+            </p>
+            <p className="text-xs text-surface-500 mt-1">
+              ~{formatWeight(analytics.totalVolume / analytics.totalWorkouts, units, 0)} per workout
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-surface-500 uppercase tracking-wider">Avg Duration</p>
+            <p className="text-2xl font-bold text-primary-400 mt-1">
+              {formatDuration(analytics.avgWorkoutDuration)}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-surface-500 uppercase tracking-wider">Avg RPE</p>
+            <p className="text-2xl font-bold text-primary-400 mt-1">
+              {analytics.avgSessionRpe > 0 ? analytics.avgSessionRpe : '-'}
+            </p>
+            <p className="text-xs text-surface-500 mt-1">
+              {analytics.avgSessionRpe >= 8 ? 'High intensity' : analytics.avgSessionRpe >= 6 ? 'Moderate' : 'Building up'}
+            </p>
+          </Card>
+        </div>
+      )}
+
       {profile ? (
         <>
           {/* Overall score card */}
@@ -559,7 +904,7 @@ export default function CoachingPage() {
                     <span className="text-sm text-surface-400">/ 100</span>
                   </div>
                 </div>
-                
+
                 {/* Stats */}
                 <div className="flex-1 space-y-4">
                   <div>
@@ -568,7 +913,7 @@ export default function CoachingPage() {
                       {formatStrengthLevel(profile.strengthLevel)}
                     </p>
                   </div>
-                  
+
                   <div className="grid grid-cols-3 gap-4">
                     <div className="p-3 bg-surface-900/50 rounded-lg">
                       <p className="text-xs text-surface-500">Balance</p>
@@ -587,7 +932,7 @@ export default function CoachingPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <div className="grid lg:grid-cols-2 gap-6">
             {/* Calibrated lifts */}
             <Card>
@@ -602,7 +947,7 @@ export default function CoachingPage() {
                         <div>
                           <h4 className="font-medium text-surface-200">{lift.lift}</h4>
                           <p className="text-sm text-surface-500">
-                            {lift.benchmarkId === 'pullup' 
+                            {lift.benchmarkId === 'pullup'
                               ? `${lift.testedReps} reps`
                               : `E1RM: ${displayWeight(lift.estimated1RM)} ${weightUnit}`}
                           </p>
@@ -611,7 +956,7 @@ export default function CoachingPage() {
                           {formatStrengthLevel(lift.strengthLevel)}
                         </Badge>
                       </div>
-                      <PercentileBar 
+                      <PercentileBar
                         percentile={lift.percentileScore.vsTrainedPopulation}
                         label="vs Trained Lifters"
                       />
@@ -620,10 +965,47 @@ export default function CoachingPage() {
                 </div>
               </CardContent>
             </Card>
-            
-            {/* Right column */}
+
+            {/* Volume by muscle */}
+            {analytics && analytics.weeklyMuscleVolume.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Volume by Muscle Group</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.weeklyMuscleVolume.slice(0, 8).map((muscle) => {
+                      const maxSets = Math.max(...analytics.weeklyMuscleVolume.map(m => m.sets));
+                      const percentage = maxSets > 0 ? (muscle.sets / maxSets) * 100 : 0;
+
+                      return (
+                        <div key={muscle.muscle}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-medium text-surface-200 capitalize">
+                              {muscle.muscle}
+                            </span>
+                            <span className="text-sm text-surface-400">
+                              {muscle.sets} sets
+                            </span>
+                          </div>
+                          <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-6">
+            {/* Imbalances and Recommendations */}
             <div className="space-y-6">
-              {/* Imbalances */}
               {profile.imbalances.length > 0 && (
                 <Card className="border-warning-500/30">
                   <CardHeader>
@@ -635,10 +1017,10 @@ export default function CoachingPage() {
                   <CardContent>
                     <div className="space-y-3">
                       {profile.imbalances.map((imbalance, i) => (
-                        <div 
+                        <div
                           key={i}
                           className={`p-4 rounded-lg ${
-                            imbalance.severity === 'significant' 
+                            imbalance.severity === 'significant'
                               ? 'bg-danger-500/10 border border-danger-500/30'
                               : imbalance.severity === 'moderate'
                               ? 'bg-warning-500/10 border border-warning-500/30'
@@ -663,8 +1045,7 @@ export default function CoachingPage() {
                   </CardContent>
                 </Card>
               )}
-              
-              {/* Recommendations */}
+
               <Card>
                 <CardHeader>
                   <CardTitle>Recommendations</CardTitle>
@@ -683,8 +1064,105 @@ export default function CoachingPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Top exercises */}
+            {analytics && analytics.topExercises.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Exercises (Est. 1RM)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {analytics.topExercises.slice(0, 8).map((exercise, idx) => (
+                      <div key={exercise.exerciseId} className="flex items-center gap-3">
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                          idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
+                        }`}>
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-surface-200 truncate">
+                            {exercise.exerciseName}
+                          </p>
+                          <p className="text-xs text-surface-500">
+                            Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-primary-400">
+                            {formatWeight(exercise.estimatedE1RM, units)}
+                          </p>
+                          <p className="text-xs text-surface-500">{exercise.totalSets} sets</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
-          
+
+          {/* Recent workouts */}
+          {analytics && analytics.recentWorkouts.length > 0 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Recent Workouts</CardTitle>
+                  <Link href="/dashboard/history">
+                    <Button variant="ghost" size="sm">View All →</Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {analytics.recentWorkouts.map((workout) => (
+                    <Link
+                      key={workout.id}
+                      href={`/dashboard/workout/${workout.id}`}
+                      className="block"
+                    >
+                      <div className="p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-surface-200">
+                              {new Date(workout.date).toLocaleDateString('en-US', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </p>
+                            <p className="text-xs text-surface-500">
+                              {workout.totalSets} sets · {workout.totalReps} reps · {formatWeight(workout.totalVolume, units)} total
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {workout.sessionRpe && (
+                              <Badge variant={workout.sessionRpe >= 8 ? 'danger' : workout.sessionRpe >= 6 ? 'warning' : 'default'}>
+                                RPE {workout.sessionRpe}
+                              </Badge>
+                            )}
+                            {workout.pumpRating && (
+                              <span className="text-sm">
+                                {workout.pumpRating === 5 && '🔥'}
+                                {workout.pumpRating === 4 && '😄'}
+                                {workout.pumpRating === 3 && '😊'}
+                                {workout.pumpRating === 2 && '🙂'}
+                                {workout.pumpRating === 1 && '😐'}
+                              </span>
+                            )}
+                            <span className="text-xs text-surface-500">
+                              {formatDuration(workout.duration)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Calibration history */}
           {sessions.length > 0 && (
             <Card>
@@ -694,7 +1172,7 @@ export default function CoachingPage() {
               <CardContent>
                 <div className="space-y-2">
                   {sessions.map((session) => (
-                    <div 
+                    <div
                       key={session.id}
                       className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg"
                     >
@@ -731,7 +1209,7 @@ export default function CoachingPage() {
             </div>
             <h2 className="text-2xl font-bold text-white mb-3">Calibrate Your Strength</h2>
             <p className="text-surface-400 mb-6 max-w-md mx-auto">
-              Test your key lifts to get personalized weight recommendations, percentile rankings, 
+              Test your key lifts to get personalized weight recommendations, percentile rankings,
               and identify any strength imbalances. Takes about 15-30 minutes.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -742,7 +1220,7 @@ export default function CoachingPage() {
                 </svg>
               </Button>
             </div>
-            
+
             <div className="mt-8 grid sm:grid-cols-3 gap-4 text-left">
               <div className="p-4 bg-surface-900/50 rounded-lg">
                 <div className="w-8 h-8 rounded-lg bg-primary-500/20 flex items-center justify-center mb-2">
@@ -772,4 +1250,3 @@ export default function CoachingPage() {
     </div>
   );
 }
-
