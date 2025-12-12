@@ -82,6 +82,7 @@ export default function AnalyticsPage() {
         }
 
         // OPTIMIZATION: Fetch all data in a single query with joins
+        // Using left joins (default) to include sessions even without sets
         let query = supabase
           .from('workout_sessions')
           .select(`
@@ -91,15 +92,15 @@ export default function AnalyticsPage() {
             session_rpe,
             pump_rating,
             planned_date,
-            exercise_blocks!inner (
+            exercise_blocks (
               id,
               workout_session_id,
-              exercises!inner (
+              exercises (
                 id,
                 name,
                 primary_muscle
               ),
-              set_logs!inner (
+              set_logs (
                 id,
                 exercise_block_id,
                 weight_kg,

@@ -193,18 +193,7 @@ export const SetInputRow = memo(function SetInputRow({
       )}
     </div>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparison for performance
-  return (
-    prevProps.setNumber === nextProps.setNumber &&
-    prevProps.targetWeight === nextProps.targetWeight &&
-    prevProps.targetRepRange[0] === nextProps.targetRepRange[0] &&
-    prevProps.targetRepRange[1] === nextProps.targetRepRange[1] &&
-    prevProps.targetRir === nextProps.targetRir &&
-    prevProps.isLastSet === nextProps.isLastSet &&
-    prevProps.disabled === nextProps.disabled &&
-    prevProps.unit === nextProps.unit &&
-    prevProps.previousSet?.id === nextProps.previousSet?.id
-  );
 });
+// Note: Using React.memo's default shallow comparison for safety.
+// Parent components should wrap callbacks with useCallback for optimal performance.
 

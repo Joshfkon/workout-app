@@ -1129,17 +1129,6 @@ export const ExerciseCard = memo(function ExerciseCard({
       )}
     </Card>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparison function for performance
-  // Only re-render if these specific props change
-  return (
-    prevProps.exercise.id === nextProps.exercise.id &&
-    prevProps.block.id === nextProps.block.id &&
-    prevProps.block.targetSets === nextProps.block.targetSets &&
-    prevProps.block.targetWeightKg === nextProps.block.targetWeightKg &&
-    prevProps.sets.length === nextProps.sets.length &&
-    prevProps.isActive === nextProps.isActive &&
-    prevProps.unit === nextProps.unit &&
-    prevProps.recommendedWeight === nextProps.recommendedWeight
-  );
 });
+// Note: Using React.memo's default shallow comparison for safety.
+// Parent components should wrap callbacks with useCallback for optimal performance.

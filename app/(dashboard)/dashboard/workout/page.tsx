@@ -80,7 +80,7 @@ export default function WorkoutPage() {
             .order('planned_date', { ascending: true })
             .limit(5),
 
-          // Active mesocycle with completed workouts this week
+          // Active mesocycle with all workout sessions (filter completed this week in-memory)
           supabase
             .from('mesocycles')
             .select(`
@@ -90,7 +90,7 @@ export default function WorkoutPage() {
               weeks,
               days_per_week,
               split,
-              workout_sessions!inner (
+              workout_sessions (
                 id,
                 state,
                 completed_at
@@ -98,7 +98,6 @@ export default function WorkoutPage() {
             `)
             .eq('user_id', user.id)
             .eq('is_active', true)
-            .gte('workout_sessions.completed_at', weekStart.toISOString())
             .maybeSingle(),
         ]);
 
@@ -131,10 +130,12 @@ export default function WorkoutPage() {
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
 
-          // Count completed workouts from already-fetched data
-          const weeklyCount = mesocycle.workout_sessions?.filter(
-            (s: any) => s.state === 'completed'
-          ).length || 0;
+          // Count completed workouts this week from already-fetched data
+          const weeklyCount = mesocycle.workout_sessions?.filter((s: any) => {
+            if (s.state !== 'completed' || !s.completed_at) return false;
+            const completedDate = new Date(s.completed_at);
+            return completedDate >= weekStart;
+          }).length || 0;
 
           setActiveMesocycle({
             id: mesocycle.id,

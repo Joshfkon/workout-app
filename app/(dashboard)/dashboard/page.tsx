@@ -85,15 +85,15 @@ export default function DashboardPage() {
             .eq('id', user.id)
             .single(),
 
-          // Workouts this week with nested data
+          // Workouts this week with nested data (left joins to include empty workouts)
           supabase
             .from('workout_sessions')
             .select(`
               id,
               session_rpe,
-              exercise_blocks!inner (
+              exercise_blocks (
                 id,
-                set_logs!inner (
+                set_logs (
                   id,
                   weight_kg,
                   reps,
@@ -114,7 +114,7 @@ export default function DashboardPage() {
             .order('completed_at', { ascending: false })
             .limit(5),
 
-          // Active mesocycle with related session data
+          // Active mesocycle with related session data (left join to show even without sessions)
           supabase
             .from('mesocycles')
             .select(`
@@ -124,7 +124,7 @@ export default function DashboardPage() {
               weeks,
               total_weeks,
               days_per_week,
-              workout_sessions!inner (
+              workout_sessions (
                 id,
                 state,
                 planned_date,
@@ -145,7 +145,7 @@ export default function DashboardPage() {
             `)
             .eq('user_id', user.id)
             .eq('is_active', true)
-            .single(),
+            .maybeSingle(),
         ]);
 
         // Set onboarding status
