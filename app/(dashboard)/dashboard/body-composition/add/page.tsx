@@ -28,7 +28,7 @@ export default function AddDexaScanPage() {
   const [boneMassDisplay, setBoneMassDisplay] = useState('');
   const [notes, setNotes] = useState('');
   const [inputMode, setInputMode] = useState<'calculated' | 'manual'>('calculated');
-  
+
   // Convert display value to kg
   const toKg = (displayValue: string): number => {
     const val = parseFloat(displayValue);
@@ -219,7 +219,7 @@ export default function AddDexaScanPage() {
         bone_mass_kg: roundedBone,
         notes: notes || null,
       };
-      
+
       // Only add regional_data if it's not null (column might not exist in older DBs)
       if (regionalResult.data) {
         insertData.regional_data = regionalResult.data;

@@ -1115,31 +1115,56 @@ export interface RegionalAnalysis {
 export interface DexaScan {
   id: string;
   userId: string;
-  
+
   /** Date of the scan (YYYY-MM-DD) */
   scanDate: string;
-  
+
   /** Total body weight in kg */
   weightKg: number;
-  
+
   /** Lean mass (muscle + organs) in kg */
   leanMassKg: number;
-  
+
   /** Fat mass in kg */
   fatMassKg: number;
-  
+
   /** Body fat percentage */
   bodyFatPercent: number;
-  
+
   /** Bone mineral content in kg (optional) */
   boneMassKg: number | null;
-  
+
   /** Regional body composition data (optional) */
   regionalData: DexaRegionalData | null;
-  
+
   /** Notes about the scan */
   notes: string | null;
-  
+
+  createdAt: string;
+}
+
+/**
+ * Progress photo entry for visual body composition tracking
+ */
+export interface ProgressPhoto {
+  id: string;
+  userId: string;
+
+  /** Date of the photo (YYYY-MM-DD) */
+  photoDate: string;
+
+  /** Storage path to the photo */
+  photoUrl: string;
+
+  /** Optional weight at time of photo in kg */
+  weightKg: number | null;
+
+  /** Optional body fat percentage at time of photo */
+  bodyFatPercent: number | null;
+
+  /** Notes about the photo */
+  notes: string | null;
+
   createdAt: string;
 }
 
