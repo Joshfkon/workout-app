@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
@@ -36,100 +36,122 @@ export default function WorkoutPage() {
     async function fetchWorkouts() {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         setIsLoading(false);
         return;
       }
 
-      // Fetch in-progress workout
-      const { data: inProgress } = await supabase
-        .from('workout_sessions')
-        .select(`
-          id,
-          planned_date,
-          state,
-          exercise_blocks (id)
-        `)
-        .eq('user_id', user.id)
-        .eq('state', 'in_progress')
-        .single();
+      // Calculate date ranges
+      const now = new Date();
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      const weekStart = new Date(now);
+      weekStart.setDate(diff);
+      weekStart.setHours(0, 0, 0, 0);
 
-      if (inProgress) {
-        setInProgressWorkout({
-          id: inProgress.id,
-          planned_date: inProgress.planned_date,
-          state: inProgress.state,
-          exercise_count: inProgress.exercise_blocks?.length || 0,
-        });
+      try {
+        // OPTIMIZATION: Run all queries in parallel
+        const [inProgressResult, plannedResult, mesocycleResult] = await Promise.all([
+          // In-progress workout
+          supabase
+            .from('workout_sessions')
+            .select(`
+              id,
+              planned_date,
+              state,
+              exercise_blocks (id)
+            `)
+            .eq('user_id', user.id)
+            .eq('state', 'in_progress')
+            .maybeSingle(),
+
+          // Planned workouts
+          supabase
+            .from('workout_sessions')
+            .select(`
+              id,
+              planned_date,
+              state,
+              exercise_blocks (id)
+            `)
+            .eq('user_id', user.id)
+            .eq('state', 'planned')
+            .order('planned_date', { ascending: true })
+            .limit(5),
+
+          // Active mesocycle with completed workouts this week
+          supabase
+            .from('mesocycles')
+            .select(`
+              id,
+              name,
+              start_date,
+              weeks,
+              days_per_week,
+              split,
+              workout_sessions!inner (
+                id,
+                state,
+                completed_at
+              )
+            `)
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .gte('workout_sessions.completed_at', weekStart.toISOString())
+            .maybeSingle(),
+        ]);
+
+        // Set in-progress workout
+        if (inProgressResult.data) {
+          setInProgressWorkout({
+            id: inProgressResult.data.id,
+            planned_date: inProgressResult.data.planned_date,
+            state: inProgressResult.data.state,
+            exercise_count: inProgressResult.data.exercise_blocks?.length || 0,
+          });
+        }
+
+        // Set planned workouts
+        if (plannedResult.data) {
+          setPlannedWorkouts(
+            plannedResult.data.map((w: any) => ({
+              id: w.id,
+              planned_date: w.planned_date,
+              state: w.state,
+              exercise_count: w.exercise_blocks?.length || 0,
+            }))
+          );
+        }
+
+        // Set active mesocycle with weekly count
+        if (mesocycleResult.data) {
+          const mesocycle = mesocycleResult.data;
+          const startDate = new Date(mesocycle.start_date);
+          const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+          const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
+
+          // Count completed workouts from already-fetched data
+          const weeklyCount = mesocycle.workout_sessions?.filter(
+            (s: any) => s.state === 'completed'
+          ).length || 0;
+
+          setActiveMesocycle({
+            id: mesocycle.id,
+            name: mesocycle.name,
+            startDate: mesocycle.start_date,
+            weeks: mesocycle.weeks,
+            currentWeek,
+            daysPerWeek: mesocycle.days_per_week || 3,
+            workoutsThisWeek: weeklyCount,
+            split: mesocycle.split || 'custom',
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching workouts:', error);
+      } finally {
+        setIsLoading(false);
       }
-
-      // Fetch planned workouts
-      const { data: planned } = await supabase
-        .from('workout_sessions')
-        .select(`
-          id,
-          planned_date,
-          state,
-          exercise_blocks (id)
-        `)
-        .eq('user_id', user.id)
-        .eq('state', 'planned')
-        .order('planned_date', { ascending: true })
-        .limit(5);
-
-      if (planned) {
-        setPlannedWorkouts(planned.map((w: any) => ({
-          id: w.id,
-          planned_date: w.planned_date,
-          state: w.state,
-          exercise_count: w.exercise_blocks?.length || 0,
-        })));
-      }
-
-      // Fetch active mesocycle
-      const { data: mesocycle } = await supabase
-        .from('mesocycles')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .single();
-
-      if (mesocycle) {
-        // Calculate current week
-        const startDate = new Date(mesocycle.start_date);
-        const now = new Date();
-        const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-        const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
-
-        // Get start of current week
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const weekStart = new Date(now);
-        weekStart.setDate(diff);
-        weekStart.setHours(0, 0, 0, 0);
-
-        // Count completed workouts this week for this mesocycle
-        const { count: weeklyCount } = await supabase
-          .from('workout_sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('mesocycle_id', mesocycle.id)
-          .eq('state', 'completed')
-          .gte('completed_at', weekStart.toISOString());
-
-        setActiveMesocycle({
-          id: mesocycle.id,
-          name: mesocycle.name,
-          startDate: mesocycle.start_date,
-          weeks: mesocycle.weeks,
-          currentWeek,
-          daysPerWeek: mesocycle.days_per_week || 3,
-          workoutsThisWeek: weeklyCount || 0,
-          split: mesocycle.split || 'custom',
-        });
-      }
-
-      setIsLoading(false);
     }
 
     fetchWorkouts();

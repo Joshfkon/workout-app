@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
@@ -50,7 +50,8 @@ interface ExerciseCardProps {
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
 }
 
-export function ExerciseCard({
+// PERFORMANCE: Memoized component to prevent unnecessary re-renders
+export const ExerciseCard = memo(function ExerciseCard({
   exercise,
   block,
   sets,
@@ -1128,4 +1129,17 @@ export function ExerciseCard({
       )}
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison function for performance
+  // Only re-render if these specific props change
+  return (
+    prevProps.exercise.id === nextProps.exercise.id &&
+    prevProps.block.id === nextProps.block.id &&
+    prevProps.block.targetSets === nextProps.block.targetSets &&
+    prevProps.block.targetWeightKg === nextProps.block.targetWeightKg &&
+    prevProps.sets.length === nextProps.sets.length &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.unit === nextProps.unit &&
+    prevProps.recommendedWeight === nextProps.recommendedWeight
+  );
+});
