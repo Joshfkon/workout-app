@@ -92,8 +92,9 @@ export async function sendCoachingMessage(
       throw new Error('Conversation not found');
     }
 
-    conversation = data;
-    messages = (data.messages as CoachingMessage[]) || [];
+    conversation = data as any;
+    const conversationData = data as any;
+    messages = (conversationData.messages as CoachingMessage[]) || [];
   }
 
   // Add user message
