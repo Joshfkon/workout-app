@@ -405,6 +405,7 @@ export default function BodyCompositionPage() {
                       </div>
                     ) : (
                       <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={photoPreview}
                           alt="Preview"
@@ -577,7 +578,7 @@ export default function BodyCompositionPage() {
                     </svg>
                   </div>
                   <p className="text-surface-400 text-sm">No progress photos yet</p>
-                  <p className="text-surface-600 text-xs mt-1">Click "Add Photo" to upload your first progress photo</p>
+                  <p className="text-surface-600 text-xs mt-1">Click &quot;Add Photo&quot; to upload your first progress photo</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -591,6 +592,7 @@ export default function BodyCompositionPage() {
                           onClick={() => setSelectedPhotoUrl(photoUrl)}
                           className="w-full aspect-square rounded-lg overflow-hidden border border-surface-700 hover:border-primary-500 transition-colors"
                         >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={photoUrl}
                             alt={`Progress photo from ${new Date(photo.photoDate).toLocaleDateString()}`}
@@ -627,6 +629,7 @@ export default function BodyCompositionPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={selectedPhotoUrl}
                 alt="Progress photo"
