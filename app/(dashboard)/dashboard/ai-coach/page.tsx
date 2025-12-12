@@ -212,7 +212,7 @@ export default function AICoachPage() {
                 onClick={() => setInput("How's my progress looking?")}
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-white">How's my progress?</p>
+                <p className="text-sm font-medium text-white">How&apos;s my progress?</p>
                 <p className="text-xs text-surface-400 mt-1">
                   Get a summary of your recent performance
                 </p>
