@@ -93,7 +93,7 @@ export async function sendCoachingMessage(
     }
 
     conversation = data;
-    messages = data.messages || [];
+    messages = (data.messages as CoachingMessage[]) || [];
   }
 
   // Add user message
