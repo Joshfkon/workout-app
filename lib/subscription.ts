@@ -13,11 +13,12 @@ export interface SubscriptionData {
   cancelAtPeriodEnd: boolean;
 }
 
-export type Feature = 
+export type Feature =
   | 'mesocycleBuilder'
   | 'coachingCalibration'
   | 'advancedAnalytics'
   | 'aiFeatures'
+  | 'ai-coaching'
   | 'unlimitedWorkouts';
 
 /**

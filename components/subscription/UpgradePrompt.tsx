@@ -34,6 +34,11 @@ const FEATURE_INFO: Record<Feature, { title: string; description: string; requir
     description: 'Unlock smart weight suggestions, exercise recommendations, and personalized programming.',
     requiredTier: 'pro',
   },
+  'ai-coaching': {
+    title: 'AI Coach',
+    description: 'Get personalized training advice from an AI coach that analyzes your actual workout data, body composition, and training phase.',
+    requiredTier: 'elite',
+  },
   unlimitedWorkouts: {
     title: 'Unlimited Workouts',
     description: 'Log unlimited workouts without restrictions.',

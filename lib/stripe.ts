@@ -61,6 +61,7 @@ export const TIER_FEATURES = {
     limits: {
       workoutsPerWeek: Infinity,
       aiFeatures: false,
+      'ai-coaching': false,
       mesocycleBuilder: false,
       coachingCalibration: false,
       advancedAnalytics: false,
@@ -82,6 +83,7 @@ export const TIER_FEATURES = {
     limits: {
       workoutsPerWeek: Infinity,
       aiFeatures: true,
+      'ai-coaching': false,
       mesocycleBuilder: true,
       coachingCalibration: false,
       advancedAnalytics: true,
@@ -94,6 +96,7 @@ export const TIER_FEATURES = {
     yearlyPrice: 199,
     features: [
       'Everything in Pro',
+      'AI Coach (personalized advice)',
       'Coaching calibration system',
       'Strength percentile rankings',
       'Advanced body composition analysis',
@@ -103,6 +106,7 @@ export const TIER_FEATURES = {
     limits: {
       workoutsPerWeek: Infinity,
       aiFeatures: true,
+      'ai-coaching': true,
       mesocycleBuilder: true,
       coachingCalibration: true,
       advancedAnalytics: true,
