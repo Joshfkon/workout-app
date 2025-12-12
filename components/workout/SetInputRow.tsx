@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Input, Button, Badge } from '@/components/ui';
 import type { SetLog, SetQuality, WeightUnit } from '@/types/schema';
 import { calculateSetQuality } from '@/services/progressionEngine';
@@ -23,7 +23,8 @@ interface SetInputRowProps {
   unit?: WeightUnit;
 }
 
-export function SetInputRow({
+// PERFORMANCE: Memoized component to prevent unnecessary re-renders
+export const SetInputRow = memo(function SetInputRow({
   setNumber,
   targetWeight,
   targetRepRange,
@@ -192,5 +193,18 @@ export function SetInputRow({
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison for performance
+  return (
+    prevProps.setNumber === nextProps.setNumber &&
+    prevProps.targetWeight === nextProps.targetWeight &&
+    prevProps.targetRepRange[0] === nextProps.targetRepRange[0] &&
+    prevProps.targetRepRange[1] === nextProps.targetRepRange[1] &&
+    prevProps.targetRir === nextProps.targetRir &&
+    prevProps.isLastSet === nextProps.isLastSet &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.unit === nextProps.unit &&
+    prevProps.previousSet?.id === nextProps.previousSet?.id
+  );
+});
 

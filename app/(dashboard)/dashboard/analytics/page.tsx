@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -64,7 +64,7 @@ export default function AnalyticsPage() {
       setIsLoading(true);
       try {
         const supabase = createUntypedClient();
-        
+
         // Get current user
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
@@ -81,21 +81,45 @@ export default function AnalyticsPage() {
           startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         }
 
-        // Fetch completed workout sessions
-        let sessionsQuery = supabase
+        // OPTIMIZATION: Fetch all data in a single query with joins
+        let query = supabase
           .from('workout_sessions')
-          .select('*')
+          .select(`
+            id,
+            started_at,
+            completed_at,
+            session_rpe,
+            pump_rating,
+            planned_date,
+            exercise_blocks!inner (
+              id,
+              workout_session_id,
+              exercises!inner (
+                id,
+                name,
+                primary_muscle
+              ),
+              set_logs!inner (
+                id,
+                exercise_block_id,
+                weight_kg,
+                reps,
+                is_warmup,
+                logged_at
+              )
+            )
+          `)
           .eq('user_id', user.id)
           .eq('state', 'completed')
           .order('completed_at', { ascending: false });
 
         if (startDate) {
-          sessionsQuery = sessionsQuery.gte('completed_at', startDate.toISOString());
+          query = query.gte('completed_at', startDate.toISOString());
         }
 
-        const { data: sessions, error: sessionsError } = await sessionsQuery;
+        const { data: sessions, error } = await query;
 
-        if (sessionsError) throw sessionsError;
+        if (error) throw error;
 
         if (!sessions || sessions.length === 0) {
           setAnalytics(null);
@@ -103,91 +127,132 @@ export default function AnalyticsPage() {
           return;
         }
 
-        // Fetch exercise blocks with exercises for these sessions
-        const sessionIds = sessions.map((s: any) => s.id);
-        const { data: blocks, error: blocksError } = await supabase
-          .from('exercise_blocks')
-          .select(`
-            *,
-            exercises (id, name, primary_muscle)
-          `)
-          .in('workout_session_id', sessionIds);
+        // Process the data - all calculations now done on pre-joined data
+        let totalSets = 0;
+        let totalVolume = 0;
+        let totalRpeSum = 0;
+        let rpeCount = 0;
+        const durations: number[] = [];
+        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string> }>();
+        const exercisePerformanceMap = new Map<string, ExercisePerformance>();
 
-        if (blocksError) throw blocksError;
+        // Single pass through the data to calculate everything
+        sessions.forEach((session: any) => {
+          // Duration calculation
+          if (session.started_at && session.completed_at) {
+            const duration = Math.floor(
+              (new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000
+            );
+            durations.push(duration);
+          }
 
-        // Fetch set logs for these blocks
-        const blockIds = (blocks || []).map((b: any) => b.id);
-        const { data: sets, error: setsError } = await supabase
-          .from('set_logs')
-          .select('*')
-          .in('exercise_block_id', blockIds)
-          .eq('is_warmup', false);
+          // RPE calculation
+          if (session.session_rpe) {
+            totalRpeSum += session.session_rpe;
+            rpeCount++;
+          }
 
-        if (setsError) throw setsError;
+          // Process exercise blocks and sets
+          if (session.exercise_blocks) {
+            session.exercise_blocks.forEach((block: any) => {
+              if (!block.exercises || !block.set_logs) return;
 
-        // Process the data
-        const workingSets = sets || [];
-        
-        // Calculate totals
+              const muscle = block.exercises.primary_muscle;
+              const exerciseId = block.exercises.id;
+              const exerciseName = block.exercises.name;
+
+              // Filter working sets once
+              const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
+
+              // Update muscle volume
+              if (!muscleVolumeMap.has(muscle)) {
+                muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set() });
+              }
+              const muscleData = muscleVolumeMap.get(muscle)!;
+              muscleData.sets += workingSets.length;
+              muscleData.workouts.add(session.id);
+
+              // Process each set
+              workingSets.forEach((set: any) => {
+                totalSets++;
+                totalVolume += set.weight_kg * set.reps;
+
+                // Update exercise performance
+                const e1rm = calculateE1RM(set.weight_kg, set.reps);
+
+                if (!exercisePerformanceMap.has(exerciseId)) {
+                  exercisePerformanceMap.set(exerciseId, {
+                    exerciseId,
+                    exerciseName,
+                    bestWeight: set.weight_kg,
+                    bestReps: set.reps,
+                    estimatedE1RM: e1rm,
+                    totalSets: 0,
+                    lastPerformed: set.logged_at,
+                  });
+                }
+
+                const exData = exercisePerformanceMap.get(exerciseId)!;
+                exData.totalSets++;
+                if (e1rm > exData.estimatedE1RM) {
+                  exData.estimatedE1RM = e1rm;
+                  exData.bestWeight = set.weight_kg;
+                  exData.bestReps = set.reps;
+                }
+                if (new Date(set.logged_at) > new Date(exData.lastPerformed)) {
+                  exData.lastPerformed = set.logged_at;
+                }
+              });
+            });
+          }
+        });
+
+        // Calculate aggregated metrics
         const totalWorkouts = sessions.length;
-        const totalSets = workingSets.length;
-        const totalVolume = workingSets.reduce((sum: number, s: any) => sum + (s.weight_kg * s.reps), 0);
-        
-        // Calculate avg duration
-        const durations = sessions
-          .filter((s: any) => s.started_at && s.completed_at)
-          .map((s: any) => {
-            const start = new Date(s.started_at).getTime();
-            const end = new Date(s.completed_at).getTime();
-            return Math.floor((end - start) / 1000);
-          });
-        const avgWorkoutDuration = durations.length > 0 
-          ? Math.floor(durations.reduce((a: number, b: number) => a + b, 0) / durations.length)
+        const avgWorkoutDuration = durations.length > 0
+          ? Math.floor(durations.reduce((a, b) => a + b, 0) / durations.length)
           : 0;
-
-        // Calculate avg session RPE
-        const rpeSessions = sessions.filter((s: any) => s.session_rpe != null);
-        const avgSessionRpe = rpeSessions.length > 0
-          ? Math.round((rpeSessions.reduce((sum: number, s: any) => sum + s.session_rpe, 0) / rpeSessions.length) * 10) / 10
+        const avgSessionRpe = rpeCount > 0
+          ? Math.round((totalRpeSum / rpeCount) * 10) / 10
           : 0;
 
         // Build recent workouts list
         const recentWorkouts: WorkoutSummary[] = sessions.slice(0, 5).map((session: any) => {
-          const sessionBlocks = (blocks || []).filter((b: any) => b.workout_session_id === session.id);
-          const blockIdSet = new Set(sessionBlocks.map((b: any) => b.id));
-          const sessionSets = workingSets.filter((s: any) => blockIdSet.has(s.exercise_block_id));
-          
+          let sessionSets = 0;
+          let sessionReps = 0;
+          let sessionVolume = 0;
+
+          if (session.exercise_blocks) {
+            session.exercise_blocks.forEach((block: any) => {
+              if (block.set_logs) {
+                block.set_logs.forEach((set: any) => {
+                  if (!set.is_warmup) {
+                    sessionSets++;
+                    sessionReps += set.reps;
+                    sessionVolume += set.weight_kg * set.reps;
+                  }
+                });
+              }
+            });
+          }
+
           const duration = session.started_at && session.completed_at
             ? Math.floor((new Date(session.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000)
             : 0;
-          
+
           return {
             id: session.id,
             date: session.completed_at || session.planned_date,
             duration,
-            totalSets: sessionSets.length,
-            totalReps: sessionSets.reduce((sum: number, s: any) => sum + s.reps, 0),
-            totalVolume: sessionSets.reduce((sum: number, s: any) => sum + (s.weight_kg * s.reps), 0),
+            totalSets: sessionSets,
+            totalReps: sessionReps,
+            totalVolume: sessionVolume,
             sessionRpe: session.session_rpe,
             pumpRating: session.pump_rating,
           };
         });
 
-        // Calculate weekly volume per muscle
-        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string> }>();
-        (blocks || []).forEach((block: any) => {
-          if (!block.exercises) return;
-          const muscle = block.exercises.primary_muscle;
-          const blockSets = workingSets.filter((s: any) => s.exercise_block_id === block.id);
-          
-          if (!muscleVolumeMap.has(muscle)) {
-            muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set() });
-          }
-          const data = muscleVolumeMap.get(muscle)!;
-          data.sets += blockSets.length;
-          data.workouts.add(block.workout_session_id);
-        });
-
+        // Finalize muscle volume data
         const weeklyMuscleVolume: MuscleVolumeData[] = Array.from(muscleVolumeMap.entries())
           .map(([muscle, data]) => ({
             muscle,
@@ -196,74 +261,34 @@ export default function AnalyticsPage() {
           }))
           .sort((a, b) => b.sets - a.sets);
 
-        // Calculate top exercises by estimated 1RM
-        const exercisePerformanceMap = new Map<string, ExercisePerformance>();
-        (blocks || []).forEach((block: any) => {
-          if (!block.exercises) return;
-          const exerciseId = block.exercises.id;
-          const exerciseName = block.exercises.name;
-          const blockSets = workingSets.filter((s: any) => s.exercise_block_id === block.id);
-          
-          blockSets.forEach((set: any) => {
-            const e1rm = calculateE1RM(set.weight_kg, set.reps);
-            
-            if (!exercisePerformanceMap.has(exerciseId)) {
-              exercisePerformanceMap.set(exerciseId, {
-                exerciseId,
-                exerciseName,
-                bestWeight: set.weight_kg,
-                bestReps: set.reps,
-                estimatedE1RM: e1rm,
-                totalSets: 0,
-                lastPerformed: set.logged_at,
-              });
-            }
-            
-            const data = exercisePerformanceMap.get(exerciseId)!;
-            data.totalSets += 1;
-            if (e1rm > data.estimatedE1RM) {
-              data.estimatedE1RM = e1rm;
-              data.bestWeight = set.weight_kg;
-              data.bestReps = set.reps;
-            }
-            if (new Date(set.logged_at) > new Date(data.lastPerformed)) {
-              data.lastPerformed = set.logged_at;
-            }
-          });
-        });
-
+        // Finalize top exercises
         const topExercises = Array.from(exercisePerformanceMap.values())
           .sort((a, b) => b.estimatedE1RM - a.estimatedE1RM)
           .slice(0, 10);
 
         // Calculate current streak
         let currentStreak = 0;
-        const sortedSessions = [...sessions].sort((a: any, b: any) => 
-          new Date(b.completed_at).getTime() - new Date(a.completed_at).getTime()
-        );
-        
-        if (sortedSessions.length > 0) {
+        if (sessions.length > 0) {
           const today = new Date();
           today.setHours(0, 0, 0, 0);
-          
-          let lastWorkoutDate = new Date(sortedSessions[0].completed_at);
+
+          let lastWorkoutDate = new Date(sessions[0].completed_at);
           lastWorkoutDate.setHours(0, 0, 0, 0);
-          
-          // Check if last workout was today or yesterday
+
           const daysSinceLastWorkout = Math.floor((today.getTime() - lastWorkoutDate.getTime()) / (24 * 60 * 60 * 1000));
-          
-          if (daysSinceLastWorkout <= 2) { // Allow 2-day gap
+
+          if (daysSinceLastWorkout <= 2) {
             currentStreak = 1;
-            
-            for (let i = 1; i < sortedSessions.length; i++) {
-              const prevDate = new Date(sortedSessions[i - 1].completed_at);
-              const currDate = new Date(sortedSessions[i].completed_at);
+
+            for (let i = 1; i < sessions.length; i++) {
+              const prevDate = new Date(sessions[i - 1].completed_at);
+              const currDate = new Date(sessions[i].completed_at);
               prevDate.setHours(0, 0, 0, 0);
               currDate.setHours(0, 0, 0, 0);
-              
+
               const gap = Math.floor((prevDate.getTime() - currDate.getTime()) / (24 * 60 * 60 * 1000));
-              
-              if (gap <= 3) { // Allow 3-day gap between workouts for streak
+
+              if (gap <= 3) {
                 currentStreak++;
               } else {
                 break;
