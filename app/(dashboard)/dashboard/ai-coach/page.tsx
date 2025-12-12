@@ -20,6 +20,12 @@ export default function AICoachPage() {
   // Check if user has access to AI coaching feature
   const hasAccess = canAccess('ai-coaching');
 
+  // Debug logging for subscription
+  useEffect(() => {
+    console.log('[AI Coach Client] Current tier:', tier);
+    console.log('[AI Coach Client] Has access:', hasAccess);
+  }, [tier, hasAccess]);
+
   // Load coaching context on mount
   useEffect(() => {
     if (hasAccess) {

@@ -59,30 +59,39 @@ export async function sendCoachingMessage(
   conversationId?: string
 ): Promise<CoachingResponse> {
   try {
+    console.log('[AI Coach] Starting sendCoachingMessage...');
     const supabase = await createClient();
+    console.log('[AI Coach] Supabase client created');
 
     // Get authenticated user
     const { data: { user } } = await supabase.auth.getUser();
+    console.log('[AI Coach] User authenticated:', user?.id);
     if (!user) {
       throw new Error('Unauthorized');
     }
 
     // Build coaching context
+    console.log('[AI Coach] Building coaching context...');
     const context = await buildCoachingContext();
+    console.log('[AI Coach] Context built:', context ? 'Success' : 'Failed');
     if (!context) {
       throw new Error('Unable to build coaching context');
     }
 
     // Initialize Anthropic client
+    console.log('[AI Coach] Checking for ANTHROPIC_API_KEY...');
     if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('[AI Coach] ANTHROPIC_API_KEY is not set!');
       throw new Error('ANTHROPIC_API_KEY environment variable is not set');
     }
+    console.log('[AI Coach] ANTHROPIC_API_KEY is set, initializing client...');
 
     const anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
   // Load or create conversation
+  console.log('[AI Coach] Loading conversation:', conversationId || 'new');
   let conversation: any;
   let messages: CoachingMessage[] = [];
 
@@ -94,12 +103,14 @@ export async function sendCoachingMessage(
       .single();
 
     if (error || !data) {
+      console.error('[AI Coach] Conversation not found:', error);
       throw new Error('Conversation not found');
     }
 
     conversation = data as any;
     const conversationData = data as any;
     messages = (conversationData.messages as CoachingMessage[]) || [];
+    console.log('[AI Coach] Loaded', messages.length, 'previous messages');
   }
 
   // Add user message
@@ -110,9 +121,12 @@ export async function sendCoachingMessage(
     context,
   };
   messages.push(userMessage);
+  console.log('[AI Coach] Added user message');
 
   // Format context for AI
+  console.log('[AI Coach] Formatting context...');
   const contextString = formatCoachingContext(context);
+  console.log('[AI Coach] Context formatted, length:', contextString.length);
 
   // Build message history for Anthropic API
   const apiMessages: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -139,18 +153,21 @@ export async function sendCoachingMessage(
   }
 
   // Call Anthropic API
+  console.log('[AI Coach] Calling Anthropic API with', apiMessages.length, 'messages...');
   const response = await anthropic.messages.create({
     model: 'claude-3-5-sonnet-20241022',
     max_tokens: 2000,
     system: SYSTEM_PROMPT,
     messages: apiMessages,
   });
+  console.log('[AI Coach] Received response from Anthropic');
 
   // Extract assistant's response
   const assistantContent = response.content
     .filter((block) => block.type === 'text')
     .map((block) => (block as any).text)
     .join('\n');
+  console.log('[AI Coach] Assistant response length:', assistantContent.length);
 
   // Add assistant message
   const assistantMessage: CoachingMessage = {
@@ -161,6 +178,7 @@ export async function sendCoachingMessage(
   messages.push(assistantMessage);
 
   // Save or update conversation
+  console.log('[AI Coach] Saving conversation...');
   if (conversation) {
     await (supabase
       .from('ai_coaching_conversations') as any)
@@ -169,6 +187,7 @@ export async function sendCoachingMessage(
         last_message_at: new Date().toISOString(),
       })
       .eq('id', conversationId as string);
+    console.log('[AI Coach] Updated existing conversation');
   } else {
     // Create new conversation with a generated title
     const title = message.slice(0, 50) + (message.length > 50 ? '...' : '');
@@ -185,13 +204,16 @@ export async function sendCoachingMessage(
       .single();
 
     if (error) {
+      console.error('[AI Coach] Failed to save new conversation:', error);
       throw new Error('Failed to save conversation');
     }
 
     conversation = data as any;
     conversationId = (data as any).id;
+    console.log('[AI Coach] Created new conversation:', conversationId);
   }
 
+    console.log('[AI Coach] Completed successfully');
     return {
       conversationId: conversationId!,
       message: assistantContent,
