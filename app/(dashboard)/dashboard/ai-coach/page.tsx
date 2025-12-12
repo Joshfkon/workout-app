@@ -107,7 +107,7 @@ export default function AICoachPage() {
         </div>
 
         <UpgradePrompt
-          feature="AI Coaching"
+          feature="ai-coaching"
           description="Get personalized training advice from an AI coach that analyzes your actual workout data, body composition, and training phase."
           requiredTier="elite"
         />
