@@ -163,7 +163,7 @@ export async function sendCoachingMessage(
         messages,
         last_message_at: new Date().toISOString(),
       } as any)
-      .eq('id', conversationId);
+      .eq('id', conversationId as string);
   } else {
     // Create new conversation with a generated title
     const title = message.slice(0, 50) + (message.length > 50 ? '...' : '');
@@ -183,8 +183,8 @@ export async function sendCoachingMessage(
       throw new Error('Failed to save conversation');
     }
 
-    conversation = data;
-    conversationId = data.id;
+    conversation = data as any;
+    conversationId = (data as any).id;
   }
 
   return {

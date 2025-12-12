@@ -35,10 +35,11 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .single();
 
   if (!userData) return null;
+  const user = userData as any;
 
   // Calculate age from birth_date
-  const age = userData.birth_date
-    ? new Date().getFullYear() - new Date(userData.birth_date).getFullYear()
+  const age = user.birth_date
+    ? new Date().getFullYear() - new Date(user.birth_date).getFullYear()
     : 30; // Default if not set
 
   // Get active training phase
@@ -49,6 +50,8 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('is_active', true)
     .single();
 
+  const phase = phaseData as any;
+
   // Get most recent bodyweight
   const { data: recentWeight } = await supabase
     .from('bodyweight_entries')
@@ -57,6 +60,8 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .order('date', { ascending: false })
     .limit(1)
     .single();
+
+  const latestWeight = recentWeight as any;
 
   // Get bodyweight trend (last 2 weeks)
   const twoWeeksAgo = new Date();
@@ -68,11 +73,13 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .gte('date', twoWeeksAgo.toISOString().split('T')[0])
     .order('date', { ascending: true });
 
+  const weights = recentWeights as any[];
+
   // Calculate weight trend
   let weightTrend: 'increasing' | 'stable' | 'decreasing' | undefined;
-  if (recentWeights && recentWeights.length >= 3) {
-    const firstWeight = recentWeights[0].weight_kg;
-    const lastWeight = recentWeights[recentWeights.length - 1].weight_kg;
+  if (weights && weights.length >= 3) {
+    const firstWeight = weights[0].weight_kg;
+    const lastWeight = weights[weights.length - 1].weight_kg;
     const diff = lastWeight - firstWeight;
     const percentChange = (diff / firstWeight) * 100;
 
@@ -90,6 +97,8 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .limit(1)
     .single();
 
+  const dexa = dexaData as any;
+
   // Get active mesocycle
   const { data: mesocycleData } = await supabase
     .from('mesocycles')
@@ -97,6 +106,8 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('user_id', authUser.id)
     .eq('state', 'active')
     .single();
+
+  const mesocycle = mesocycleData as any;
 
   // Get recent lift performance (last 30 days, top sets only)
   const thirtyDaysAgo = new Date();
@@ -123,12 +134,14 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .order('planned_date', { ascending: false })
     .limit(20);
 
+  const sessions = recentSessions as any[];
+
   // Process recent lifts to get top sets per exercise
   const recentLifts: RecentLift[] = [];
   const exerciseTopSets = new Map<string, RecentLift>();
 
-  if (recentSessions) {
-    for (const session of recentSessions) {
+  if (sessions) {
+    for (const session of sessions) {
       if (!session.exercise_blocks) continue;
 
       for (const block of session.exercise_blocks) {
@@ -176,29 +189,29 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     user: {
       name: authUser.email?.split('@')[0] || 'User',
       age,
-      sex: userData.sex || 'male',
-      height: userData.height_cm || 175,
-      trainingAge: userData.training_age_years || 1,
+      sex: user.sex || 'male',
+      height: user.height_cm || 175,
+      trainingAge: user.training_age_years || 1,
     },
-    phase: phaseData
+    phase: phase
       ? {
-          type: phaseData.phase_type,
-          weekNumber: phaseData.current_week,
-          startWeight: phaseData.start_weight_kg,
-          targetWeight: phaseData.target_weight_kg,
+          type: phase.phase_type,
+          weekNumber: phase.current_week,
+          startWeight: phase.start_weight_kg,
+          targetWeight: phase.target_weight_kg,
         }
       : undefined,
     currentStats: {
-      weight: recentWeight?.weight_kg || userData.weight_kg || 75,
+      weight: latestWeight?.weight_kg || user.weight_kg || 75,
       weightTrend,
-      bodyFat: dexaData?.body_fat_percent,
-      leanMass: dexaData?.lean_mass_kg,
-      lastDexaDate: dexaData?.scan_date,
+      bodyFat: dexa?.body_fat_percent,
+      leanMass: dexa?.lean_mass_kg,
+      lastDexaDate: dexa?.scan_date,
     },
     training: {
-      currentBlock: mesocycleData?.name,
-      weekInBlock: mesocycleData?.current_week,
-      daysPerWeek: mesocycleData?.days_per_week,
+      currentBlock: mesocycle?.name,
+      weekInBlock: mesocycle?.current_week,
+      daysPerWeek: mesocycle?.days_per_week,
       recentLifts: recentLifts.slice(0, 15), // Limit to 15 most relevant lifts
     },
   };
