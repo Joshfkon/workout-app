@@ -7,10 +7,10 @@
  * personalized training advice based on user's actual data.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext, formatCoachingContext } from '@/services/coachingContextService';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
+import type { Database, Json } from '@/types/database';
 
 // System prompt for AI coaching
 const SYSTEM_PROMPT = `You are an AI strength and physique coach embedded in a training app. You have access to this user's actual data — use it. Never give generic advice when their specific numbers tell a clearer story.
@@ -72,11 +72,6 @@ export async function sendCoachingMessage(
     throw new Error('Unable to build coaching context');
   }
 
-  // Initialize Anthropic client
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
-
   // Load or create conversation
   let conversation: any;
   let messages: CoachingMessage[] = [];
@@ -133,16 +128,32 @@ export async function sendCoachingMessage(
     apiMessages[apiMessages.length - 1].content = `${contextString}\n\n${message}`;
   }
 
-  // Call Anthropic API
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 2000,
-    system: SYSTEM_PROMPT,
-    messages: apiMessages,
+  // Call Anthropic API via HTTPS to avoid relying on the SDK in serverless builds
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT,
+      messages: apiMessages,
+    }),
   });
 
+  if (!response.ok) {
+    throw new Error('Failed to contact Anthropic');
+  }
+
+  const responseData: {
+    content: { type: string; text?: string }[];
+  } = await response.json();
+
   // Extract assistant's response
-  const assistantContent = response.content
+  const assistantContent = responseData.content
     .filter((block) => block.type === 'text')
     .map((block) => (block as any).text)
     .join('\n');
@@ -155,14 +166,16 @@ export async function sendCoachingMessage(
   };
   messages.push(assistantMessage);
 
+  const serializedMessages = messages as unknown as Database['public']['Tables']['ai_coaching_conversations']['Update']['messages'];
+
   // Save or update conversation
   if (conversation) {
     await supabase
       .from('ai_coaching_conversations')
       .update({
-        messages,
+        messages: serializedMessages,
         last_message_at: new Date().toISOString(),
-      } as any)
+      })
       .eq('id', conversationId);
   } else {
     // Create new conversation with a generated title
@@ -172,10 +185,10 @@ export async function sendCoachingMessage(
       .insert({
         user_id: user.id,
         title,
-        messages,
+        messages: serializedMessages,
         started_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-      } as any)
+      })
       .select()
       .single();
 

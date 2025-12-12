@@ -49,6 +49,7 @@ export default function OnboardingBodyCompPage() {
   
   // Form state - stored in display units
   const [sex, setSex] = useState<'male' | 'female'>('male');
+  const [heightCm, setHeightCm] = useState<number | null>(null);
   const [heightDisplay, setHeightDisplay] = useState<string>('');
   const [weightDisplay, setWeightDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
@@ -108,19 +109,24 @@ export default function OnboardingBodyCompPage() {
         .single();
       
       if (userData?.height_cm) {
-        // Convert to display units
-        const displayHeight = units === 'lb' 
-          ? cmToInches(userData.height_cm).toFixed(1)
-          : String(userData.height_cm);
-        setHeightDisplay(displayHeight);
+        setHeightCm(userData.height_cm);
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
       }
     }
-    
+
     fetchDexaData();
   }, []);
+
+  useEffect(() => {
+    if (heightCm !== null) {
+      const displayHeight = units === 'lb'
+        ? cmToInches(heightCm).toFixed(1)
+        : String(heightCm);
+      setHeightDisplay(displayHeight);
+    }
+  }, [heightCm, units]);
   
   // Calculate body composition when inputs change
   useEffect(() => {

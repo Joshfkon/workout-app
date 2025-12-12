@@ -202,6 +202,38 @@ export interface Database {
           completion_percent?: number;
         };
       };
+      ai_coaching_conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string | null;
+          started_at: string;
+          last_message_at: string;
+          messages: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title?: string | null;
+          started_at?: string;
+          last_message_at?: string;
+          messages?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string | null;
+          started_at?: string;
+          last_message_at?: string;
+          messages?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       exercise_blocks: {
         Row: {
           id: string;
