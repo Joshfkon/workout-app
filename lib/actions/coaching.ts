@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext, formatCoachingContext } from '@/services/coachingContextService';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
+import type { Json } from '@/types/database';
 
 // System prompt for AI coaching
 const SYSTEM_PROMPT = `You are an AI strength and physique coach embedded in a training app. You have access to this user's actual data — use it. Never give generic advice when their specific numbers tell a clearer story.
@@ -155,12 +156,14 @@ export async function sendCoachingMessage(
   };
   messages.push(assistantMessage);
 
+  const serializedMessages = messages as unknown as Json;
+
   // Save or update conversation
   if (conversation) {
     await supabase
       .from('ai_coaching_conversations')
       .update({
-        messages,
+        messages: serializedMessages,
         last_message_at: new Date().toISOString(),
       } as any)
       .eq('id', conversationId);
@@ -172,7 +175,7 @@ export async function sendCoachingMessage(
       .insert({
         user_id: user.id,
         title,
-        messages,
+        messages: serializedMessages,
         started_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
       } as any)
