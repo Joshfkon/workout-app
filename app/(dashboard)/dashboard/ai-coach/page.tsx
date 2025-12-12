@@ -71,10 +71,11 @@ export default function AICoachPage() {
     } catch (error) {
       console.error('Failed to send message:', error);
 
-      // Show error message
+      // Show error message with details
+      const errorDetails = error instanceof Error ? error.message : 'Unknown error';
       const errorMessage: CoachingMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: `Sorry, I encountered an error: ${errorDetails}\n\nPlease check:\n1. Database migrations are run\n2. ANTHROPIC_API_KEY is set in environment\n3. Browser console for more details`,
         timestamp: new Date().toISOString(),
       };
 
