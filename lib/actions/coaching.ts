@@ -157,25 +157,25 @@ export async function sendCoachingMessage(
 
   // Save or update conversation
   if (conversation) {
-    await supabase
-      .from('ai_coaching_conversations')
+    await (supabase
+      .from('ai_coaching_conversations') as any)
       .update({
         messages,
         last_message_at: new Date().toISOString(),
-      } as any)
+      })
       .eq('id', conversationId as string);
   } else {
     // Create new conversation with a generated title
     const title = message.slice(0, 50) + (message.length > 50 ? '...' : '');
-    const { data, error } = await supabase
-      .from('ai_coaching_conversations')
+    const { data, error } = await (supabase
+      .from('ai_coaching_conversations') as any)
       .insert({
         user_id: user.id,
         title,
         messages,
         started_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-      } as any)
+      })
       .select()
       .single();
 
