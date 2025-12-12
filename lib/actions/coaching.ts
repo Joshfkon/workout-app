@@ -162,7 +162,7 @@ export async function sendCoachingMessage(
       .update({
         messages,
         last_message_at: new Date().toISOString(),
-      })
+      } as any)
       .eq('id', conversationId);
   } else {
     // Create new conversation with a generated title
@@ -175,7 +175,7 @@ export async function sendCoachingMessage(
         messages,
         started_at: new Date().toISOString(),
         last_message_at: new Date().toISOString(),
-      })
+      } as any)
       .select()
       .single();
 
