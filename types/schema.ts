@@ -1137,10 +1137,32 @@ export interface DexaScan {
   /** Regional body composition data (optional) */
   regionalData: DexaRegionalData | null;
 
-  /** Progress photo URL (optional) */
-  progressPhotoUrl: string | null;
-
   /** Notes about the scan */
+  notes: string | null;
+
+  createdAt: string;
+}
+
+/**
+ * Progress photo entry for visual body composition tracking
+ */
+export interface ProgressPhoto {
+  id: string;
+  userId: string;
+
+  /** Date of the photo (YYYY-MM-DD) */
+  photoDate: string;
+
+  /** Storage path to the photo */
+  photoUrl: string;
+
+  /** Optional weight at time of photo in kg */
+  weightKg: number | null;
+
+  /** Optional body fat percentage at time of photo */
+  bodyFatPercent: number | null;
+
+  /** Notes about the photo */
   notes: string | null;
 
   createdAt: string;

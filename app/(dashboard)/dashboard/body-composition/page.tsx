@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { FFMIGauge } from '@/components/analytics/FFMIGauge';
 import { createUntypedClient } from '@/lib/supabase/client';
-import type { DexaScan, Goal, Experience, FFMIResult, BodyCompRecommendation, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
+import type { DexaScan, Goal, Experience, FFMIResult, BodyCompRecommendation, DexaRegionalData, RegionalAnalysis, ProgressPhoto } from '@/types/schema';
 import {
   calculateFFMI,
   analyzeBodyCompTrend,
@@ -43,6 +43,7 @@ interface UserProfile {
 
 export default function BodyCompositionPage() {
   const [scans, setScans] = useState<DexaScan[]>([]);
+  const [progressPhotos, setProgressPhotos] = useState<ProgressPhoto[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showTargetEditor, setShowTargetEditor] = useState(false);
@@ -50,6 +51,16 @@ export default function BodyCompositionPage() {
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [deletingScanId, setDeletingScanId] = useState<string | null>(null);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
+
+  // Progress photo upload state
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoDate, setPhotoDate] = useState(new Date().toISOString().split('T')[0]);
+  const [photoWeight, setPhotoWeight] = useState('');
+  const [photoBodyFat, setPhotoBodyFat] = useState('');
+  const [photoNotes, setPhotoNotes] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Get photo URL from storage path
   const getPhotoUrl = (photoPath: string | null) => {
@@ -137,11 +148,31 @@ export default function BodyCompositionPage() {
           bodyFatPercent: scan.body_fat_percent,
           boneMassKg: scan.bone_mass_kg,
           regionalData: scan.regional_data as DexaRegionalData | null,
-          progressPhotoUrl: scan.progress_photo_url,
           notes: scan.notes,
           createdAt: scan.created_at,
         }));
         setScans(transformedScans);
+      }
+
+      // Fetch progress photos
+      const { data: photoData } = await supabase
+        .from('progress_photos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('photo_date', { ascending: false });
+
+      if (photoData) {
+        const transformedPhotos: ProgressPhoto[] = photoData.map((photo: any) => ({
+          id: photo.id,
+          userId: photo.user_id,
+          photoDate: photo.photo_date,
+          photoUrl: photo.photo_url,
+          weightKg: photo.weight_kg,
+          bodyFatPercent: photo.body_fat_percent,
+          notes: photo.notes,
+          createdAt: photo.created_at,
+        }));
+        setProgressPhotos(transformedPhotos);
       }
 
       setIsLoading(false);
@@ -311,45 +342,276 @@ export default function BodyCompositionPage() {
             </Card>
           </div>
 
-          {/* Progress Photos Gallery */}
-          {scans.some(scan => scan.progressPhotoUrl) && (
-            <Card>
-              <CardHeader>
+          {/* Progress Photos Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
                 <CardTitle>Progress Photos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {scans
-                    .filter(scan => scan.progressPhotoUrl)
-                    .map((scan) => {
-                      const photoUrl = getPhotoUrl(scan.progressPhotoUrl);
-                      if (!photoUrl) return null;
+                <Button
+                  onClick={() => setShowPhotoUpload(!showPhotoUpload)}
+                  size="sm"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Photo
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {showPhotoUpload && (
+                <div className="mb-6 p-4 border border-surface-700 rounded-lg bg-surface-800/50">
+                  <h4 className="font-medium text-surface-200 mb-4">Upload Progress Photo</h4>
 
-                      return (
-                        <div key={scan.id} className="relative group">
-                          <button
-                            onClick={() => setSelectedPhotoUrl(photoUrl)}
-                            className="w-full aspect-square rounded-lg overflow-hidden border border-surface-700 hover:border-primary-500 transition-colors"
-                          >
-                            <img
-                              src={photoUrl}
-                              alt={`Progress photo from ${new Date(scan.scanDate).toLocaleDateString()}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </button>
-                          <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                            <p className="text-xs text-white font-medium">
-                              {new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </p>
-                            <p className="text-xs text-white/80">{scan.bodyFatPercent}% BF</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="space-y-4">
+                    {/* Photo Upload */}
+                    {!photoPreview ? (
+                      <div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              if (!file.type.startsWith('image/')) {
+                                alert('Please select a valid image file');
+                                return;
+                              }
+                              if (file.size > 10 * 1024 * 1024) {
+                                alert('Image size must be less than 10MB');
+                                return;
+                              }
+                              setUploadingPhoto(file);
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setPhotoPreview(reader.result as string);
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                          id="photo-upload"
+                        />
+                        <label
+                          htmlFor="photo-upload"
+                          className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-surface-600 rounded-lg cursor-pointer hover:border-primary-500 hover:bg-surface-700/50 transition-colors"
+                        >
+                          <svg className="w-10 h-10 text-surface-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-sm text-surface-400">Click to upload</p>
+                          <p className="text-xs text-surface-600 mt-1">PNG, JPG up to 10MB</p>
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={photoPreview}
+                          alt="Preview"
+                          className="w-full h-64 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() => {
+                            setUploadingPhoto(null);
+                            setPhotoPreview(null);
+                          }}
+                          className="absolute top-2 right-2 p-2 bg-danger-500 text-white rounded-full hover:bg-danger-600"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Photo Details */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-surface-400 mb-1">Date</label>
+                        <input
+                          type="date"
+                          value={photoDate}
+                          onChange={(e) => setPhotoDate(e.target.value)}
+                          className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded text-sm text-surface-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-surface-400 mb-1">Weight (kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={photoWeight}
+                          onChange={(e) => setPhotoWeight(e.target.value)}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded text-sm text-surface-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-surface-400 mb-1">Body Fat %</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={photoBodyFat}
+                          onChange={(e) => setPhotoBodyFat(e.target.value)}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded text-sm text-surface-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400 mb-1">Notes</label>
+                      <textarea
+                        value={photoNotes}
+                        onChange={(e) => setPhotoNotes(e.target.value)}
+                        placeholder="Optional notes..."
+                        rows={2}
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded text-sm text-surface-100 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          setShowPhotoUpload(false);
+                          setUploadingPhoto(null);
+                          setPhotoPreview(null);
+                          setPhotoDate(new Date().toISOString().split('T')[0]);
+                          setPhotoWeight('');
+                          setPhotoBodyFat('');
+                          setPhotoNotes('');
+                        }}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!uploadingPhoto) {
+                            alert('Please select a photo');
+                            return;
+                          }
+
+                          setIsUploadingPhoto(true);
+                          try {
+                            const supabase = createUntypedClient();
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (!user) throw new Error('Not logged in');
+
+                            // Upload photo
+                            const fileExt = uploadingPhoto.name.split('.').pop();
+                            const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+                            const { error: uploadError } = await supabase.storage
+                              .from('progress-photos')
+                              .upload(fileName, uploadingPhoto);
+
+                            if (uploadError) throw uploadError;
+
+                            // Save to database
+                            const { error: insertError } = await supabase
+                              .from('progress_photos')
+                              .insert({
+                                user_id: user.id,
+                                photo_date: photoDate,
+                                photo_url: fileName,
+                                weight_kg: photoWeight ? parseFloat(photoWeight) : null,
+                                body_fat_percent: photoBodyFat ? parseFloat(photoBodyFat) : null,
+                                notes: photoNotes || null,
+                              });
+
+                            if (insertError) throw insertError;
+
+                            // Refresh photos
+                            const { data: photoData } = await supabase
+                              .from('progress_photos')
+                              .select('*')
+                              .eq('user_id', user.id)
+                              .order('photo_date', { ascending: false });
+
+                            if (photoData) {
+                              const transformedPhotos: ProgressPhoto[] = photoData.map((photo: any) => ({
+                                id: photo.id,
+                                userId: photo.user_id,
+                                photoDate: photo.photo_date,
+                                photoUrl: photo.photo_url,
+                                weightKg: photo.weight_kg,
+                                bodyFatPercent: photo.body_fat_percent,
+                                notes: photo.notes,
+                                createdAt: photo.created_at,
+                              }));
+                              setProgressPhotos(transformedPhotos);
+                            }
+
+                            // Reset form
+                            setShowPhotoUpload(false);
+                            setUploadingPhoto(null);
+                            setPhotoPreview(null);
+                            setPhotoDate(new Date().toISOString().split('T')[0]);
+                            setPhotoWeight('');
+                            setPhotoBodyFat('');
+                            setPhotoNotes('');
+                          } catch (err) {
+                            console.error('Upload failed:', err);
+                            alert(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+                          } finally {
+                            setIsUploadingPhoto(false);
+                          }
+                        }}
+                        isLoading={isUploadingPhoto}
+                        size="sm"
+                      >
+                        Upload Photo
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+
+              {/* Photos Grid */}
+              {progressPhotos.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="text-surface-400 text-sm">No progress photos yet</p>
+                  <p className="text-surface-600 text-xs mt-1">Click "Add Photo" to upload your first progress photo</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {progressPhotos.map((photo) => {
+                    const photoUrl = getPhotoUrl(photo.photoUrl);
+                    if (!photoUrl) return null;
+
+                    return (
+                      <div key={photo.id} className="relative group">
+                        <button
+                          onClick={() => setSelectedPhotoUrl(photoUrl)}
+                          className="w-full aspect-square rounded-lg overflow-hidden border border-surface-700 hover:border-primary-500 transition-colors"
+                        >
+                          <img
+                            src={photoUrl}
+                            alt={`Progress photo from ${new Date(photo.photoDate).toLocaleDateString()}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                          <p className="text-xs text-white font-medium">
+                            {new Date(photo.photoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                          {photo.bodyFatPercent && (
+                            <p className="text-xs text-white/80">{photo.bodyFatPercent}% BF</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Photo Lightbox Modal */}
           {selectedPhotoUrl && (
