@@ -4,11 +4,14 @@ A science-based hypertrophy training app with intelligent auto-regulation, built
 
 ## Features
 
+- **AI Coaching**: Get personalized training advice based on your actual workout data, body composition, and training phase
 - **Volume Tracking**: Monitor sets per muscle group against personalized MEV/MAV/MRV landmarks
 - **Auto Progression**: Intelligent weight and rep recommendations based on your performance
-- **Fatigue Management**: Pre-workout readiness checks and smart deload recommendations  
+- **Fatigue Management**: Pre-workout readiness checks and smart deload recommendations
 - **Plateau Detection**: Identify stalled exercises and get actionable suggestions
 - **Exercise Library**: 50+ exercises with form cues, common mistakes, and setup notes
+- **Body Composition Tracking**: DEXA scan tracking with FFMI calculations and regional analysis
+- **Strength Calibration**: Benchmark lift testing with percentile rankings
 
 ## Tech Stack
 
@@ -49,10 +52,14 @@ npx supabase start
 cp .env.local.example .env.local
 ```
 
-5. Update `.env.local` with your Supabase credentials (from `supabase start` output):
+5. Update `.env.local` with your Supabase and API credentials (from `supabase start` output):
 ```
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# For AI Coaching feature (Elite tier)
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 ```
 
 6. Run database migrations:
@@ -126,6 +133,10 @@ The app uses these main tables:
 - `exercise_performance_snapshots` - Historical performance for progress tracking
 - `weekly_muscle_volume` - Aggregated weekly volume per muscle
 - `plateau_alerts` - Detected plateaus with suggestions
+- `training_phases` - Cut/bulk/maintain phase tracking with goals
+- `ai_coaching_conversations` - AI coaching conversation history
+- `dexa_scans` - Body composition tracking
+- `calibrated_lifts` - Strength benchmarks with percentile rankings
 
 ## License
 
