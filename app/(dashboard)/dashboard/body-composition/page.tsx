@@ -49,6 +49,17 @@ export default function BodyCompositionPage() {
   const [editingTarget, setEditingTarget] = useState('');
   const [isSavingTarget, setIsSavingTarget] = useState(false);
   const [deletingScanId, setDeletingScanId] = useState<string | null>(null);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
+
+  // Get photo URL from storage path
+  const getPhotoUrl = (photoPath: string | null) => {
+    if (!photoPath) return null;
+    const supabase = createUntypedClient();
+    const { data } = supabase.storage
+      .from('progress-photos')
+      .getPublicUrl(photoPath);
+    return data.publicUrl;
+  };
 
   const handleDeleteScan = async (scanId: string) => {
     if (!confirm('Are you sure you want to delete this DEXA scan? This cannot be undone.')) {
@@ -126,6 +137,7 @@ export default function BodyCompositionPage() {
           bodyFatPercent: scan.body_fat_percent,
           boneMassKg: scan.bone_mass_kg,
           regionalData: scan.regional_data as DexaRegionalData | null,
+          progressPhotoUrl: scan.progress_photo_url,
           notes: scan.notes,
           createdAt: scan.created_at,
         }));
@@ -298,6 +310,69 @@ export default function BodyCompositionPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Progress Photos Gallery */}
+          {scans.some(scan => scan.progressPhotoUrl) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Progress Photos</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {scans
+                    .filter(scan => scan.progressPhotoUrl)
+                    .map((scan) => {
+                      const photoUrl = getPhotoUrl(scan.progressPhotoUrl);
+                      if (!photoUrl) return null;
+
+                      return (
+                        <div key={scan.id} className="relative group">
+                          <button
+                            onClick={() => setSelectedPhotoUrl(photoUrl)}
+                            className="w-full aspect-square rounded-lg overflow-hidden border border-surface-700 hover:border-primary-500 transition-colors"
+                          >
+                            <img
+                              src={photoUrl}
+                              alt={`Progress photo from ${new Date(scan.scanDate).toLocaleDateString()}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                          <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                            <p className="text-xs text-white font-medium">
+                              {new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                            <p className="text-xs text-white/80">{scan.bodyFatPercent}% BF</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Photo Lightbox Modal */}
+          {selectedPhotoUrl && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+              onClick={() => setSelectedPhotoUrl(null)}
+            >
+              <button
+                onClick={() => setSelectedPhotoUrl(null)}
+                className="absolute top-4 right-4 p-2 bg-surface-800 text-white rounded-full hover:bg-surface-700 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <img
+                src={selectedPhotoUrl}
+                alt="Progress photo"
+                className="max-w-full max-h-full rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          )}
 
           {/* Targets */}
           {latestScan && (

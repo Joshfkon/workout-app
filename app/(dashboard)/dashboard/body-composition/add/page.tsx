@@ -28,6 +28,11 @@ export default function AddDexaScanPage() {
   const [boneMassDisplay, setBoneMassDisplay] = useState('');
   const [notes, setNotes] = useState('');
   const [inputMode, setInputMode] = useState<'calculated' | 'manual'>('calculated');
+
+  // Progress photo upload state
+  const [progressPhoto, setProgressPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   
   // Convert display value to kg
   const toKg = (displayValue: string): number => {
@@ -57,6 +62,34 @@ export default function AddDexaScanPage() {
     trunkFat: '', trunkLean: '',
     androidFat: '', gynoidFat: '',
   });
+
+  // Handle photo selection
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith('image/')) {
+        setError('Please select a valid image file');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        setError('Image size must be less than 10MB');
+        return;
+      }
+      setProgressPhoto(file);
+      // Create preview URL
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Remove photo
+  const handleRemovePhoto = () => {
+    setProgressPhoto(null);
+    setPhotoPreview(null);
+  };
 
   // Auto-calculate lean/fat mass when weight and body fat are entered
   const handleWeightOrBfChange = (newWeight: string, newBf: string) => {
@@ -163,6 +196,34 @@ export default function AddDexaScanPage() {
 
       if (!user) throw new Error('You must be logged in');
 
+      // Upload progress photo if one is selected
+      let progressPhotoUrl: string | null = null;
+      if (progressPhoto) {
+        setIsUploadingPhoto(true);
+        const fileExt = progressPhoto.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('progress-photos')
+          .upload(fileName, progressPhoto, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) {
+          console.error('Photo upload error:', uploadError);
+          throw new Error(`Failed to upload photo: ${uploadError.message}`);
+        }
+
+        // Get the public URL (or signed URL for private buckets)
+        const { data: { publicUrl } } = supabase.storage
+          .from('progress-photos')
+          .getPublicUrl(fileName);
+
+        progressPhotoUrl = fileName; // Store the path, not the public URL
+        setIsUploadingPhoto(false);
+      }
+
       // Convert display values to kg for storage
       const weight = toKg(weightDisplay);
       const bf = parseFloat(bodyFatPercent);
@@ -218,8 +279,9 @@ export default function AddDexaScanPage() {
         body_fat_percent: roundedBf,
         bone_mass_kg: roundedBone,
         notes: notes || null,
+        progress_photo_url: progressPhotoUrl,
       };
-      
+
       // Only add regional_data if it's not null (column might not exist in older DBs)
       if (regionalResult.data) {
         insertData.regional_data = regionalResult.data;
@@ -737,6 +799,55 @@ export default function AddDexaScanPage() {
               />
             </div>
 
+            {/* Progress Photo Upload */}
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1.5">
+                Progress Photo (Optional)
+              </label>
+              <p className="text-xs text-surface-500 mb-3">
+                Upload a photo to track visual progress alongside your body composition metrics
+              </p>
+
+              {!photoPreview ? (
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                    id="progress-photo-input"
+                  />
+                  <label
+                    htmlFor="progress-photo-input"
+                    className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-surface-700 rounded-lg cursor-pointer hover:border-primary-500 hover:bg-surface-800/50 transition-colors"
+                  >
+                    <svg className="w-12 h-12 text-surface-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-sm text-surface-400">Click to upload a progress photo</p>
+                    <p className="text-xs text-surface-600 mt-1">PNG, JPG up to 10MB</p>
+                  </label>
+                </div>
+              ) : (
+                <div className="relative">
+                  <img
+                    src={photoPreview}
+                    alt="Progress photo preview"
+                    className="w-full h-64 object-cover rounded-lg border border-surface-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="absolute top-2 right-2 p-2 bg-danger-500 text-white rounded-full hover:bg-danger-600 transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               <Button
@@ -749,10 +860,10 @@ export default function AddDexaScanPage() {
               </Button>
               <Button
                 type="submit"
-                isLoading={isSubmitting}
+                isLoading={isSubmitting || isUploadingPhoto}
                 className="flex-1"
               >
-                Save Scan
+                {isUploadingPhoto ? 'Uploading Photo...' : isSubmitting ? 'Saving...' : 'Save Scan'}
               </Button>
             </div>
           </form>
