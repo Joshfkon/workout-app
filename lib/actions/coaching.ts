@@ -58,24 +58,29 @@ export async function sendCoachingMessage(
   message: string,
   conversationId?: string
 ): Promise<CoachingResponse> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  // Get authenticated user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
+    // Get authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('Unauthorized');
+    }
 
-  // Build coaching context
-  const context = await buildCoachingContext();
-  if (!context) {
-    throw new Error('Unable to build coaching context');
-  }
+    // Build coaching context
+    const context = await buildCoachingContext();
+    if (!context) {
+      throw new Error('Unable to build coaching context');
+    }
 
-  // Initialize Anthropic client
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+    // Initialize Anthropic client
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+    }
+
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
 
   // Load or create conversation
   let conversation: any;
@@ -187,11 +192,24 @@ export async function sendCoachingMessage(
     conversationId = (data as any).id;
   }
 
-  return {
-    conversationId: conversationId!,
-    message: assistantContent,
-    timestamp: assistantMessage.timestamp,
-  };
+    return {
+      conversationId: conversationId!,
+      message: assistantContent,
+      timestamp: assistantMessage.timestamp,
+    };
+  } catch (error) {
+    // Log detailed error on server
+    console.error('AI Coaching Error:', error);
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+    });
+
+    // Re-throw with more context
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    throw new Error(`AI Coaching failed: ${errorMessage}`);
+  }
 }
 
 /**
