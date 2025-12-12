@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
@@ -114,7 +114,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
 
   // Format weight for display
-  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  const displayWeight = useCallback((kg: number) => formatWeightValue(kg, unit), [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
   // Initialize pending inputs when sets change
@@ -163,7 +163,15 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     
     setPendingInputs(newPendingInputs);
-  }, [completedSets.length, pendingSetsCount, suggestedWeight, block.targetRepRange, block.targetRir]);
+  }, [
+    block.targetRepRange,
+    block.targetRir,
+    completedSets,
+    displayWeight,
+    pendingSetsCount,
+    previousSets,
+    suggestedWeight,
+  ]);
 
   // Swipe to delete handlers
   const handleTouchStart = (setId: string, e: React.TouchEvent) => {

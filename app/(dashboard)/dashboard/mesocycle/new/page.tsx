@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -189,7 +189,7 @@ export default function NewMesocyclePage() {
   }, []);
 
   // Build extended profile for full program generation
-  const extendedProfile: ExtendedUserProfile = {
+  const extendedProfile: ExtendedUserProfile = useMemo(() => ({
     age: userAge,
     experience: userExperience,
     goal: userGoal,
@@ -200,7 +200,18 @@ export default function NewMesocyclePage() {
     trainingAge,
     heightCm,
     latestDexa,
-  };
+  }), [
+    availableEquipment,
+    heightCm,
+    injuryHistory,
+    latestDexa,
+    sleepQuality,
+    stressLevel,
+    trainingAge,
+    userAge,
+    userExperience,
+    userGoal,
+  ]);
 
   // Calculate recovery factors for display
   const recoveryFactors = calculateRecoveryFactors(extendedProfile);
@@ -241,8 +252,18 @@ export default function NewMesocyclePage() {
       const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
       setFullProgram(program);
     }
-  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes]);
+  }, [
+    availableEquipment,
+    daysPerWeek,
+    extendedProfile,
+    heightCm,
+    injuryHistory,
+    latestDexa,
+    sessionDurationMinutes,
+    useAiRecommendation,
+    userExperience,
+    userGoal,
+  ]);
 
   // Generate default name
   useEffect(() => {
