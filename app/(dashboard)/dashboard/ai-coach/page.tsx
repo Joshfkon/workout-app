@@ -8,7 +8,7 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { UpgradePrompt } from '@/components/subscription';
 
 export default function AICoachPage() {
-  const { tier, canAccessFeature } = useSubscription();
+  const { tier, canAccess } = useSubscription();
   const [messages, setMessages] = useState<CoachingMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,7 @@ export default function AICoachPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Check if user has access to AI coaching feature
-  const hasAccess = canAccessFeature('ai-coaching');
+  const hasAccess = canAccess('ai-coaching');
 
   // Load coaching context on mount
   useEffect(() => {
