@@ -124,7 +124,7 @@ export default function DashboardPage() {
               weeks,
               total_weeks,
               days_per_week,
-              workout_sessions!inner (
+              workout_sessions (
                 id,
                 state,
                 planned_date,
@@ -145,7 +145,7 @@ export default function DashboardPage() {
             `)
             .eq('user_id', user.id)
             .eq('is_active', true)
-            .single(),
+            .maybeSingle(),
         ]);
 
         // Set onboarding status
