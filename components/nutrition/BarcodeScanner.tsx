@@ -21,6 +21,7 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
     return () => {
       stopScanning();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startScanning() {

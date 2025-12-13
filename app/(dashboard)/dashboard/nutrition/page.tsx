@@ -49,6 +49,7 @@ export default function NutritionPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   async function loadData() {
@@ -471,7 +472,7 @@ export default function NutritionPage() {
                   <span>{meal.emoji}</span>
                   <span>{meal.label}</span>
                   {meal.entries.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">
+                    <Badge variant="info" className="ml-2">
                       {Math.round(
                         meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0)
                       )}{' '}

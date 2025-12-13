@@ -260,12 +260,13 @@ export function AddFoodModal({
           <Select
             value={mealType}
             onChange={(e) => setMealType(e.target.value as MealType)}
-          >
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snack">Snack</option>
-          </Select>
+            options={[
+              { value: 'breakfast', label: 'Breakfast' },
+              { value: 'lunch', label: 'Lunch' },
+              { value: 'dinner', label: 'Dinner' },
+              { value: 'snack', label: 'Snack' },
+            ]}
+          />
         </div>
 
         {error && (
