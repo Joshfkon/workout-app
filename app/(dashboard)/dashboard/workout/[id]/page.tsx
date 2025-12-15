@@ -1007,9 +1007,15 @@ export default function WorkoutPage() {
         }
       }
       
-      // Generate warmup for compound exercises with actual weight
+      // Check if this is the first exercise for this muscle group in the workout
+      const muscleAlreadyWarmedUp = blocks.some(
+        block => block.exercise.primaryMuscle === exercise.primary_muscle
+      );
+      
+      // Only generate warmup for first compound exercise of each muscle group
+      const shouldWarmup = isCompound && !muscleAlreadyWarmedUp;
       const workingWeight = suggestedWeight > 0 ? suggestedWeight : 60;
-      const warmupSets = isCompound ? generateWarmupProtocol({
+      const warmupSets = shouldWarmup ? generateWarmupProtocol({
         workingWeight,
         exercise: {
           id: exercise.id,
@@ -1026,7 +1032,7 @@ export default function WorkoutPage() {
           movementPattern: '',
           equipmentRequired: [],
         },
-        isFirstExercise: false,
+        isFirstExercise: blocks.length === 0, // First exercise overall gets general warmup
       }) : [];
 
       // Create new exercise block with suggested weight

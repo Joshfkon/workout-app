@@ -214,18 +214,30 @@ function NewWorkoutContent() {
 
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
-      // Create exercise blocks with warmup protocols
+      // Track which muscle groups have had warmups
+      const warmedUpMuscles = new Set<string>();
+
+      // Create exercise blocks with warmup protocols (only for first exercise per muscle group)
       const exerciseBlocks = selectedExercises.map((exerciseId, index) => {
         const exercise = exercises.find(e => e.id === exerciseId);
         const isCompound = exercise?.mechanic === 'compound';
+        const muscleGroup = exercise?.primary_muscle || '';
         
-        // Generate warmup for compound exercises
-        const warmupSets = isCompound ? generateWarmupProtocol({
+        // Only generate warmup for first compound exercise of each muscle group
+        const isFirstForMuscle = !warmedUpMuscles.has(muscleGroup);
+        const shouldWarmup = isCompound && isFirstForMuscle;
+        
+        if (shouldWarmup && muscleGroup) {
+          warmedUpMuscles.add(muscleGroup);
+        }
+        
+        // Generate warmup for first compound exercise of each muscle group
+        const warmupSets = shouldWarmup ? generateWarmupProtocol({
           workingWeight: 60, // Default starting weight, user can adjust
           exercise: {
             id: exerciseId,
             name: exercise?.name || '',
-            primaryMuscle: exercise?.primary_muscle || '',
+            primaryMuscle: muscleGroup,
             secondaryMuscles: [],
             mechanic: exercise?.mechanic || 'compound',
             defaultRepRange: [8, 12],
@@ -237,7 +249,7 @@ function NewWorkoutContent() {
             movementPattern: '',
             equipmentRequired: [],
           },
-          isFirstExercise: index === 0,
+          isFirstExercise: index === 0, // First exercise overall gets general warmup
         }) : [];
 
         return {
