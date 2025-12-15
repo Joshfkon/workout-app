@@ -299,3 +299,194 @@ export async function getCoachingContext() {
   const context = await buildCoachingContext();
   return context;
 }
+
+// ============================================================
+// WORKOUT-SPECIFIC AI COACHING
+// ============================================================
+
+// System prompt specifically for pre-workout coaching notes
+const WORKOUT_COACH_PROMPT = `You are a knowledgeable strength coach giving brief, personalized pre-workout notes. You have access to the user's actual training data.
+
+IMPORTANT STYLE GUIDELINES:
+- Be concise. This appears at the START of a workout—don't write an essay.
+- Total response should be 3-5 sentences max.
+- Sound like a real coach: direct, supportive, specific to TODAY.
+- Reference their actual data when relevant (specific weights, recent progress, body comp).
+- Don't list every exercise—just give the key focus for the session.
+- End with one actionable tip or focus point for today.
+
+WHAT TO INCLUDE (pick the most relevant 1-2):
+- If it's early in a mesocycle: mention finding weights, focus on form
+- If late in mesocycle: mention pushing intensity, approaching peak
+- If they have lagging areas being trained today: brief mention
+- If cutting: reinforce intensity over volume, maintain strength
+- If bulking: focus on progressive overload
+- If specific lifts have plateaued: one technique tip
+- Reference recent PRs or improvements if relevant
+
+WHAT TO AVOID:
+- Generic motivation ("Let's crush it!")
+- Listing all exercises in the workout
+- Long explanations of training principles
+- Anything that sounds like ChatGPT`;
+
+export interface WorkoutCoachNotesInput {
+  exercises: Array<{
+    name: string;
+    primaryMuscle: string;
+    mechanic: 'compound' | 'isolation';
+    sets: number;
+    targetReps?: string;
+  }>;
+  workoutType?: string; // e.g., "Push", "Pull", "Legs", "Upper", "Lower", "Full Body"
+  weekInMesocycle?: number;
+  mesocycleName?: string;
+  totalWeeks?: number;
+}
+
+export interface WorkoutCoachNotesResult {
+  notes: string;
+  generated: boolean;
+  error?: string;
+}
+
+/**
+ * Generates AI-powered coach notes for a specific workout
+ * 
+ * @param input - Workout details including exercises and context
+ * @returns AI-generated personalized coaching notes
+ */
+export async function generateWorkoutCoachNotes(
+  input: WorkoutCoachNotesInput
+): Promise<WorkoutCoachNotesResult> {
+  try {
+    // Check for API key first
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      console.log('[Workout Coach] No API key, returning fallback');
+      return {
+        notes: generateFallbackNotes(input),
+        generated: false,
+      };
+    }
+
+    // Build coaching context
+    let context;
+    try {
+      context = await buildCoachingContext();
+    } catch (contextError) {
+      console.error('[Workout Coach] Failed to build context:', contextError);
+      context = null;
+    }
+
+    // Format workout details for the prompt
+    const workoutDescription = formatWorkoutForAI(input);
+    const contextString = context ? formatCoachingContext(context) : 'No detailed user context available.';
+
+    // Build the prompt
+    const prompt = `${contextString}
+
+TODAY'S WORKOUT:
+${workoutDescription}
+
+Please provide brief, personalized pre-workout coaching notes for this session. Remember: 3-5 sentences max.`;
+
+    // Initialize Anthropic client
+    const anthropic = new Anthropic({
+      apiKey: apiKey,
+    });
+
+    // Call API with a quick model for fast responses
+    const response = await anthropic.messages.create({
+      model: 'claude-3-5-haiku-latest',
+      max_tokens: 500,
+      system: WORKOUT_COACH_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    // Extract response
+    const notes = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => (block as any).text)
+      .join('\n')
+      .trim();
+
+    return {
+      notes: notes || generateFallbackNotes(input),
+      generated: true,
+    };
+  } catch (error: any) {
+    console.error('[Workout Coach] Error generating notes:', error?.message || error);
+    return {
+      notes: generateFallbackNotes(input),
+      generated: false,
+      error: error?.message,
+    };
+  }
+}
+
+/**
+ * Formats workout input for AI consumption
+ */
+function formatWorkoutForAI(input: WorkoutCoachNotesInput): string {
+  const lines: string[] = [];
+
+  if (input.workoutType) {
+    lines.push(`Type: ${input.workoutType}`);
+  }
+
+  if (input.weekInMesocycle && input.totalWeeks) {
+    lines.push(`Week ${input.weekInMesocycle} of ${input.totalWeeks} (${input.mesocycleName || 'current mesocycle'})`);
+  }
+
+  // List exercises briefly
+  const exerciseList = input.exercises
+    .map(e => `- ${e.name} (${e.primaryMuscle}, ${e.mechanic}): ${e.sets} sets${e.targetReps ? ` of ${e.targetReps}` : ''}`)
+    .join('\n');
+  
+  lines.push(`\nExercises (${input.exercises.length} total):\n${exerciseList}`);
+
+  // Summarize workout structure
+  const compoundCount = input.exercises.filter(e => e.mechanic === 'compound').length;
+  const isolationCount = input.exercises.filter(e => e.mechanic === 'isolation').length;
+  const totalSets = input.exercises.reduce((sum, e) => sum + e.sets, 0);
+  const muscles = Array.from(new Set(input.exercises.map(e => e.primaryMuscle)));
+
+  lines.push(`\nSummary: ${totalSets} total sets, ${compoundCount} compound / ${isolationCount} isolation`);
+  lines.push(`Target muscles: ${muscles.join(', ')}`);
+
+  return lines.join('\n');
+}
+
+/**
+ * Generates fallback notes when AI is unavailable
+ */
+function generateFallbackNotes(input: WorkoutCoachNotesInput): string {
+  const totalSets = input.exercises.reduce((sum, e) => sum + e.sets, 0);
+  const compoundCount = input.exercises.filter(e => e.mechanic === 'compound').length;
+  const muscles = Array.from(new Set(input.exercises.map(e => e.primaryMuscle)));
+  
+  // Determine workout type
+  const workoutType = input.workoutType || 
+    (muscles.length >= 5 ? 'Full Body' : 
+     muscles.includes('chest') && muscles.includes('shoulders') ? 'Push' :
+     muscles.includes('back') && muscles.includes('biceps') ? 'Pull' :
+     muscles.includes('quads') && muscles.includes('hamstrings') ? 'Legs' :
+     muscles.join(' & '));
+
+  // Time-based greeting
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  // Week-specific advice
+  let weekAdvice = '';
+  if (input.weekInMesocycle) {
+    if (input.weekInMesocycle === 1) {
+      weekAdvice = ' Focus on dialing in your working weights and nailing form this week.';
+    } else if (input.weekInMesocycle >= 4 && input.totalWeeks && input.weekInMesocycle >= input.totalWeeks - 1) {
+      weekAdvice = ' You\'re in the final push—bring the intensity and push close to failure on your top sets.';
+    }
+  }
+
+  return `${timeGreeting}! Today's ${workoutType} session has ${totalSets} sets across ${input.exercises.length} exercises.${weekAdvice} ${compoundCount > 0 ? 'Start with your compounds while you\'re fresh.' : 'Focus on mind-muscle connection throughout.'}`;
+}

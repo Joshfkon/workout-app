@@ -11,6 +11,7 @@ import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { formatWeight } from '@/lib/utils';
+import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -340,6 +341,8 @@ export default function WorkoutPage() {
   const [showCoachMessage, setShowCoachMessage] = useState(true);
   const [coachMessage, setCoachMessage] = useState<ReturnType<typeof generateCoachMessage> | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
+  const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
+  const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -543,6 +546,42 @@ export default function WorkoutPage() {
         
         // Generate coach message with profile and context
         setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
+        
+        // Generate AI-powered coach notes in the background
+        (async () => {
+          setIsLoadingAiNotes(true);
+          try {
+            // Determine workout type from exercises
+            const muscles = Array.from(new Set(transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exercise.primaryMuscle)));
+            let inferredWorkoutType = '';
+            if (muscles.length >= 5) inferredWorkoutType = 'Full Body';
+            else if (muscles.includes('chest') && muscles.includes('back')) inferredWorkoutType = 'Upper Body';
+            else if (muscles.includes('quads') && muscles.includes('hamstrings')) inferredWorkoutType = 'Lower Body';
+            else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) inferredWorkoutType = 'Push';
+            else if (muscles.includes('back') && muscles.includes('biceps')) inferredWorkoutType = 'Pull';
+            else inferredWorkoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+            
+            const aiInput: WorkoutCoachNotesInput = {
+              exercises: transformedBlocks.map((b: ExerciseBlockWithExercise) => ({
+                name: b.exercise.name,
+                primaryMuscle: b.exercise.primaryMuscle,
+                mechanic: b.exercise.mechanic,
+                sets: b.targetSets,
+                targetReps: `${b.targetRepRange[0]}-${b.targetRepRange[1]}`,
+              })),
+              workoutType: inferredWorkoutType,
+              weekInMesocycle: userContext.weekInMesocycle,
+              mesocycleName: userContext.mesocycleName,
+              totalWeeks: mesocycleData?.weeks,
+            };
+            const result = await generateWorkoutCoachNotes(aiInput);
+            setAiCoachNotes(result.notes);
+          } catch (error) {
+            console.error('[AI Coach Notes] Failed to generate:', error);
+          } finally {
+            setIsLoadingAiNotes(false);
+          }
+        })();
         
         // Fetch exercise history for all exercises in this workout
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
@@ -1415,8 +1454,24 @@ export default function WorkoutPage() {
                 <p className="text-sm text-surface-400">{coachMessage.overview}</p>
               </div>
 
-              {/* Personalized Insight */}
-              {coachMessage.personalizedInsight && (
+              {/* AI-Powered Coach Notes */}
+              {isLoadingAiNotes ? (
+                <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
+                  </div>
+                </div>
+              ) : aiCoachNotes ? (
+                <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                  <div className="flex items-start gap-2">
+                    <span className="text-primary-400 text-lg mt-0.5">💬</span>
+                    <p className="text-sm text-primary-300 leading-relaxed">
+                      {aiCoachNotes}
+                    </p>
+                  </div>
+                </div>
+              ) : coachMessage.personalizedInsight && (
                 <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
                   <p className="text-sm text-primary-300">
                     {coachMessage.personalizedInsight}
