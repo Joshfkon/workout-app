@@ -113,7 +113,7 @@ export default function NutritionPage() {
     carbs: number;
     fat: number;
     meal_type: MealType;
-    source?: 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+    source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
     food_id?: string;
     nutritionix_id?: string;
   }) {
