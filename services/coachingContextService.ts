@@ -121,6 +121,24 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
 
   const mesocycle = mesocycleData as any;
 
+  // Get strength calibrations (from coaching system)
+  const { data: calibrationsData } = await supabase
+    .from('calibrated_lifts')
+    .select('*')
+    .eq('user_id', authUser.id)
+    .order('tested_at', { ascending: false });
+
+  const calibrations = calibrationsData as any[] || [];
+
+  // Get user preferences/goals
+  const { data: prefsData } = await supabase
+    .from('user_preferences')
+    .select('*')
+    .eq('user_id', authUser.id)
+    .single();
+
+  const prefs = prefsData as any;
+
   // Get recent lift performance (last 30 days, top sets only)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -159,18 +177,28 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       for (const block of session.exercise_blocks) {
         if (!block.set_logs || block.set_logs.length === 0) continue;
 
-        // Get top working set (non-warmup, highest weight)
+        // Get top working set (non-warmup, highest weight, valid data)
         const workingSets = block.set_logs.filter(
-          (set: any) => !set.is_warmup && set.weight_kg > 0
+          (set: any) => !set.is_warmup && 
+                        set.weight_kg != null && 
+                        set.weight_kg > 0 && 
+                        set.reps != null && 
+                        set.reps > 0
         );
 
         if (workingSets.length === 0) continue;
 
         const topSet = workingSets.reduce((best: any, current: any) => {
-          const currentE1RM = current.weight_kg * (1 + current.reps / 30);
-          const bestE1RM = best.weight_kg * (1 + best.reps / 30);
+          const currentWeight = current.weight_kg || 0;
+          const currentReps = current.reps || 0;
+          const bestWeight = best.weight_kg || 0;
+          const bestReps = best.reps || 0;
+          const currentE1RM = currentWeight * (1 + currentReps / 30);
+          const bestE1RM = bestWeight * (1 + bestReps / 30);
           return currentE1RM > bestE1RM ? current : best;
         });
+
+        if (!topSet.weight_kg || !topSet.reps) continue;
 
         const estimated1RM = topSet.weight_kg * (1 + topSet.reps / 30);
 
@@ -196,6 +224,24 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     recentLifts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
+  // Process calibrated lifts
+  const calibratedLifts = calibrations.map((cal: any) => ({
+    liftName: cal.lift_name,
+    estimated1RM: cal.estimated_1rm,
+    testedWeight: cal.tested_weight_kg,
+    testedReps: cal.tested_reps,
+    percentileVsTrained: cal.percentile_vs_trained,
+    strengthLevel: cal.strength_level,
+    testedAt: cal.tested_at,
+  }));
+
+  // Calculate FFMI if we have the data
+  let ffmi: number | undefined;
+  if (dexa?.lean_mass_kg && user.height_cm) {
+    const heightM = user.height_cm / 100;
+    ffmi = dexa.lean_mass_kg / (heightM * heightM);
+  }
+
   // Build coaching context
   const context: CoachingContext = {
     user: {
@@ -204,6 +250,8 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       sex: user.sex || 'male',
       height: user.height_cm || 175,
       trainingAge: user.training_age_years || 1,
+      goal: prefs?.coaching?.primaryGoal || user.goal || undefined,
+      experience: user.experience || undefined,
     },
     phase: phase
       ? {
@@ -218,6 +266,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       weightTrend,
       bodyFat: dexa?.body_fat_percent,
       leanMass: dexa?.lean_mass_kg,
+      ffmi,
       lastDexaDate: dexa?.scan_date,
     },
     training: {
@@ -226,6 +275,12 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       daysPerWeek: mesocycle?.days_per_week,
       recentLifts: recentLifts.slice(0, 15), // Limit to 15 most relevant lifts
     },
+    strength: calibratedLifts.length > 0 
+      ? {
+          calibratedLifts: calibratedLifts.slice(0, 6), // Top 6 lifts
+          overallLevel: calibrations[0]?.strength_level,
+        }
+      : undefined,
   };
 
   return context;
@@ -246,7 +301,14 @@ export function formatCoachingContext(context: CoachingContext): string {
   formatted += `**Age:** ${context.user.age} years\n`;
   formatted += `**Sex:** ${context.user.sex}\n`;
   formatted += `**Height:** ${context.user.height} cm\n`;
-  formatted += `**Training Age:** ${context.user.trainingAge} years\n\n`;
+  formatted += `**Training Age:** ${context.user.trainingAge} years\n`;
+  if (context.user.goal) {
+    formatted += `**Primary Goal:** ${context.user.goal}\n`;
+  }
+  if (context.user.experience) {
+    formatted += `**Experience Level:** ${context.user.experience}\n`;
+  }
+  formatted += `\n`;
 
   // Phase info
   if (context.phase) {
@@ -271,10 +333,29 @@ export function formatCoachingContext(context: CoachingContext): string {
   if (context.currentStats.leanMass) {
     formatted += `**Lean Mass:** ${context.currentStats.leanMass.toFixed(1)} kg\n`;
   }
+  if (context.currentStats.ffmi) {
+    formatted += `**FFMI:** ${context.currentStats.ffmi.toFixed(1)}\n`;
+  }
   if (context.currentStats.lastDexaDate) {
     formatted += `**Last DEXA Scan:** ${context.currentStats.lastDexaDate}\n`;
   }
   formatted += `\n`;
+
+  // Strength calibrations
+  if (context.strength && context.strength.calibratedLifts.length > 0) {
+    formatted += `**Calibrated Strength (Estimated 1RMs):**\n`;
+    if (context.strength.overallLevel) {
+      formatted += `Overall Level: ${context.strength.overallLevel}\n`;
+    }
+    for (const lift of context.strength.calibratedLifts) {
+      formatted += `- ${lift.liftName}: ${lift.estimated1RM.toFixed(1)}kg`;
+      if (lift.percentileVsTrained) {
+        formatted += ` (${lift.percentileVsTrained}th percentile vs trained)`;
+      }
+      formatted += `\n`;
+    }
+    formatted += `\n`;
+  }
 
   // Training info
   if (context.training.currentBlock) {

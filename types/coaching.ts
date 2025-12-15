@@ -51,6 +51,17 @@ export interface RecentLift {
   estimated1RM: number;
 }
 
+/** Calibrated strength data */
+export interface CalibratedLift {
+  liftName: string;
+  estimated1RM: number;
+  testedWeight: number;
+  testedReps: number;
+  percentileVsTrained?: number;
+  strengthLevel?: string;
+  testedAt: string;
+}
+
 /** Coaching context passed to AI for personalized advice */
 export interface CoachingContext {
   user: {
@@ -59,6 +70,8 @@ export interface CoachingContext {
     sex: 'male' | 'female';
     height: number; // cm
     trainingAge: number; // years
+    goal?: string; // e.g., 'hypertrophy', 'strength', 'recomp'
+    experience?: string; // e.g., 'novice', 'intermediate', 'advanced'
   };
   phase?: {
     type: PhaseType;
@@ -71,6 +84,7 @@ export interface CoachingContext {
     weightTrend?: 'increasing' | 'stable' | 'decreasing';
     bodyFat?: number;
     leanMass?: number;
+    ffmi?: number;
     lastDexaDate?: string;
   };
   training: {
@@ -79,7 +93,10 @@ export interface CoachingContext {
     daysPerWeek?: number;
     recentLifts: RecentLift[];
   };
-  // Future: nutrition object will be added here
+  strength?: {
+    calibratedLifts: CalibratedLift[];
+    overallLevel?: string;
+  };
 }
 
 /** Request to AI coaching endpoint */
