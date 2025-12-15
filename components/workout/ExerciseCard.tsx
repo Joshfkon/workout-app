@@ -743,9 +743,27 @@ export const ExerciseCard = memo(function ExerciseCard({
                   )}
                   <td className="px-3 py-2.5 text-surface-300 font-medium">
                     <div className="flex items-center gap-2">
-                      <svg className="w-4 h-4 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      {onSetDelete ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSetDelete(set.id);
+                          }}
+                          className="w-5 h-5 rounded bg-success-500 flex items-center justify-center hover:bg-surface-600 transition-colors group/check"
+                          title="Uncheck set"
+                        >
+                          <svg className="w-3 h-3 text-white group-hover/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <svg className="w-3 h-3 text-surface-400 hidden group-hover/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <svg className="w-4 h-4 text-success-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                       {set.setNumber}
                     </div>
                   </td>
