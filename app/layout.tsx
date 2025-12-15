@@ -29,12 +29,20 @@ export const metadata: Metadata = {
     siteName: "HyperTrack",
     title: "HyperTrack - Science-Based Workout Tracker",
     description: "The intelligent hypertrophy training app with auto-regulation, volume tracking, AI coaching, and science-backed progression.",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "HyperTrack - Science-Based Workout Tracker",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "HyperTrack - Science-Based Workout Tracker",
     description: "Build muscle smarter with AI-powered workout planning, auto-regulation, and science-backed progression.",
-    creator: "@hypertrack",
+    images: ["/twitter-image"],
   },
   robots: {
     index: true,

@@ -21,93 +21,28 @@ export default async function Image() {
           alignItems: 'center',
           justifyContent: 'center',
           backgroundColor: '#0a0a0a',
-          backgroundImage: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
+          position: 'relative',
         }}
       >
-        {/* Decorative elements */}
+        {/* Background gradient overlay */}
         <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            inset: 0,
+            background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
           }}
-        >
-          <div
-            style={{
-              width: 400,
-              height: 400,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)',
-              position: 'absolute',
-            }}
-          />
-        </div>
+        />
 
-        {/* Main content */}
+        {/* Glow effect */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
+            position: 'absolute',
+            width: 500,
+            height: 500,
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)',
           }}
-        >
-          {/* Dumbbell Icon */}
-          <svg
-            width="100"
-            height="100"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="url(#gradient)"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <defs>
-              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="100%" stopColor="#8b5cf6" />
-              </linearGradient>
-            </defs>
-            <path d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5" />
-          </svg>
-
-          {/* App Name */}
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 64,
-              fontWeight: 900,
-              background: 'linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%)',
-              backgroundClip: 'text',
-              color: 'transparent',
-              marginTop: 20,
-              letterSpacing: '-2px',
-            }}
-          >
-            HYPERTROPHY
-          </div>
-
-          {/* Tagline */}
-          <div
-            style={{
-              display: 'flex',
-              fontSize: 24,
-              color: '#3b82f6',
-              marginTop: 12,
-              letterSpacing: '4px',
-              textTransform: 'uppercase',
-            }}
-          >
-            Train Smarter • Build Muscle • Track Progress
-          </div>
-        </div>
+        />
 
         {/* Corner accents */}
         <div
@@ -132,6 +67,48 @@ export default async function Image() {
             borderBottom: '3px solid #8b5cf6',
           }}
         />
+
+        {/* Dumbbell Icon */}
+        <div
+          style={{
+            display: 'flex',
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 12, height: 50, background: 'linear-gradient(180deg, #3b82f6, #8b5cf6)', borderRadius: 4 }} />
+            <div style={{ width: 16, height: 70, background: 'linear-gradient(180deg, #3b82f6, #8b5cf6)', borderRadius: 4 }} />
+            <div style={{ width: 100, height: 16, background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', borderRadius: 8 }} />
+            <div style={{ width: 16, height: 70, background: 'linear-gradient(180deg, #8b5cf6, #3b82f6)', borderRadius: 4 }} />
+            <div style={{ width: 12, height: 50, background: 'linear-gradient(180deg, #8b5cf6, #3b82f6)', borderRadius: 4 }} />
+          </div>
+        </div>
+
+        {/* App Name */}
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 72,
+            fontWeight: 900,
+            color: '#ffffff',
+            letterSpacing: -2,
+          }}
+        >
+          HYPERTROPHY
+        </div>
+
+        {/* Tagline */}
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 24,
+            color: '#3b82f6',
+            marginTop: 16,
+            letterSpacing: 4,
+          }}
+        >
+          TRAIN SMARTER • BUILD MUSCLE • TRACK PROGRESS
+        </div>
       </div>
     ),
     {

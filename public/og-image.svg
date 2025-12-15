@@ -1,0 +1,59 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a0a"/>
+      <stop offset="50%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#0a0a0a"/>
+    </linearGradient>
+    <linearGradient id="iconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#a0a0a0"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.2"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)"/>
+  
+  <!-- Glow effect -->
+  <ellipse cx="600" cy="280" rx="300" ry="300" fill="url(#glow)"/>
+  
+  <!-- Corner accents -->
+  <path d="M32 112 L32 32 L112 32" stroke="#3b82f6" stroke-width="3" fill="none"/>
+  <path d="M1168 518 L1168 598 L1088 598" stroke="#8b5cf6" stroke-width="3" fill="none"/>
+  
+  <!-- Dumbbell Icon -->
+  <g transform="translate(600, 220)" stroke="url(#iconGrad)" stroke-width="6" stroke-linecap="round" fill="none">
+    <line x1="-50" y1="0" x2="50" y2="0"/>
+    <line x1="-70" y1="-30" x2="-70" y2="30"/>
+    <line x1="-85" y1="-20" x2="-85" y2="20"/>
+    <line x1="70" y1="-30" x2="70" y2="30"/>
+    <line x1="85" y1="-20" x2="85" y2="20"/>
+  </g>
+  
+  <!-- App Name -->
+  <text x="600" y="340" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="900" fill="url(#textGrad)" letter-spacing="-2">HYPERTROPHY</text>
+  
+  <!-- Tagline -->
+  <text x="600" y="390" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="24" fill="#3b82f6" letter-spacing="4">TRAIN SMARTER</text>
+  
+  <!-- Features -->
+  <g transform="translate(600, 480)">
+    <circle cx="-250" cy="0" r="5" fill="#3b82f6"/>
+    <text x="-235" y="6" font-family="system-ui, sans-serif" font-size="18" fill="#888888">Auto-Regulation</text>
+    
+    <circle cx="-20" cy="0" r="5" fill="#8b5cf6"/>
+    <text x="-5" y="6" font-family="system-ui, sans-serif" font-size="18" fill="#888888">Volume Tracking</text>
+    
+    <circle cx="200" cy="0" r="5" fill="#06b6d4"/>
+    <text x="215" y="6" font-family="system-ui, sans-serif" font-size="18" fill="#888888">AI Coaching</text>
+  </g>
+</svg>
+
