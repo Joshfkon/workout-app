@@ -48,6 +48,7 @@ interface ExerciseCardProps {
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
+  hideHeader?: boolean;  // Hide the exercise name header (for mobile when shown in parent)
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -67,6 +68,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   recommendedWeight,
   previousSets = [],
   exerciseHistory,
+  hideHeader = false,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -399,44 +401,47 @@ export const ExerciseCard = memo(function ExerciseCard({
       padding="none"
       className={`overflow-hidden transition-all ${isActive ? 'ring-2 ring-primary-500/50' : ''}`}
     >
-      {/* Header */}
-      <div className="p-4 border-b border-surface-800">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-surface-100 truncate">
-                {exercise.name}
-              </h3>
-              {exercise.hypertrophyScore?.tier && (
-                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
-                  {exercise.hypertrophyScore.tier}
-                </span>
-              )}
-              {block.progressionType && (
-                <span className="flex items-center gap-1 text-primary-400">
-                  {getProgressionIcon(block.progressionType)}
-                </span>
+      {/* Header - compact when hideHeader is true */}
+      <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800`}>
+        <div className="flex items-start justify-between gap-2">
+          {/* Exercise name and info - hidden when hideHeader */}
+          {!hideHeader && (
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-surface-100 truncate">
+                  {exercise.name}
+                </h3>
+                {exercise.hypertrophyScore?.tier && (
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
+                    {exercise.hypertrophyScore.tier}
+                  </span>
+                )}
+                {block.progressionType && (
+                  <span className="flex items-center gap-1 text-primary-400">
+                    {getProgressionIcon(block.progressionType)}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-surface-400 mt-0.5">
+                {exercise.primaryMuscle} • {exercise.mechanic}
+              </p>
+              {/* Show tier explanation for top-tier exercises */}
+              {exercise.hypertrophyScore?.tier && ['S', 'A'].includes(exercise.hypertrophyScore.tier) && (
+                <p className="text-xs text-emerald-500/70 mt-0.5 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  {exercise.hypertrophyScore.tier === 'S' 
+                    ? 'Top-tier for muscle growth' 
+                    : 'Highly effective choice'}
+                </p>
               )}
             </div>
-            <p className="text-sm text-surface-400 mt-0.5">
-              {exercise.primaryMuscle} • {exercise.mechanic}
-            </p>
-            {/* Show tier explanation for top-tier exercises */}
-            {exercise.hypertrophyScore?.tier && ['S', 'A'].includes(exercise.hypertrophyScore.tier) && (
-              <p className="text-xs text-emerald-500/70 mt-0.5 flex items-center gap-1">
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                </svg>
-                {exercise.hypertrophyScore.tier === 'S' 
-                  ? 'Top-tier for muscle growth' 
-                  : 'Highly effective choice'}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
+          )}
+          <div className={`flex items-center gap-1 ${hideHeader ? 'flex-1 justify-between' : ''}`}>
             {/* Set controls */}
             {onTargetSetsChange && isActive && (
-              <div className="flex items-center gap-1 mr-2">
+              <div className="flex items-center gap-1">
                 <button
                   onClick={() => onTargetSetsChange(Math.max(1, block.targetSets - 1))}
                   disabled={block.targetSets <= completedSets.length || block.targetSets <= 1}
@@ -463,7 +468,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {onExerciseSwap && isActive && similarExercises.length > 0 && (
               <button
                 onClick={() => setShowSwapModal(true)}
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors mr-2"
+                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors"
                 title="Swap exercise"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -479,7 +484,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onExerciseDelete();
                   }
                 }}
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors mr-2"
+                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
                 title="Remove exercise"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -493,24 +498,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
 
-        {/* Targets */}
-        <div className="flex flex-wrap gap-3 mt-3 text-sm">
-          <div className="flex items-center gap-1.5">
-            {suggestedWeight > 0 ? (
-              <>
-                <span className="text-primary-500">💡 Suggested:</span>
-                <span className="font-medium text-primary-300">
-                  {displayWeight(suggestedWeight)} {weightLabel}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="text-surface-500">Weight:</span>
-                <span className="font-medium text-surface-400 italic">
-                  Enter your working weight
-                </span>
-              </>
-            )}
+        {/* Targets - only show suggested weight, not empty state */}
+        <div className="flex flex-wrap gap-3 mt-2 text-sm">
+          {suggestedWeight > 0 && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-primary-500">💡 Suggested:</span>
+              <span className="font-medium text-primary-300">
+                {displayWeight(suggestedWeight)} {weightLabel}
+              </span>
+            </div>
+          )}
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-surface-500">Reps:</span>
@@ -870,11 +867,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <button
                       onClick={() => completePendingSet(index)}
                       disabled={!input.weight || !input.reps || !input.rpe}
-                      className={`p-2 rounded-lg transition-colors ${
-                        input.weight && input.reps && input.rpe
-                          ? 'bg-success-500 hover:bg-success-600 text-white'
-                          : 'bg-surface-800 border border-surface-600 text-surface-500 hover:border-surface-500'
-                      }`}
+                      className="p-2 rounded-lg transition-colors bg-surface-800 border border-surface-600 text-surface-500 hover:bg-success-500 hover:border-success-500 hover:text-white disabled:opacity-40 disabled:hover:bg-surface-800 disabled:hover:border-surface-600 disabled:hover:text-surface-500"
                       title="Complete set"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -1508,7 +1508,7 @@ export default function WorkoutPage() {
                 const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
                 
                 return (
-                <div className="ml-11 space-y-4">
+                <div className="mt-3 space-y-3">
                   {/* Warmup protocol */}
                   {block.warmupProtocol && block.warmupProtocol.length > 0 && effectiveWorkingWeight > 0 && (
                     <WarmupProtocol
@@ -1519,8 +1519,9 @@ export default function WorkoutPage() {
                     />
                   )}
 
-                  {/* Exercise card with integrated set inputs */}
+                  {/* Exercise card with integrated set inputs - hideHeader on mobile since name shows above */}
                   <ExerciseCard
+                    hideHeader
                     exercise={block.exercise}
                     block={addingExtraSet === block.id 
                       ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
