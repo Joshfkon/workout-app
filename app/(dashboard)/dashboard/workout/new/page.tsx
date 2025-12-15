@@ -12,6 +12,7 @@ interface Exercise {
   name: string;
   primary_muscle: string;
   mechanic: 'compound' | 'isolation';
+  hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
 }
 
 function NewWorkoutContent() {
@@ -83,16 +84,28 @@ function NewWorkoutContent() {
         .eq('id', user.id)
         .single();
       
-      // Fetch exercises for suggested muscles
+      // Fetch exercises for suggested muscles, including hypertrophy tier
       const { data: exercisesData } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic')
+        .select('id, name, primary_muscle, mechanic, hypertrophy_tier')
         .in('primary_muscle', suggestedMuscles)
         .order('name');
       
-      // Pick 4-6 exercises (compounds first)
-      const compounds = exercisesData?.filter((e: { mechanic: string }) => e.mechanic === 'compound') || [];
-      const isolations = exercisesData?.filter((e: { mechanic: string }) => e.mechanic === 'isolation') || [];
+      // Sort by hypertrophy tier (S > A > B > C > D > F), then by mechanic
+      const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
+      const sortedExercises = (exercisesData || []).sort((a: any, b: any) => {
+        const tierA = tierRank[a.hypertrophy_tier || 'C'] ?? 3;
+        const tierB = tierRank[b.hypertrophy_tier || 'C'] ?? 3;
+        if (tierA !== tierB) return tierA - tierB;
+        // Then compounds first
+        const mechA = a.mechanic === 'compound' ? 0 : 1;
+        const mechB = b.mechanic === 'compound' ? 0 : 1;
+        return mechA - mechB;
+      });
+      
+      // Pick 4-6 exercises (best tiers first, compounds before isolations)
+      const compounds = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'compound');
+      const isolations = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'isolation');
       const picked = [
         ...compounds.slice(0, 3),
         ...isolations.slice(0, 3),
@@ -140,12 +153,20 @@ function NewWorkoutContent() {
         const supabase = createUntypedClient();
         const { data, error } = await supabase
           .from('exercises')
-          .select('id, name, primary_muscle, mechanic')
+          .select('id, name, primary_muscle, mechanic, hypertrophy_tier')
           .in('primary_muscle', selectedMuscles)
           .order('name');
 
         if (data && !error) {
-          setExercises(data);
+          // Sort by hypertrophy tier (S > A > B > C), then alphabetically
+          const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
+          const sorted = [...data].sort((a: any, b: any) => {
+            const tierA = tierRank[a.hypertrophy_tier || 'C'] ?? 3;
+            const tierB = tierRank[b.hypertrophy_tier || 'C'] ?? 3;
+            if (tierA !== tierB) return tierA - tierB;
+            return (a.name || '').localeCompare(b.name || '');
+          });
+          setExercises(sorted);
         }
         setIsLoading(false);
       };
@@ -409,9 +430,20 @@ function NewWorkoutContent() {
                             </div>
                             <span className="text-surface-200">{exercise.name}</span>
                           </div>
-                          <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
-                            {exercise.mechanic}
-                          </Badge>
+                          <div className="flex gap-1.5">
+                            {exercise.hypertrophy_tier && ['S', 'A'].includes(exercise.hypertrophy_tier) && (
+                              <Badge 
+                                variant="success" 
+                                size="sm"
+                                className="font-semibold"
+                              >
+                                {exercise.hypertrophy_tier}-tier
+                              </Badge>
+                            )}
+                            <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
+                              {exercise.mechanic}
+                            </Badge>
+                          </div>
                         </button>
                       ))}
                     </div>
