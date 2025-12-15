@@ -21,21 +21,33 @@ import type { CoachingContext, RecentLift } from '@/types/coaching';
  * @returns CoachingContext with all available user data, or null if user not found
  */
 export async function buildCoachingContext(): Promise<CoachingContext | null> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  // Get authenticated user
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
+    // Get authenticated user
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) {
+      console.log('[CoachingContext] No authenticated user');
+      return null;
+    }
 
-  // Fetch user profile
-  const { data: userData } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', authUser.id)
-    .single();
+    // Fetch user profile
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
 
-  if (!userData) return null;
-  const user = userData as any;
+    if (userError) {
+      console.error('[CoachingContext] Error fetching user:', userError.message);
+      return null;
+    }
+
+    if (!userData) {
+      console.log('[CoachingContext] No user data found');
+      return null;
+    }
+    const user = userData as any;
 
   // Calculate age from birth_date
   const age = user.birth_date
@@ -217,6 +229,10 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
   };
 
   return context;
+  } catch (error: any) {
+    console.error('[CoachingContext] Error building context:', error?.message || error);
+    return null;
+  }
 }
 
 /**
