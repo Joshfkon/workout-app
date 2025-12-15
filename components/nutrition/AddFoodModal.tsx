@@ -163,7 +163,7 @@ export function AddFoodModal({
         carbs: Math.round(carbs * servingsNum * 10) / 10,
         fat: Math.round(fat * servingsNum * 10) / 10,
         meal_type: mealType,
-        source: 'fatsecret',
+        source: 'usda',
         food_id: selectedFood.foodId,
       });
 

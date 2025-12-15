@@ -3,7 +3,7 @@
  */
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export type FoodSource = 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+export type FoodSource = 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
 
 export interface FoodLogEntry {
   id: string;

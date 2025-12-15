@@ -3,76 +3,9 @@
 /**
  * Nutrition API Server Actions
  *
- * Handles integration with FatSecret Platform API for food search and barcode lookup.
- * API keys are kept server-side for security.
+ * Primary: USDA FoodData Central API (free, no IP restrictions)
+ * Fallback: FatSecret Platform API (if configured and whitelisted)
  */
-
-// Token cache for FatSecret OAuth
-let cachedToken: {
-  accessToken: string;
-  expiresAt: number;
-} | null = null;
-
-interface FatSecretServing {
-  serving_id: string;
-  serving_description: string;
-  serving_url?: string;
-  metric_serving_amount?: string;
-  metric_serving_unit?: string;
-  number_of_units?: string;
-  measurement_description?: string;
-  calories?: string;
-  carbohydrate?: string;
-  protein?: string;
-  fat?: string;
-  saturated_fat?: string;
-  fiber?: string;
-  sugar?: string;
-  sodium?: string;
-}
-
-interface FatSecretFood {
-  food_id: string;
-  food_name: string;
-  food_type: string;
-  brand_name?: string;
-  food_url?: string;
-  food_description?: string;
-  servings?: {
-    serving: FatSecretServing | FatSecretServing[];
-  };
-}
-
-interface FatSecretSearchResult {
-  foods?: {
-    food: FatSecretFood | FatSecretFood[];
-    max_results: string;
-    page_number: string;
-    total_results: string;
-  };
-  error?: {
-    code: number;
-    message: string;
-  };
-}
-
-interface FatSecretFoodResponse {
-  food?: FatSecretFood;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
-
-interface FatSecretBarcodeResponse {
-  food_id?: {
-    value: string;
-  };
-  error?: {
-    code: number;
-    message: string;
-  };
-}
 
 export interface FoodSearchResult {
   name: string;
@@ -83,9 +16,8 @@ export interface FoodSearchResult {
   carbs: number;
   fat: number;
   foodId?: string;
-  nutritionixId?: string; // Legacy field for compatibility
-  photoUrl?: string;
   brandName?: string;
+  dataSource?: 'usda' | 'fatsecret';
   servings?: Array<{
     id: string;
     description: string;
@@ -96,85 +28,53 @@ export interface FoodSearchResult {
   }>;
 }
 
-/**
- * Get FatSecret access token using Client Credentials Grant
- */
-async function getAccessToken(): Promise<string> {
-  // Check if we have a valid cached token (with 5 min buffer)
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 300000) {
-    return cachedToken.accessToken;
-  }
+// ============================================================
+// USDA FoodData Central API (Primary - No IP Restrictions!)
+// ============================================================
 
-  const clientId = process.env.FATSECRET_CLIENT_ID;
-  const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
+interface USDAFood {
+  fdcId: number;
+  description: string;
+  dataType: string;
+  brandOwner?: string;
+  brandName?: string;
+  ingredients?: string;
+  servingSize?: number;
+  servingSizeUnit?: string;
+  foodNutrients: Array<{
+    nutrientId: number;
+    nutrientName: string;
+    nutrientNumber: string;
+    unitName: string;
+    value: number;
+  }>;
+}
 
-  if (!clientId || !clientSecret) {
-    throw new Error('FatSecret API credentials not configured');
-  }
+interface USDASearchResponse {
+  foods: USDAFood[];
+  totalHits: number;
+  currentPage: number;
+  totalPages: number;
+}
 
-  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+// Nutrient IDs in USDA database
+const NUTRIENT_IDS = {
+  CALORIES: 1008,      // Energy (kcal)
+  PROTEIN: 1003,       // Protein
+  FAT: 1004,           // Total lipid (fat)
+  CARBS: 1005,         // Carbohydrate, by difference
+  FIBER: 1079,         // Fiber, total dietary
+  SUGAR: 2000,         // Sugars, total
+  SODIUM: 1093,        // Sodium
+};
 
-  const response = await fetch('https://oauth.fatsecret.com/connect/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials&scope=basic',
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('FatSecret token error:', response.status, errorText);
-    throw new Error('Failed to authenticate with FatSecret');
-  }
-
-  const data = await response.json();
-
-  // Cache the token
-  cachedToken = {
-    accessToken: data.access_token,
-    expiresAt: Date.now() + (data.expires_in * 1000),
-  };
-
-  return data.access_token;
+function extractNutrient(nutrients: USDAFood['foodNutrients'], nutrientId: number): number {
+  const nutrient = nutrients.find(n => n.nutrientId === nutrientId);
+  return nutrient ? Math.round(nutrient.value * 10) / 10 : 0;
 }
 
 /**
- * Make authenticated API request to FatSecret
- */
-async function fatSecretRequest<T>(
-  method: string,
-  params: Record<string, string> = {}
-): Promise<T> {
-  const accessToken = await getAccessToken();
-
-  const searchParams = new URLSearchParams({
-    method,
-    format: 'json',
-    ...params,
-  });
-
-  const response = await fetch('https://platform.fatsecret.com/rest/server.api', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: searchParams.toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('FatSecret API error:', response.status, errorText);
-    throw new Error(`FatSecret API error: ${response.status}`);
-  }
-
-  return response.json();
-}
-
-/**
- * Search for foods using FatSecret API
+ * Search for foods using USDA FoodData Central API
  */
 export async function searchFoods(query: string): Promise<{
   foods: FoodSearchResult[];
@@ -185,58 +85,80 @@ export async function searchFoods(query: string): Promise<{
       return { foods: [], error: 'Please enter a search query' };
     }
 
-    const clientId = process.env.FATSECRET_CLIENT_ID;
-    const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
+    // USDA API Key (free, get one at https://fdc.nal.usda.gov/api-key-signup.html)
+    const apiKey = process.env.USDA_API_KEY || 'DEMO_KEY';
 
-    if (!clientId || !clientSecret) {
-      console.error('FatSecret API credentials not configured');
-      return {
-        foods: [],
-        error: 'Nutrition search is not configured. Please add FatSecret API credentials.'
-      };
+    const response = await fetch(
+      `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: query.trim(),
+          pageSize: 25,
+          pageNumber: 1,
+          sortBy: 'dataType.keyword',
+          sortOrder: 'asc',
+          dataType: ['Branded', 'Survey (FNDDS)', 'Foundation', 'SR Legacy'],
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('USDA API error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        return { foods: [], error: 'Rate limit exceeded. Please wait a moment and try again.' };
+      }
+      
+      return { foods: [], error: 'Unable to search foods. Please try again.' };
     }
 
-    const data = await fatSecretRequest<FatSecretSearchResult>('foods.search', {
-      search_expression: query.trim(),
-      max_results: '25',
-    });
+    const data: USDASearchResponse = await response.json();
 
-    if (data.error) {
-      console.error('FatSecret search error:', data.error);
-      return { foods: [], error: data.error.message || 'Search failed' };
-    }
-
-    if (!data.foods || !data.foods.food) {
+    if (!data.foods || data.foods.length === 0) {
       return { foods: [], error: 'No foods found matching your search' };
     }
 
-    // Handle single result vs array
-    const foodsArray = Array.isArray(data.foods.food) 
-      ? data.foods.food 
-      : [data.foods.food];
+    const foods: FoodSearchResult[] = data.foods.map((food) => {
+      const calories = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CALORIES);
+      const protein = extractNutrient(food.foodNutrients, NUTRIENT_IDS.PROTEIN);
+      const carbs = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CARBS);
+      const fat = extractNutrient(food.foodNutrients, NUTRIENT_IDS.FAT);
 
-    const foods: FoodSearchResult[] = foodsArray.map((food) => {
-      // Parse the food_description to extract nutrition info
-      // Format: "Per 100g - Calories: 89kcal | Fat: 0.33g | Carbs: 22.84g | Protein: 1.09g"
-      const desc = food.food_description || '';
-      const servingMatch = desc.match(/^Per (.+?) -/);
-      const caloriesMatch = desc.match(/Calories:\s*([\d.]+)/);
-      const fatMatch = desc.match(/Fat:\s*([\d.]+)/);
-      const carbsMatch = desc.match(/Carbs:\s*([\d.]+)/);
-      const proteinMatch = desc.match(/Protein:\s*([\d.]+)/);
+      // Serving size - USDA uses 100g as base, but branded foods have serving sizes
+      let servingSize = '100g';
+      let servingMultiplier = 1;
+
+      if (food.servingSize && food.servingSizeUnit) {
+        servingSize = `${food.servingSize}${food.servingSizeUnit}`;
+        servingMultiplier = food.servingSize / 100;
+      }
+
+      // Clean up the food name
+      let name = food.description;
+      if (food.brandName || food.brandOwner) {
+        const brand = food.brandName || food.brandOwner;
+        // Don't duplicate if brand is already in name
+        if (!name.toLowerCase().includes(brand?.toLowerCase() || '')) {
+          name = `${name} (${brand})`;
+        }
+      }
 
       return {
-        name: food.brand_name 
-          ? `${food.food_name} (${food.brand_name})`
-          : food.food_name,
-        servingSize: servingMatch ? servingMatch[1] : '1 serving',
+        name,
+        servingSize,
         servingQty: 1,
-        calories: caloriesMatch ? Math.round(parseFloat(caloriesMatch[1])) : 0,
-        protein: proteinMatch ? Math.round(parseFloat(proteinMatch[1]) * 10) / 10 : 0,
-        carbs: carbsMatch ? Math.round(parseFloat(carbsMatch[1]) * 10) / 10 : 0,
-        fat: fatMatch ? Math.round(parseFloat(fatMatch[1]) * 10) / 10 : 0,
-        foodId: food.food_id,
-        brandName: food.brand_name,
+        calories: Math.round(calories * servingMultiplier),
+        protein: Math.round(protein * servingMultiplier * 10) / 10,
+        carbs: Math.round(carbs * servingMultiplier * 10) / 10,
+        fat: Math.round(fat * servingMultiplier * 10) / 10,
+        foodId: food.fdcId.toString(),
+        brandName: food.brandName || food.brandOwner,
+        dataSource: 'usda',
       };
     });
 
@@ -245,13 +167,13 @@ export async function searchFoods(query: string): Promise<{
     console.error('Error searching foods:', error);
     return {
       foods: [],
-      error: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
+      error: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.',
     };
   }
 }
 
 /**
- * Get detailed food information by ID (with serving options)
+ * Get detailed food information by USDA FDC ID
  */
 export async function getFoodDetails(foodId: string): Promise<{
   food?: FoodSearchResult;
@@ -262,51 +184,81 @@ export async function getFoodDetails(foodId: string): Promise<{
       return { error: 'Invalid food ID' };
     }
 
-    const data = await fatSecretRequest<FatSecretFoodResponse>('food.get.v4', {
-      food_id: foodId,
-    });
+    const apiKey = process.env.USDA_API_KEY || 'DEMO_KEY';
 
-    if (data.error) {
-      return { error: data.error.message || 'Food not found' };
-    }
+    const response = await fetch(
+      `https://api.nal.usda.gov/fdc/v1/food/${foodId}?api_key=${apiKey}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-    if (!data.food) {
+    if (!response.ok) {
       return { error: 'Food not found' };
     }
 
-    const food = data.food;
-    const servingsArray = food.servings?.serving
-      ? (Array.isArray(food.servings.serving) 
-          ? food.servings.serving 
-          : [food.servings.serving])
-      : [];
+    const food: USDAFood = await response.json();
 
-    // Get the first serving for default values
-    const defaultServing = servingsArray[0];
+    const calories = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CALORIES);
+    const protein = extractNutrient(food.foodNutrients, NUTRIENT_IDS.PROTEIN);
+    const carbs = extractNutrient(food.foodNutrients, NUTRIENT_IDS.CARBS);
+    const fat = extractNutrient(food.foodNutrients, NUTRIENT_IDS.FAT);
 
-    // Map servings to a simpler format
-    const servings = servingsArray.map(s => ({
-      id: s.serving_id,
-      description: s.serving_description,
-      calories: Math.round(parseFloat(s.calories || '0')),
-      protein: Math.round(parseFloat(s.protein || '0') * 10) / 10,
-      carbs: Math.round(parseFloat(s.carbohydrate || '0') * 10) / 10,
-      fat: Math.round(parseFloat(s.fat || '0') * 10) / 10,
-    }));
+    let servingSize = '100g';
+    let servingMultiplier = 1;
+
+    if (food.servingSize && food.servingSizeUnit) {
+      servingSize = `${food.servingSize}${food.servingSizeUnit}`;
+      servingMultiplier = food.servingSize / 100;
+    }
+
+    // Create serving options
+    const servings = [
+      {
+        id: '100g',
+        description: '100g',
+        calories: Math.round(calories),
+        protein: Math.round(protein * 10) / 10,
+        carbs: Math.round(carbs * 10) / 10,
+        fat: Math.round(fat * 10) / 10,
+      },
+    ];
+
+    // Add actual serving size if different from 100g
+    if (food.servingSize && food.servingSize !== 100) {
+      servings.unshift({
+        id: 'serving',
+        description: servingSize,
+        calories: Math.round(calories * servingMultiplier),
+        protein: Math.round(protein * servingMultiplier * 10) / 10,
+        carbs: Math.round(carbs * servingMultiplier * 10) / 10,
+        fat: Math.round(fat * servingMultiplier * 10) / 10,
+      });
+    }
+
+    let name = food.description;
+    if (food.brandName || food.brandOwner) {
+      const brand = food.brandName || food.brandOwner;
+      if (!name.toLowerCase().includes(brand?.toLowerCase() || '')) {
+        name = `${name} (${brand})`;
+      }
+    }
 
     return {
       food: {
-        name: food.brand_name 
-          ? `${food.food_name} (${food.brand_name})`
-          : food.food_name,
-        servingSize: defaultServing?.serving_description || '1 serving',
-        servingQty: parseFloat(defaultServing?.number_of_units || '1'),
-        calories: Math.round(parseFloat(defaultServing?.calories || '0')),
-        protein: Math.round(parseFloat(defaultServing?.protein || '0') * 10) / 10,
-        carbs: Math.round(parseFloat(defaultServing?.carbohydrate || '0') * 10) / 10,
-        fat: Math.round(parseFloat(defaultServing?.fat || '0') * 10) / 10,
-        foodId: food.food_id,
-        brandName: food.brand_name,
+        name,
+        servingSize: servings[0].description,
+        servingQty: 1,
+        calories: servings[0].calories,
+        protein: servings[0].protein,
+        carbs: servings[0].carbs,
+        fat: servings[0].fat,
+        foodId: food.fdcId.toString(),
+        brandName: food.brandName || food.brandOwner,
+        dataSource: 'usda',
         servings,
       },
     };
@@ -319,7 +271,7 @@ export async function getFoodDetails(foodId: string): Promise<{
 }
 
 /**
- * Look up food by barcode/UPC
+ * Look up food by barcode/UPC using Open Food Facts (free, no auth)
  */
 export async function lookupBarcode(barcode: string): Promise<{
   food?: FoodSearchResult;
@@ -330,31 +282,67 @@ export async function lookupBarcode(barcode: string): Promise<{
       return { error: 'Invalid barcode' };
     }
 
-    const clientId = process.env.FATSECRET_CLIENT_ID;
-    const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
+    // Use Open Food Facts API (free, no auth required)
+    const response = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode.trim()}.json`,
+      {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'WorkoutApp/1.0',
+        },
+      }
+    );
 
-    if (!clientId || !clientSecret) {
-      console.error('FatSecret API credentials not configured');
-      return {
-        error: 'Barcode lookup is not configured. Please add FatSecret API credentials.'
-      };
-    }
-
-    // First, get the food_id for the barcode
-    const barcodeData = await fatSecretRequest<FatSecretBarcodeResponse>('food.find_id_for_barcode', {
-      barcode: barcode.trim(),
-    });
-
-    if (barcodeData.error) {
+    if (!response.ok) {
       return { error: 'Product not found. Try searching by name or add manually.' };
     }
 
-    if (!barcodeData.food_id?.value) {
+    const data = await response.json();
+
+    if (data.status !== 1 || !data.product) {
       return { error: 'Product not found. Try searching by name or add manually.' };
     }
 
-    // Get full food details
-    return getFoodDetails(barcodeData.food_id.value);
+    const product = data.product;
+    const nutriments = product.nutriments || {};
+
+    // Get serving size
+    let servingSize = product.serving_size || '100g';
+    let servingMultiplier = 1;
+
+    // Use per-serving values if available, otherwise use per 100g
+    const hasServingValues = nutriments['energy-kcal_serving'] !== undefined;
+
+    const calories = hasServingValues
+      ? nutriments['energy-kcal_serving'] || 0
+      : (nutriments['energy-kcal_100g'] || nutriments['energy-kcal'] || 0);
+
+    const protein = hasServingValues
+      ? nutriments['proteins_serving'] || 0
+      : (nutriments['proteins_100g'] || nutriments['proteins'] || 0);
+
+    const carbs = hasServingValues
+      ? nutriments['carbohydrates_serving'] || 0
+      : (nutriments['carbohydrates_100g'] || nutriments['carbohydrates'] || 0);
+
+    const fat = hasServingValues
+      ? nutriments['fat_serving'] || 0
+      : (nutriments['fat_100g'] || nutriments['fat'] || 0);
+
+    return {
+      food: {
+        name: product.product_name || 'Unknown Product',
+        servingSize: hasServingValues ? servingSize : '100g',
+        servingQty: 1,
+        calories: Math.round(calories),
+        protein: Math.round(protein * 10) / 10,
+        carbs: Math.round(carbs * 10) / 10,
+        fat: Math.round(fat * 10) / 10,
+        foodId: barcode,
+        brandName: product.brands,
+        dataSource: 'usda', // Using 'usda' for compatibility
+      },
+    };
   } catch (error) {
     console.error('Error looking up barcode:', error);
     return { error: 'An unexpected error occurred. Please try again.' };
@@ -362,29 +350,13 @@ export async function lookupBarcode(barcode: string): Promise<{
 }
 
 /**
- * Get autocomplete suggestions for food search
+ * Get autocomplete suggestions (simple prefix matching from recent search)
  */
 export async function getAutocompleteSuggestions(query: string): Promise<{
   suggestions: string[];
   error?: string;
 }> {
-  try {
-    if (!query || query.trim().length < 2) {
-      return { suggestions: [] };
-    }
-
-    const data = await fatSecretRequest<{ suggestions?: { suggestion: string[] } }>('foods.autocomplete', {
-      expression: query.trim(),
-      max_results: '10',
-    });
-
-    return {
-      suggestions: data.suggestions?.suggestion || [],
-    };
-  } catch (error) {
-    console.error('Error getting autocomplete suggestions:', error);
-    return {
-      suggestions: [],
-    };
-  }
+  // USDA doesn't have autocomplete, so we just return empty
+  // The UI can cache recent searches client-side
+  return { suggestions: [] };
 }
