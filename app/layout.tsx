@@ -14,8 +14,39 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "HyperTrack - Intelligent Workout Tracker",
-  description: "Science-based hypertrophy training with auto-regulation, volume tracking, and intelligent progression",
+  title: {
+    default: "HyperTrack - Science-Based Workout Tracker",
+    template: "%s | HyperTrack",
+  },
+  description: "The intelligent hypertrophy training app with auto-regulation, volume tracking, AI coaching, and science-backed progression. Build muscle smarter.",
+  keywords: ["workout tracker", "hypertrophy", "fitness app", "muscle building", "strength training", "gym app", "workout planner"],
+  authors: [{ name: "HyperTrack" }],
+  creator: "HyperTrack",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://hypertrack.app"),
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: "HyperTrack",
+    title: "HyperTrack - Science-Based Workout Tracker",
+    description: "The intelligent hypertrophy training app with auto-regulation, volume tracking, AI coaching, and science-backed progression.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "HyperTrack - Science-Based Workout Tracker",
+    description: "Build muscle smarter with AI-powered workout planning, auto-regulation, and science-backed progression.",
+    creator: "@hypertrack",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/apple-icon.svg",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
