@@ -6,6 +6,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
 import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
 import { NutritionTargetsModal } from '@/components/nutrition/NutritionTargetsModal';
+import { MacroCalculatorModal } from '@/components/nutrition/MacroCalculatorModal';
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -44,6 +45,7 @@ export default function NutritionPage() {
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
+  const [showMacroCalculator, setShowMacroCalculator] = useState(false);
 
   const supabase = createUntypedClient();
 
@@ -298,12 +300,15 @@ export default function NutritionPage() {
           <h1 className="text-3xl font-bold text-surface-100">Nutrition Tracking</h1>
           <p className="text-surface-400 mt-1">Track your daily food intake and weight</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={showWeightLog ? undefined : () => setShowWeightLog(true)}>
             Log Weight
           </Button>
-          <Button variant="outline" onClick={() => setShowTargetsModal(true)}>
-            {nutritionTargets ? 'Edit Targets' : 'Set Targets'}
+          <Button variant="primary" onClick={() => setShowMacroCalculator(true)}>
+            🧮 Calculate Macros
+          </Button>
+          <Button variant="ghost" onClick={() => setShowTargetsModal(true)}>
+            {nutritionTargets ? 'Edit' : 'Manual'}
           </Button>
         </div>
       </div>
@@ -448,18 +453,33 @@ export default function NutritionPage() {
           </div>
 
           {!nutritionTargets && (
-            <div className="p-4 bg-surface-800/50 border border-surface-700 rounded-lg">
-              <p className="text-sm text-surface-300">
-                Set your nutrition targets to track your progress against daily goals.
-              </p>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowTargetsModal(true)}
-                className="mt-2"
-              >
-                Set Targets
-              </Button>
+            <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 border border-primary-500/20 rounded-lg">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">🎯</span>
+                <div>
+                  <h4 className="font-medium text-surface-100">Get Personalized Macro Targets</h4>
+                  <p className="text-sm text-surface-300 mt-1">
+                    Let us calculate your ideal calories and macros based on your body stats, 
+                    activity level, and goals.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setShowMacroCalculator(true)}
+                    >
+                      🧮 Calculate My Macros
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowTargetsModal(true)}
+                    >
+                      Enter Manually
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
@@ -634,6 +654,19 @@ export default function NutritionPage() {
         onClose={() => setShowTargetsModal(false)}
         onSave={handleSaveTargets}
         existingTargets={nutritionTargets || undefined}
+      />
+
+      <MacroCalculatorModal
+        isOpen={showMacroCalculator}
+        onClose={() => setShowMacroCalculator(false)}
+        onApply={handleSaveTargets}
+        existingTargets={nutritionTargets ? {
+          calories: nutritionTargets.calories || undefined,
+          protein: nutritionTargets.protein || undefined,
+          carbs: nutritionTargets.carbs || undefined,
+          fat: nutritionTargets.fat || undefined,
+        } : undefined}
+        workoutsPerWeek={4}
       />
     </div>
   );
