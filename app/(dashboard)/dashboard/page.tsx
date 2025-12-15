@@ -155,7 +155,7 @@ export default function DashboardPage() {
               )
             `)
             .eq('user_id', user.id)
-            .eq('is_active', true)
+            .eq('state', 'active')
             .maybeSingle(),
         ]);
 
