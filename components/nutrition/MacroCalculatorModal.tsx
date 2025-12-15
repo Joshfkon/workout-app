@@ -9,12 +9,13 @@ import {
   calculateMacros,
   getGoalOptions,
   getActivityOptions,
+  getPeptideOptions,
   lbsToKg,
   inchesToCm,
-  kgToLbs,
   type Goal,
   type ActivityLevel,
   type Sex,
+  type Peptide,
   type MacroRecommendation,
 } from '@/lib/nutrition/macroCalculator';
 
@@ -67,6 +68,9 @@ export function MacroCalculatorModal({
 
   // Goal
   const [goal, setGoal] = useState<Goal>('maintain');
+  
+  // Peptides/Medications
+  const [peptide, setPeptide] = useState<Peptide>('none');
 
   // Results
   const [recommendation, setRecommendation] = useState<MacroRecommendation | null>(null);
@@ -123,7 +127,7 @@ export function MacroCalculatorModal({
         avgWorkoutMinutes: parseInt(workoutDuration) || 60,
         workoutIntensity,
       },
-      { goal }
+      { goal, peptide }
     );
 
     setRecommendation(result);
@@ -150,6 +154,7 @@ export function MacroCalculatorModal({
 
   const goalOptions = getGoalOptions();
   const activityOptions = getActivityOptions();
+  const peptideOptions = getPeptideOptions();
 
   return (
     <Modal
@@ -334,6 +339,34 @@ export function MacroCalculatorModal({
           </div>
         </div>
 
+        {/* Step 4: Medications/Peptides */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+            Medications (Optional)
+          </h3>
+          <p className="text-xs text-surface-400">
+            GLP-1 medications affect appetite and require higher protein to prevent muscle loss.
+          </p>
+
+          <Select
+            value={peptide}
+            onChange={(e) => setPeptide(e.target.value as Peptide)}
+            options={peptideOptions.map(opt => ({
+              value: opt.value,
+              label: opt.label,
+            }))}
+          />
+          
+          {peptide !== 'none' && (
+            <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+              <p className="text-sm text-warning-300">
+                💊 <strong>Peptide Adjustments:</strong> Protein increased to prevent muscle loss. 
+                You may tolerate a larger deficit due to reduced appetite.
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Calculate Button */}
         <Button onClick={calculateRecommendation} variant="primary" className="w-full">
           Calculate My Macros
@@ -378,7 +411,7 @@ export function MacroCalculatorModal({
 
             <div className="text-sm text-surface-300 bg-surface-900/50 p-3 rounded-lg">
               <p className="mb-2">{recommendation.explanation}</p>
-              <div className="flex gap-4 text-xs text-surface-400">
+              <div className="flex flex-wrap gap-4 text-xs text-surface-400">
                 <span>BMR: {recommendation.bmr} cal</span>
                 <span>TDEE: {recommendation.tdee} cal</span>
                 {recommendation.deficit !== 0 && (
@@ -388,6 +421,14 @@ export function MacroCalculatorModal({
                 )}
               </div>
             </div>
+
+            {recommendation.peptideNotes && (
+              <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
+                <p className="text-sm text-accent-300">
+                  💡 <strong>Peptide Tip:</strong> {recommendation.peptideNotes}
+                </p>
+              </div>
+            )}
 
             <Button
               onClick={handleApply}
