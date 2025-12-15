@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     description: "The intelligent hypertrophy training app with auto-regulation, volume tracking, AI coaching, and science-backed progression.",
     images: [
       {
-        url: "/opengraph-image",
+        url: "/api/og",
         width: 1200,
         height: 630,
         alt: "HyperTrack - Science-Based Workout Tracker",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "HyperTrack - Science-Based Workout Tracker",
     description: "Build muscle smarter with AI-powered workout planning, auto-regulation, and science-backed progression.",
-    images: ["/twitter-image"],
+    images: ["/api/og"],
   },
   robots: {
     index: true,
