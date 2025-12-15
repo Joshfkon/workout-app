@@ -369,12 +369,22 @@ export function formatCoachingContext(context: CoachingContext): string {
     formatted += `\n`;
   }
 
-  // Recent lifts
-  if (context.training.recentLifts.length > 0) {
+  // Recent lifts - only include valid data
+  const validLifts = context.training.recentLifts.filter(
+    lift => lift.topSetWeight != null && lift.topSetWeight > 0 && lift.topSetReps != null && lift.topSetReps > 0
+  );
+  
+  if (validLifts.length > 0) {
     formatted += `**Recent Lift Performance (last 30 days):**\n`;
-    for (const lift of context.training.recentLifts.slice(0, 10)) {
-      formatted += `- ${lift.exerciseName}: ${lift.topSetWeight}kg × ${lift.topSetReps} @ RPE ${lift.topSetRpe} (e1RM: ${lift.estimated1RM.toFixed(1)}kg) - ${lift.date}\n`;
+    for (const lift of validLifts.slice(0, 10)) {
+      const weight = lift.topSetWeight?.toFixed(1) || '?';
+      const reps = lift.topSetReps || '?';
+      const rpe = lift.topSetRpe || '?';
+      const e1rm = lift.estimated1RM?.toFixed(1) || '?';
+      formatted += `- ${lift.exerciseName}: ${weight}kg × ${reps} @ RPE ${rpe} (e1RM: ${e1rm}kg) - ${lift.date}\n`;
     }
+  } else if (context.training.recentLifts.length > 0) {
+    formatted += `**Note:** Recent workout data exists but weight/rep values are incomplete. Please ensure you log weights when completing sets.\n`;
   }
 
   return formatted;
