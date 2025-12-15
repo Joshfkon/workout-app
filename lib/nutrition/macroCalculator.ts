@@ -124,40 +124,49 @@ export function calculateTDEE(stats: UserStats, activity: ActivityConfig): numbe
 
 /**
  * Calculate protein needs based on goals and body composition
+ * Target: ~1g per lb of body weight (2.2g/kg) for most lifters
+ * Higher during cuts to preserve muscle
  */
 function calculateProtein(stats: UserStats, goal: Goal): number {
   const weightKg = stats.weightKg;
-  let leanMassKg = weightKg;
+  const weightLbs = weightKg * 2.20462;
   
-  if (stats.bodyFatPercent) {
-    leanMassKg = weightKg * (1 - stats.bodyFatPercent / 100);
-  }
-
-  // Protein recommendations (g per kg of body weight or lean mass)
-  let proteinPerKg: number;
+  // For lifters, use ~1g per lb as baseline (industry standard)
+  // Adjust based on goal and body composition
+  let proteinPerLb: number;
   
   switch (goal) {
     case 'aggressive_cut':
+      // Higher protein during aggressive cut to maximize muscle retention
+      proteinPerLb = 1.2; // 1.2g per lb
+      break;
     case 'moderate_cut':
-      // Higher protein during a cut to preserve muscle
-      proteinPerKg = stats.bodyFatPercent ? 2.4 : 2.2; // Per lean mass or total
+      proteinPerLb = 1.1; // 1.1g per lb
       break;
     case 'slow_cut':
     case 'maintain':
-      proteinPerKg = stats.bodyFatPercent ? 2.2 : 2.0;
+      proteinPerLb = 1.0; // 1g per lb (standard recommendation)
       break;
     case 'slow_bulk':
     case 'moderate_bulk':
+      proteinPerLb = 1.0; // 1g per lb
+      break;
     case 'aggressive_bulk':
-      // Moderate-high protein for muscle building
-      proteinPerKg = stats.bodyFatPercent ? 2.0 : 1.8;
+      // Slightly less needed when in large surplus
+      proteinPerLb = 0.9; // 0.9g per lb
       break;
     default:
-      proteinPerKg = 2.0;
+      proteinPerLb = 1.0;
   }
 
-  const targetWeight = stats.bodyFatPercent ? leanMassKg : weightKg;
-  return Math.round(targetWeight * proteinPerKg);
+  // If body fat is known and high (>25%), base protein on estimated lean mass
+  if (stats.bodyFatPercent && stats.bodyFatPercent > 25) {
+    const leanMassLbs = weightLbs * (1 - stats.bodyFatPercent / 100);
+    // Use 1.2-1.3g per lb of lean mass for higher body fat individuals
+    return Math.round(leanMassLbs * 1.25);
+  }
+
+  return Math.round(weightLbs * proteinPerLb);
 }
 
 /**

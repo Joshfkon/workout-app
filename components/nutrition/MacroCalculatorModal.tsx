@@ -158,7 +158,7 @@ export function MacroCalculatorModal({
       title="Smart Macro Calculator"
       size="lg"
     >
-      <div className="space-y-6">
+      <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
         {error && (
           <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
             {error}
@@ -311,24 +311,24 @@ export function MacroCalculatorModal({
         </div>
 
         {/* Step 3: Goal */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
             Your Goal
           </h3>
 
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {goalOptions.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setGoal(opt.value)}
-                className={`p-3 rounded-lg border text-left transition-colors ${
+                className={`p-2 rounded-lg border text-center transition-colors ${
                   goal === opt.value
                     ? 'border-primary-500 bg-primary-500/10'
                     : 'border-surface-700 hover:border-surface-600'
                 }`}
               >
-                <div className="font-medium text-surface-100">{opt.label}</div>
-                <div className="text-sm text-surface-400">{opt.description}</div>
+                <div className="text-sm font-medium text-surface-100">{opt.label}</div>
+                <div className="text-xs text-surface-400">{opt.description}</div>
               </button>
             ))}
           </div>
