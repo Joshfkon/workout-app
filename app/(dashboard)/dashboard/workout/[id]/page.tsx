@@ -1443,7 +1443,7 @@ export default function WorkoutPage() {
         </Card>
       )}
 
-      {/* Rest timer - fixed on mobile */}
+      {/* Rest timer - fixed position overlay, no layout shift */}
       {showRestTimer && (
         <RestTimer
           defaultSeconds={currentBlock.targetRestSeconds}
@@ -1452,9 +1452,6 @@ export default function WorkoutPage() {
           onDismiss={() => setShowRestTimer(false)}
         />
       )}
-
-      {/* Spacer for fixed timer on mobile */}
-      {showRestTimer && <div className="h-40 lg:hidden" />}
 
       {/* All exercises list */}
       <div className="space-y-4">
