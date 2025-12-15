@@ -114,7 +114,7 @@ export async function sendCoachingMessage(
     role: 'user',
     content: message,
     timestamp: new Date().toISOString(),
-    context,
+    context: context || undefined,
   };
   messages.push(userMessage);
 
