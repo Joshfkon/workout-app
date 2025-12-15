@@ -14,87 +14,22 @@ export default async function Image() {
     (
       <div
         style={{
-          height: '100%',
           width: '100%',
+          height: '100%',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#0a0a0a',
-          position: 'relative',
+          backgroundColor: '#0f0f0f',
         }}
       >
-        {/* Background gradient overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
-          }}
-        />
-
-        {/* Glow effect */}
-        <div
-          style={{
-            position: 'absolute',
-            width: 500,
-            height: 500,
-            borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%)',
-          }}
-        />
-
-        {/* Corner accents */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 32,
-            left: 32,
-            width: 80,
-            height: 80,
-            borderLeft: '3px solid #3b82f6',
-            borderTop: '3px solid #3b82f6',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 32,
-            right: 32,
-            width: 80,
-            height: 80,
-            borderRight: '3px solid #8b5cf6',
-            borderBottom: '3px solid #8b5cf6',
-          }}
-        />
-
-        {/* Dumbbell Icon - simplified */}
-        <div
-          style={{
-            display: 'flex',
-            marginBottom: 24,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* Left plates */}
-            <div style={{ width: 12, height: 50, background: 'linear-gradient(180deg, #3b82f6, #8b5cf6)', borderRadius: 4 }} />
-            <div style={{ width: 16, height: 70, background: 'linear-gradient(180deg, #3b82f6, #8b5cf6)', borderRadius: 4 }} />
-            {/* Bar */}
-            <div style={{ width: 100, height: 16, background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', borderRadius: 8 }} />
-            {/* Right plates */}
-            <div style={{ width: 16, height: 70, background: 'linear-gradient(180deg, #8b5cf6, #3b82f6)', borderRadius: 4 }} />
-            <div style={{ width: 12, height: 50, background: 'linear-gradient(180deg, #8b5cf6, #3b82f6)', borderRadius: 4 }} />
-          </div>
-        </div>
-
         {/* App Name */}
         <div
           style={{
-            display: 'flex',
-            fontSize: 80,
+            fontSize: 90,
             fontWeight: 900,
             color: '#ffffff',
-            letterSpacing: -2,
+            letterSpacing: -3,
           }}
         >
           HYPERTROPHY
@@ -103,36 +38,24 @@ export default async function Image() {
         {/* Tagline */}
         <div
           style={{
-            display: 'flex',
-            fontSize: 28,
+            fontSize: 32,
             color: '#3b82f6',
-            marginTop: 16,
-            letterSpacing: 6,
+            marginTop: 20,
+            letterSpacing: 8,
           }}
         >
           TRAIN SMARTER
         </div>
 
-        {/* Features row */}
+        {/* Subtitle */}
         <div
           style={{
-            display: 'flex',
-            gap: 48,
-            marginTop: 48,
+            fontSize: 24,
+            color: '#666666',
+            marginTop: 40,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#3b82f6' }} />
-            <span style={{ color: '#888888', fontSize: 20 }}>Auto-Regulation</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#8b5cf6' }} />
-            <span style={{ color: '#888888', fontSize: 20 }}>Volume Tracking</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: '#06b6d4' }} />
-            <span style={{ color: '#888888', fontSize: 20 }}>AI Coaching</span>
-          </div>
+          Science-Based Workout Tracker
         </div>
       </div>
     ),
