@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [showFormCues, setShowFormCues] = useState(true);
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
   const [prioritizeHypertrophy, setPrioritizeHypertrophy] = useState(true);
+  const [skipPreWorkoutCheckIn, setSkipPreWorkoutCheckIn] = useState(false);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,6 +119,7 @@ export default function SettingsPage() {
             setShowFormCues((prefs.showFormCues as boolean) ?? true);
             setShowWarmupSuggestions((prefs.showWarmupSuggestions as boolean) ?? true);
             setPrioritizeHypertrophy((prefs.prioritizeHypertrophy as boolean) ?? true);
+            setSkipPreWorkoutCheckIn((prefs.skipPreWorkoutCheckIn as boolean) ?? false);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
             // Merge with defaults to ensure all muscle groups have values
@@ -184,6 +186,7 @@ export default function SettingsPage() {
             showFormCues,
             showWarmupSuggestions,
             prioritizeHypertrophy,
+            skipPreWorkoutCheckIn,
           },
           volume_landmarks: volumeLandmarks,
           // Extended profile fields
@@ -546,6 +549,25 @@ export default function SettingsPage() {
                 <span
                   className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
                     prioritizeHypertrophy ? 'translate-x-7' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </label>
+
+            <label className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Skip Pre-Workout Check-In</p>
+                <p className="text-xs text-surface-500">Start workouts immediately without readiness questions</p>
+              </div>
+              <button
+                onClick={() => setSkipPreWorkoutCheckIn(!skipPreWorkoutCheckIn)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  skipPreWorkoutCheckIn ? 'bg-primary-500' : 'bg-surface-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                    skipPreWorkoutCheckIn ? 'translate-x-7' : 'translate-x-1'
                   }`}
                 />
               </button>

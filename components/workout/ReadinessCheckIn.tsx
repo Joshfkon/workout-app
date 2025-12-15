@@ -8,9 +8,10 @@ import { calculateReadinessScore, getReadinessInterpretation } from '@/services/
 interface ReadinessCheckInProps {
   onSubmit: (checkIn: PreWorkoutCheckIn) => void;
   onSkip?: () => void;
+  onSkipPermanently?: () => void;
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip }: ReadinessCheckInProps) {
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: ReadinessCheckInProps) {
   const [sleepHours, setSleepHours] = useState(7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
   const [stressLevel, setStressLevel] = useState<Rating>(3);
@@ -210,6 +211,21 @@ export function ReadinessCheckIn({ onSubmit, onSkip }: ReadinessCheckInProps) {
             Start Workout
           </Button>
         </div>
+
+        {/* Don't show again option */}
+        {onSkipPermanently && (
+          <div className="pt-4 border-t border-surface-700 mt-4">
+            <button
+              onClick={onSkipPermanently}
+              className="w-full text-center text-sm text-surface-500 hover:text-surface-300 transition-colors"
+            >
+              Don&apos;t show this again
+            </button>
+            <p className="text-xs text-surface-600 text-center mt-1">
+              You can re-enable this in Settings
+            </p>
+          </div>
+        )}
       </div>
     </Card>
   );

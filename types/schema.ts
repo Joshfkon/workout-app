@@ -133,6 +133,13 @@ export interface UserPreferences {
    * Default: true
    */
   prioritizeHypertrophy?: boolean;
+  
+  /**
+   * Skip the pre-workout readiness check-in
+   * When true, workouts start immediately without the check-in screen
+   * Default: false
+   */
+  skipPreWorkoutCheckIn?: boolean;
 }
 
 /**
@@ -601,6 +608,8 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   restTimerDefault: 180,
   showFormCues: true,
   showWarmupSuggestions: true,
+  prioritizeHypertrophy: true,
+  skipPreWorkoutCheckIn: false,
 };
 
 // ============ EXTENDED USER PROFILE (for AI mesocycle builder) ============

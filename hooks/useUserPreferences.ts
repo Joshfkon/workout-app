@@ -13,6 +13,7 @@ interface UserPreferences {
   restTimerDefault: number;
   showFormCues: boolean;
   showWarmupSuggestions: boolean;
+  skipPreWorkoutCheckIn: boolean;
 }
 
 const defaultPreferences: UserPreferences = {
@@ -24,6 +25,7 @@ const defaultPreferences: UserPreferences = {
   restTimerDefault: 180,
   showFormCues: true,
   showWarmupSuggestions: true,
+  skipPreWorkoutCheckIn: false,
 };
 
 // Global state to share preferences across components
@@ -73,6 +75,7 @@ export function useUserPreferences() {
               restTimerDefault: (prefs.restTimer as number) || 180,
               showFormCues: (prefs.showFormCues as boolean) ?? true,
               showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
+              skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
             };
             notifyListeners(newPrefs);
           }
@@ -103,7 +106,7 @@ export function useUserPreferences() {
 
     // Persist to database
     try {
-      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions') {
+      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn') {
         // These go in the preferences JSONB column
         const { data: currentUser } = await supabase
           .from('users')

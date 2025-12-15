@@ -310,7 +310,7 @@ export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.id as string;
-  const { preferences } = useUserPreferences();
+  const { preferences, updatePreference } = useUserPreferences();
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -638,7 +638,21 @@ export default function WorkoutPage() {
         } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
-          setPhase('checkin');
+          // Check if user wants to skip pre-workout check-in
+          if (preferences.skipPreWorkoutCheckIn) {
+            // Skip check-in, go directly to workout
+            const supabase = createUntypedClient();
+            await supabase
+              .from('workout_sessions')
+              .update({
+                state: 'in_progress',
+                started_at: new Date().toISOString(),
+              })
+              .eq('id', sessionId);
+            setPhase('workout');
+          } else {
+            setPhase('checkin');
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load workout');
@@ -665,6 +679,13 @@ export default function WorkoutPage() {
       console.error('Failed to update session:', err);
       setPhase('workout'); // Continue anyway
     }
+  };
+
+  const handleSkipCheckInPermanently = async () => {
+    // Save preference to skip check-ins in the future
+    await updatePreference('skipPreWorkoutCheckIn', true);
+    // Then complete the check-in for this workout
+    await handleCheckInComplete();
   };
 
   const handleSetComplete = async (data: { weightKg: number; reps: number; rpe: number; note?: string }) => {
@@ -1230,6 +1251,7 @@ export default function WorkoutPage() {
         <ReadinessCheckIn
           onSubmit={handleCheckInComplete}
           onSkip={handleCheckInComplete}
+          onSkipPermanently={handleSkipCheckInPermanently}
         />
       </div>
     );
