@@ -3,7 +3,7 @@
  */
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export type FoodSource = 'nutritionix' | 'custom' | 'manual';
+export type FoodSource = 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
 
 export interface FoodLogEntry {
   id: string;
@@ -18,7 +18,8 @@ export interface FoodLogEntry {
   carbs: number | null;
   fat: number | null;
   source: FoodSource | null;
-  nutritionix_id: string | null;
+  food_id: string | null; // FatSecret food_id
+  nutritionix_id: string | null; // Legacy Nutritionix ID
   created_at: string;
 }
 
@@ -88,7 +89,8 @@ export interface AddFoodFormData {
   fat: number;
   meal_type: MealType;
   source?: FoodSource;
-  nutritionix_id?: string;
+  food_id?: string; // FatSecret food_id
+  nutritionix_id?: string; // Legacy Nutritionix ID
 }
 
 export interface WeightTrend {

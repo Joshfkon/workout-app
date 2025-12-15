@@ -5,7 +5,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { searchFoods, lookupBarcode, type FoodSearchResult } from '@/lib/actions/nutrition';
+import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult } from '@/lib/actions/nutrition';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { MealType, CustomFood } from '@/types/nutrition';
 
@@ -21,7 +21,8 @@ interface AddFoodModalProps {
     carbs: number;
     fat: number;
     meal_type: MealType;
-    source?: 'nutritionix' | 'custom' | 'manual';
+    source?: 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+    food_id?: string;
     nutritionix_id?: string;
   }) => Promise<void>;
   defaultMealType: MealType;
@@ -64,6 +65,8 @@ export function AddFoodModal({
   const [error, setError] = useState('');
   const [barcodeError, setBarcodeError] = useState('');
   const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [selectedServingIndex, setSelectedServingIndex] = useState(0);
 
   const handleBarcodeScanned = async (barcode: string) => {
     setBarcodeError('');
@@ -109,9 +112,25 @@ export function AddFoodModal({
     }
   };
 
-  const handleSelectFood = (food: FoodSearchResult) => {
+  const handleSelectFood = async (food: FoodSearchResult) => {
     setSelectedFood(food);
     setServings('1');
+    setSelectedServingIndex(0);
+    
+    // If the food has a foodId, fetch detailed info with serving options
+    if (food.foodId && !food.servings) {
+      setIsLoadingDetails(true);
+      try {
+        const result = await getFoodDetails(food.foodId);
+        if (result.food) {
+          setSelectedFood(result.food);
+        }
+      } catch (err) {
+        console.error('Error fetching food details:', err);
+      } finally {
+        setIsLoadingDetails(false);
+      }
+    }
   };
 
   const handleAddSelectedFood = async () => {
@@ -127,17 +146,25 @@ export function AddFoodModal({
     setError('');
 
     try {
+      // Use selected serving if available
+      const serving = selectedFood.servings?.[selectedServingIndex];
+      const calories = serving ? serving.calories : selectedFood.calories;
+      const protein = serving ? serving.protein : selectedFood.protein;
+      const carbs = serving ? serving.carbs : selectedFood.carbs;
+      const fat = serving ? serving.fat : selectedFood.fat;
+      const servingSize = serving ? serving.description : selectedFood.servingSize;
+
       await onAdd({
         food_name: selectedFood.name,
-        serving_size: selectedFood.servingSize,
+        serving_size: servingSize,
         servings: servingsNum,
-        calories: Math.round(selectedFood.calories * servingsNum),
-        protein: Math.round(selectedFood.protein * servingsNum * 10) / 10,
-        carbs: Math.round(selectedFood.carbs * servingsNum * 10) / 10,
-        fat: Math.round(selectedFood.fat * servingsNum * 10) / 10,
+        calories: Math.round(calories * servingsNum),
+        protein: Math.round(protein * servingsNum * 10) / 10,
+        carbs: Math.round(carbs * servingsNum * 10) / 10,
+        fat: Math.round(fat * servingsNum * 10) / 10,
         meal_type: mealType,
-        source: 'nutritionix',
-        nutritionix_id: selectedFood.nutritionixId,
+        source: 'fatsecret',
+        food_id: selectedFood.foodId,
       });
 
       resetAndClose();
@@ -224,6 +251,7 @@ export function AddFoodModal({
     });
     setError('');
     setSearchError('');
+    setSelectedServingIndex(0);
     onClose();
   };
 
@@ -304,7 +332,9 @@ export function AddFoodModal({
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="font-medium text-surface-100">{selectedFood.name}</h3>
-                    <p className="text-sm text-surface-400">{selectedFood.servingSize}</p>
+                    {selectedFood.brandName && (
+                      <p className="text-xs text-primary-400">{selectedFood.brandName}</p>
+                    )}
                   </div>
                   <button
                     onClick={() => setSelectedFood(null)}
@@ -314,46 +344,86 @@ export function AddFoodModal({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 text-sm">
-                  <div>
-                    <p className="text-surface-400">Calories</p>
-                    <p className="font-medium text-surface-100">{selectedFood.calories}</p>
+                {isLoadingDetails ? (
+                  <div className="text-center py-4 text-surface-400">
+                    Loading serving options...
                   </div>
-                  <div>
-                    <p className="text-surface-400">Protein</p>
-                    <p className="font-medium text-surface-100">{selectedFood.protein}g</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400">Carbs</p>
-                    <p className="font-medium text-surface-100">{selectedFood.carbs}g</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400">Fat</p>
-                    <p className="font-medium text-surface-100">{selectedFood.fat}g</p>
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    {/* Serving Size Selector */}
+                    {selectedFood.servings && selectedFood.servings.length > 1 && (
+                      <div>
+                        <label className="block text-sm font-medium text-surface-300 mb-1">
+                          Serving Size
+                        </label>
+                        <select
+                          value={selectedServingIndex}
+                          onChange={(e) => setSelectedServingIndex(parseInt(e.target.value))}
+                          className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {selectedFood.servings.map((serving, idx) => (
+                            <option key={serving.id} value={idx}>
+                              {serving.description} ({serving.calories} cal)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Servings
-                  </label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0.1"
-                    value={servings}
-                    onChange={(e) => setServings(e.target.value)}
-                  />
-                </div>
+                    {/* Nutrition Info */}
+                    <div className="grid grid-cols-4 gap-2 text-sm">
+                      {(() => {
+                        const serving = selectedFood.servings?.[selectedServingIndex];
+                        const cal = serving?.calories ?? selectedFood.calories;
+                        const prot = serving?.protein ?? selectedFood.protein;
+                        const carb = serving?.carbs ?? selectedFood.carbs;
+                        const f = serving?.fat ?? selectedFood.fat;
+                        return (
+                          <>
+                            <div>
+                              <p className="text-surface-400">Calories</p>
+                              <p className="font-medium text-surface-100">{cal}</p>
+                            </div>
+                            <div>
+                              <p className="text-surface-400">Protein</p>
+                              <p className="font-medium text-surface-100">{prot}g</p>
+                            </div>
+                            <div>
+                              <p className="text-surface-400">Carbs</p>
+                              <p className="font-medium text-surface-100">{carb}g</p>
+                            </div>
+                            <div>
+                              <p className="text-surface-400">Fat</p>
+                              <p className="font-medium text-surface-100">{f}g</p>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
 
-                <Button
-                  onClick={handleAddSelectedFood}
-                  variant="primary"
-                  disabled={isSubmitting}
-                  className="w-full"
-                >
-                  {isSubmitting ? 'Adding...' : 'Add to Log'}
-                </Button>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-300 mb-1">
+                        Number of Servings
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={servings}
+                        onChange={(e) => setServings(e.target.value)}
+                      />
+                    </div>
+
+                    <Button
+                      onClick={handleAddSelectedFood}
+                      variant="primary"
+                      disabled={isSubmitting}
+                      className="w-full"
+                    >
+                      {isSubmitting ? 'Adding...' : 'Add to Log'}
+                    </Button>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-2 max-h-96 overflow-y-auto">

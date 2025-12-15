@@ -1,22 +1,21 @@
-'use server';
-
 /**
- * Nutrition API Server Actions
- *
- * Handles integration with FatSecret Platform API for food search and barcode lookup.
- * API keys are kept server-side for security.
+ * FatSecret API Service
+ * 
+ * Handles OAuth 2.0 authentication and food search using FatSecret Platform API.
+ * Uses Client Credentials Grant for server-to-server authentication.
  */
 
-// Token cache for FatSecret OAuth
-let cachedToken: {
-  accessToken: string;
-  expiresAt: number;
-} | null = null;
+interface FatSecretTokenResponse {
+  access_token: string;
+  expires_in: number;
+  token_type: string;
+  scope: string;
+}
 
 interface FatSecretServing {
   serving_id: string;
   serving_description: string;
-  serving_url?: string;
+  serving_url: string;
   metric_serving_amount?: string;
   metric_serving_unit?: string;
   number_of_units?: string;
@@ -26,9 +25,13 @@ interface FatSecretServing {
   protein?: string;
   fat?: string;
   saturated_fat?: string;
+  polyunsaturated_fat?: string;
+  monounsaturated_fat?: string;
+  cholesterol?: string;
+  sodium?: string;
+  potassium?: string;
   fiber?: string;
   sugar?: string;
-  sodium?: string;
 }
 
 interface FatSecretFood {
@@ -36,7 +39,7 @@ interface FatSecretFood {
   food_name: string;
   food_type: string;
   brand_name?: string;
-  food_url?: string;
+  food_url: string;
   food_description?: string;
   servings?: {
     serving: FatSecretServing | FatSecretServing[];
@@ -50,54 +53,20 @@ interface FatSecretSearchResult {
     page_number: string;
     total_results: string;
   };
-  error?: {
-    code: number;
-    message: string;
-  };
 }
 
 interface FatSecretFoodResponse {
-  food?: FatSecretFood;
-  error?: {
-    code: number;
-    message: string;
-  };
+  food: FatSecretFood;
 }
 
-interface FatSecretBarcodeResponse {
-  food_id?: {
-    value: string;
-  };
-  error?: {
-    code: number;
-    message: string;
-  };
-}
-
-export interface FoodSearchResult {
-  name: string;
-  servingSize: string;
-  servingQty: number;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  foodId?: string;
-  nutritionixId?: string; // Legacy field for compatibility
-  photoUrl?: string;
-  brandName?: string;
-  servings?: Array<{
-    id: string;
-    description: string;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-  }>;
-}
+// Token cache
+let cachedToken: {
+  accessToken: string;
+  expiresAt: number;
+} | null = null;
 
 /**
- * Get FatSecret access token using Client Credentials Grant
+ * Get access token using Client Credentials Grant
  */
 async function getAccessToken(): Promise<string> {
   // Check if we have a valid cached token (with 5 min buffer)
@@ -129,7 +98,7 @@ async function getAccessToken(): Promise<string> {
     throw new Error('Failed to authenticate with FatSecret');
   }
 
-  const data = await response.json();
+  const data: FatSecretTokenResponse = await response.json();
 
   // Cache the token
   cachedToken = {
@@ -173,41 +142,44 @@ async function fatSecretRequest<T>(
   return response.json();
 }
 
+export interface FoodSearchResult {
+  name: string;
+  servingSize: string;
+  servingQty: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  foodId: string;
+  brandName?: string;
+  photoUrl?: string;
+}
+
 /**
- * Search for foods using FatSecret API
+ * Search for foods by name
  */
-export async function searchFoods(query: string): Promise<{
+export async function searchFoods(
+  query: string,
+  pageNumber: number = 0,
+  maxResults: number = 20
+): Promise<{
   foods: FoodSearchResult[];
+  totalResults: number;
   error?: string;
 }> {
   try {
     if (!query || query.trim().length === 0) {
-      return { foods: [], error: 'Please enter a search query' };
-    }
-
-    const clientId = process.env.FATSECRET_CLIENT_ID;
-    const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error('FatSecret API credentials not configured');
-      return {
-        foods: [],
-        error: 'Nutrition search is not configured. Please add FatSecret API credentials.'
-      };
+      return { foods: [], totalResults: 0, error: 'Please enter a search query' };
     }
 
     const data = await fatSecretRequest<FatSecretSearchResult>('foods.search', {
       search_expression: query.trim(),
-      max_results: '25',
+      page_number: pageNumber.toString(),
+      max_results: maxResults.toString(),
     });
 
-    if (data.error) {
-      console.error('FatSecret search error:', data.error);
-      return { foods: [], error: data.error.message || 'Search failed' };
-    }
-
     if (!data.foods || !data.foods.food) {
-      return { foods: [], error: 'No foods found matching your search' };
+      return { foods: [], totalResults: 0 };
     }
 
     // Handle single result vs array
@@ -240,21 +212,27 @@ export async function searchFoods(query: string): Promise<{
       };
     });
 
-    return { foods };
+    return {
+      foods,
+      totalResults: parseInt(data.foods.total_results || '0', 10),
+    };
   } catch (error) {
     console.error('Error searching foods:', error);
     return {
       foods: [],
-      error: error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
+      totalResults: 0,
+      error: error instanceof Error ? error.message : 'Search failed',
     };
   }
 }
 
 /**
- * Get detailed food information by ID (with serving options)
+ * Get detailed food information by ID
  */
-export async function getFoodDetails(foodId: string): Promise<{
-  food?: FoodSearchResult;
+export async function getFoodDetails(
+  foodId: string
+): Promise<{
+  food?: FoodSearchResult & { servings: FatSecretServing[] };
   error?: string;
 }> {
   try {
@@ -265,10 +243,6 @@ export async function getFoodDetails(foodId: string): Promise<{
     const data = await fatSecretRequest<FatSecretFoodResponse>('food.get.v4', {
       food_id: foodId,
     });
-
-    if (data.error) {
-      return { error: data.error.message || 'Food not found' };
-    }
 
     if (!data.food) {
       return { error: 'Food not found' };
@@ -284,16 +258,6 @@ export async function getFoodDetails(foodId: string): Promise<{
     // Get the first serving for default values
     const defaultServing = servingsArray[0];
 
-    // Map servings to a simpler format
-    const servings = servingsArray.map(s => ({
-      id: s.serving_id,
-      description: s.serving_description,
-      calories: Math.round(parseFloat(s.calories || '0')),
-      protein: Math.round(parseFloat(s.protein || '0') * 10) / 10,
-      carbs: Math.round(parseFloat(s.carbohydrate || '0') * 10) / 10,
-      fat: Math.round(parseFloat(s.fat || '0') * 10) / 10,
-    }));
-
     return {
       food: {
         name: food.brand_name 
@@ -307,7 +271,7 @@ export async function getFoodDetails(foodId: string): Promise<{
         fat: Math.round(parseFloat(defaultServing?.fat || '0') * 10) / 10,
         foodId: food.food_id,
         brandName: food.brand_name,
-        servings,
+        servings: servingsArray,
       },
     };
   } catch (error) {
@@ -319,9 +283,11 @@ export async function getFoodDetails(foodId: string): Promise<{
 }
 
 /**
- * Look up food by barcode/UPC
+ * Search for foods by barcode/UPC
  */
-export async function lookupBarcode(barcode: string): Promise<{
+export async function lookupBarcode(
+  barcode: string
+): Promise<{
   food?: FoodSearchResult;
   error?: string;
 }> {
@@ -330,41 +296,31 @@ export async function lookupBarcode(barcode: string): Promise<{
       return { error: 'Invalid barcode' };
     }
 
-    const clientId = process.env.FATSECRET_CLIENT_ID;
-    const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error('FatSecret API credentials not configured');
-      return {
-        error: 'Barcode lookup is not configured. Please add FatSecret API credentials.'
-      };
-    }
-
-    // First, get the food_id for the barcode
-    const barcodeData = await fatSecretRequest<FatSecretBarcodeResponse>('food.find_id_for_barcode', {
+    const data = await fatSecretRequest<FatSecretFoodResponse>('food.find_id_for_barcode', {
       barcode: barcode.trim(),
     });
 
-    if (barcodeData.error) {
-      return { error: 'Product not found. Try searching by name or add manually.' };
-    }
-
-    if (!barcodeData.food_id?.value) {
+    if (!data.food) {
       return { error: 'Product not found. Try searching by name or add manually.' };
     }
 
     // Get full food details
-    return getFoodDetails(barcodeData.food_id.value);
+    return getFoodDetails(data.food.food_id);
   } catch (error) {
     console.error('Error looking up barcode:', error);
-    return { error: 'An unexpected error occurred. Please try again.' };
+    return {
+      error: error instanceof Error ? error.message : 'Barcode lookup failed',
+    };
   }
 }
 
 /**
  * Get autocomplete suggestions for food search
  */
-export async function getAutocompleteSuggestions(query: string): Promise<{
+export async function getAutocompleteSuggestions(
+  query: string,
+  maxResults: number = 10
+): Promise<{
   suggestions: string[];
   error?: string;
 }> {
@@ -375,7 +331,7 @@ export async function getAutocompleteSuggestions(query: string): Promise<{
 
     const data = await fatSecretRequest<{ suggestions?: { suggestion: string[] } }>('foods.autocomplete', {
       expression: query.trim(),
-      max_results: '10',
+      max_results: maxResults.toString(),
     });
 
     return {
@@ -385,6 +341,8 @@ export async function getAutocompleteSuggestions(query: string): Promise<{
     console.error('Error getting autocomplete suggestions:', error);
     return {
       suggestions: [],
+      error: error instanceof Error ? error.message : 'Autocomplete failed',
     };
   }
 }
+

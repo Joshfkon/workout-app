@@ -113,7 +113,8 @@ export default function NutritionPage() {
     carbs: number;
     fat: number;
     meal_type: MealType;
-    source?: 'nutritionix' | 'custom' | 'manual';
+    source?: 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+    food_id?: string;
     nutritionix_id?: string;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -131,6 +132,7 @@ export default function NutritionPage() {
       carbs: food.carbs,
       fat: food.fat,
       source: food.source || 'manual',
+      food_id: food.food_id,
       nutritionix_id: food.nutritionix_id,
     });
 
@@ -251,7 +253,7 @@ export default function NutritionPage() {
   const recentFoods: FoodSearchResult[] = Array.from(
     new Map(
       foodEntries
-        .filter((e) => e.source === 'nutritionix')
+        .filter((e) => e.source === 'fatsecret' || e.source === 'nutritionix')
         .map((e) => [
           e.food_name,
           {
@@ -262,6 +264,7 @@ export default function NutritionPage() {
             protein: e.protein || 0,
             carbs: e.carbs || 0,
             fat: e.fat || 0,
+            foodId: e.food_id || undefined,
             nutritionixId: e.nutritionix_id || undefined,
           },
         ])
