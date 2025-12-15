@@ -159,6 +159,19 @@ export default function DashboardPage() {
             .maybeSingle(),
         ]);
 
+        // Debug: Check mesocycle result
+        console.log('[Dashboard] Active mesocycle query result:', {
+          data: activeMesocycleResult.data,
+          error: activeMesocycleResult.error,
+        });
+
+        // Debug: Also query all mesocycles to see what states exist
+        const { data: allMesocycles } = await supabase
+          .from('mesocycles')
+          .select('id, name, state')
+          .eq('user_id', user.id);
+        console.log('[Dashboard] All mesocycles for user:', allMesocycles);
+
         // Set onboarding status
         setOnboardingCompleted(
           (userDataResult.data as { onboarding_completed?: boolean } | null)?.onboarding_completed ?? false
