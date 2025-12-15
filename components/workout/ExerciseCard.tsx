@@ -508,7 +508,6 @@ export const ExerciseCard = memo(function ExerciseCard({
               </span>
             </div>
           )}
-          </div>
           <div className="flex items-center gap-1.5">
             <span className="text-surface-500">Reps:</span>
             <span className="font-medium text-surface-200">
