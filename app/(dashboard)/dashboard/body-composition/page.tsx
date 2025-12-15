@@ -62,6 +62,7 @@ export default function BodyCompositionPage() {
   const [photoNotes, setPhotoNotes] = useState('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // Get signed photo URLs when photos change
   useEffect(() => {
@@ -99,6 +100,51 @@ export default function BodyCompositionPage() {
   // Get photo URL from cache
   const getPhotoUrl = (photoId: string) => {
     return photoUrls[photoId] || null;
+  };
+
+  // Delete a progress photo
+  const handleDeletePhoto = async (photo: ProgressPhoto) => {
+    if (!confirm('Are you sure you want to delete this photo? This cannot be undone.')) {
+      return;
+    }
+
+    setDeletingPhotoId(photo.id);
+    try {
+      const supabase = createUntypedClient();
+
+      // Delete from storage first
+      if (photo.photoUrl) {
+        const { error: storageError } = await supabase.storage
+          .from('progress-photos')
+          .remove([photo.photoUrl]);
+        
+        if (storageError) {
+          console.error('Error deleting photo from storage:', storageError);
+          // Continue anyway to delete the database record
+        }
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('progress_photos')
+        .delete()
+        .eq('id', photo.id);
+
+      if (dbError) throw dbError;
+
+      // Remove from state
+      setProgressPhotos(prev => prev.filter(p => p.id !== photo.id));
+      setPhotoUrls(prev => {
+        const updated = { ...prev };
+        delete updated[photo.id];
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error deleting photo:', error);
+      alert('Failed to delete photo. Please try again.');
+    } finally {
+      setDeletingPhotoId(null);
+    }
   };
 
   const handleDeleteScan = async (scanId: string) => {
@@ -613,19 +659,21 @@ export default function BodyCompositionPage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {progressPhotos.map((photo) => {
                     const photoUrl = getPhotoUrl(photo.id);
+                    const isDeleting = deletingPhotoId === photo.id;
                     
                     return (
                       <div key={photo.id} className="relative group">
                         <button
                           onClick={() => photoUrl && setSelectedPhotoUrl(photoUrl)}
                           className="w-full aspect-square rounded-lg overflow-hidden border border-surface-700 hover:border-primary-500 transition-colors bg-surface-800"
+                          disabled={isDeleting}
                         >
                           {photoUrl ? (
                             /* eslint-disable-next-line @next/next/no-img-element */
                             <img
                               src={photoUrl}
                               alt={`Progress photo from ${new Date(photo.photoDate).toLocaleDateString()}`}
-                              className="w-full h-full object-cover"
+                              className={`w-full h-full object-cover ${isDeleting ? 'opacity-50' : ''}`}
                               onError={(e) => {
                                 // Hide broken images
                                 (e.target as HTMLImageElement).style.display = 'none';
@@ -639,6 +687,29 @@ export default function BodyCompositionPage() {
                             </div>
                           )}
                         </button>
+                        
+                        {/* Delete button - shows on hover */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeletePhoto(photo);
+                          }}
+                          disabled={isDeleting}
+                          className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-danger-500 transition-all disabled:opacity-50"
+                          title="Delete photo"
+                        >
+                          {isDeleting ? (
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
+                        
                         <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                           <p className="text-xs text-white font-medium">
                             {new Date(photo.photoDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
