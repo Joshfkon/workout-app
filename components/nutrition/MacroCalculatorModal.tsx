@@ -77,15 +77,34 @@ export function MacroCalculatorModal({
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState('');
 
-  // Parse height from total inches
+  // Update form when userStats props change (after data loads)
   useEffect(() => {
+    if (userStats?.weightLbs) {
+      setWeight(userStats.weightLbs.toString());
+    }
     if (userStats?.heightInches) {
       const feet = Math.floor(userStats.heightInches / 12);
       const inches = userStats.heightInches % 12;
       setHeightFeet(feet.toString());
       setHeightInches(inches.toString());
     }
-  }, [userStats?.heightInches]);
+    if (userStats?.age) {
+      setAge(userStats.age.toString());
+    }
+    if (userStats?.sex) {
+      setSex(userStats.sex);
+    }
+    if (userStats?.bodyFatPercent) {
+      setBodyFat(userStats.bodyFatPercent.toString());
+    }
+  }, [userStats]);
+
+  // Update workouts when prop changes
+  useEffect(() => {
+    if (workoutsPerWeek) {
+      setWorkouts(workoutsPerWeek.toString());
+    }
+  }, [workoutsPerWeek]);
 
   const calculateRecommendation = () => {
     setError('');

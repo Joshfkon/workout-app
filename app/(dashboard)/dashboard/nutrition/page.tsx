@@ -32,6 +32,16 @@ const MEAL_TYPES: { type: MealType; label: string; emoji: string }[] = [
   { type: 'snack', label: 'Snacks', emoji: '🍎' },
 ];
 
+// User profile data for macro calculator
+interface UserProfileData {
+  weightLbs?: number;
+  heightInches?: number;
+  age?: number;
+  sex?: 'male' | 'female';
+  bodyFatPercent?: number;
+  workoutsPerWeek?: number;
+}
+
 export default function NutritionPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
@@ -39,6 +49,7 @@ export default function NutritionPage() {
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserProfileData>({});
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -99,6 +110,72 @@ export default function NutritionPage() {
         .order('created_at', { ascending: false });
 
       setCustomFoods(customFoodsData || []);
+
+      // Load user profile data for macro calculator
+      const profileData: UserProfileData = {};
+
+      // Get weight from most recent weight log or DEXA scan
+      if (weightData && weightData.length > 0) {
+        profileData.weightLbs = weightData[0].weight;
+      }
+
+      // Get user's basic info
+      const { data: userData } = await supabase
+        .from('users')
+        .select('height_cm, date_of_birth, sex')
+        .eq('id', user.id)
+        .single();
+
+      if (userData) {
+        if (userData.height_cm) {
+          profileData.heightInches = Math.round(userData.height_cm / 2.54);
+        }
+        if (userData.date_of_birth) {
+          const birthDate = new Date(userData.date_of_birth);
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const monthDiff = today.getMonth() - birthDate.getMonth();
+          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          profileData.age = age;
+        }
+        if (userData.sex) {
+          profileData.sex = userData.sex as 'male' | 'female';
+        }
+      }
+
+      // Try to get body fat from DEXA scans
+      const { data: dexaData } = await supabase
+        .from('dexa_scans')
+        .select('body_fat_percent, weight_kg')
+        .eq('user_id', user.id)
+        .order('scan_date', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (dexaData) {
+        if (dexaData.body_fat_percent) {
+          profileData.bodyFatPercent = dexaData.body_fat_percent;
+        }
+        if (dexaData.weight_kg && !profileData.weightLbs) {
+          profileData.weightLbs = Math.round(dexaData.weight_kg * 2.20462);
+        }
+      }
+
+      // Get workouts per week from active mesocycle
+      const { data: mesocycleData } = await supabase
+        .from('mesocycles')
+        .select('days_per_week')
+        .eq('user_id', user.id)
+        .eq('state', 'active')
+        .single();
+
+      if (mesocycleData?.days_per_week) {
+        profileData.workoutsPerWeek = mesocycleData.days_per_week;
+      }
+
+      setUserProfile(profileData);
     } catch (error) {
       console.error('Error loading nutrition data:', error);
     } finally {
@@ -187,16 +264,45 @@ export default function NutritionPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { error } = await supabase.from('nutrition_targets').upsert({
-      user_id: user.id,
-      ...targets,
-    });
+    // Try to update existing record first
+    const { data: existing } = await supabase
+      .from('nutrition_targets')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    let error;
+    if (existing) {
+      // Update existing
+      const result = await supabase
+        .from('nutrition_targets')
+        .update({
+          calories: targets.calories,
+          protein: targets.protein,
+          carbs: targets.carbs,
+          fat: targets.fat,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.id);
+      error = result.error;
+    } else {
+      // Insert new
+      const result = await supabase.from('nutrition_targets').insert({
+        user_id: user.id,
+        calories: targets.calories,
+        protein: targets.protein,
+        carbs: targets.carbs,
+        fat: targets.fat,
+      });
+      error = result.error;
+    }
 
     if (error) {
       console.error('Error saving targets:', error);
       throw error;
     }
 
+    // Reload data to show updated targets
     await loadData();
   }
 
@@ -666,7 +772,8 @@ export default function NutritionPage() {
           carbs: nutritionTargets.carbs || undefined,
           fat: nutritionTargets.fat || undefined,
         } : undefined}
-        workoutsPerWeek={4}
+        userStats={userProfile}
+        workoutsPerWeek={userProfile.workoutsPerWeek || 4}
       />
     </div>
   );
