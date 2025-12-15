@@ -310,7 +310,7 @@ export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
   const sessionId = params.id as string;
-  const { preferences, updatePreference } = useUserPreferences();
+  const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -639,9 +639,23 @@ export default function WorkoutPage() {
           setPhase('workout');
         } else {
           // Check if user wants to skip pre-workout check-in
-          if (preferences.skipPreWorkoutCheckIn) {
+          // Fetch preference directly from DB to avoid race condition with React state
+          const { data: { user } } = await supabase.auth.getUser();
+          let shouldSkipCheckIn = false;
+          
+          if (user) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select('preferences')
+              .eq('id', user.id)
+              .single();
+            
+            const prefs = (userData?.preferences as Record<string, unknown>) || {};
+            shouldSkipCheckIn = (prefs.skipPreWorkoutCheckIn as boolean) ?? false;
+          }
+          
+          if (shouldSkipCheckIn) {
             // Skip check-in, go directly to workout
-            const supabase = createUntypedClient();
             await supabase
               .from('workout_sessions')
               .update({
