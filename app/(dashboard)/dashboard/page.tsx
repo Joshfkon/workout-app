@@ -4,6 +4,21 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
+
+interface NutritionTotals {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+interface NutritionTargets {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
 
 interface Stats {
   workoutsThisWeek: number;
@@ -27,6 +42,75 @@ interface ActiveMesocycle {
   currentWeek: number;
   workoutsCompleted: number;
   totalWorkouts: number;
+  splitType?: string;
+  daysPerWeek?: number;
+}
+
+interface ScheduledWorkout {
+  dayName: string;
+  muscles: string[];
+  dayNumber: number;
+}
+
+// Helper to calculate workout schedule based on split type
+function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): ScheduledWorkout | null {
+  const splits: Record<string, { dayName: string; muscles: string[] }[]> = {
+    'Full Body': [
+      { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
+      { dayName: 'Full Body B', muscles: ['back', 'hamstrings', 'glutes', 'biceps', 'calves'] },
+      { dayName: 'Full Body C', muscles: ['chest', 'quads', 'shoulders', 'biceps', 'abs'] },
+    ],
+    'Upper/Lower': [
+      { dayName: 'Upper A', muscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
+      { dayName: 'Lower A', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+      { dayName: 'Upper B', muscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
+      { dayName: 'Lower B', muscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
+    ],
+    'PPL': [
+      { dayName: 'Push', muscles: ['chest', 'shoulders', 'triceps'] },
+      { dayName: 'Pull', muscles: ['back', 'biceps', 'shoulders'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+      { dayName: 'Push 2', muscles: ['chest', 'shoulders', 'triceps'] },
+      { dayName: 'Pull 2', muscles: ['back', 'biceps', 'shoulders'] },
+      { dayName: 'Legs 2', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+    ],
+    'Arnold': [
+      { dayName: 'Chest & Back', muscles: ['chest', 'back'] },
+      { dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+    ],
+    'Bro Split': [
+      { dayName: 'Chest', muscles: ['chest'] },
+      { dayName: 'Back', muscles: ['back'] },
+      { dayName: 'Shoulders', muscles: ['shoulders'] },
+      { dayName: 'Arms', muscles: ['biceps', 'triceps'] },
+      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
+    ],
+  };
+
+  const schedule = splits[splitType] || splits['Upper/Lower'];
+  
+  // Typical training days (Mon=1, Tue=2, etc., Sun=0->7)
+  const trainingDayMaps: Record<number, number[]> = {
+    2: [1, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 5, 6],
+    6: [1, 2, 3, 4, 5, 6],
+  };
+
+  const trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  const dayIndex = trainingDays.indexOf(dayOfWeek);
+
+  if (dayIndex === -1) {
+    return null; // Rest day
+  }
+
+  const workoutIndex = dayIndex % schedule.length;
+  return {
+    ...schedule[workoutIndex],
+    dayNumber: dayIndex + 1,
+  };
 }
 
 interface TodaysWorkout {
@@ -52,9 +136,13 @@ export default function DashboardPage() {
   const [recentWorkouts, setRecentWorkouts] = useState<any[]>([]);
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(null);
+  const [scheduledWorkout, setScheduledWorkout] = useState<ScheduledWorkout | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
+  const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>({ calories: 0, protein: 0, carbs: 0, fat: 0 });
+  const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
+  const [showQuickLogger, setShowQuickLogger] = useState(false);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -134,6 +222,7 @@ export default function DashboardPage() {
               start_date,
               total_weeks,
               days_per_week,
+              split_type,
               workout_sessions (
                 id,
                 state,
@@ -252,6 +341,9 @@ export default function DashboardPage() {
 
           const totalWorkouts = (mesocycle.days_per_week || 3) * totalWeeks;
 
+          const splitType = mesocycle.split_type || 'Upper/Lower';
+          const daysPerWeek = mesocycle.days_per_week || 4;
+
           setActiveMesocycle({
             id: mesocycle.id,
             name: mesocycle.name,
@@ -260,6 +352,8 @@ export default function DashboardPage() {
             currentWeek,
             workoutsCompleted: completedCount,
             totalWorkouts,
+            splitType,
+            daysPerWeek,
           });
 
           // Find today's/active workout from the already-fetched sessions
@@ -299,8 +393,48 @@ export default function DashboardPage() {
               completedSets,
               totalSets,
             });
+          } else {
+            // No session exists - check if today is a scheduled workout day based on split
+            const todayDayOfWeek = today.getDay() || 7; // Convert Sunday (0) to 7
+            const scheduled = getWorkoutForDay(splitType, todayDayOfWeek, daysPerWeek);
+            if (scheduled) {
+              setScheduledWorkout(scheduled);
+            }
           }
         }
+
+        // Fetch today's nutrition data
+        const todayStr = today.toISOString().split('T')[0];
+        const [nutritionResult, targetsResult] = await Promise.all([
+          supabase
+            .from('food_log')
+            .select('calories, protein, carbs, fat')
+            .eq('user_id', user.id)
+            .eq('logged_at', todayStr),
+          supabase
+            .from('nutrition_targets')
+            .select('calories, protein, carbs, fat')
+            .eq('user_id', user.id)
+            .single(),
+        ]);
+
+        if (nutritionResult.data) {
+          const totals = nutritionResult.data.reduce(
+            (acc: NutritionTotals, entry: { calories?: number; protein?: number; carbs?: number; fat?: number }) => ({
+              calories: acc.calories + (entry.calories || 0),
+              protein: acc.protein + (entry.protein || 0),
+              carbs: acc.carbs + (entry.carbs || 0),
+              fat: acc.fat + (entry.fat || 0),
+            }),
+            { calories: 0, protein: 0, carbs: 0, fat: 0 }
+          );
+          setNutritionTotals(totals);
+        }
+
+        if (targetsResult.data) {
+          setNutritionTargets(targetsResult.data);
+        }
+
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -310,6 +444,46 @@ export default function DashboardPage() {
 
     fetchDashboardData();
   }, []);
+
+  const handleAddFood = async (food: {
+    food_name: string;
+    serving_size: string;
+    servings: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    source: 'usda' | 'manual';
+  }) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    await supabase.from('food_log').insert({
+      user_id: user.id,
+      food_name: food.food_name,
+      serving_size: food.serving_size,
+      servings: food.servings,
+      calories: food.calories,
+      protein: food.protein,
+      carbs: food.carbs,
+      fat: food.fat,
+      meal_type: food.meal_type,
+      source: food.source,
+      logged_at: todayStr,
+    });
+
+    // Update local state
+    setNutritionTotals((prev) => ({
+      calories: prev.calories + food.calories,
+      protein: prev.protein + food.protein,
+      carbs: prev.carbs + food.carbs,
+      fat: prev.fat + food.fat,
+    }));
+  };
 
   return (
     <div className="space-y-6">
@@ -524,25 +698,57 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Rest day card - active mesocycle but no workout today */}
+      {/* Rest day card OR Scheduled workout card - active mesocycle but no session exists */}
       {activeMesocycle && !todaysWorkout && (
-        <Card className="overflow-hidden border border-surface-700 bg-surface-800/30">
+        <Card className={`overflow-hidden border ${scheduledWorkout ? 'border-primary-500/50 bg-primary-500/5' : 'border-surface-700 bg-surface-800/30'}`}>
           <div className="p-5 sm:p-6">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
-                <p className="text-sm text-surface-500">No workout scheduled for today. Recovery is part of progress!</p>
-              </div>
-              <Link href="/dashboard/workout/new">
-                <Button variant="outline" size="sm">
-                  Start Ad-hoc Workout
-                </Button>
-              </Link>
+              {scheduledWorkout ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-surface-100">Today&apos;s Workout: {scheduledWorkout.dayName}</h2>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {scheduledWorkout.muscles.slice(0, 4).map((muscle) => (
+                        <Badge key={muscle} variant="default" size="sm" className="capitalize">{muscle}</Badge>
+                      ))}
+                      {scheduledWorkout.muscles.length > 4 && (
+                        <Badge variant="default" size="sm">+{scheduledWorkout.muscles.length - 4}</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Link href="/dashboard/mesocycle">
+                    <Button>
+                      Start Workout
+                      <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </Button>
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
+                    <p className="text-sm text-surface-500">No workout scheduled for today. Recovery is part of progress!</p>
+                  </div>
+                  <Link href="/dashboard/workout/new">
+                    <Button variant="outline" size="sm">
+                      Start Ad-hoc Workout
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </Card>
@@ -687,6 +893,123 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Nutrition Widget */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <span>🍎</span> Today&apos;s Nutrition
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowQuickLogger(!showQuickLogger)}
+                className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                title="Quick log food"
+              >
+                <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <Link href="/dashboard/nutrition">
+                <Button variant="ghost" size="sm">Full View →</Button>
+              </Link>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {showQuickLogger && (
+            <div className="mb-4">
+              <QuickFoodLogger
+                onAdd={handleAddFood}
+                onClose={() => setShowQuickLogger(false)}
+              />
+            </div>
+          )}
+          
+          {nutritionTargets ? (
+            <div className="space-y-3">
+              {/* Calories */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-surface-300">Calories</span>
+                  <span className="text-sm text-surface-400">
+                    <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
+                    {' / '}{nutritionTargets.calories}
+                  </span>
+                </div>
+                <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      nutritionTotals.calories > nutritionTargets.calories
+                        ? 'bg-danger-500'
+                        : nutritionTotals.calories > nutritionTargets.calories * 0.9
+                        ? 'bg-success-500'
+                        : 'bg-primary-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (nutritionTotals.calories / nutritionTargets.calories) * 100)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Macros */}
+              <div className="grid grid-cols-3 gap-4">
+                {/* Protein */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-surface-500">Protein</span>
+                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
+                  </div>
+                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.protein}g</p>
+                </div>
+
+                {/* Carbs */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-surface-500">Carbs</span>
+                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
+                  </div>
+                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.carbs}g</p>
+                </div>
+
+                {/* Fat */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-surface-500">Fat</span>
+                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
+                  </div>
+                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-pink-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.fat}g</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6">
+              <p className="text-surface-400 text-sm mb-3">No nutrition targets set</p>
+              <Link href="/dashboard/nutrition">
+                <Button variant="outline" size="sm">Set Up Targets</Button>
+              </Link>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Two column layout */}
       <div className="grid md:grid-cols-2 gap-6">
