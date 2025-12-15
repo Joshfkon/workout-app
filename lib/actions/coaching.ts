@@ -58,24 +58,36 @@ export async function sendCoachingMessage(
   message: string,
   conversationId?: string
 ): Promise<CoachingResponse> {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  // Get authenticated user
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('Unauthorized');
-  }
+    // Get authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.error('[AI Coach] No authenticated user');
+      throw new Error('Unauthorized');
+    }
 
-  // Build coaching context
-  const context = await buildCoachingContext();
-  if (!context) {
-    throw new Error('Unable to build coaching context');
-  }
+    // Check for API key
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.error('[AI Coach] ANTHROPIC_API_KEY is not set');
+      throw new Error('AI coaching is not configured. Please contact support.');
+    }
 
-  // Initialize Anthropic client
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+    // Build coaching context
+    let context;
+    try {
+      context = await buildCoachingContext();
+    } catch (contextError) {
+      console.error('[AI Coach] Failed to build context:', contextError);
+      // Continue without context rather than failing completely
+      context = null;
+    }
+
+    // Initialize Anthropic client
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    });
 
   // Load or create conversation
   let conversation: any;
@@ -106,8 +118,8 @@ export async function sendCoachingMessage(
   };
   messages.push(userMessage);
 
-  // Format context for AI
-  const contextString = formatCoachingContext(context);
+  // Format context for AI (if available)
+  const contextString = context ? formatCoachingContext(context) : 'No user context available yet.';
 
   // Build message history for Anthropic API
   const apiMessages: { role: 'user' | 'assistant'; content: string }[] = [];
@@ -134,12 +146,18 @@ export async function sendCoachingMessage(
   }
 
   // Call Anthropic API
-  const response = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 2000,
-    system: SYSTEM_PROMPT,
-    messages: apiMessages,
-  });
+  let response;
+  try {
+    response = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT,
+      messages: apiMessages,
+    });
+  } catch (apiError: any) {
+    console.error('[AI Coach] Anthropic API error:', apiError?.message || apiError);
+    throw new Error(`AI service error: ${apiError?.message || 'Unknown error'}`);
+  }
 
   // Extract assistant's response
   const assistantContent = response.content
@@ -192,6 +210,10 @@ export async function sendCoachingMessage(
     message: assistantContent,
     timestamp: assistantMessage.timestamp,
   };
+  } catch (error: any) {
+    console.error('[AI Coach] Error in sendCoachingMessage:', error?.message || error);
+    throw error;
+  }
 }
 
 /**

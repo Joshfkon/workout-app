@@ -421,6 +421,17 @@ export const ExerciseCard = memo(function ExerciseCard({
             <p className="text-sm text-surface-400 mt-0.5">
               {exercise.primaryMuscle} • {exercise.mechanic}
             </p>
+            {/* Show tier explanation for top-tier exercises */}
+            {exercise.hypertrophyScore?.tier && ['S', 'A'].includes(exercise.hypertrophyScore.tier) && (
+              <p className="text-xs text-emerald-500/70 mt-0.5 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                {exercise.hypertrophyScore.tier === 'S' 
+                  ? 'Top-tier for muscle growth' 
+                  : 'Highly effective choice'}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {/* Set controls */}

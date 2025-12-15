@@ -68,13 +68,14 @@ export default function AICoachPage() {
 
       setMessages((prev) => [...prev, assistantMessage]);
       setConversationId(response.conversationId);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send message:', error);
 
-      // Show error message
+      // Show error message with more details
+      const errorText = error?.message || 'Unknown error occurred';
       const errorMessage: CoachingMessage = {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: `Sorry, I encountered an error: ${errorText}. Please try again or contact support if the issue persists.`,
         timestamp: new Date().toISOString(),
       };
 
