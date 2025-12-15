@@ -14,7 +14,8 @@ import type {
   CustomFood,
   MealType,
 } from '@/types/nutrition';
-import type { FoodSearchResult } from '@/lib/actions/nutrition';
+import type { FoodSearchResult } from '@/services/fatSecretService';
+import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import {
   LineChart,
   Line,
@@ -57,6 +58,9 @@ export default function NutritionPage() {
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
+  
+  // Notification for macro updates
+  const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
   const supabase = createUntypedClient();
 
@@ -240,16 +244,41 @@ export default function NutritionPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Get user's unit preference to convert to kg for macro calculation
+    const { data: prefs } = await supabase
+      .from('user_preferences')
+      .select('weight_unit')
+      .eq('user_id', user.id)
+      .single();
+    
+    const isLbs = prefs?.weight_unit === 'lb';
+    const weightKg = isLbs ? weight * 0.453592 : weight;
+
     const { error } = await supabase.from('weight_log').upsert({
       user_id: user.id,
       logged_at: date,
       weight: weight,
+      unit: isLbs ? 'lb' : 'kg',
       notes: notes,
     });
 
     if (error) {
       console.error('Error saving weight:', error);
       throw error;
+    }
+
+    // Auto-recalculate macros based on new weight
+    try {
+      const result = await recalculateMacrosForWeight(weightKg);
+      if (result.success && !result.skipped && result.newTargets) {
+        setMacroUpdateNotification(
+          `✅ Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
+        );
+        // Clear notification after 5 seconds
+        setTimeout(() => setMacroUpdateNotification(null), 5000);
+      }
+    } catch (e) {
+      console.error('Failed to auto-recalculate macros:', e);
     }
 
     await loadData();
@@ -361,7 +390,7 @@ export default function NutritionPage() {
   const recentFoods: FoodSearchResult[] = Array.from(
     new Map(
       foodEntries
-        .filter((e) => e.source === 'fatsecret' || e.source === 'nutritionix')
+        .filter((e) => (e.source === 'fatsecret' || e.source === 'nutritionix' || e.source === 'usda') && e.food_id)
         .map((e) => [
           e.food_name,
           {
@@ -372,8 +401,7 @@ export default function NutritionPage() {
             protein: e.protein || 0,
             carbs: e.carbs || 0,
             fat: e.fat || 0,
-            foodId: e.food_id || undefined,
-            nutritionixId: e.nutritionix_id || undefined,
+            foodId: e.food_id!,
           },
         ])
     ).values()
@@ -400,6 +428,19 @@ export default function NutritionPage() {
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Macro Update Notification */}
+      {macroUpdateNotification && (
+        <div className="bg-success-500/10 border border-success-500/20 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-success-300 text-sm">{macroUpdateNotification}</span>
+          <button 
+            onClick={() => setMacroUpdateNotification(null)}
+            className="text-success-400 hover:text-success-300"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

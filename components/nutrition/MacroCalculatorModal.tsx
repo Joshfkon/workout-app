@@ -18,6 +18,7 @@ import {
   type Peptide,
   type MacroRecommendation,
 } from '@/lib/nutrition/macroCalculator';
+import { saveMacroSettings } from '@/lib/actions/nutrition';
 
 interface MacroCalculatorModalProps {
   isOpen: boolean;
@@ -157,12 +158,32 @@ export function MacroCalculatorModal({
 
     setIsApplying(true);
     try {
+      // Save macro targets
       await onApply({
         calories: recommendation.calories,
         protein: recommendation.protein,
         carbs: recommendation.carbs,
         fat: recommendation.fat,
       });
+      
+      // Save macro settings for auto-recalculation when weight changes
+      const totalHeightInches = (parseFloat(heightFeet) * 12) + parseFloat(heightInches);
+      const heightCm = inchesToCm(totalHeightInches);
+      
+      await saveMacroSettings({
+        height_cm: heightCm,
+        age: parseInt(age),
+        sex: sex,
+        activity_level: activityLevel,
+        workouts_per_week: parseInt(workouts),
+        avg_workout_minutes: parseInt(workoutDuration),
+        workout_intensity: workoutIntensity,
+        goal: goal,
+        target_weight_change_per_week: null, // Using goal default
+        peptide: peptide,
+        auto_update_enabled: true,
+      });
+      
       onClose();
     } catch (err) {
       setError('Failed to save targets. Please try again.');

@@ -12,7 +12,7 @@ interface FatSecretTokenResponse {
   scope: string;
 }
 
-interface FatSecretServing {
+export interface FatSecretServing {
   serving_id: string;
   serving_description: string;
   serving_url: string;
@@ -32,6 +32,15 @@ interface FatSecretServing {
   potassium?: string;
   fiber?: string;
   sugar?: string;
+}
+
+// Parsed serving for UI use
+export interface ParsedServing {
+  description: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
 }
 
 interface FatSecretFood {
@@ -153,6 +162,12 @@ export interface FoodSearchResult {
   foodId: string;
   brandName?: string;
   photoUrl?: string;
+  dataSource?: 'fatsecret' | 'usda' | 'nutritionix';
+}
+
+// Extended version with serving options (returned by getFoodDetails)
+export interface FoodSearchResultWithServings extends FoodSearchResult {
+  servings: ParsedServing[];
 }
 
 /**
@@ -232,7 +247,7 @@ export async function searchFoods(
 export async function getFoodDetails(
   foodId: string
 ): Promise<{
-  food?: FoodSearchResult & { servings: FatSecretServing[] };
+  food?: FoodSearchResultWithServings;
   error?: string;
 }> {
   try {
@@ -255,23 +270,32 @@ export async function getFoodDetails(
           : [food.servings.serving])
       : [];
 
+    // Parse servings into a simpler format
+    const parsedServings: ParsedServing[] = servingsArray.map((s) => ({
+      description: s.serving_description || '1 serving',
+      calories: Math.round(parseFloat(s.calories || '0')),
+      protein: Math.round(parseFloat(s.protein || '0') * 10) / 10,
+      carbs: Math.round(parseFloat(s.carbohydrate || '0') * 10) / 10,
+      fat: Math.round(parseFloat(s.fat || '0') * 10) / 10,
+    }));
+
     // Get the first serving for default values
-    const defaultServing = servingsArray[0];
+    const defaultServing = parsedServings[0];
 
     return {
       food: {
         name: food.brand_name 
           ? `${food.food_name} (${food.brand_name})`
           : food.food_name,
-        servingSize: defaultServing?.serving_description || '1 serving',
-        servingQty: parseFloat(defaultServing?.number_of_units || '1'),
-        calories: Math.round(parseFloat(defaultServing?.calories || '0')),
-        protein: Math.round(parseFloat(defaultServing?.protein || '0') * 10) / 10,
-        carbs: Math.round(parseFloat(defaultServing?.carbohydrate || '0') * 10) / 10,
-        fat: Math.round(parseFloat(defaultServing?.fat || '0') * 10) / 10,
+        servingSize: defaultServing?.description || '1 serving',
+        servingQty: 1,
+        calories: defaultServing?.calories || 0,
+        protein: defaultServing?.protein || 0,
+        carbs: defaultServing?.carbs || 0,
+        fat: defaultServing?.fat || 0,
         foodId: food.food_id,
         brandName: food.brand_name,
-        servings: servingsArray,
+        servings: parsedServings,
       },
     };
   } catch (error) {

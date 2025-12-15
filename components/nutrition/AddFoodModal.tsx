@@ -5,7 +5,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult } from '@/lib/actions/nutrition';
+import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/fatSecretService';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { MealType, CustomFood } from '@/types/nutrition';
 
@@ -45,7 +45,7 @@ export function AddFoodModal({
   const [searchResults, setSearchResults] = useState<FoodSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
-  const [selectedFood, setSelectedFood] = useState<FoodSearchResult | null>(null);
+  const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
 
   // Form state
   const [servings, setServings] = useState('1');
@@ -118,7 +118,8 @@ export function AddFoodModal({
     setSelectedServingIndex(0);
     
     // If the food has a foodId, fetch detailed info with serving options
-    if (food.foodId && !food.servings) {
+    const hasServings = 'servings' in food && Array.isArray((food as FoodSearchResultWithServings).servings);
+    if (food.foodId && !hasServings) {
       setIsLoadingDetails(true);
       try {
         const result = await getFoodDetails(food.foodId);
@@ -147,7 +148,8 @@ export function AddFoodModal({
 
     try {
       // Use selected serving if available
-      const serving = selectedFood.servings?.[selectedServingIndex];
+      const foodWithServings = selectedFood as FoodSearchResultWithServings;
+      const serving: ParsedServing | undefined = foodWithServings.servings?.[selectedServingIndex];
       const calories = serving ? serving.calories : selectedFood.calories;
       const protein = serving ? serving.protein : selectedFood.protein;
       const carbs = serving ? serving.carbs : selectedFood.carbs;
@@ -351,29 +353,35 @@ export function AddFoodModal({
                 ) : (
                   <>
                     {/* Serving Size Selector */}
-                    {selectedFood.servings && selectedFood.servings.length > 1 && (
-                      <div>
-                        <label className="block text-sm font-medium text-surface-300 mb-1">
-                          Serving Size
-                        </label>
-                        <select
-                          value={selectedServingIndex}
-                          onChange={(e) => setSelectedServingIndex(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        >
-                          {selectedFood.servings.map((serving, idx) => (
-                            <option key={serving.id} value={idx}>
-                              {serving.description} ({serving.calories} cal)
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
+                    {(() => {
+                      const foodWithServings = selectedFood as FoodSearchResultWithServings;
+                      const servings = foodWithServings.servings;
+                      if (!servings || servings.length <= 1) return null;
+                      return (
+                        <div>
+                          <label className="block text-sm font-medium text-surface-300 mb-1">
+                            Serving Size
+                          </label>
+                          <select
+                            value={selectedServingIndex}
+                            onChange={(e) => setSelectedServingIndex(parseInt(e.target.value))}
+                            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          >
+                            {servings.map((serving, idx) => (
+                              <option key={idx} value={idx}>
+                                {serving.description} ({serving.calories} cal)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
 
                     {/* Nutrition Info */}
                     <div className="grid grid-cols-4 gap-2 text-sm">
                       {(() => {
-                        const serving = selectedFood.servings?.[selectedServingIndex];
+                        const foodWithServings = selectedFood as FoodSearchResultWithServings;
+                        const serving = foodWithServings.servings?.[selectedServingIndex];
                         const cal = serving?.calories ?? selectedFood.calories;
                         const prot = serving?.protein ?? selectedFood.protein;
                         const carb = serving?.carbs ?? selectedFood.carbs;

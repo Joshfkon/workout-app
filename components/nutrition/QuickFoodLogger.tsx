@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui';
-import { searchFoods, type FoodSearchResult } from '@/lib/actions/nutrition';
+import { searchFoods, type FoodSearchResult } from '@/services/fatSecretService';
 
 interface QuickFoodLoggerProps {
   onAdd: (food: {
