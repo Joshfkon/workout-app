@@ -12,9 +12,12 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - opengraph-image (OG image generation)
+     * - twitter-image (Twitter card image)
+     * - api/og (OG image API routes)
      * Feel free to modify this pattern to include more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|opengraph-image|twitter-image|api/og|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 
