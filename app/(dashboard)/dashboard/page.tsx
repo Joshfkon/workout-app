@@ -12,6 +12,13 @@ interface Stats {
   avgRpe: number | null;
 }
 
+interface MuscleVolumeStats {
+  muscle: string;
+  sets: number;
+  target: number; // MEV to MRV range midpoint
+  status: 'low' | 'optimal' | 'high';
+}
+
 interface ActiveMesocycle {
   id: string;
   name: string;
@@ -47,6 +54,7 @@ export default function DashboardPage() {
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null);
+  const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -93,6 +101,9 @@ export default function DashboardPage() {
               session_rpe,
               exercise_blocks!inner (
                 id,
+                exercises (
+                  primary_muscle
+                ),
                 set_logs!inner (
                   id,
                   weight_kg,
@@ -187,6 +198,37 @@ export default function DashboardPage() {
             totalVolume: Math.round(totalVolume),
             avgRpe: rpeCount > 0 ? Math.round((rpeSum / rpeCount) * 10) / 10 : null,
           });
+
+          // Calculate volume by muscle group
+          const muscleSetCounts: Record<string, number> = {};
+          workouts.forEach((workout: any) => {
+            if (workout.exercise_blocks) {
+              workout.exercise_blocks.forEach((block: any) => {
+                const muscle = block.exercises?.primary_muscle || 'unknown';
+                const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
+                muscleSetCounts[muscle] = (muscleSetCounts[muscle] || 0) + sets;
+              });
+            }
+          });
+
+          // Default volume targets (MEV to MRV midpoint)
+          const volumeTargets: Record<string, number> = {
+            chest: 12, back: 14, shoulders: 10, biceps: 8, triceps: 8,
+            quads: 12, hamstrings: 10, glutes: 8, calves: 8, abs: 6
+          };
+
+          const volumeStats: MuscleVolumeStats[] = Object.entries(muscleSetCounts)
+            .filter(([muscle]) => muscle !== 'unknown')
+            .map(([muscle, sets]) => {
+              const target = volumeTargets[muscle] || 10;
+              let status: 'low' | 'optimal' | 'high' = 'optimal';
+              if (sets < target * 0.7) status = 'low';
+              else if (sets > target * 1.3) status = 'high';
+              return { muscle, sets, target, status };
+            })
+            .sort((a, b) => b.sets - a.sets);
+
+          setMuscleVolume(volumeStats);
         }
 
         // Set recent workouts
@@ -693,51 +735,61 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Quick actions */}
+        {/* Weekly Volume by Muscle */}
         <Card>
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Weekly Volume</span>
+              <span className="text-xs font-normal text-surface-500">sets per muscle</span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3">
-              <Link
-                href="/dashboard/workout/new"
-                className="flex flex-col items-center p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors"
-              >
-                <svg className="w-8 h-8 text-primary-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span className="text-sm text-surface-300">Quick Workout</span>
-              </Link>
-              <Link
-                href="/dashboard/exercises"
-                className="flex flex-col items-center p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors"
-              >
-                <svg className="w-8 h-8 text-primary-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <span className="text-sm text-surface-300">Exercises</span>
-              </Link>
-              <Link
-                href="/dashboard/mesocycle/new"
-                className="flex flex-col items-center p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors"
-              >
-                <svg className="w-8 h-8 text-primary-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-sm text-surface-300">New Mesocycle</span>
-              </Link>
-              <Link
-                href="/dashboard/settings"
-                className="flex flex-col items-center p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors"
-              >
-                <svg className="w-8 h-8 text-primary-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span className="text-sm text-surface-300">Settings</span>
-              </Link>
-            </div>
+            {muscleVolume.length > 0 ? (
+              <div className="space-y-3">
+                {muscleVolume.slice(0, 6).map((mv) => (
+                  <div key={mv.muscle} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-surface-300 capitalize">{mv.muscle}</span>
+                      <span className={`font-medium ${
+                        mv.status === 'optimal' ? 'text-success-400' :
+                        mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
+                      }`}>
+                        {mv.sets}/{mv.target}
+                        <span className="text-xs text-surface-500 ml-1">
+                          {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-500 ${
+                          mv.status === 'optimal' ? 'bg-success-500' :
+                          mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {muscleVolume.length === 0 && (
+                  <p className="text-center text-surface-500 text-sm py-4">
+                    Complete workouts to track volume
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-800 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                <p className="text-surface-400">No volume data yet</p>
+                <p className="text-sm text-surface-500 mt-1">
+                  Log workouts to track muscle volume
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
