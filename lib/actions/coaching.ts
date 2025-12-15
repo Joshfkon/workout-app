@@ -69,10 +69,15 @@ export async function sendCoachingMessage(
     }
 
     // Check for API key
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
       console.error('[AI Coach] ANTHROPIC_API_KEY is not set');
       throw new Error('AI coaching is not configured. Please contact support.');
     }
+    
+    // Debug: Log key info (first 20 chars only for security)
+    console.log('[AI Coach] API key starts with:', apiKey.substring(0, 20) + '...');
+    console.log('[AI Coach] API key length:', apiKey.length);
 
     // Build coaching context
     let context;
@@ -86,7 +91,7 @@ export async function sendCoachingMessage(
 
     // Initialize Anthropic client
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
+      apiKey: apiKey,
     });
 
   // Load or create conversation
@@ -149,7 +154,7 @@ export async function sendCoachingMessage(
   let response;
   try {
     response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-3-5-haiku-latest',
       max_tokens: 2000,
       system: SYSTEM_PROMPT,
       messages: apiMessages,
