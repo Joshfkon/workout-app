@@ -870,7 +870,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <button
                       onClick={() => completePendingSet(index)}
                       disabled={!input.weight || !input.reps || !input.rpe}
-                      className="p-2 bg-primary-500 hover:bg-primary-600 disabled:bg-surface-700 disabled:text-surface-500 text-white rounded-lg transition-colors"
+                      className={`p-2 rounded-lg transition-colors ${
+                        input.weight && input.reps && input.rpe
+                          ? 'bg-success-500 hover:bg-success-600 text-white'
+                          : 'bg-surface-800 border border-surface-600 text-surface-500 hover:border-surface-500'
+                      }`}
                       title="Complete set"
                     >
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
