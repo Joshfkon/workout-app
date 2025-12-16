@@ -324,11 +324,20 @@ WHAT TO INCLUDE (pick the most relevant 1-2):
 - If specific lifts have plateaued: one technique tip
 - Reference recent PRs or improvements if relevant
 
+HANDLING INJURIES (PRIORITY IF PRESENT):
+- If the user has reported injuries, this takes PRIORITY over other notes
+- Acknowledge the injury directly: "Working around your lower back today..."
+- Reassure them that exercises have been adjusted to be safer
+- Give ONE specific tip for protecting the injured area (e.g., "Keep your core braced throughout", "Stop immediately if you feel any pain")
+- Don't be overly cautious or negative—they're here to train, just smartly
+- For severe injuries (severity 3), emphasize listening to their body and permission to cut the session short if needed
+
 WHAT TO AVOID:
 - Generic motivation ("Let's crush it!")
 - Listing all exercises in the workout
 - Long explanations of training principles
-- Anything that sounds like ChatGPT`;
+- Anything that sounds like ChatGPT
+- Being overly dramatic about injuries`;
 
 export interface WorkoutCoachNotesInput {
   exercises: Array<{
@@ -342,6 +351,11 @@ export interface WorkoutCoachNotesInput {
   weekInMesocycle?: number;
   mesocycleName?: string;
   totalWeeks?: number;
+  /** Current injuries the user is working around */
+  injuries?: Array<{
+    area: string;
+    severity: 1 | 2 | 3; // 1=mild, 2=moderate, 3=severe
+  }>;
 }
 
 export interface WorkoutCoachNotesResult {
@@ -439,6 +453,16 @@ function formatWorkoutForAI(input: WorkoutCoachNotesInput): string {
     lines.push(`Week ${input.weekInMesocycle} of ${input.totalWeeks} (${input.mesocycleName || 'current mesocycle'})`);
   }
 
+  // IMPORTANT: Include injury context
+  if (input.injuries && input.injuries.length > 0) {
+    const severityLabels = { 1: 'mild', 2: 'moderate', 3: 'significant' };
+    const injuryList = input.injuries
+      .map(i => `${i.area.replace('_', ' ')} (${severityLabels[i.severity] || 'unknown'})`)
+      .join(', ');
+    lines.push(`\n⚠️ CURRENT INJURIES: ${injuryList}`);
+    lines.push(`Note: User is working around these issues today. Exercises have been adjusted but coach should acknowledge injury management.`);
+  }
+
   // List exercises briefly
   const exerciseList = input.exercises
     .map(e => `- ${e.name} (${e.primaryMuscle}, ${e.mechanic}): ${e.sets} sets${e.targetReps ? ` of ${e.targetReps}` : ''}`)
@@ -478,9 +502,21 @@ function generateFallbackNotes(input: WorkoutCoachNotesInput): string {
   const hour = new Date().getHours();
   const timeGreeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  // Injury-specific advice
+  let injuryAdvice = '';
+  if (input.injuries && input.injuries.length > 0) {
+    const severeInjuries = input.injuries.filter(i => i.severity >= 2);
+    if (severeInjuries.length > 0) {
+      const areas = severeInjuries.map(i => i.area.replace('_', ' ')).join(' and ');
+      injuryAdvice = ` Since you're working around your ${areas}, pay extra attention to form and stop if anything feels off. We've adjusted exercises to be safer—listen to your body.`;
+    } else {
+      injuryAdvice = ' With your minor discomfort today, warm up extra thoroughly and stay mindful of your form.';
+    }
+  }
+
   // Week-specific advice
   let weekAdvice = '';
-  if (input.weekInMesocycle) {
+  if (input.weekInMesocycle && !injuryAdvice) {
     if (input.weekInMesocycle === 1) {
       weekAdvice = ' Focus on dialing in your working weights and nailing form this week.';
     } else if (input.weekInMesocycle >= 4 && input.totalWeeks && input.weekInMesocycle >= input.totalWeeks - 1) {
@@ -488,5 +524,8 @@ function generateFallbackNotes(input: WorkoutCoachNotesInput): string {
     }
   }
 
-  return `${timeGreeting}! Today's ${workoutType} session has ${totalSets} sets across ${input.exercises.length} exercises.${weekAdvice} ${compoundCount > 0 ? 'Start with your compounds while you\'re fresh.' : 'Focus on mind-muscle connection throughout.'}`;
+  const mainAdvice = injuryAdvice || weekAdvice;
+  const endNote = compoundCount > 0 && !injuryAdvice ? ' Start with your compounds while you\'re fresh.' : '';
+
+  return `${timeGreeting}! Today's ${workoutType} session has ${totalSets} sets across ${input.exercises.length} exercises.${mainAdvice}${endNote}`;
 }

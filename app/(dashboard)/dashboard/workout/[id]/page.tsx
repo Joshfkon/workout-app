@@ -388,6 +388,15 @@ export default function WorkoutPage() {
   const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
   const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
   
+  // Store AI context for regenerating notes when injuries change
+  const [aiNotesContext, setAiNotesContext] = useState<{
+    exercises: WorkoutCoachNotesInput['exercises'];
+    workoutType: string;
+    weekInMesocycle?: number;
+    mesocycleName?: string;
+    totalWeeks?: number;
+  } | null>(null);
+  
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
@@ -620,6 +629,14 @@ export default function WorkoutPage() {
         // Generate coach message with profile and context
         setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
         
+        // Check for existing injuries from session's pre_workout_check_in
+        const existingCheckIn = sessionData.pre_workout_check_in as { temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }> } | null;
+        const existingInjuries = existingCheckIn?.temporaryInjuries || [];
+        if (existingInjuries.length > 0) {
+          setTemporaryInjuries(existingInjuries);
+          console.log('[Workout] Loaded existing injuries from session:', existingInjuries);
+        }
+        
         // Generate AI-powered coach notes in the background
         (async () => {
           setIsLoadingAiNotes(true);
@@ -634,18 +651,32 @@ export default function WorkoutPage() {
             else if (muscles.includes('back') && muscles.includes('biceps')) inferredWorkoutType = 'Pull';
             else inferredWorkoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
             
-            const aiInput: WorkoutCoachNotesInput = {
-              exercises: transformedBlocks.map((b: ExerciseBlockWithExercise) => ({
-                name: b.exercise.name,
-                primaryMuscle: b.exercise.primaryMuscle,
-                mechanic: b.exercise.mechanic,
-                sets: b.targetSets,
-                targetReps: `${b.targetRepRange[0]}-${b.targetRepRange[1]}`,
-              })),
+            // Build exercises data for AI context
+            const exercisesData = transformedBlocks.map((b: ExerciseBlockWithExercise) => ({
+              name: b.exercise.name,
+              primaryMuscle: b.exercise.primaryMuscle,
+              mechanic: b.exercise.mechanic,
+              sets: b.targetSets,
+              targetReps: `${b.targetRepRange[0]}-${b.targetRepRange[1]}`,
+            }));
+            
+            // Store context for potential regeneration later
+            setAiNotesContext({
+              exercises: exercisesData,
               workoutType: inferredWorkoutType,
               weekInMesocycle: userContext.weekInMesocycle,
               mesocycleName: userContext.mesocycleName,
               totalWeeks: mesocycleData?.total_weeks,
+            });
+            
+            const aiInput: WorkoutCoachNotesInput = {
+              exercises: exercisesData,
+              workoutType: inferredWorkoutType,
+              weekInMesocycle: userContext.weekInMesocycle,
+              mesocycleName: userContext.mesocycleName,
+              totalWeeks: mesocycleData?.total_weeks,
+              // Include existing injuries if any (from previous session state)
+              injuries: existingInjuries.length > 0 ? existingInjuries : undefined,
             };
             const result = await generateWorkoutCoachNotes(aiInput);
             setAiCoachNotes(result.notes);
@@ -839,6 +870,29 @@ export default function WorkoutPage() {
     loadTodayNutrition();
   }, []);
 
+  // Function to regenerate AI coach notes with injury context
+  const regenerateAiCoachNotes = async (injuries: { area: string; severity: 1 | 2 | 3 }[]) => {
+    if (!aiNotesContext) {
+      console.log('[AI Coach] No context stored, skipping regeneration');
+      return;
+    }
+    
+    setIsLoadingAiNotes(true);
+    try {
+      const aiInput: WorkoutCoachNotesInput = {
+        ...aiNotesContext,
+        injuries: injuries.length > 0 ? injuries : undefined,
+      };
+      console.log('[AI Coach] Regenerating notes with injuries:', injuries);
+      const result = await generateWorkoutCoachNotes(aiInput);
+      setAiCoachNotes(result.notes);
+    } catch (error) {
+      console.error('[AI Coach Notes] Failed to regenerate:', error);
+    } finally {
+      setIsLoadingAiNotes(false);
+    }
+  };
+
   const handleCheckInComplete = async (checkInData?: PreWorkoutCheckIn) => {
     try {
       const supabase = createUntypedClient();
@@ -888,15 +942,18 @@ export default function WorkoutPage() {
         
         // Auto-adjust exercises if injuries were reported
         if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
+          const injuriesForAi = checkInData.temporaryInjuries.map(i => ({
+            area: i.area,
+            severity: i.severity,
+          }));
+          
           // Schedule auto-adjust after state updates
           setTimeout(() => {
-            autoAdjustForInjuries(
-              checkInData.temporaryInjuries!.map(i => ({
-                area: i.area,
-                severity: i.severity,
-              }))
-            );
+            autoAdjustForInjuries(injuriesForAi);
           }, 500);
+          
+          // Regenerate AI coach notes with injury context
+          regenerateAiCoachNotes(injuriesForAi);
         }
       }
       
@@ -1212,6 +1269,11 @@ export default function WorkoutPage() {
       
       // Auto-adjust exercises based on injuries
       await autoAdjustForInjuries(temporaryInjuries);
+      
+      // Regenerate AI coach notes with the updated injury context
+      if (temporaryInjuries.length > 0) {
+        regenerateAiCoachNotes(temporaryInjuries);
+      }
       
       setShowInjuryModal(false);
     } catch (err) {
