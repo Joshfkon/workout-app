@@ -554,8 +554,8 @@ export default function MesocyclePage() {
         </Card>
       )}
 
-      {/* What is a mesocycle - only show when no active */}
-      {!activeMesocycle && (
+      {/* What is a mesocycle - always show after loading */}
+      {!isLoading && (
         <Card>
           <CardHeader>
             <CardTitle>What is a Mesocycle?</CardTitle>
