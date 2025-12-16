@@ -132,7 +132,7 @@ const DEFAULT_STANDARDS: Record<string, number> = {
 };
 
 // Optimal weekly sets by experience level
-const OPTIMAL_VOLUME: Record<string, Record<string, number>> = {
+const OPTIMAL_WEEKLY_VOLUME: Record<string, Record<string, number>> = {
   novice: {
     chest: 10, back: 10, shoulders: 8, biceps: 6, triceps: 6,
     quads: 10, hamstrings: 8, glutes: 8, calves: 8, abs: 6,
@@ -149,6 +149,32 @@ const OPTIMAL_VOLUME: Record<string, Record<string, number>> = {
     adductors: 10, forearms: 8, traps: 10,
   },
 };
+
+// Get weeks multiplier for time range
+function getWeeksInRange(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): number {
+  switch (range) {
+    case '7d': return 1;
+    case '30d': return 4;
+    case '60d': return 8;
+    case '6m': return 26;
+    case '1y': return 52;
+    case 'all': return 52; // Default to 1 year for "all" comparison
+    default: return 4;
+  }
+}
+
+// Get time range label
+function getTimeRangeLabel(range: '7d' | '30d' | '60d' | '6m' | '1y' | 'all'): string {
+  switch (range) {
+    case '7d': return 'this week';
+    case '30d': return 'this month';
+    case '60d': return '2 months';
+    case '6m': return '6 months';
+    case '1y': return '1 year';
+    case 'all': return 'all time';
+    default: return 'this period';
+  }
+}
 
 interface AnalyticsData {
   totalWorkouts: number;
@@ -197,7 +223,7 @@ export default function AnalyticsPage() {
   const { preferences } = useUserPreferences();
   const [activeTab, setActiveTab] = useState<TabType>('body-composition');
   const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState<'7d' | '30d' | 'all'>('30d');
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
 
   // Body composition state
   const [scans, setScans] = useState<DexaScan[]>([]);
@@ -386,10 +412,17 @@ export default function AnalyticsPage() {
 
         const now = new Date();
         let startDate: Date | null = null;
+        const dayMs = 24 * 60 * 60 * 1000;
         if (timeRange === '7d') {
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          startDate = new Date(now.getTime() - 7 * dayMs);
         } else if (timeRange === '30d') {
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          startDate = new Date(now.getTime() - 30 * dayMs);
+        } else if (timeRange === '60d') {
+          startDate = new Date(now.getTime() - 60 * dayMs);
+        } else if (timeRange === '6m') {
+          startDate = new Date(now.getTime() - 180 * dayMs);
+        } else if (timeRange === '1y') {
+          startDate = new Date(now.getTime() - 365 * dayMs);
         }
 
         let query = supabase
@@ -652,18 +685,25 @@ export default function AnalyticsPage() {
         </div>
         <div className="flex gap-2">
           {/* Time range selector */}
-          <div className="flex gap-1 bg-surface-800 p-1 rounded-lg">
-            {(['7d', '30d', 'all'] as const).map((range) => (
+          <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap">
+            {([
+              { value: '7d', label: '7d' },
+              { value: '30d', label: '30d' },
+              { value: '60d', label: '60d' },
+              { value: '6m', label: '6mo' },
+              { value: '1y', label: '1yr' },
+              { value: 'all', label: 'All' },
+            ] as const).map((range) => (
               <button
-                key={range}
-                onClick={() => setTimeRange(range)}
+                key={range.value}
+                onClick={() => setTimeRange(range.value)}
                 className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                  timeRange === range
+                  timeRange === range.value
                     ? 'bg-primary-500 text-white'
                     : 'text-surface-400 hover:text-surface-200'
                 }`}
               >
-                {range === '7d' ? '7d' : range === '30d' ? '30d' : 'All'}
+                {range.label}
               </button>
             ))}
           </div>
@@ -1065,13 +1105,18 @@ export default function AnalyticsPage() {
                       <CardTitle>Volume by Muscle Group</CardTitle>
                       <span className="text-xs text-surface-500">Click to expand</span>
                     </div>
+                    <p className="text-xs text-surface-500 mt-1">
+                      Showing {getTimeRangeLabel(timeRange)} • Target = optimal sets for this period
+                    </p>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       {analytics.weeklyMuscleVolume.slice(0, 10).map((muscle) => {
                         const maxSets = Math.max(...analytics.weeklyMuscleVolume.map(m => m.sets));
                         const percentage = maxSets > 0 ? (muscle.sets / maxSets) * 100 : 0;
-                        const optimalSets = OPTIMAL_VOLUME[userProfile?.experience || 'intermediate'][muscle.muscle] || 12;
+                        const weeklyOptimal = OPTIMAL_WEEKLY_VOLUME[userProfile?.experience || 'intermediate'][muscle.muscle] || 12;
+                        const weeksMultiplier = getWeeksInRange(timeRange);
+                        const optimalSets = Math.round(weeklyOptimal * weeksMultiplier);
                         const volumeStatus = muscle.sets >= optimalSets ? 'optimal' : muscle.sets >= optimalSets * 0.7 ? 'good' : 'low';
                         const isExpanded = expandedMuscles.has(muscle.muscle);
 
