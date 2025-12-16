@@ -16,15 +16,16 @@ export interface StrongWorkoutRow {
   'Exercise Name': string;
   'Set Order': string;
   Weight: string;
-  'Weight Unit': string;
+  'Weight Unit'?: string;
   Reps: string;
-  RPE: string;
-  Distance: string;
-  'Distance Unit': string;
-  Seconds: string;
-  Notes: string;
-  'Workout Notes': string;
-  'Workout Duration': string;
+  RPE?: string;
+  Distance?: string;
+  'Distance Unit'?: string;
+  Seconds?: string;
+  Notes?: string;
+  'Workout Notes'?: string;
+  'Workout Duration'?: string;
+  Duration?: string; // Alternative column name
 }
 
 export interface LoseItFoodRow {
@@ -138,18 +139,46 @@ function parseCSVLine(line: string): string[] {
 // ============================================
 
 export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
-  const rows = parseCSV(csvText) as unknown as StrongWorkoutRow[];
+  const rawRows = parseCSV(csvText);
   const workouts: Map<string, ParsedStrongWorkout> = new Map();
   
-  for (const row of rows) {
+  console.log(`Parsing ${rawRows.length} rows from Strong CSV`);
+  if (rawRows.length > 0) {
+    console.log('First row columns:', Object.keys(rawRows[0]));
+  }
+  
+  for (const rawRow of rawRows) {
+    // Flexible column name mapping (Strong exports vary)
+    const row: StrongWorkoutRow = {
+      Date: rawRow['Date'] || rawRow['date'] || '',
+      'Workout Name': rawRow['Workout Name'] || rawRow['workout name'] || rawRow['WorkoutName'] || '',
+      'Exercise Name': rawRow['Exercise Name'] || rawRow['exercise name'] || rawRow['ExerciseName'] || '',
+      'Set Order': rawRow['Set Order'] || rawRow['set order'] || rawRow['SetOrder'] || '1',
+      Weight: rawRow['Weight'] || rawRow['weight'] || '0',
+      'Weight Unit': rawRow['Weight Unit'] || rawRow['weight unit'] || rawRow['WeightUnit'] || 'lbs',
+      Reps: rawRow['Reps'] || rawRow['reps'] || '0',
+      RPE: rawRow['RPE'] || rawRow['rpe'] || '',
+      Distance: rawRow['Distance'] || rawRow['distance'] || '',
+      Seconds: rawRow['Seconds'] || rawRow['seconds'] || '',
+      Notes: rawRow['Notes'] || rawRow['notes'] || '',
+      'Workout Notes': rawRow['Workout Notes'] || rawRow['workout notes'] || '',
+      Duration: rawRow['Duration'] || rawRow['duration'] || rawRow['Workout Duration'] || '',
+    };
+    
+    // Skip rows without essential data
+    if (!row.Date || !row['Exercise Name']) {
+      continue;
+    }
+    
     const dateKey = `${row.Date}_${row['Workout Name']}`;
     
     if (!workouts.has(dateKey)) {
+      const durationStr = row.Duration || row['Workout Duration'] || '';
       workouts.set(dateKey, {
         date: row.Date,
         workoutName: row['Workout Name'] || 'Imported Workout',
         exercises: [],
-        duration: row['Workout Duration'] ? parseDuration(row['Workout Duration']) : undefined,
+        duration: durationStr ? parseDuration(durationStr) : undefined,
         notes: row['Workout Notes'] || undefined,
       });
     }
@@ -157,27 +186,41 @@ export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
     const workout = workouts.get(dateKey)!;
     
     // Find or create exercise
-    let exercise = workout.exercises.find(e => e.name === row['Exercise Name']);
+    const exerciseName = row['Exercise Name'].trim();
+    let exercise = workout.exercises.find(e => e.name === exerciseName);
     if (!exercise) {
-      exercise = { name: row['Exercise Name'], sets: [] };
+      exercise = { name: exerciseName, sets: [] };
       workout.exercises.push(exercise);
     }
     
-    // Add set
+    // Parse weight - default to lbs if no unit specified
     const weight = parseFloat(row.Weight) || 0;
-    const weightUnit = (row['Weight Unit']?.toLowerCase() === 'lbs' ? 'lb' : 'kg') as 'kg' | 'lb';
-    const reps = parseInt(row.Reps) || 0;
-    const rpe = row.RPE ? parseFloat(row.RPE) : undefined;
+    const weightUnitRaw = (row['Weight Unit'] || 'lbs').toLowerCase().trim();
+    const weightUnit: 'kg' | 'lb' = weightUnitRaw.includes('kg') ? 'kg' : 'lb';
     
-    exercise.sets.push({
-      weight,
-      weightUnit,
-      reps,
-      rpe,
-      notes: row.Notes || undefined,
-    });
+    // Parse reps
+    const reps = parseInt(row.Reps) || 0;
+    
+    // Parse RPE (may be empty)
+    const rpeVal = row.RPE ? parseFloat(row.RPE) : undefined;
+    const rpe = rpeVal && !isNaN(rpeVal) ? rpeVal : undefined;
+    
+    // Check if this is a warmup set (Strong uses 'W' in Set Order sometimes)
+    const isWarmup = row['Set Order']?.toString().toUpperCase().includes('W');
+    
+    // Only add non-warmup sets with actual data
+    if (reps > 0 || weight > 0) {
+      exercise.sets.push({
+        weight,
+        weightUnit,
+        reps,
+        rpe,
+        notes: row.Notes || undefined,
+      });
+    }
   }
   
+  console.log(`Parsed ${workouts.size} unique workouts`);
   return Array.from(workouts.values());
 }
 

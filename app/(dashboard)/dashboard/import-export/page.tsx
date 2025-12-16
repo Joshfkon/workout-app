@@ -81,6 +81,9 @@ export default function ImportExportPage() {
         let imported = 0;
         let skipped = 0;
         const errors: string[] = [];
+        
+        // Cache exercise lookups to avoid repeated DB queries
+        const exerciseCache: Map<string, string> = new Map();
 
         for (let i = 0; i < workouts.length; i++) {
           const workout = workouts[i];
@@ -125,38 +128,68 @@ export default function ImportExportPage() {
 
             // Import exercises
             let order = 1;
-            for (const exercise of workout.exercises) {
-              // Find or create exercise in database
-              let { data: existingExercise } = await supabase
-                .from('exercises')
-                .select('id')
-                .ilike('name', exercise.name)
-                .single();
+            const allSetLogs: Array<{
+              exercise_block_id: string;
+              weight_kg: number;
+              reps: number;
+              rpe?: number;
+              is_warmup: boolean;
+              logged_at: string;
+            }> = [];
 
-              if (!existingExercise) {
-                // Create new exercise
-                const { data: newExercise } = await supabase
+            for (const exercise of workout.exercises) {
+              // Skip exercises with no sets
+              if (!exercise.sets || exercise.sets.length === 0) continue;
+              
+              const exerciseNameLower = exercise.name.toLowerCase().trim();
+              let exerciseId = exerciseCache.get(exerciseNameLower);
+              
+              if (!exerciseId) {
+                // Find or create exercise in database
+                const { data: existingExercise } = await supabase
                   .from('exercises')
-                  .insert({
-                    name: exercise.name,
-                    primary_muscle: inferMuscleFromName(exercise.name),
-                    mechanic: inferMechanicFromName(exercise.name),
-                    difficulty: 'intermediate',
-                    is_custom: true,
-                    created_by: user.id,
-                  })
-                  .select()
+                  .select('id')
+                  .ilike('name', exercise.name)
                   .single();
-                existingExercise = newExercise;
+
+                if (existingExercise) {
+                  exerciseId = existingExercise.id;
+                } else {
+                  // Create new exercise
+                  const { data: newExercise, error: exError } = await supabase
+                    .from('exercises')
+                    .insert({
+                      name: exercise.name,
+                      primary_muscle: inferMuscleFromName(exercise.name),
+                      mechanic: inferMechanicFromName(exercise.name),
+                      difficulty: 'intermediate',
+                      is_custom: true,
+                      created_by: user.id,
+                    })
+                    .select()
+                    .single();
+                  
+                  if (exError) {
+                    console.error('Failed to create exercise:', exercise.name, exError);
+                  }
+                  if (newExercise) {
+                    exerciseId = newExercise.id;
+                  }
+                }
+                
+                // Cache the result
+                if (exerciseId) {
+                  exerciseCache.set(exerciseNameLower, exerciseId);
+                }
               }
 
-              if (existingExercise) {
+              if (exerciseId) {
                 // Create exercise block
-                const { data: block } = await supabase
+                const { data: block, error: blockError } = await supabase
                   .from('exercise_blocks')
                   .insert({
                     workout_session_id: session.id,
-                    exercise_id: existingExercise.id,
+                    exercise_id: exerciseId,
                     order: order++,
                     target_sets: exercise.sets.length,
                     target_rep_range: [8, 12],
@@ -165,22 +198,35 @@ export default function ImportExportPage() {
                   .select()
                   .single();
 
+                if (blockError) {
+                  console.error('Failed to create exercise block:', blockError);
+                }
+
                 if (block) {
-                  // Import sets
+                  // Batch set logs for this exercise
                   for (const set of exercise.sets) {
                     const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
-                    await supabase
-                      .from('set_logs')
-                      .insert({
-                        exercise_block_id: block.id,
-                        weight_kg: weightKg,
-                        reps: set.reps,
-                        rpe: set.rpe,
-                        is_warmup: false,
-                        logged_at: workoutDate,
-                      });
+                    allSetLogs.push({
+                      exercise_block_id: block.id,
+                      weight_kg: weightKg,
+                      reps: set.reps,
+                      rpe: set.rpe,
+                      is_warmup: false,
+                      logged_at: workoutDate,
+                    });
                   }
                 }
+              }
+            }
+
+            // Batch insert all set logs for this workout (much faster!)
+            if (allSetLogs.length > 0) {
+              const { error: setError } = await supabase
+                .from('set_logs')
+                .insert(allSetLogs);
+              
+              if (setError) {
+                console.error('Failed to insert set logs:', setError);
               }
             }
 
