@@ -58,7 +58,9 @@ INSERT INTO promo_codes (code, tier, duration_type, max_uses, description) VALUE
   ('FAMILY-ELITE-007', 'elite', 'lifetime', 1, 'Friends & Family lifetime code'),
   ('FAMILY-ELITE-008', 'elite', 'lifetime', 1, 'Friends & Family lifetime code'),
   ('FAMILY-ELITE-009', 'elite', 'lifetime', 1, 'Friends & Family lifetime code'),
-  ('FAMILY-ELITE-010', 'elite', 'lifetime', 1, 'Friends & Family lifetime code');
+  ('FAMILY-ELITE-010', 'elite', 'lifetime', 1, 'Friends & Family lifetime code'),
+  -- Shareable code with 50 uses
+  ('LIFTSCIENCE-VIP', 'elite', 'lifetime', 50, 'Shareable lifetime code for early adopters');
 
 -- Add a column to subscriptions to track if it's from a promo code
 ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS promo_code_id UUID REFERENCES promo_codes(id);
