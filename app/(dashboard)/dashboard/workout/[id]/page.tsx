@@ -322,6 +322,7 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
+  const [allCollapsed, setAllCollapsed] = useState(false);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -425,6 +426,13 @@ export default function WorkoutPage() {
               setupNote: block.exercises.setup_note || '',
               movementPattern: block.exercises.movement_pattern || '',
               equipmentRequired: block.exercises.equipment_required || [],
+              // Include hypertrophy scoring for tier badges
+              hypertrophyScore: block.exercises.hypertrophy_tier ? {
+                tier: block.exercises.hypertrophy_tier,
+                stretchUnderLoad: block.exercises.stretch_under_load || 3,
+                resistanceProfile: block.exercises.resistance_profile || 3,
+                progressionEase: block.exercises.progression_ease || 3,
+              } : undefined,
             },
           }));
 
@@ -899,16 +907,57 @@ export default function WorkoutPage() {
   };
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
-    // Update local state immediately
-    setBlocks(prevBlocks => prevBlocks.map(block => 
-      block.id === blockId 
-        ? { ...block, exerciseId: newExercise.id, exercise: newExercise }
-        : block
-    ));
-
-    // Update in database
     try {
       const supabase = createUntypedClient();
+      
+      // Fetch full exercise data from database (for hypertrophy scores, equipment, etc.)
+      const { data: fullExerciseData, error: fetchError } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('id', newExercise.id)
+        .single();
+      
+      if (fetchError || !fullExerciseData) {
+        console.error('Failed to fetch exercise data:', fetchError);
+        // Fall back to the passed exercise data
+        setBlocks(prevBlocks => prevBlocks.map(block => 
+          block.id === blockId 
+            ? { ...block, exerciseId: newExercise.id, exercise: newExercise }
+            : block
+        ));
+      } else {
+        // Create complete exercise object with all fields
+        const completeExercise: Exercise = {
+          id: fullExerciseData.id,
+          name: fullExerciseData.name,
+          primaryMuscle: fullExerciseData.primary_muscle,
+          secondaryMuscles: fullExerciseData.secondary_muscles || [],
+          mechanic: fullExerciseData.mechanic,
+          defaultRepRange: fullExerciseData.default_rep_range || [8, 12],
+          defaultRir: fullExerciseData.default_rir || 2,
+          minWeightIncrementKg: fullExerciseData.min_weight_increment_kg || 2.5,
+          formCues: fullExerciseData.form_cues || [],
+          commonMistakes: fullExerciseData.common_mistakes || [],
+          setupNote: fullExerciseData.setup_note || '',
+          movementPattern: fullExerciseData.movement_pattern || '',
+          equipmentRequired: fullExerciseData.equipment_required || [],
+          hypertrophyScore: fullExerciseData.hypertrophy_tier ? {
+            tier: fullExerciseData.hypertrophy_tier,
+            stretchUnderLoad: fullExerciseData.stretch_under_load || 3,
+            resistanceProfile: fullExerciseData.resistance_profile || 3,
+            progressionEase: fullExerciseData.progression_ease || 3,
+          } : undefined,
+        };
+        
+        // Update local state with complete exercise data
+        setBlocks(prevBlocks => prevBlocks.map(block => 
+          block.id === blockId 
+            ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise }
+            : block
+        ));
+      }
+
+      // Update in database
       const { error: updateError } = await supabase
         .from('exercise_blocks')
         .update({ exercise_id: newExercise.id })
@@ -1088,9 +1137,18 @@ export default function WorkoutPage() {
         isFirstExercise: blocks.length === 0, // First exercise overall gets general warmup
       }) : [];
 
-      // Create new exercise block with suggested weight
-      const newOrder = blocks.length + 1;
-      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder, suggestedWeight });
+      // Get max order from database to avoid duplicate key error
+      const { data: maxOrderResult } = await supabase
+        .from('exercise_blocks')
+        .select('order')
+        .eq('workout_session_id', sessionId)
+        .order('order', { ascending: false })
+        .limit(1)
+        .single();
+      
+      const maxExistingOrder = maxOrderResult?.order || 0;
+      const newOrder = maxExistingOrder + 1;
+      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder, suggestedWeight, maxExistingOrder });
       
       const { data: newBlock, error: blockError } = await supabase
         .from('exercise_blocks')
@@ -1382,6 +1440,21 @@ export default function WorkoutPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setAllCollapsed(!allCollapsed)}
+            className="p-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-400 transition-colors"
+            title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
+          >
+            {allCollapsed ? (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+          </button>
           <Button variant="ghost" onClick={handleOpenAddExercise}>
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1551,6 +1624,11 @@ export default function WorkoutPage() {
                 <div className="flex-1">
                   <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
                     {block.exercise.name}
+                    {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
+                      <span className="text-surface-500 font-normal text-sm ml-1">
+                        ({block.exercise.equipmentRequired[0]})
+                      </span>
+                    )}
                   </p>
                   <p className="text-xs text-surface-500">
                     {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
@@ -1564,8 +1642,8 @@ export default function WorkoutPage() {
                 )}
               </div>
 
-              {/* Expanded content for current exercise */}
-              {isCurrent && (() => {
+              {/* Expanded content for current exercise (or when not collapsed) */}
+              {isCurrent && !allCollapsed && (() => {
                 // Calculate AI recommended weight first so it can be used for warmup
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
@@ -1575,17 +1653,7 @@ export default function WorkoutPage() {
                 
                 return (
                 <div className="mt-3 space-y-3">
-                  {/* Warmup protocol */}
-                  {block.warmupProtocol && block.warmupProtocol.length > 0 && effectiveWorkingWeight > 0 && (
-                    <WarmupProtocol
-                      warmupSets={block.warmupProtocol}
-                      workingWeight={effectiveWorkingWeight}
-                      minIncrement={block.exercise.minWeightIncrementKg}
-                      unit={preferences.units}
-                    />
-                  )}
-
-                  {/* Exercise card with integrated set inputs - hideHeader on mobile since name shows above */}
+                  {/* Exercise card with integrated set inputs and warmups - hideHeader on mobile since name shows above */}
                   <ExerciseCard
                     hideHeader
                     exercise={block.exercise}
@@ -1625,6 +1693,8 @@ export default function WorkoutPage() {
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
+                    warmupSets={block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
+                    workingWeight={effectiveWorkingWeight}
                   />
 
                   {/* Exercise complete actions */}
@@ -1648,8 +1718,8 @@ export default function WorkoutPage() {
                 );
               })()}
 
-              {/* Collapsed preview for non-current exercises */}
-              {!isCurrent && (
+              {/* Collapsed preview for non-current exercises or when all collapsed */}
+              {(!isCurrent || allCollapsed) && (
                 <div 
                   className={`ml-11 p-3 rounded-lg cursor-pointer transition-colors ${
                     isComplete ? 'bg-success-500/5 border border-success-500/20' : 'bg-surface-800/30 hover:bg-surface-800/50'

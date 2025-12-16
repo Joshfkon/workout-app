@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, memo } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
-import { formatWeight, formatWeightValue, inputWeightToKg } from '@/lib/utils';
+import { formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
@@ -32,6 +32,13 @@ interface ExerciseHistory {
   totalSessions: number;
 }
 
+interface WarmupSetData {
+  setNumber: number;
+  percentOfWorking: number;
+  targetReps: number;
+  purpose: string;
+}
+
 interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
@@ -49,6 +56,8 @@ interface ExerciseCardProps {
   previousSets?: { weightKg: number; reps: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
   hideHeader?: boolean;  // Hide the exercise name header (for mobile when shown in parent)
+  warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
+  workingWeight?: number;  // Working weight in kg for warmup calculations
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -69,9 +78,13 @@ export const ExerciseCard = memo(function ExerciseCard({
   previousSets = [],
   exerciseHistory,
   hideHeader = false,
+  warmupSets = [],
+  workingWeight = 0,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
+  const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
@@ -424,6 +437,9 @@ export const ExerciseCard = memo(function ExerciseCard({
               </div>
               <p className="text-sm text-surface-400 mt-0.5">
                 {exercise.primaryMuscle} • {exercise.mechanic}
+                {exercise.equipmentRequired && exercise.equipmentRequired.length > 0 && (
+                  <> • <span className="text-surface-500 capitalize">{exercise.equipmentRequired[0]}</span></>
+                )}
               </p>
               {/* Show tier explanation for top-tier exercises */}
               {exercise.hypertrophyScore?.tier && ['S', 'A'].includes(exercise.hypertrophyScore.tier) && (
@@ -657,13 +673,98 @@ export const ExerciseCard = memo(function ExerciseCard({
               <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
               <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
               <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
-              <th className="px-2 py-2 text-center text-surface-400 font-medium">RPE</th>
+              <th className="px-2 py-2 text-center text-surface-400 font-medium">
+                <button 
+                  onClick={() => setShowRpeGuide(true)}
+                  className="inline-flex items-center gap-1 hover:text-primary-400 transition-colors"
+                >
+                  RPE
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              </th>
               <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
               <th className="px-2 py-2 w-12"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-surface-800">
-            {/* Completed sets */}
+            {/* Warmup sets - displayed inline before working sets */}
+            {isActive && warmupSets.length > 0 && workingWeight > 0 && warmupSets.map((warmup) => {
+              const warmupWeightKg = workingWeight * (warmup.percentOfWorking / 100);
+              const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
+              const displayWarmupWeight = roundedWeight === 0 ? 'Empty' : formatWeightValue(roundedWeight, unit);
+              const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
+              
+              return (
+                <tr 
+                  key={`warmup-${warmup.setNumber}`}
+                  className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
+                >
+                  <td className="px-3 py-2 text-amber-400 font-medium text-xs">
+                    W{warmup.setNumber}
+                  </td>
+                  <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">
+                    {displayWarmupWeight}
+                  </td>
+                  <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">
+                    {warmup.targetReps}
+                  </td>
+                  <td className="px-2 py-2 text-center text-surface-500 text-xs">
+                    —
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      onClick={() => {
+                        setCompletedWarmups(prev => {
+                          const next = new Set(prev);
+                          if (next.has(warmup.setNumber)) {
+                            next.delete(warmup.setNumber);
+                          } else {
+                            next.add(warmup.setNumber);
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`p-2 rounded-lg transition-colors ${
+                        isWarmupCompleted 
+                          ? 'bg-amber-500 text-white' 
+                          : 'bg-surface-700 hover:bg-surface-600 text-surface-400'
+                      }`}
+                    >
+                      {isWarmupCompleted ? (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      )}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            
+            {/* Skip warmup button */}
+            {isActive && warmupSets.length > 0 && workingWeight > 0 && completedWarmups.size < warmupSets.length && (
+              <tr className="bg-surface-800/30">
+                <td colSpan={6} className="px-3 py-1.5 text-center">
+                  <button
+                    onClick={() => setCompletedWarmups(new Set(warmupSets.map(w => w.setNumber)))}
+                    className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
+                  >
+                    Skip warmup (already warm)
+                  </button>
+                </td>
+              </tr>
+            )}
+            
+            {/* Completed working sets */}
             {completedSets.map((set) => (
               editingSetId === set.id ? (
                 <tr key={set.id} className="bg-primary-500/10">
@@ -1133,6 +1234,51 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RPE Guide Modal */}
+      {showRpeGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowRpeGuide(false)}>
+          <div className="bg-surface-900 border border-surface-700 rounded-xl p-4 max-w-sm mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-surface-100">RPE Guide</h3>
+              <button 
+                onClick={() => setShowRpeGuide(false)}
+                className="p-1 text-surface-400 hover:text-surface-200"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <p className="text-sm text-surface-400 mb-4">Rate of Perceived Exertion - how hard was the set?</p>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
+                <span className="font-mono font-bold text-danger-400">RPE 10</span>
+                <span className="text-sm text-surface-300">Max effort - 0 reps left</span>
+              </div>
+              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
+                <span className="font-mono font-bold text-warning-400">RPE 9</span>
+                <span className="text-sm text-surface-300">Very hard - 1 rep left</span>
+              </div>
+              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
+                <span className="font-mono font-bold text-primary-400">RPE 8</span>
+                <span className="text-sm text-surface-300">Hard - 2 reps left</span>
+              </div>
+              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
+                <span className="font-mono font-bold text-success-400">RPE 7</span>
+                <span className="text-sm text-surface-300">Moderate - 3 reps left</span>
+              </div>
+              <div className="flex justify-between items-center p-2 bg-surface-800 rounded-lg">
+                <span className="font-mono font-bold text-surface-400">RPE 6</span>
+                <span className="text-sm text-surface-300">Easy - 4+ reps left</span>
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-4 text-center">
+              Target RPE 7-8 for most working sets
+            </p>
           </div>
         </div>
       )}

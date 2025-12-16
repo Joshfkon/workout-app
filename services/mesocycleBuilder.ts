@@ -699,11 +699,18 @@ export function selectExercises(
     !profile.injuryHistory.includes(muscle)  // Be cautious with injured areas
   );
   
-  // Filter by difficulty
+  // Filter by difficulty - but always allow S-tier and A-tier exercises regardless of difficulty
+  // (these are the best exercises and should be available to everyone with proper coaching)
   if (profile.experience === 'novice') {
-    candidates = candidates.filter(e => e.difficulty === 'beginner');
+    candidates = candidates.filter(e => 
+      e.difficulty === 'beginner' || 
+      (prioritizeHypertrophy && ['S', 'A'].includes(e.hypertrophyScore?.tier || ''))
+    );
   } else if (profile.experience === 'intermediate') {
-    candidates = candidates.filter(e => e.difficulty !== 'advanced');
+    candidates = candidates.filter(e => 
+      e.difficulty !== 'advanced' ||
+      (prioritizeHypertrophy && ['S', 'A'].includes(e.hypertrophyScore?.tier || ''))
+    );
   }
   // Advanced can use anything
   
