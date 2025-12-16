@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -694,24 +694,16 @@ export default function NewMesocyclePage() {
             )}
 
             {/* Toggle for AI vs Manual */}
-            <label className="flex items-center justify-between p-3 bg-surface-800/30 rounded-lg cursor-pointer">
+            <div className="flex items-center justify-between p-3 bg-surface-800/30 rounded-lg">
               <div>
                 <p className="font-medium text-surface-200">Use AI recommendations</p>
                 <p className="text-xs text-surface-500">Let us optimize your split and volume</p>
               </div>
-              <button
-                onClick={() => setUseAiRecommendation(!useAiRecommendation)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  useAiRecommendation ? 'bg-primary-500' : 'bg-surface-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    useAiRecommendation ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
+              <Toggle
+                checked={useAiRecommendation}
+                onChange={setUseAiRecommendation}
+              />
+            </div>
 
             <div className="pt-4 flex justify-end">
               <Button onClick={() => setStep(2)}>
