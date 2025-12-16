@@ -120,15 +120,22 @@ export default function DashboardPage() {
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
 
         // Fetch active mesocycle with workout sessions
-        const { data: mesocycle } = await supabase
+        // Check both is_active flag and state='active' for backwards compatibility
+        const { data: mesocycles, error: mesoError } = await supabase
           .from('mesocycles')
           .select(`
-            id, name, start_date, weeks, split_type, days_per_week,
+            id, name, start_date, weeks, split_type, days_per_week, state, is_active,
             workout_sessions (id, planned_date, state, completed_at)
           `)
           .eq('user_id', user.id)
-          .eq('is_active', true)
-          .single();
+          .order('created_at', { ascending: false });
+        
+        if (mesoError) {
+          console.error('Error fetching mesocycle:', mesoError);
+        }
+        
+        // Find active mesocycle - check both is_active flag and state field
+        const mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
 
         if (mesocycle) {
           const startDate = new Date(mesocycle.start_date);
