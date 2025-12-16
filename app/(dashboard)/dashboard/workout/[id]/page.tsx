@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -426,6 +426,19 @@ export default function WorkoutPage() {
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
   const [selectedInjurySeverity, setSelectedInjurySeverity] = useState<1 | 2 | 3>(1);
+  
+  // Today's nutrition for pre-workout check-in
+  const [todayNutrition, setTodayNutrition] = useState<{
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    targetCalories?: number;
+    targetProtein?: number;
+  } | null>(null);
+  
+  // State for showing swap modal for a specific exercise due to injury
+  const [showSwapForInjury, setShowSwapForInjury] = useState<string | null>(null);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -806,15 +819,107 @@ export default function WorkoutPage() {
     loadWorkout();
   }, [sessionId]);
 
-  const handleCheckInComplete = async () => {
+  // Fetch today's nutrition data for check-in
+  useEffect(() => {
+    async function loadTodayNutrition() {
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // Fetch today's food log entries
+        const { data: foodEntries } = await supabase
+          .from('food_log')
+          .select('calories, protein, carbs, fat')
+          .eq('user_id', user.id)
+          .gte('logged_at', `${today}T00:00:00`)
+          .lt('logged_at', `${today}T23:59:59`);
+
+        // Fetch nutrition targets
+        const { data: targets } = await supabase
+          .from('nutrition_targets')
+          .select('calories, protein')
+          .eq('user_id', user.id)
+          .single();
+
+        if (foodEntries) {
+          const totals = foodEntries.reduce(
+            (acc: { calories: number; protein: number; carbs: number; fat: number }, entry: { calories?: number; protein?: number; carbs?: number; fat?: number }) => ({
+              calories: acc.calories + (entry.calories || 0),
+              protein: acc.protein + (entry.protein || 0),
+              carbs: acc.carbs + (entry.carbs || 0),
+              fat: acc.fat + (entry.fat || 0),
+            }),
+            { calories: 0, protein: 0, carbs: 0, fat: 0 }
+          );
+
+          setTodayNutrition({
+            ...totals,
+            targetCalories: targets?.calories,
+            targetProtein: targets?.protein,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to load nutrition:', err);
+      }
+    }
+
+    loadTodayNutrition();
+  }, []);
+
+  const handleCheckInComplete = async (checkInData?: PreWorkoutCheckIn) => {
     try {
       const supabase = createUntypedClient();
+      
+      // Prepare check-in data for database
+      const updateData: Record<string, unknown> = {
+        state: 'in_progress',
+        started_at: new Date().toISOString(),
+      };
+      
+      // If we have check-in data, save it
+      if (checkInData) {
+        updateData.pre_workout_check_in = {
+          sleepHours: checkInData.sleepHours,
+          sleepQuality: checkInData.sleepQuality,
+          stressLevel: checkInData.stressLevel,
+          nutritionRating: checkInData.nutritionRating,
+          bodyweightKg: checkInData.bodyweightKg,
+          readinessScore: checkInData.readinessScore,
+          temporaryInjuries: checkInData.temporaryInjuries,
+        };
+        
+        // Set temporary injuries in state so they carry over to workout
+        if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
+          setTemporaryInjuries(
+            checkInData.temporaryInjuries.map(i => ({
+              area: i.area,
+              severity: i.severity,
+            }))
+          );
+        }
+        
+        // If bodyweight was provided, also log it to weight log
+        if (checkInData.bodyweightKg) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from('weight_log')
+              .insert({
+                user_id: user.id,
+                weight_kg: checkInData.bodyweightKg,
+                source: 'manual',
+                logged_at: new Date().toISOString(),
+              });
+          }
+        }
+      }
+      
       await supabase
         .from('workout_sessions')
-        .update({
-          state: 'in_progress',
-          started_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', sessionId);
       
       setPhase('workout');
@@ -827,7 +932,7 @@ export default function WorkoutPage() {
   const handleSkipCheckInPermanently = async () => {
     // Save preference to skip check-ins in the future
     await updatePreference('skipPreWorkoutCheckIn', true);
-    // Then complete the check-in for this workout
+    // Then complete the check-in for this workout (without check-in data)
     await handleCheckInComplete();
   };
 
@@ -960,6 +1065,70 @@ export default function WorkoutPage() {
   const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
 
   // Handle changing target sets for an exercise
+  // Handle applying injuries and saving to session
+  const handleApplyInjuries = async () => {
+    try {
+      const supabase = createUntypedClient();
+      
+      // Update session's pre_workout_check_in with temporary injuries
+      const { data: sessionData } = await supabase
+        .from('workout_sessions')
+        .select('pre_workout_check_in')
+        .eq('id', sessionId)
+        .single();
+      
+      const existingCheckIn = sessionData?.pre_workout_check_in || {};
+      
+      await supabase
+        .from('workout_sessions')
+        .update({
+          pre_workout_check_in: {
+            ...existingCheckIn,
+            temporaryInjuries: temporaryInjuries,
+          },
+        })
+        .eq('id', sessionId);
+      
+      // Find exercises that need swapping and get alternatives
+      const riskyExercises = blocks
+        .map((block, idx) => {
+          const risk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
+          return { block, idx, risk };
+        })
+        .filter(({ risk }) => risk.isRisky && risk.severity >= 2);
+      
+      if (riskyExercises.length > 0) {
+        // Auto-fetch safe alternatives for risky exercises
+        for (const { block } of riskyExercises) {
+          // Find a safe alternative from available exercises
+          const safeAlternative = availableExercises.find(ex => {
+            // Must target same muscle
+            if (ex.primary_muscle !== block.exercise.primaryMuscle) return false;
+            
+            // Check if this alternative would also be risky
+            const altRisk = getExerciseInjuryRisk({
+              ...block.exercise,
+              name: ex.name,
+              primaryMuscle: ex.primary_muscle,
+            }, temporaryInjuries);
+            
+            return !altRisk.isRisky || altRisk.severity < 2;
+          });
+          
+          if (safeAlternative) {
+            // Offer the swap
+            console.log(`Found safe alternative for ${block.exercise.name}: ${safeAlternative.name}`);
+          }
+        }
+      }
+      
+      setShowInjuryModal(false);
+    } catch (err) {
+      console.error('Failed to save injury data:', err);
+      setShowInjuryModal(false);
+    }
+  };
+
   const handleTargetSetsChange = async (blockId: string, newTargetSets: number) => {
     // Update local state immediately
     setBlocks(prevBlocks => prevBlocks.map(block => 
@@ -1449,8 +1618,10 @@ export default function WorkoutPage() {
       <div className="max-w-lg mx-auto py-8">
         <ReadinessCheckIn
           onSubmit={handleCheckInComplete}
-          onSkip={handleCheckInComplete}
+          onSkip={() => handleCheckInComplete()}
           onSkipPermanently={handleSkipCheckInPermanently}
+          unit={preferences.units}
+          todayNutrition={todayNutrition || undefined}
         />
       </div>
     );
@@ -1779,10 +1950,10 @@ export default function WorkoutPage() {
                           }`}>
                             ⚠️ {injuryRisk.reasons[0]}
                             <button 
-                              className="ml-2 underline"
+                              className="ml-2 underline font-medium"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // This will trigger the exercise swap in ExerciseCard
+                                setShowSwapForInjury(block.id);
                               }}
                             >
                               Swap exercise?
@@ -1829,7 +2000,10 @@ export default function WorkoutPage() {
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
-                    onExerciseSwap={(newEx) => handleExerciseSwap(block.id, newEx)}
+                    onExerciseSwap={(newEx) => {
+                      handleExerciseSwap(block.id, newEx);
+                      setShowSwapForInjury(null); // Clear after swap
+                    }}
                     onExerciseDelete={() => handleExerciseDelete(block.id)}
                     availableExercises={blocks.map(b => b.exercise).concat(
                       availableExercises.map(ex => ({
@@ -1854,6 +2028,7 @@ export default function WorkoutPage() {
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     warmupSets={isCurrent && block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
                     workingWeight={effectiveWorkingWeight}
+                    showSwapOnMount={showSwapForInjury === block.id}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}
@@ -2330,8 +2505,20 @@ export default function WorkoutPage() {
               )}
             </div>
 
-            <div className="p-4 border-t border-surface-800">
-              <Button onClick={() => setShowInjuryModal(false)} className="w-full">
+            <div className="p-4 border-t border-surface-800 space-y-2">
+              {/* Show risky exercises count */}
+              {temporaryInjuries.length > 0 && (
+                <div className="text-center text-sm text-surface-400 mb-2">
+                  {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).isRisky).length > 0 ? (
+                    <span className="text-warning-400">
+                      ⚠️ {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
+                    </span>
+                  ) : (
+                    <span className="text-success-400">✓ All exercises look safe!</span>
+                  )}
+                </div>
+              )}
+              <Button onClick={handleApplyInjuries} className="w-full">
                 {temporaryInjuries.length > 0 ? 'Apply & Continue Workout' : 'Close'}
               </Button>
             </div>

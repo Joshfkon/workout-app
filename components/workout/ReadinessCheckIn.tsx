@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Card, Slider, Badge } from '@/components/ui';
-import type { PreWorkoutCheckIn, Rating, TemporaryInjury } from '@/types/schema';
+import type { PreWorkoutCheckIn, Rating, TemporaryInjury, WeightUnit } from '@/types/schema';
 import { calculateReadinessScore, getReadinessInterpretation } from '@/services/fatigueEngine';
 
 // Injury area options with display names
@@ -26,22 +26,65 @@ const INJURY_AREAS: { value: TemporaryInjury['area']; label: string; icon: strin
   { value: 'other', label: 'Other', icon: '⚠️' },
 ];
 
+// Convert lbs to kg
+const lbsToKg = (lbs: number) => lbs * 0.453592;
+
+interface TodayNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  targetCalories?: number;
+  targetProtein?: number;
+}
+
 interface ReadinessCheckInProps {
   onSubmit: (checkIn: PreWorkoutCheckIn) => void;
   onSkip?: () => void;
   onSkipPermanently?: () => void;
+  unit?: WeightUnit;
+  todayNutrition?: TodayNutrition;
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: ReadinessCheckInProps) {
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition }: ReadinessCheckInProps) {
   const [sleepHours, setSleepHours] = useState(7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
   const [stressLevel, setStressLevel] = useState<Rating>(3);
-  const [nutritionRating, setNutritionRating] = useState<Rating>(3);
   const [bodyweight, setBodyweight] = useState('');
   const [showInjurySection, setShowInjurySection] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
   const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
   const [selectedSeverity, setSelectedSeverity] = useState<1 | 2 | 3>(1);
+  
+  // Calculate nutrition rating from logged data
+  const getNutritionRating = (): Rating => {
+    if (!todayNutrition) return 3; // Default if no data
+    
+    const { calories, protein, targetCalories, targetProtein } = todayNutrition;
+    
+    // If no targets, just check if they've eaten something
+    if (!targetCalories && !targetProtein) {
+      if (calories === 0) return 1;
+      if (calories < 500) return 2;
+      if (protein >= 50) return 4;
+      return 3;
+    }
+    
+    // Calculate how close they are to targets
+    const caloriePercent = targetCalories ? (calories / targetCalories) * 100 : 100;
+    const proteinPercent = targetProtein ? (protein / targetProtein) * 100 : 100;
+    
+    // Weight protein more heavily for workout performance
+    const score = (caloriePercent * 0.4) + (proteinPercent * 0.6);
+    
+    if (score >= 90) return 5;
+    if (score >= 75) return 4;
+    if (score >= 50) return 3;
+    if (score >= 25) return 2;
+    return 1;
+  };
+  
+  const nutritionRating = getNutritionRating();
 
   const addInjury = () => {
     if (selectedArea) {
@@ -68,12 +111,19 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
   const interpretation = getReadinessInterpretation(readinessScore);
 
   const handleSubmit = () => {
+    // Convert bodyweight to kg if entered in lbs
+    let bodyweightKg: number | null = null;
+    if (bodyweight) {
+      const enteredWeight = parseFloat(bodyweight);
+      bodyweightKg = unit === 'lb' ? lbsToKg(enteredWeight) : enteredWeight;
+    }
+    
     const checkIn: PreWorkoutCheckIn = {
       sleepHours,
       sleepQuality,
       stressLevel,
       nutritionRating,
-      bodyweightKg: bodyweight ? parseFloat(bodyweight) : null,
+      bodyweightKg,
       readinessScore,
       temporaryInjuries: temporaryInjuries.length > 0 ? temporaryInjuries : undefined,
     };
@@ -182,31 +232,61 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
           <p className="text-xs text-surface-500 mt-1">1 = Very High Stress, 5 = Very Low Stress</p>
         </div>
 
-        {/* Nutrition */}
-        <div>
+        {/* Today's Nutrition (from logging) */}
+        <div className="p-4 bg-surface-800/50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-surface-200">
               Today&apos;s Nutrition
             </label>
-            <span className="text-sm text-primary-400">
+            <span className={`text-sm font-medium ${
+              nutritionRating >= 4 ? 'text-success-400' : 
+              nutritionRating >= 3 ? 'text-primary-400' : 
+              nutritionRating >= 2 ? 'text-warning-400' : 'text-danger-400'
+            }`}>
               {getRatingLabel(nutritionRating, 'nutrition')}
             </span>
           </div>
-          <div className="flex gap-2">
-            {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
-              <button
-                key={rating}
-                onClick={() => setNutritionRating(rating)}
-                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  nutritionRating === rating
-                    ? 'bg-primary-500 text-white'
-                    : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                }`}
-              >
-                {rating}
-              </button>
-            ))}
-          </div>
+          {todayNutrition ? (
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="p-2 bg-surface-900/50 rounded">
+                <p className="text-lg font-bold text-surface-100">{todayNutrition.calories}</p>
+                <p className="text-xs text-surface-500">cal</p>
+              </div>
+              <div className="p-2 bg-surface-900/50 rounded">
+                <p className="text-lg font-bold text-primary-400">{todayNutrition.protein}g</p>
+                <p className="text-xs text-surface-500">protein</p>
+              </div>
+              <div className="p-2 bg-surface-900/50 rounded">
+                <p className="text-lg font-bold text-surface-300">{todayNutrition.carbs}g</p>
+                <p className="text-xs text-surface-500">carbs</p>
+              </div>
+              <div className="p-2 bg-surface-900/50 rounded">
+                <p className="text-lg font-bold text-surface-300">{todayNutrition.fat}g</p>
+                <p className="text-xs text-surface-500">fat</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-surface-500">No nutrition logged today. Log your meals to improve this score!</p>
+          )}
+          {todayNutrition && todayNutrition.targetProtein && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all ${
+                    (todayNutrition.protein / todayNutrition.targetProtein) >= 0.9 
+                      ? 'bg-success-500' 
+                      : (todayNutrition.protein / todayNutrition.targetProtein) >= 0.5
+                        ? 'bg-warning-500'
+                        : 'bg-danger-500'
+                  }`}
+                  style={{ width: `${Math.min(100, (todayNutrition.protein / todayNutrition.targetProtein) * 100)}%` }}
+                />
+              </div>
+              <span className="text-xs text-surface-400">
+                {Math.round((todayNutrition.protein / todayNutrition.targetProtein) * 100)}% protein
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Bodyweight (optional) */}
@@ -219,11 +299,11 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
               type="number"
               value={bodyweight}
               onChange={(e) => setBodyweight(e.target.value)}
-              placeholder="e.g., 75.5"
+              placeholder={unit === 'lb' ? 'e.g., 165' : 'e.g., 75.5'}
               step="0.1"
               className="flex-1 px-4 py-2.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder:text-surface-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-            <span className="text-surface-400">kg</span>
+            <span className="text-surface-400">{unit}</span>
           </div>
         </div>
 

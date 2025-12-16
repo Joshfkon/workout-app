@@ -58,6 +58,7 @@ interface ExerciseCardProps {
   hideHeader?: boolean;  // Hide the exercise name header (for mobile when shown in parent)
   warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
   workingWeight?: number;  // Working weight in kg for warmup calculations
+  showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -80,14 +81,22 @@ export const ExerciseCard = memo(function ExerciseCard({
   hideHeader = false,
   warmupSets = [],
   workingWeight = 0,
+  showSwapOnMount = false,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [showRpeGuide, setShowRpeGuide] = useState(false);
-  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(showSwapOnMount);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
+  
+  // Auto-show swap modal when showSwapOnMount changes to true
+  useEffect(() => {
+    if (showSwapOnMount) {
+      setShowSwapModal(true);
+    }
+  }, [showSwapOnMount]);
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
