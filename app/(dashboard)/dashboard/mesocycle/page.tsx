@@ -224,7 +224,23 @@ export default function MesocyclePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Mesocycle</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-surface-100">Mesocycle</h1>
+            <div className="group relative">
+              <button className="w-5 h-5 rounded-full bg-surface-700 hover:bg-surface-600 text-surface-400 text-xs flex items-center justify-center">
+                ?
+              </button>
+              <div className="absolute left-0 top-7 w-72 p-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <p className="text-sm font-medium text-surface-200 mb-1">What is a Mesocycle?</p>
+                <p className="text-xs text-surface-400">
+                  A <span className="text-primary-400">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
+                </p>
+                <p className="text-xs text-surface-500 mt-2">
+                  Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
+                </p>
+              </div>
+            </div>
+          </div>
           <p className="text-surface-400 mt-1">Plan and track your training blocks</p>
         </div>
         <Link href="/dashboard/mesocycle/new">
