@@ -579,6 +579,47 @@ export default function SettingsPage() {
       {/* Subscription Management */}
       <SubscriptionCard />
 
+      {/* Account & Setup */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Account & Setup</CardTitle>
+          <p className="text-sm text-surface-400 mt-1">
+            Re-run the setup wizard or manage your account
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-surface-200">Setup Wizard</p>
+              <p className="text-xs text-surface-500">Re-run the onboarding process to update your profile</p>
+            </div>
+            <Link href="/onboarding">
+              <Button variant="outline" size="sm">
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Re-run Setup
+              </Button>
+            </Link>
+          </div>
+          
+          <div className="flex items-center justify-between p-4 bg-surface-800/50 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-surface-200">Strength Calibration</p>
+              <p className="text-xs text-surface-500">Update your benchmark lifts for better weight recommendations</p>
+            </div>
+            <Link href="/onboarding/calibrate">
+              <Button variant="outline" size="sm">
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Calibrate
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Volume Landmarks */}
       <Card>
         <CardHeader>
