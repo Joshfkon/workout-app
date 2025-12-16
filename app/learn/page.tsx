@@ -10,6 +10,18 @@ const features = [
     howItWorks: 'We analyze your training frequency, session duration, experience level, sleep quality, and stress to recommend the optimal split, volume distribution, and periodization model.',
   },
   {
+    icon: '🤖',
+    title: 'AI Coaching & Personalized Notes',
+    description: 'Get real AI-powered coaching advice before every workout. Our system analyzes your history, body composition, and current mesocycle phase to give context-aware guidance.',
+    howItWorks: 'Using Claude AI, we generate personalized coach notes that consider your workout type, week in mesocycle, recent performance, body composition goals, and training history—like having a knowledgeable coach in your pocket.',
+  },
+  {
+    icon: '🍎',
+    title: 'Complete Nutrition Tracking',
+    description: 'Track your nutrition with our integrated food database powered by USDA FoodData Central. Log meals, scan barcodes, calculate macros, and auto-adjust targets as your body changes.',
+    howItWorks: 'Search 300,000+ foods from the USDA database. Use our smart macro calculator that factors in your goals, activity level, and even GLP-1 medications. Your macro targets automatically recalculate when you log new weight.',
+  },
+  {
     icon: '⚡',
     title: 'Auto-Regulation & Fatigue Management',
     description: 'Our fatigue budget system tracks both systemic (CNS) and local muscle fatigue, adjusting your workout in real-time.',
@@ -17,6 +29,12 @@ const features = [
   },
   {
     icon: '🎯',
+    title: 'S-Tier Exercise Selection',
+    description: 'Not all exercises are created equal. Our database rates every exercise by hypertrophy effectiveness (S/A/B/C tier) based on Stimulus-to-Fatigue Ratio.',
+    howItWorks: 'When building your mesocycle, we prioritize S-tier exercises (high stimulus, low fatigue) like cable work and machines, especially later in mesocycles when fatigue accumulates. Compounds are reserved for when you\'re fresh.',
+  },
+  {
+    icon: '🔄',
     title: 'Smart Rep Range System',
     description: 'Rep ranges adapt based on muscle fiber type dominance, exercise position in workout, periodization phase, and your experience level.',
     howItWorks: 'Fast-twitch muscles (hamstrings, triceps) get 4-8 reps. Slow-twitch (calves, delts) get 12-20. Mixed-fiber (chest, back) get 8-12. Compounds start workouts heavier; isolations finish lighter.',
@@ -26,6 +44,12 @@ const features = [
     title: 'DEXA Tracking & FFMI Analysis',
     description: 'Track body composition scans over time. Calculate your Fat-Free Mass Index to see where you stand against natural limits.',
     howItWorks: 'Enter your DEXA scan data (or estimates). We calculate FFMI (Lean Mass / Height²) and compare you to natural benchmarks (21-25 range). AI coaching suggests bulk, cut, or recomp.',
+  },
+  {
+    icon: '💊',
+    title: 'GLP-1 & Peptide Support',
+    description: 'On Ozempic, Mounjaro, or other GLP-1 medications? Our macro calculator adjusts protein targets to prevent muscle loss during aggressive cuts.',
+    howItWorks: 'Select your medication and we automatically increase protein recommendations (up to 1.2g/lb) and allow larger caloric deficits while keeping you in a safe, muscle-preserving range.',
   },
   {
     icon: '🔄',
@@ -55,6 +79,12 @@ const scienceConcepts = [
     application: 'When building your program, we prioritize high-SFR exercises (machines, cables, isolation work) later in mesocycles when fatigue is high, saving low-SFR compounds for when you&apos;re fresh.',
   },
   {
+    title: 'Evidence-Based Protein Requirements',
+    source: 'Schoenfeld & Aragon Research',
+    explanation: 'Muscle protein synthesis is maximized at 1.6-2.2g/kg of protein daily for trained individuals. Higher protein becomes even more critical during caloric deficits to prevent muscle loss.',
+    application: 'Our macro calculator sets protein at 1g/lb (2.2g/kg) by default—the gold standard for lifters. When on GLP-1 medications, we increase to 1.2g/lb to protect muscle during aggressive cuts.',
+  },
+  {
     title: 'Muscle Fiber Type Dominance',
     source: 'Exercise Physiology Research',
     explanation: 'Muscles have different proportions of fast-twitch (explosive, fatigable) and slow-twitch (endurance, resistant) fibers. Each type responds to different rep ranges.',
@@ -65,6 +95,12 @@ const scienceConcepts = [
     source: 'Powerlifting & Sports Science',
     explanation: 'RPE (Rate of Perceived Exertion) and RIR (Reps in Reserve) let you train to appropriate intensity based on how you feel that day, not a fixed percentage of 1RM that ignores recovery state.',
     application: 'Start mesocycles at 3 RIR (could do 3 more). Progress to 1 RIR by the end. Last sets can go to 0 RIR. This systematic approach ensures progressive overload without burning out.',
+  },
+  {
+    title: 'TDEE & Adaptive Thermogenesis',
+    source: 'Metabolic Research',
+    explanation: 'Your Total Daily Energy Expenditure (TDEE) includes BMR, activity, and exercise. During dieting, metabolic adaptation can reduce TDEE by 10-15%. Tracking weight helps recalibrate.',
+    application: 'Our macro calculator computes TDEE from your stats and activity level. When you log new weight, we automatically recalculate your targets to keep progress on track.',
   },
   {
     title: 'Daily Undulating Periodization (DUP)',
@@ -82,6 +118,12 @@ const scienceConcepts = [
 
 const comparisonTable = [
   { feature: 'AI Mesocycle Generation', hypertracker: true, others: false },
+  { feature: 'AI Coaching Notes', hypertracker: true, others: false },
+  { feature: 'Integrated Nutrition Tracking', hypertracker: true, others: 'partial' },
+  { feature: 'Smart Macro Calculator', hypertracker: true, others: false },
+  { feature: 'GLP-1/Peptide Support', hypertracker: true, others: false },
+  { feature: 'Auto-Update Macros on Weight Change', hypertracker: true, others: false },
+  { feature: 'S-Tier Exercise Scoring', hypertracker: true, others: false },
   { feature: 'Fatigue Budget System', hypertracker: true, others: false },
   { feature: 'Fiber Type Optimization', hypertracker: true, others: false },
   { feature: 'DEXA/FFMI Tracking', hypertracker: true, others: false },
@@ -117,8 +159,8 @@ export default function LearnPage() {
             </span>
           </h1>
           <p className="text-xl text-surface-300 max-w-3xl">
-            We didn&apos;t just build another workout logger. We encoded decades of exercise science research 
-            into algorithms that optimize your training in real-time.
+            We didn&apos;t just build another workout logger. We encoded decades of exercise science and nutrition research 
+            into AI-powered algorithms that optimize your training, diet, and recovery in real-time.
           </p>
         </div>
       </div>

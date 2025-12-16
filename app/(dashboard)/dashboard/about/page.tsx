@@ -11,10 +11,34 @@ const features = [
     competitors: 'Most apps just let you log workouts. We plan them for you.',
   },
   {
+    icon: '🤖',
+    title: 'AI Coaching Notes',
+    description: 'Get personalized coaching advice before every workout. Our AI analyzes your history, body composition, mesocycle phase, and goals to provide context-aware guidance—like having a knowledgeable coach in your pocket.',
+    competitors: 'Other apps give generic tips. We give YOU-specific advice.',
+  },
+  {
+    icon: '🍎',
+    title: 'Complete Nutrition Tracking',
+    description: 'Track your nutrition with USDA FoodData Central—300,000+ foods. Log meals, scan barcodes, and watch your macros update in real-time on your dashboard.',
+    competitors: 'Why switch apps? We integrate training AND nutrition.',
+  },
+  {
+    icon: '🧮',
+    title: 'Smart Macro Calculator',
+    description: 'Our evidence-based macro calculator considers your goals, activity level, training frequency, and even GLP-1 medications. Macros auto-update when you log new weight.',
+    competitors: 'Static macro targets are outdated. Ours adapt.',
+  },
+  {
     icon: '⚡',
     title: 'Auto-Regulation & Fatigue Management',
     description: 'Our fatigue budget system tracks both systemic (CNS) and local muscle fatigue, adjusting your workout in real-time. The Stimulus-to-Fatigue Ratio (SFR) ensures every exercise earns its place.',
     competitors: 'Other apps ignore fatigue. We optimize for sustainable gains.',
+  },
+  {
+    icon: '⭐',
+    title: 'S-Tier Exercise Selection',
+    description: 'Every exercise in our database is rated S/A/B/C for hypertrophy effectiveness. We prioritize high stimulus-to-fatigue exercises so you get more growth with less burnout.',
+    competitors: 'Random exercise generators ignore exercise quality.',
   },
   {
     icon: '🎯',
@@ -27,6 +51,12 @@ const features = [
     title: 'DEXA Tracking & FFMI Analysis',
     description: 'Track body composition scans over time. Calculate your Fat-Free Mass Index to see where you stand against natural limits. Get AI coaching recommendations for optimal recomposition.',
     competitors: 'No other workout app integrates body composition intelligence.',
+  },
+  {
+    icon: '💊',
+    title: 'GLP-1 & Peptide Support',
+    description: 'On Ozempic, Mounjaro, or other GLP-1 medications? We adjust protein targets higher (up to 1.2g/lb) to prevent muscle loss during aggressive cuts. First app to support this.',
+    competitors: 'Most apps don\'t even know what GLP-1s are.',
   },
   {
     icon: '🔄',
@@ -49,7 +79,7 @@ const features = [
   {
     icon: '⏱️',
     title: 'Smart Rest Timer',
-    description: 'Auto-starting rest timers with exercise-specific durations. Compounds get longer rest for strength; isolations get shorter rest for metabolic stress.',
+    description: 'Auto-starting rest timers with exercise-specific durations and audio alerts. Compounds get longer rest for strength; isolations get shorter rest for metabolic stress.',
     competitors: 'Basic timers ignore exercise context.',
   },
   {
@@ -57,24 +87,6 @@ const features = [
     title: 'Set Quality Assessment',
     description: 'Every set is rated as stimulative, effective, or junk based on RPE, RIR, and rep targets. Know exactly which sets drove growth and which were wasted volume.',
     competitors: 'Logging without analysis is just a diary.',
-  },
-  {
-    icon: '🎚️',
-    title: 'Daily Undulating Periodization (DUP)',
-    description: 'Automatically rotate through hypertrophy, strength, and power days within your week. Built-in tempo recommendations and rest period adjustments for each training style.',
-    competitors: 'Linear periodization is outdated for intermediates.',
-  },
-  {
-    icon: '🩹',
-    title: 'Injury-Aware Programming',
-    description: 'Mark injured areas in your profile. HyperTracker automatically excludes problematic exercises and suggests alternatives that work around limitations.',
-    competitors: 'Most apps ignore injury history entirely.',
-  },
-  {
-    icon: '📱',
-    title: 'Mid-Workout Flexibility',
-    description: 'Equipment taken? Add exercises on the fly. Our fatigue system recalculates to ensure you stay within productive limits even when improvising.',
-    competitors: 'Rigid workout plans fail in real gym conditions.',
   },
 ];
 
@@ -96,6 +108,12 @@ function SupportIcon({ value }: { value: SupportLevel }) {
 
 const comparisonPoints: ComparisonRow[] = [
   { feature: 'AI Mesocycle Generation', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
+  { feature: 'AI Coaching Notes', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
+  { feature: 'Integrated Nutrition Tracking', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
+  { feature: 'Smart Macro Calculator', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
+  { feature: 'GLP-1/Peptide Macro Adjustment', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
+  { feature: 'Auto-Update Macros on Weight Change', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
+  { feature: 'S-Tier Exercise Scoring', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'Fatigue Budget System', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'SFR-Based Exercise Selection', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'DEXA/FFMI Tracking', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
@@ -103,8 +121,6 @@ const comparisonPoints: ComparisonRow[] = [
   { feature: 'Muscle Fiber Type Optimization', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
   { feature: 'Volume Landmark Personalization', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
   { feature: 'Set Quality Analysis', hypertracker: true, strongApp: false, hevy: false, fitbod: false },
-  { feature: 'DUP/Block Periodization', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
-  { feature: 'Injury-Aware Substitutions', hypertracker: true, strongApp: false, hevy: false, fitbod: 'partial' },
   { feature: 'Basic Workout Logging', hypertracker: true, strongApp: true, hevy: true, fitbod: true },
   { feature: 'Exercise Library', hypertracker: true, strongApp: true, hevy: true, fitbod: true },
 ];
@@ -118,8 +134,8 @@ export default function AboutPage() {
           HyperTracker
         </h1>
         <p className="text-xl text-surface-300 max-w-2xl mx-auto">
-          The most scientifically advanced hypertrophy training app ever built. 
-          Not just a workout logger—your AI-powered muscle building co-pilot.
+          The most scientifically advanced hypertrophy training and nutrition app ever built. 
+          AI-powered workout planning, smart nutrition tracking, and personalized coaching—all in one place.
         </p>
       </div>
 
@@ -128,17 +144,18 @@ export default function AboutPage() {
         <h2 className="text-2xl font-bold text-surface-100 mb-4">Our Philosophy</h2>
         <div className="space-y-4 text-surface-300">
           <p>
-            <strong className="text-surface-100">Most workout apps are glorified notepads.</strong> They let you log sets and reps, 
-            maybe show a graph, and call it a day. But logging without intelligence is just busywork.
+            <strong className="text-surface-100">Most fitness apps are glorified notepads.</strong> They let you log sets and reps 
+            or track calories in isolation, maybe show a graph, and call it a day. But data without intelligence is just busywork.
           </p>
           <p>
-            HyperTracker is built on the latest exercise science: Renaissance Periodization&apos;s volume landmarks, 
-            Mike Israetel&apos;s SFR concepts, Greg Nuckols&apos; periodization research, and Brad Schoenfeld&apos;s 
-            hypertrophy mechanisms. We&apos;ve encoded decades of research into algorithms that work for YOU.
+            HyperTracker integrates <strong className="text-surface-100">training AND nutrition</strong> into one intelligent system built on the latest science: 
+            Renaissance Periodization&apos;s volume landmarks, Mike Israetel&apos;s SFR concepts, Greg Nuckols&apos; periodization research, 
+            Brad Schoenfeld&apos;s hypertrophy mechanisms, and evidence-based nutrition protocols. Our AI coaching ties it all together.
           </p>
           <p>
-            <strong className="text-surface-100">The result?</strong> Every set you do is intentional. Every exercise is optimized. 
-            Every deload is timed perfectly. No more guessing, no more junk volume, no more spinning your wheels.
+            <strong className="text-surface-100">The result?</strong> Every set you do is intentional. Every exercise is S-tier optimized. 
+            Your macros adapt to your changing body. You get personalized coaching advice before every workout. 
+            No more guessing, no more junk volume, no more spinning your wheels.
           </p>
         </div>
       </Card>
@@ -251,7 +268,13 @@ export default function AboutPage() {
           <Card className="p-5">
             <h3 className="font-semibold text-surface-200 mb-2">Stimulus-to-Fatigue Ratio</h3>
             <p className="text-sm text-surface-400">
-              Not all exercises are equal. Machine flyes give more chest stimulus per unit of fatigue than barbell bench. We optimize your exercise selection accordingly.
+              Not all exercises are equal. Machine flyes give more chest stimulus per unit of fatigue than barbell bench. We rate exercises S/A/B/C and prioritize accordingly.
+            </p>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold text-surface-200 mb-2">Evidence-Based Protein</h3>
+            <p className="text-sm text-surface-400">
+              1g/lb protein for muscle building, increased to 1.2g/lb during aggressive cuts or GLP-1 use. Our macro calculator implements the latest research.
             </p>
           </Card>
           <Card className="p-5">
@@ -264,6 +287,12 @@ export default function AboutPage() {
             <h3 className="font-semibold text-surface-200 mb-2">Autoregulation & RPE</h3>
             <p className="text-sm text-surface-400">
               RIR (Reps in Reserve) targets that progress through your mesocycle. Start at 3 RIR, end at 0-1 RIR. Systematic overload without guessing.
+            </p>
+          </Card>
+          <Card className="p-5">
+            <h3 className="font-semibold text-surface-200 mb-2">Adaptive TDEE</h3>
+            <p className="text-sm text-surface-400">
+              Your metabolism adapts during dieting. When you log new weight, we recalculate your TDEE and macro targets to keep progress on track.
             </p>
           </Card>
         </div>
