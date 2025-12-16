@@ -272,6 +272,10 @@ export default function ImportExportPage() {
         console.log(`Sessions created: ${sessionMap.size}`);
         console.log(`Exercise cache size: ${exerciseCache.size}`);
         
+        // Debug: Show first 5 exercises in cache
+        const cacheEntries = Array.from(exerciseCache.entries()).slice(0, 5);
+        console.log('Sample cached exercises:', cacheEntries);
+        
         setImportProgress({ current: 3, total: 5, currentItem: 'Step 4/5: Creating exercise blocks...' });
         
         // STEP 4: Batch insert all exercise blocks
@@ -286,17 +290,28 @@ export default function ImportExportPage() {
           _exercise_name: string;
         }> = [];
         
+        let missingExercises = 0;
+        let missingSessions = 0;
+        const missingExerciseNames = new Set<string>();
+        
         for (const { workout, date } of validWorkouts) {
           const key = `${workout.date}_${workout.workoutName}`;
           const sessionId = sessionMap.get(key);
-          if (!sessionId) continue;
+          if (!sessionId) {
+            missingSessions++;
+            continue;
+          }
           
           let order = 1;
           for (const exercise of workout.exercises) {
             if (!exercise.sets || exercise.sets.length === 0) continue;
             
             const exerciseId = exerciseCache.get(exercise.name.toLowerCase().trim());
-            if (!exerciseId) continue;
+            if (!exerciseId) {
+              missingExercises++;
+              missingExerciseNames.add(exercise.name);
+              continue;
+            }
             
             allBlocks.push({
               workout_session_id: sessionId,
@@ -309,6 +324,12 @@ export default function ImportExportPage() {
               _exercise_name: exercise.name,
             });
           }
+        }
+        
+        console.log(`Missing sessions: ${missingSessions}`);
+        console.log(`Missing exercises: ${missingExercises}`);
+        if (missingExerciseNames.size > 0) {
+          console.log('Sample missing exercise names:', Array.from(missingExerciseNames).slice(0, 10));
         }
         
         // Insert blocks in batches and track their IDs
