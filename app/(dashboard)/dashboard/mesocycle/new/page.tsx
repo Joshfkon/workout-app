@@ -875,30 +875,45 @@ export default function NewMesocyclePage() {
                     Why {splitType}?
                   </h4>
                   <p className="text-sm text-surface-400 mb-3">
-                    {daysPerWeek <= 3 
-                      ? `With ${daysPerWeek} training days, each muscle needs to be hit in fewer sessions. ${splitType === 'Full Body' ? 'Full Body allows you to train each muscle 2-3x/week for optimal frequency.' : 'This split maximizes your limited days.'}`
-                      : daysPerWeek === 4
-                      ? `4 days is ideal for Upper/Lower splits, giving each muscle group 2x/week frequency with adequate recovery between sessions.`
-                      : `With ${daysPerWeek} training days, PPL (Push/Pull/Legs) allows higher volume per muscle group while maintaining good frequency.`
+                    {splitType === 'Full Body' 
+                      ? `Full Body training ${daysPerWeek}x/week allows you to train each muscle 2-3x per week for optimal protein synthesis and frequency. Each session hits all major muscle groups with moderate volume.`
+                      : splitType === 'Upper/Lower'
+                      ? `Upper/Lower splits hit each muscle group 2x/week with ${daysPerWeek} training days. This provides excellent recovery (72+ hours between sessions) while maintaining high frequency for growth.`
+                      : splitType === 'PPL'
+                      ? `Push/Pull/Legs ${daysPerWeek >= 6 ? '2x/week' : '1x/week'} allows higher volume per muscle group per session. Push days hit chest/shoulders/triceps, Pull days hit back/biceps, and Leg days cover the lower body.`
+                      : splitType === 'Arnold'
+                      ? `The Arnold split groups Chest/Back, Shoulders/Arms, and Legs for ${daysPerWeek} training days. This classic approach allows high volume with antagonist supersets.`
+                      : `The Bro Split dedicates entire sessions to single muscle groups, allowing maximum volume per muscle but lower frequency (1x/week per muscle).`
                     }
                   </p>
                   <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="p-2 bg-surface-800 rounded text-center">
                       <p className="text-surface-500">Frequency</p>
                       <p className="text-surface-200 font-medium">
-                        {splitType === 'Full Body' ? '2-3x' : splitType === 'Upper/Lower' ? '2x' : '1-2x'}/week per muscle
+                        {splitType === 'Full Body' ? '2-3x' 
+                          : splitType === 'Upper/Lower' ? '2x' 
+                          : splitType === 'PPL' ? (daysPerWeek >= 6 ? '2x' : '1x')
+                          : splitType === 'Arnold' ? '2x'
+                          : '1x'}/week per muscle
                       </p>
                     </div>
                     <div className="p-2 bg-surface-800 rounded text-center">
                       <p className="text-surface-500">Recovery</p>
                       <p className="text-surface-200 font-medium">
-                        {splitType === 'Full Body' ? '48h' : splitType === 'Upper/Lower' ? '72h' : '96-168h'} between
+                        {splitType === 'Full Body' ? '48h' 
+                          : splitType === 'Upper/Lower' ? '72h' 
+                          : splitType === 'PPL' ? (daysPerWeek >= 6 ? '72h' : '168h')
+                          : splitType === 'Arnold' ? '72h'
+                          : '168h'} between
                       </p>
                     </div>
                     <div className="p-2 bg-surface-800 rounded text-center">
                       <p className="text-surface-500">Volume/Session</p>
                       <p className="text-surface-200 font-medium">
-                        {splitType === 'Full Body' ? 'Moderate' : splitType === 'Upper/Lower' ? 'Moderate' : 'High'}
+                        {splitType === 'Full Body' ? 'Moderate' 
+                          : splitType === 'Upper/Lower' ? 'Moderate' 
+                          : splitType === 'Bro Split' ? 'Very High'
+                          : 'High'}
                       </p>
                     </div>
                   </div>
