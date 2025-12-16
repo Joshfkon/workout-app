@@ -35,6 +35,10 @@ export default function ImportExportPage() {
   const [deleteType, setDeleteType] = useState<'workouts' | 'nutrition' | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; count: number } | null>(null);
+  
+  // Fix categories state
+  const [isFixingCategories, setIsFixingCategories] = useState(false);
+  const [fixResult, setFixResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -139,6 +143,75 @@ export default function ImportExportPage() {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
       setDeleteType(null);
+    }
+  };
+
+  const handleFixExerciseCategories = async () => {
+    setIsFixingCategories(true);
+    setFixResult(null);
+    
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      setFixResult({ success: false, message: 'Not logged in' });
+      setIsFixingCategories(false);
+      return;
+    }
+    
+    try {
+      // Get all custom exercises created by this user
+      const { data: exercises, error: fetchError } = await supabase
+        .from('exercises')
+        .select('id, name, primary_muscle')
+        .eq('is_custom', true)
+        .eq('created_by', user.id);
+      
+      if (fetchError) throw fetchError;
+      
+      if (!exercises || exercises.length === 0) {
+        setFixResult({ success: true, message: 'No custom exercises found to fix.' });
+        setIsFixingCategories(false);
+        return;
+      }
+      
+      let fixedCount = 0;
+      const updates: { id: string; name: string; oldMuscle: string; newMuscle: string }[] = [];
+      
+      for (const exercise of exercises) {
+        const inferredMuscle = inferMuscleFromName(exercise.name);
+        if (inferredMuscle !== exercise.primary_muscle) {
+          updates.push({
+            id: exercise.id,
+            name: exercise.name,
+            oldMuscle: exercise.primary_muscle,
+            newMuscle: inferredMuscle,
+          });
+        }
+      }
+      
+      // Update exercises in batches
+      for (const update of updates) {
+        const { error: updateError } = await supabase
+          .from('exercises')
+          .update({ primary_muscle: update.newMuscle })
+          .eq('id', update.id);
+        
+        if (!updateError) {
+          fixedCount++;
+          console.log(`Fixed: ${update.name} from ${update.oldMuscle} to ${update.newMuscle}`);
+        }
+      }
+      
+      setFixResult({ 
+        success: true, 
+        message: `✅ Fixed ${fixedCount} of ${exercises.length} exercises. ${exercises.length - updates.length} were already correct.`
+      });
+    } catch (error) {
+      console.error('Fix categories error:', error);
+      setFixResult({ success: false, message: '❌ Failed to fix exercise categories. Please try again.' });
+    } finally {
+      setIsFixingCategories(false);
     }
   };
 
@@ -890,6 +963,50 @@ export default function ImportExportPage() {
             </CardContent>
           </Card>
 
+          {/* Data Maintenance */}
+          <Card className="border-primary-500/30">
+            <CardHeader>
+              <CardTitle className="text-primary-400">🔧 Data Maintenance</CardTitle>
+              <p className="text-sm text-surface-400 mt-1">
+                Tools to fix and maintain your exercise data
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {fixResult && (
+                <div className={`p-4 rounded-lg ${
+                  fixResult.success 
+                    ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+                    : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                }`}>
+                  {fixResult.message}
+                </div>
+              )}
+
+              <div className="p-4 bg-surface-800 rounded-lg">
+                <h4 className="font-medium text-surface-200 mb-2">Fix Exercise Categories</h4>
+                <p className="text-sm text-surface-400 mb-3">
+                  Re-categorize custom exercises that may have been assigned the wrong muscle group during import.
+                  This will analyze exercise names and fix their primary muscle assignments.
+                </p>
+                <Button 
+                  variant="outline" 
+                  className="border-primary-500/50 text-primary-400 hover:bg-primary-500/10"
+                  onClick={handleFixExerciseCategories}
+                  disabled={isFixingCategories}
+                >
+                  {isFixingCategories ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin mr-2" />
+                      Fixing Categories...
+                    </>
+                  ) : (
+                    '🏋️ Fix Exercise Categories'
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Danger Zone */}
           <Card className="border-danger-500/30">
             <CardHeader>
@@ -1011,35 +1128,101 @@ function parseDate(dateStr: string): string | null {
 function inferMuscleFromName(exerciseName: string): string {
   const name = exerciseName.toLowerCase();
   
-  if (name.includes('bench') || name.includes('chest') || name.includes('fly') || name.includes('push')) {
-    return 'chest';
+  // Abs - check first to catch crunch, ab, sit-up
+  if (name.includes('crunch') || name.includes('ab ') || name.includes('abdominal') || 
+      name.includes('sit-up') || name.includes('situp') || name.includes('plank') ||
+      name.includes('leg raise') && !name.includes('calf')) {
+    return 'abs';
   }
-  if (name.includes('row') || name.includes('lat') || name.includes('pull')) {
-    return 'back';
+  
+  // Traps - check before back
+  if (name.includes('shrug') || name.includes('trap bar') && !name.includes('deadlift')) {
+    return 'traps';
   }
-  if (name.includes('squat') || name.includes('leg press') || name.includes('extension') || name.includes('quad')) {
-    return 'quads';
-  }
-  if (name.includes('deadlift') || name.includes('curl') && name.includes('leg') || name.includes('hamstring')) {
-    return 'hamstrings';
-  }
-  if (name.includes('shoulder') || name.includes('press') || name.includes('lateral') || name.includes('delt')) {
-    return 'shoulders';
-  }
-  if (name.includes('bicep') || name.includes('curl') && !name.includes('leg')) {
-    return 'biceps';
-  }
-  if (name.includes('tricep') || name.includes('pushdown') || name.includes('extension') && !name.includes('leg')) {
+  
+  // Triceps - check before chest (skullcrusher, pushdown, etc.)
+  if (name.includes('tricep') || name.includes('skullcrusher') || name.includes('skull crusher') ||
+      name.includes('pushdown') || name.includes('kickback') || 
+      (name.includes('extension') && !name.includes('leg') && !name.includes('back'))) {
     return 'triceps';
   }
-  if (name.includes('calf') || name.includes('raise') && name.includes('calf')) {
-    return 'calves';
+  
+  // Rear delts / Back - check "reverse fly" before general "fly"
+  if (name.includes('reverse fly') || name.includes('rear delt') || name.includes('face pull')) {
+    return 'shoulders'; // Rear delts are part of shoulders
   }
-  if (name.includes('glute') || name.includes('hip thrust')) {
+  
+  // Back exercises
+  if (name.includes('row') || name.includes('lat pull') || name.includes('pulldown') || 
+      name.includes('pull-up') || name.includes('pullup') || name.includes('chin-up') ||
+      name.includes('chinup') || name.includes('back extension') || name.includes('hyper')) {
+    return 'back';
+  }
+  
+  // Chest - be more specific, don't just match "fly" or "push"
+  if (name.includes('bench press') || name.includes('chest press') || name.includes('chest fly') || 
+      name.includes('pec deck') || name.includes('pec fly') || name.includes('cable fly') ||
+      name.includes('dumbbell fly') || name.includes('incline press') || name.includes('decline press') ||
+      (name.includes('fly') && (name.includes('chest') || name.includes('pec') || name.includes('cable')))) {
+    return 'chest';
+  }
+  
+  // Hip adductors/abductors
+  if (name.includes('adductor') || name.includes('adduction')) {
+    return 'adductors';
+  }
+  if (name.includes('abductor') || name.includes('abduction')) {
+    return 'glutes'; // Hip abductors are basically glutes
+  }
+  
+  // Glutes
+  if (name.includes('glute') || name.includes('hip thrust') || name.includes('kickback') && name.includes('glute')) {
     return 'glutes';
   }
   
-  return 'chest'; // Default
+  // Shoulders - front raise, lateral raise, overhead press
+  if (name.includes('shoulder') || name.includes('lateral raise') || name.includes('front raise') ||
+      name.includes('side raise') || name.includes('delt') || name.includes('military') ||
+      name.includes('overhead press') || name.includes('ohp')) {
+    return 'shoulders';
+  }
+  
+  // Hamstrings
+  if (name.includes('hamstring') || name.includes('leg curl') || name.includes('lying curl') ||
+      name.includes('seated curl') && name.includes('leg') || name.includes('rdl') ||
+      name.includes('romanian') || name.includes('stiff leg')) {
+    return 'hamstrings';
+  }
+  
+  // Quads
+  if (name.includes('squat') || name.includes('leg press') || name.includes('leg extension') ||
+      name.includes('quad') || name.includes('lunge') || name.includes('hack')) {
+    return 'quads';
+  }
+  
+  // Biceps
+  if (name.includes('bicep') || (name.includes('curl') && !name.includes('leg') && !name.includes('ham'))) {
+    return 'biceps';
+  }
+  
+  // Calves
+  if (name.includes('calf') || name.includes('calves') || 
+      (name.includes('raise') && (name.includes('calf') || name.includes('heel')))) {
+    return 'calves';
+  }
+  
+  // Forearms
+  if (name.includes('forearm') || name.includes('wrist curl') || name.includes('grip')) {
+    return 'forearms';
+  }
+  
+  // Deadlift variations
+  if (name.includes('deadlift') || name.includes('trap bar')) {
+    return 'hamstrings'; // Primary for conventional deadlift
+  }
+  
+  // Default to back (more common than chest as a catch-all)
+  return 'back';
 }
 
 function inferMechanicFromName(exerciseName: string): string {
