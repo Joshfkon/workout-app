@@ -295,6 +295,7 @@ export default function ImportExportPage() {
           target_rir: number;
           _workout_key: string;
           _exercise_name: string;
+          _valid_sets: Array<{ weight: number; weightUnit: 'kg' | 'lb'; reps: number; rpe?: number; isWarmup?: boolean }>;
         }> = [];
         
         let missingExercises = 0;
@@ -311,7 +312,11 @@ export default function ImportExportPage() {
           
           let order = 1;
           for (const exercise of workout.exercises) {
-            if (!exercise.sets || exercise.sets.length === 0) continue;
+            if (!exercise.sets) continue;
+            
+            // Filter to only valid sets (reps >= 1)
+            const validSets = exercise.sets.filter(s => s.reps && s.reps >= 1);
+            if (validSets.length === 0) continue;
             
             const exerciseId = exerciseCache.get(exercise.name.toLowerCase().trim());
             if (!exerciseId) {
@@ -320,19 +325,18 @@ export default function ImportExportPage() {
               continue;
             }
             
-            // Only add block if there are sets (target_sets must be >= 1)
-            if (exercise.sets.length > 0) {
-              allBlocks.push({
-                workout_session_id: sessionId,
-                exercise_id: exerciseId,
-                order: order++,
-                target_sets: Math.max(1, exercise.sets.length),
-                target_rep_range: [8, 12],
-                target_rir: 2,
-                _workout_key: key,
-                _exercise_name: exercise.name,
-              });
-            }
+            // Add block with count of valid sets only
+            allBlocks.push({
+              workout_session_id: sessionId,
+              exercise_id: exerciseId,
+              order: order++,
+              target_sets: validSets.length,
+              target_rep_range: [8, 12],
+              target_rir: 2,
+              _workout_key: key,
+              _exercise_name: exercise.name,
+              _valid_sets: validSets, // Store valid sets for later use
+            });
           }
         }
         
@@ -349,7 +353,7 @@ export default function ImportExportPage() {
         
         for (let i = 0; i < allBlocks.length; i += BATCH_SIZE) {
           const batch = allBlocks.slice(i, i + BATCH_SIZE);
-          const blocksToInsert = batch.map(({ _workout_key, _exercise_name, ...block }) => block);
+          const blocksToInsert = batch.map(({ _workout_key, _exercise_name, _valid_sets, ...block }) => block);
           
           const { data: blocks, error: blockError } = await supabase
             .from('exercise_blocks')
@@ -375,7 +379,7 @@ export default function ImportExportPage() {
         
         setImportProgress({ current: 4, total: 5, currentItem: 'Step 5/5: Creating set logs...' });
         
-        // STEP 5: Batch insert all set logs
+        // STEP 5: Batch insert all set logs using pre-validated sets from allBlocks
         const allSetLogs: Array<{
           exercise_block_id: string;
           set_number: number;
@@ -386,35 +390,33 @@ export default function ImportExportPage() {
           logged_at: string;
         }> = [];
         
-        for (const { workout, date } of validWorkouts) {
-          const key = `${workout.date}_${workout.workoutName}`;
-          const sessionId = sessionMap.get(key);
-          if (!sessionId) continue;
+        // Use the pre-validated sets we stored in allBlocks
+        for (const block of allBlocks) {
+          const blockId = blockMap.get(`${block.workout_session_id}_${block._exercise_name.toLowerCase()}`);
+          if (!blockId) continue;
           
-          for (const exercise of workout.exercises) {
-            if (!exercise.sets || exercise.sets.length === 0) continue;
+          // Get the date from the workout key
+          const datePart = block._workout_key.split('_')[0];
+          const parsedDate = new Date(datePart);
+          const date = isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString();
+          
+          let setNumber = 1;
+          for (const set of block._valid_sets) {
+            // Already pre-validated, but double-check
+            if (!set.reps || set.reps < 1) continue;
             
-            const blockId = blockMap.get(`${sessionId}_${exercise.name.toLowerCase()}`);
-            if (!blockId) continue;
-            
-            let setNumber = 1;
-            for (const set of exercise.sets) {
-              // Skip sets with invalid reps (0 or null)
-              if (!set.reps || set.reps < 1) continue;
-              
-              const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
-              // RPE must be between 1-10, default to 7 if not provided or invalid
-              const rpeValue = set.rpe && set.rpe >= 1 && set.rpe <= 10 ? set.rpe : 7;
-              allSetLogs.push({
-                exercise_block_id: blockId,
-                set_number: setNumber++,
-                weight_kg: Math.max(0, weightKg || 0), // weight can be 0 (bodyweight)
-                reps: set.reps,
-                rpe: rpeValue,
-                is_warmup: set.isWarmup || false,
-                logged_at: date,
-              });
-            }
+            const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
+            // RPE must be between 1-10, default to 7 if not provided or invalid
+            const rpeValue = set.rpe && set.rpe >= 1 && set.rpe <= 10 ? set.rpe : 7;
+            allSetLogs.push({
+              exercise_block_id: blockId,
+              set_number: setNumber++,
+              weight_kg: Math.max(0, weightKg || 0), // weight can be 0 (bodyweight)
+              reps: set.reps,
+              rpe: rpeValue,
+              is_warmup: set.isWarmup || false,
+              logged_at: date,
+            });
           }
         }
         
