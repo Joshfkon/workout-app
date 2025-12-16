@@ -37,6 +37,9 @@ export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   glutes: 'mixed',
   calves: 'slow',          // Notoriously slow-twitch, need high reps
   abs: 'slow',             // Postural muscles, endurance-oriented
+  adductors: 'mixed',      // Inner thigh muscles
+  forearms: 'slow',        // Grip endurance, need higher reps
+  traps: 'mixed',          // Upper back/neck
 };
 
 // ============================================================

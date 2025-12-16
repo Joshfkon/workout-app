@@ -668,6 +668,9 @@ function calculateVolumeDistribution(
       glutes: Math.min(daysPerWeek, 2),
       calves: Math.min(daysPerWeek, 2),
       abs: Math.min(daysPerWeek, 2),
+      adductors: Math.min(daysPerWeek, 2),
+      forearms: Math.min(daysPerWeek, 2),
+      traps: Math.min(daysPerWeek, 2),
     },
     'Upper/Lower': {
       chest: 2,
@@ -680,6 +683,9 @@ function calculateVolumeDistribution(
       glutes: 2,
       calves: 2,
       abs: 2,
+      adductors: 2,
+      forearms: 2,
+      traps: 2,
     },
     PPL: {
       chest: daysPerWeek >= 6 ? 2 : 1,
@@ -692,6 +698,9 @@ function calculateVolumeDistribution(
       glutes: daysPerWeek >= 6 ? 2 : 1,
       calves: daysPerWeek >= 6 ? 2 : 1,
       abs: daysPerWeek >= 6 ? 2 : 1,
+      adductors: daysPerWeek >= 6 ? 2 : 1,
+      forearms: daysPerWeek >= 6 ? 2 : 1,
+      traps: daysPerWeek >= 6 ? 2 : 1,
     },
     Arnold: {
       chest: 2,
@@ -704,6 +713,9 @@ function calculateVolumeDistribution(
       glutes: 2,
       calves: 2,
       abs: 2,
+      adductors: 2,
+      forearms: 2,
+      traps: 2,
     },
     'Bro Split': {
       chest: 1,
@@ -716,6 +728,9 @@ function calculateVolumeDistribution(
       glutes: 1,
       calves: 1,
       abs: 1,
+      adductors: 1,
+      forearms: 1,
+      traps: 1,
     },
   };
 

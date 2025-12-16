@@ -33,6 +33,9 @@ export const MUSCLE_FIBER_PROFILE: Record<MuscleGroup, FiberType> = {
   glutes: 'mixed',
   calves: 'slow',
   abs: 'slow',
+  adductors: 'mixed',
+  forearms: 'slow',
+  traps: 'mixed',
 };
 
 // ============================================================

@@ -597,24 +597,29 @@ export function calculateVolumeDistribution(
     'Full Body': {
       chest: Math.min(daysPerWeek, 3), back: Math.min(daysPerWeek, 3), shoulders: Math.min(daysPerWeek, 3),
       biceps: Math.min(daysPerWeek, 2), triceps: Math.min(daysPerWeek, 2), quads: Math.min(daysPerWeek, 3),
-      hamstrings: Math.min(daysPerWeek, 2), glutes: Math.min(daysPerWeek, 2), calves: Math.min(daysPerWeek, 2), abs: Math.min(daysPerWeek, 2)
+      hamstrings: Math.min(daysPerWeek, 2), glutes: Math.min(daysPerWeek, 2), calves: Math.min(daysPerWeek, 2), abs: Math.min(daysPerWeek, 2),
+      adductors: Math.min(daysPerWeek, 2), forearms: Math.min(daysPerWeek, 2), traps: Math.min(daysPerWeek, 2)
     },
     'Upper/Lower': {
       chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
-      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2
+      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
+      adductors: 2, forearms: 2, traps: 2
     },
     'PPL': {
       chest: daysPerWeek >= 6 ? 2 : 1, back: daysPerWeek >= 6 ? 2 : 1, shoulders: daysPerWeek >= 6 ? 2 : 1,
       biceps: daysPerWeek >= 6 ? 2 : 1, triceps: daysPerWeek >= 6 ? 2 : 1, quads: daysPerWeek >= 6 ? 2 : 1,
-      hamstrings: daysPerWeek >= 6 ? 2 : 1, glutes: daysPerWeek >= 6 ? 2 : 1, calves: daysPerWeek >= 6 ? 2 : 1, abs: daysPerWeek >= 6 ? 2 : 1
+      hamstrings: daysPerWeek >= 6 ? 2 : 1, glutes: daysPerWeek >= 6 ? 2 : 1, calves: daysPerWeek >= 6 ? 2 : 1, abs: daysPerWeek >= 6 ? 2 : 1,
+      adductors: daysPerWeek >= 6 ? 2 : 1, forearms: daysPerWeek >= 6 ? 2 : 1, traps: daysPerWeek >= 6 ? 2 : 1
     },
     'Arnold': {
       chest: 2, back: 2, shoulders: 2, biceps: 2, triceps: 2,
-      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2
+      quads: 2, hamstrings: 2, glutes: 2, calves: 2, abs: 2,
+      adductors: 2, forearms: 2, traps: 2
     },
     'Bro Split': {
       chest: 1, back: 1, shoulders: 1, biceps: 1, triceps: 1,
-      quads: 1, hamstrings: 1, glutes: 1, calves: 1, abs: 1
+      quads: 1, hamstrings: 1, glutes: 1, calves: 1, abs: 1,
+      adductors: 1, forearms: 1, traps: 1
     }
   };
   

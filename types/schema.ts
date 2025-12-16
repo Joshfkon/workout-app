@@ -1050,6 +1050,9 @@ export const MUSCLE_GROUPS = [
   'glutes',
   'calves',
   'abs',
+  'adductors',
+  'forearms',
+  'traps',
 ] as const;
 
 export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
