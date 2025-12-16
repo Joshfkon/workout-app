@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Card, Badge, Button } from '@/components/ui';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -67,13 +68,17 @@ function calculateE1RM(weight: number, reps: number): number {
   return weight * (36 / (37 - reps));
 }
 
-export default function HistoryPage() {
+function HistoryPageContent() {
+  const searchParams = useSearchParams();
+  const exerciseIdParam = searchParams.get('exercise');
+  
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
+  const [autoFetchedExercise, setAutoFetchedExercise] = useState(false);
   const { preferences } = useUserPreferences();
   const unit = preferences.units;
 
@@ -352,6 +357,34 @@ export default function HistoryPage() {
 
     fetchHistory();
   }, []);
+
+  // Auto-fetch exercise from query parameter (from analytics page)
+  useEffect(() => {
+    async function autoFetchExercise() {
+      if (!exerciseIdParam || autoFetchedExercise || isLoading) return;
+      
+      setAutoFetchedExercise(true);
+      
+      try {
+        const supabase = createUntypedClient();
+        
+        // Get exercise details
+        const { data: exercise } = await supabase
+          .from('exercises')
+          .select('id, name, primary_muscle')
+          .eq('id', exerciseIdParam)
+          .single();
+        
+        if (exercise) {
+          fetchExerciseHistory(exercise.id, exercise.name, exercise.primary_muscle);
+        }
+      } catch (err) {
+        console.error('Failed to auto-fetch exercise:', err);
+      }
+    }
+    
+    autoFetchExercise();
+  }, [exerciseIdParam, autoFetchedExercise, isLoading]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -748,5 +781,17 @@ export default function HistoryPage() {
       {/* Exercise History Modal */}
       <ExerciseHistoryModal />
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <HistoryPageContent />
+    </Suspense>
   );
 }

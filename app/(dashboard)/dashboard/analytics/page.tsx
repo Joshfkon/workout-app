@@ -64,16 +64,91 @@ interface MuscleVolumeData {
   muscle: string;
   sets: number;
   workouts: number;
+  exercises: Array<{
+    id: string;
+    name: string;
+    sets: number;
+    bestE1RM: number;
+  }>;
 }
 
 interface ExercisePerformance {
   exerciseId: string;
   exerciseName: string;
+  primaryMuscle: string;
   bestWeight: number;
   bestReps: number;
   estimatedE1RM: number;
   totalSets: number;
 }
+
+// Strength standards relative to bodyweight (intermediate male, approximate)
+// These are multipliers for 1RM relative to bodyweight
+const STRENGTH_STANDARDS: Record<string, number> = {
+  // Compound exercises
+  'Barbell Back Squat': 1.5,
+  'Front Squat': 1.2,
+  'Conventional Deadlift': 1.75,
+  'Sumo Deadlift': 1.75,
+  'Romanian Deadlift': 1.2,
+  'Barbell Bench Press': 1.25,
+  'Incline Barbell Press': 1.0,
+  'Standing Overhead Press': 0.75,
+  'Barbell Row': 1.0,
+  'Pendulum Squat': 1.4,
+  'Hack Squat': 1.4,
+  'Leg Press': 2.5,
+  'Hip Thrust': 1.5,
+  // Isolation exercises
+  'Barbell Curl': 0.4,
+  'EZ Bar Curl': 0.4,
+  'Dumbbell Curl': 0.2, // Per arm
+  'Lat Pulldown': 0.9,
+  'Cable Row': 0.8,
+  'Leg Extension': 0.6,
+  'Leg Curl': 0.5,
+  'Lying Leg Curl': 0.5,
+  'Seated Leg Curl': 0.5,
+  'Tricep Pushdown': 0.35,
+  'Lateral Raise': 0.1, // Per arm
+  'Face Pull': 0.3,
+};
+
+// Default strength standard for unknown exercises based on muscle group
+const DEFAULT_STANDARDS: Record<string, number> = {
+  chest: 1.0,
+  back: 0.9,
+  shoulders: 0.6,
+  biceps: 0.35,
+  triceps: 0.5,
+  quads: 1.3,
+  hamstrings: 0.8,
+  glutes: 1.2,
+  calves: 1.0,
+  abs: 0.5,
+  adductors: 0.6,
+  forearms: 0.3,
+  traps: 0.5,
+};
+
+// Optimal weekly sets by experience level
+const OPTIMAL_VOLUME: Record<string, Record<string, number>> = {
+  novice: {
+    chest: 10, back: 10, shoulders: 8, biceps: 6, triceps: 6,
+    quads: 10, hamstrings: 8, glutes: 8, calves: 8, abs: 6,
+    adductors: 6, forearms: 4, traps: 6,
+  },
+  intermediate: {
+    chest: 14, back: 16, shoulders: 12, biceps: 10, triceps: 10,
+    quads: 14, hamstrings: 12, glutes: 12, calves: 12, abs: 10,
+    adductors: 8, forearms: 6, traps: 8,
+  },
+  advanced: {
+    chest: 20, back: 22, shoulders: 16, biceps: 14, triceps: 14,
+    quads: 20, hamstrings: 16, glutes: 16, calves: 16, abs: 14,
+    adductors: 10, forearms: 8, traps: 10,
+  },
+};
 
 interface AnalyticsData {
   totalWorkouts: number;
@@ -136,6 +211,8 @@ export default function AnalyticsPage() {
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
+  const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
 
   // Unit display helpers
   const units = preferences?.units || 'lb';
@@ -358,7 +435,7 @@ export default function AnalyticsPage() {
         let totalRpeSum = 0;
         let rpeCount = 0;
         const durations: number[] = [];
-        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string> }>();
+        const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string>; exercises: Map<string, { id: string; name: string; sets: number; bestE1RM: number }> }>();
         const exercisePerformanceMap = new Map<string, ExercisePerformance>();
 
         workoutSessions.forEach((session: any) => {
@@ -385,22 +462,35 @@ export default function AnalyticsPage() {
               const workingSets = block.set_logs.filter((s: any) => !s.is_warmup);
 
               if (!muscleVolumeMap.has(muscle)) {
-                muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set() });
+                muscleVolumeMap.set(muscle, { sets: 0, workouts: new Set(), exercises: new Map() });
               }
               const muscleData = muscleVolumeMap.get(muscle)!;
               muscleData.sets += workingSets.length;
               muscleData.workouts.add(session.id);
+
+              // Track exercises within each muscle group
+              if (!muscleData.exercises.has(exerciseId)) {
+                muscleData.exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: 0, bestE1RM: 0 });
+              }
+              const exInMuscle = muscleData.exercises.get(exerciseId)!;
+              exInMuscle.sets += workingSets.length;
 
               workingSets.forEach((set: any) => {
                 totalSets++;
                 totalVolume += set.weight_kg * set.reps;
 
                 const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                
+                // Update best E1RM for this exercise in muscle group
+                if (e1rm > exInMuscle.bestE1RM) {
+                  exInMuscle.bestE1RM = e1rm;
+                }
 
                 if (!exercisePerformanceMap.has(exerciseId)) {
                   exercisePerformanceMap.set(exerciseId, {
                     exerciseId,
                     exerciseName,
+                    primaryMuscle: muscle,
                     bestWeight: set.weight_kg,
                     bestReps: set.reps,
                     estimatedE1RM: e1rm,
@@ -467,6 +557,8 @@ export default function AnalyticsPage() {
             muscle,
             sets: data.sets,
             workouts: data.workouts.size,
+            exercises: Array.from(data.exercises.values())
+              .sort((a, b) => b.sets - a.sets),
           }))
           .sort((a, b) => b.sets - a.sets);
 
@@ -969,26 +1061,92 @@ export default function AnalyticsPage() {
                 {/* Volume by Muscle */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Volume by Muscle Group</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Volume by Muscle Group</CardTitle>
+                      <span className="text-xs text-surface-500">Click to expand</span>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {analytics.weeklyMuscleVolume.slice(0, 8).map((muscle) => {
+                      {analytics.weeklyMuscleVolume.slice(0, 10).map((muscle) => {
                         const maxSets = Math.max(...analytics.weeklyMuscleVolume.map(m => m.sets));
                         const percentage = maxSets > 0 ? (muscle.sets / maxSets) * 100 : 0;
+                        const optimalSets = OPTIMAL_VOLUME[userProfile?.experience || 'intermediate'][muscle.muscle] || 12;
+                        const volumeStatus = muscle.sets >= optimalSets ? 'optimal' : muscle.sets >= optimalSets * 0.7 ? 'good' : 'low';
+                        const isExpanded = expandedMuscles.has(muscle.muscle);
 
                         return (
                           <div key={muscle.muscle}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium text-surface-200 capitalize">{muscle.muscle}</span>
-                              <span className="text-sm text-surface-400">{muscle.sets} sets</span>
-                            </div>
-                            <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all duration-500"
-                                style={{ width: `${percentage}%` }}
-                              />
-                            </div>
+                            <button
+                              onClick={() => {
+                                const newExpanded = new Set(expandedMuscles);
+                                if (isExpanded) {
+                                  newExpanded.delete(muscle.muscle);
+                                } else {
+                                  newExpanded.add(muscle.muscle);
+                                }
+                                setExpandedMuscles(newExpanded);
+                              }}
+                              className="w-full text-left"
+                            >
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <svg 
+                                    className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                  <span className="text-sm font-medium text-surface-200 capitalize">{muscle.muscle}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                    volumeStatus === 'optimal' ? 'bg-success-500/20 text-success-400' :
+                                    volumeStatus === 'good' ? 'bg-warning-500/20 text-warning-400' :
+                                    'bg-surface-700 text-surface-400'
+                                  }`}>
+                                    {muscle.sets}/{optimalSets}
+                                  </span>
+                                  <span className="text-sm text-surface-400">{muscle.sets} sets</span>
+                                </div>
+                              </div>
+                              <div className="h-2 bg-surface-800 rounded-full overflow-hidden relative">
+                                {/* Optimal target marker */}
+                                <div 
+                                  className="absolute top-0 bottom-0 w-0.5 bg-success-500/50 z-10"
+                                  style={{ left: `${Math.min((optimalSets / maxSets) * 100, 100)}%` }}
+                                />
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    volumeStatus === 'optimal' ? 'bg-gradient-to-r from-success-500 to-success-400' :
+                                    volumeStatus === 'good' ? 'bg-gradient-to-r from-warning-500 to-warning-400' :
+                                    'bg-gradient-to-r from-primary-500 to-accent-500'
+                                  }`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                            </button>
+                            
+                            {/* Expanded exercise details */}
+                            {isExpanded && muscle.exercises.length > 0 && (
+                              <div className="mt-2 ml-6 pl-3 border-l-2 border-surface-700 space-y-2">
+                                {muscle.exercises.map((ex) => (
+                                  <Link
+                                    key={ex.id}
+                                    href={`/dashboard/history?exercise=${ex.id}`}
+                                    className="flex items-center justify-between py-1 hover:bg-surface-800/50 rounded px-2 -mx-2 transition-colors"
+                                  >
+                                    <span className="text-xs text-surface-300">{ex.name}</span>
+                                    <div className="flex items-center gap-3 text-xs">
+                                      <span className="text-surface-500">{ex.sets} sets</span>
+                                      <span className="text-primary-400 font-medium">
+                                        {formatWeight(ex.bestE1RM, units)} E1RM
+                                      </span>
+                                    </div>
+                                  </Link>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -999,31 +1157,104 @@ export default function AnalyticsPage() {
                 {/* Top Exercises */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Top Exercises (Est. 1RM)</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle>Top Exercises</CardTitle>
+                      <div className="flex gap-1 p-0.5 bg-surface-800 rounded-lg">
+                        <button
+                          onClick={() => setStrengthViewMode('absolute')}
+                          className={`px-2 py-1 text-xs rounded transition-colors ${
+                            strengthViewMode === 'absolute' 
+                              ? 'bg-primary-500 text-white' 
+                              : 'text-surface-400 hover:text-surface-200'
+                          }`}
+                        >
+                          Absolute
+                        </button>
+                        <button
+                          onClick={() => setStrengthViewMode('relative')}
+                          className={`px-2 py-1 text-xs rounded transition-colors ${
+                            strengthViewMode === 'relative' 
+                              ? 'bg-primary-500 text-white' 
+                              : 'text-surface-400 hover:text-surface-200'
+                          }`}
+                        >
+                          Relative
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-surface-500 mt-1">
+                      {strengthViewMode === 'absolute' 
+                        ? 'Ranked by estimated 1RM' 
+                        : 'Ranked by strength relative to expected standards'}
+                    </p>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {analytics.topExercises.map((exercise, idx) => (
-                        <div key={exercise.exerciseId} className="flex items-center gap-3">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                            idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
-                          }`}>
-                            {idx + 1}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-surface-200 truncate">{exercise.exerciseName}</p>
-                            <p className="text-xs text-surface-500">
-                              Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-primary-400">
-                              {formatWeight(exercise.estimatedE1RM, units)}
-                            </p>
-                            <p className="text-xs text-surface-500">{exercise.totalSets} sets</p>
-                          </div>
-                        </div>
-                      ))}
+                      {(() => {
+                        const userWeight = latestScan?.weightKg || 80; // Default to 80kg if no scan
+                        
+                        const sortedExercises = [...analytics.topExercises].sort((a, b) => {
+                          if (strengthViewMode === 'absolute') {
+                            return b.estimatedE1RM - a.estimatedE1RM;
+                          }
+                          // Relative strength: compare to expected standard
+                          const standardA = STRENGTH_STANDARDS[a.exerciseName] || DEFAULT_STANDARDS[a.primaryMuscle] || 0.5;
+                          const standardB = STRENGTH_STANDARDS[b.exerciseName] || DEFAULT_STANDARDS[b.primaryMuscle] || 0.5;
+                          const relativeA = a.estimatedE1RM / (userWeight * standardA);
+                          const relativeB = b.estimatedE1RM / (userWeight * standardB);
+                          return relativeB - relativeA;
+                        }).slice(0, 8);
+
+                        return sortedExercises.map((exercise, idx) => {
+                          const standard = STRENGTH_STANDARDS[exercise.exerciseName] || DEFAULT_STANDARDS[exercise.primaryMuscle] || 0.5;
+                          const expectedE1RM = userWeight * standard;
+                          const relativeStrength = (exercise.estimatedE1RM / expectedE1RM) * 100;
+                          
+                          return (
+                            <Link
+                              key={exercise.exerciseId}
+                              href={`/dashboard/history?exercise=${exercise.exerciseId}`}
+                              className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer"
+                            >
+                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
+                              }`}>
+                                {idx + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-surface-200 truncate">{exercise.exerciseName}</p>
+                                <p className="text-xs text-surface-500">
+                                  Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                {strengthViewMode === 'absolute' ? (
+                                  <>
+                                    <p className="text-sm font-bold text-primary-400">
+                                      {formatWeight(exercise.estimatedE1RM, units)}
+                                    </p>
+                                    <p className="text-xs text-surface-500">{exercise.totalSets} sets</p>
+                                  </>
+                                ) : (
+                                  <>
+                                    <p className={`text-sm font-bold ${
+                                      relativeStrength >= 100 ? 'text-success-400' :
+                                      relativeStrength >= 80 ? 'text-primary-400' :
+                                      relativeStrength >= 60 ? 'text-warning-400' :
+                                      'text-surface-400'
+                                    }`}>
+                                      {Math.round(relativeStrength)}%
+                                    </p>
+                                    <p className="text-xs text-surface-500">
+                                      of standard
+                                    </p>
+                                  </>
+                                )}
+                              </div>
+                            </Link>
+                          );
+                        });
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
