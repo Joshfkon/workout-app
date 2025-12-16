@@ -1213,7 +1213,7 @@ export default function AnalyticsPage() {
                               : 'text-surface-400 hover:text-surface-200'
                           }`}
                         >
-                          Absolute
+                          By E1RM
                         </button>
                         <button
                           onClick={() => setStrengthViewMode('relative')}
@@ -1223,14 +1223,14 @@ export default function AnalyticsPage() {
                               : 'text-surface-400 hover:text-surface-200'
                           }`}
                         >
-                          Relative
+                          By Relative
                         </button>
                       </div>
                     </div>
                     <p className="text-xs text-surface-500 mt-1">
                       {strengthViewMode === 'absolute' 
-                        ? 'Ranked by estimated 1RM' 
-                        : 'Ranked by strength relative to expected standards'}
+                        ? 'Ranked by estimated 1RM • Gauges show relative strength' 
+                        : 'Ranked by strength relative to bodyweight standards'}
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -1255,46 +1255,72 @@ export default function AnalyticsPage() {
                           const expectedE1RM = userWeight * standard;
                           const relativeStrength = (exercise.estimatedE1RM / expectedE1RM) * 100;
                           
+                          // Strength level thresholds (% of intermediate standard)
+                          // Beginner: <50%, Novice: 50-75%, Intermediate: 75-100%, Advanced: 100-125%, Elite: >125%
+                          const getStrengthLevel = (pct: number) => {
+                            if (pct >= 125) return { label: 'Elite', color: 'text-purple-400', bgColor: 'bg-purple-500' };
+                            if (pct >= 100) return { label: 'Advanced', color: 'text-success-400', bgColor: 'bg-success-500' };
+                            if (pct >= 75) return { label: 'Intermediate', color: 'text-primary-400', bgColor: 'bg-primary-500' };
+                            if (pct >= 50) return { label: 'Novice', color: 'text-warning-400', bgColor: 'bg-warning-500' };
+                            return { label: 'Beginner', color: 'text-surface-400', bgColor: 'bg-surface-500' };
+                          };
+                          
+                          const strengthLevel = getStrengthLevel(relativeStrength);
+                          const gaugeWidth = Math.min(relativeStrength, 150); // Cap at 150% for display
+                          
                           return (
                             <Link
                               key={exercise.exerciseId}
                               href={`/dashboard/history?exercise=${exercise.exerciseId}`}
-                              className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer"
+                              className="block p-3 -mx-2 rounded-lg hover:bg-surface-800/50 transition-colors cursor-pointer border border-transparent hover:border-surface-700"
                             >
-                              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
-                              }`}>
-                                {idx + 1}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-surface-200 truncate">{exercise.exerciseName}</p>
-                                <p className="text-xs text-surface-500">
-                                  Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                {strengthViewMode === 'absolute' ? (
-                                  <>
-                                    <p className="text-sm font-bold text-primary-400">
+                              <div className="flex items-start gap-3">
+                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                  idx < 3 ? 'bg-primary-500/20 text-primary-400' : 'bg-surface-800 text-surface-500'
+                                }`}>
+                                  {idx + 1}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-sm font-medium text-surface-200 truncate">{exercise.exerciseName}</p>
+                                    <p className="text-sm font-bold text-primary-400 ml-2">
                                       {formatWeight(exercise.estimatedE1RM, units)}
                                     </p>
-                                    <p className="text-xs text-surface-500">{exercise.totalSets} sets</p>
-                                  </>
-                                ) : (
-                                  <>
-                                    <p className={`text-sm font-bold ${
-                                      relativeStrength >= 100 ? 'text-success-400' :
-                                      relativeStrength >= 80 ? 'text-primary-400' :
-                                      relativeStrength >= 60 ? 'text-warning-400' :
-                                      'text-surface-400'
-                                    }`}>
-                                      {Math.round(relativeStrength)}%
-                                    </p>
-                                    <p className="text-xs text-surface-500">
-                                      of standard
-                                    </p>
-                                  </>
-                                )}
+                                  </div>
+                                  
+                                  {/* Relative Strength Gauge */}
+                                  <div className="mt-2">
+                                    <div className="flex items-center justify-between text-xs mb-1">
+                                      <span className={strengthLevel.color}>{strengthLevel.label}</span>
+                                      <span className="text-surface-500">
+                                        {Math.round(relativeStrength)}% of standard
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden relative">
+                                      {/* Tier markers */}
+                                      <div className="absolute top-0 bottom-0 left-[33%] w-px bg-surface-600" title="Novice" />
+                                      <div className="absolute top-0 bottom-0 left-[50%] w-px bg-surface-600" title="Intermediate" />
+                                      <div className="absolute top-0 bottom-0 left-[66%] w-px bg-surface-600" title="Advanced" />
+                                      <div className="absolute top-0 bottom-0 left-[83%] w-px bg-surface-600" title="Elite" />
+                                      
+                                      {/* Progress bar */}
+                                      <div
+                                        className={`h-full rounded-full transition-all duration-500 ${strengthLevel.bgColor}`}
+                                        style={{ width: `${(gaugeWidth / 150) * 100}%` }}
+                                      />
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-surface-600 mt-0.5">
+                                      <span>Beginner</span>
+                                      <span>Elite</span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-surface-500">
+                                    <span>Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}</span>
+                                    <span>•</span>
+                                    <span>{exercise.totalSets} sets</span>
+                                  </div>
+                                </div>
                               </div>
                             </Link>
                           );
