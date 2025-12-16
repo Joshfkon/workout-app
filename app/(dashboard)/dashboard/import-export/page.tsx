@@ -368,9 +368,10 @@ export default function ImportExportPage() {
         // STEP 5: Batch insert all set logs
         const allSetLogs: Array<{
           exercise_block_id: string;
+          set_number: number;
           weight_kg: number;
           reps: number;
-          rpe?: number;
+          rpe: number;
           is_warmup: boolean;
           logged_at: string;
         }> = [];
@@ -386,13 +387,17 @@ export default function ImportExportPage() {
             const blockId = blockMap.get(`${sessionId}_${exercise.name.toLowerCase()}`);
             if (!blockId) continue;
             
+            let setNumber = 1;
             for (const set of exercise.sets) {
               const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
+              // RPE must be between 1-10, default to 7 if not provided or invalid
+              const rpeValue = set.rpe && set.rpe >= 1 && set.rpe <= 10 ? set.rpe : 7;
               allSetLogs.push({
                 exercise_block_id: blockId,
+                set_number: setNumber++,
                 weight_kg: weightKg,
-                reps: set.reps,
-                rpe: set.rpe,
+                reps: set.reps || 0,
+                rpe: rpeValue,
                 is_warmup: false,
                 logged_at: date,
               });
