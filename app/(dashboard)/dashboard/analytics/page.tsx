@@ -1280,18 +1280,24 @@ export default function AnalyticsPage() {
                           return null;
                         };
 
-                        const sortedExercises = [...analytics.topExercises].sort((a, b) => {
+                        // Filter and sort based on view mode
+                        let sortedExercises = [...analytics.topExercises];
+                        
+                        if (strengthViewMode === 'relative') {
+                          // Only show exercises with reliable standards in relative mode
+                          sortedExercises = sortedExercises.filter(ex => {
+                            const standard = getStandard(ex.exerciseName);
+                            return standard !== null && hasReliableStandard(ex.exerciseName);
+                          });
+                        }
+                        
+                        sortedExercises = sortedExercises.sort((a, b) => {
                           if (strengthViewMode === 'absolute') {
                             return b.estimatedE1RM - a.estimatedE1RM;
                           }
-                          // Relative strength: only compare exercises with reliable standards
-                          const standardA = getStandard(a.exerciseName);
-                          const standardB = getStandard(b.exerciseName);
-                          // If neither has standard, sort by absolute
-                          if (!standardA && !standardB) return b.estimatedE1RM - a.estimatedE1RM;
-                          // Put exercises with standards first
-                          if (!standardA) return 1;
-                          if (!standardB) return -1;
+                          // Relative strength
+                          const standardA = getStandard(a.exerciseName) || 1;
+                          const standardB = getStandard(b.exerciseName) || 1;
                           const relativeA = a.estimatedE1RM / (userWeight * standardA);
                           const relativeB = b.estimatedE1RM / (userWeight * standardB);
                           return relativeB - relativeA;
@@ -1335,8 +1341,8 @@ export default function AnalyticsPage() {
                                     </p>
                                   </div>
                                   
-                                  {/* Relative Strength Gauge - only for free weight compounds */}
-                                  {showGauge ? (
+                                  {/* Relative Strength Gauge - only shown for exercises with reliable data */}
+                                  {showGauge && (
                                     <div className="mt-2">
                                       <div className="flex items-center justify-between text-xs mb-1">
                                         <span className={strengthLevel.color}>{strengthLevel.label}</span>
@@ -1362,12 +1368,6 @@ export default function AnalyticsPage() {
                                         <span>Elite</span>
                                       </div>
                                     </div>
-                                  ) : (
-                                    <div className="mt-1">
-                                      <span className="text-xs text-surface-500 italic">
-                                        Machine/isolation - no reliable standard
-                                      </span>
-                                    </div>
                                   )}
                                   
                                   <div className="flex items-center gap-3 mt-2 text-xs text-surface-500">
@@ -1380,6 +1380,36 @@ export default function AnalyticsPage() {
                             </Link>
                           );
                         });
+                      })()}
+                      
+                      {/* Show message if no exercises with reliable standards in relative mode */}
+                      {strengthViewMode === 'relative' && (() => {
+                        const getStandardCheck = (name: string): number | null => {
+                          if (STRENGTH_STANDARDS[name]) return STRENGTH_STANDARDS[name];
+                          const lowerName = name.toLowerCase();
+                          for (const [key, value] of Object.entries(STRENGTH_STANDARDS)) {
+                            if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+                              return value;
+                            }
+                          }
+                          return null;
+                        };
+                        const hasReliable = analytics.topExercises.some(ex => 
+                          getStandardCheck(ex.exerciseName) !== null && hasReliableStandard(ex.exerciseName)
+                        );
+                        if (!hasReliable) {
+                          return (
+                            <div className="p-4 bg-surface-800/50 rounded-lg text-center">
+                              <p className="text-sm text-surface-400">
+                                No free-weight compound exercises found in this period.
+                              </p>
+                              <p className="text-xs text-surface-500 mt-1">
+                                Relative strength standards only apply to barbell/dumbbell compounds like Squat, Bench, Deadlift, etc.
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
                       })()}
                     </div>
                   </CardContent>
