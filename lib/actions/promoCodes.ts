@@ -36,13 +36,20 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
   }
 
   // Use service role for database operations
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    console.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+    return { success: false, message: 'Server configuration error. Please contact support.' };
+  }
+  
   const serviceSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    serviceRoleKey
   );
 
   // Normalize the code (uppercase, trim)
   const normalizedCode = code.trim().toUpperCase();
+  console.log('Looking up promo code:', normalizedCode);
 
   // Find the promo code
   const { data: promoCode, error: codeError } = await serviceSupabase
@@ -58,12 +65,18 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
     if (codeError.message?.includes('relation') || codeError.code === '42P01') {
       return { success: false, message: 'Promo code system is not yet configured. Please contact support.' };
     }
-    return { success: false, message: 'Invalid promo code. Please check and try again.' };
+    // PGRST116 means no rows returned (code not found)
+    if (codeError.code === 'PGRST116') {
+      return { success: false, message: 'Invalid promo code. Please check and try again.' };
+    }
+    return { success: false, message: `Code lookup failed: ${codeError.message}` };
   }
   
   if (!promoCode) {
     return { success: false, message: 'Invalid promo code. Please check and try again.' };
   }
+  
+  console.log('Found promo code:', promoCode.id, promoCode.code);
 
   // Check if code has expired
   if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date()) {
@@ -130,7 +143,7 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
     if (redemptionError.message?.includes('relation') || redemptionError.code === '42P01') {
       return { success: false, message: 'Promo code system is not yet configured. Please contact support.' };
     }
-    return { success: false, message: 'Failed to redeem code. Please try again.' };
+    return { success: false, message: `Failed to redeem code: ${redemptionError.message}` };
   }
 
   // Increment usage count
@@ -157,7 +170,7 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
 
   if (subError) {
     console.error('Error updating subscription:', subError);
-    return { success: false, message: 'Failed to activate subscription. Please contact support.' };
+    return { success: false, message: `Failed to activate subscription: ${subError.message}` };
   }
 
   const tierLabel = promoCode.tier === 'elite' ? 'Elite' : 'Pro';
