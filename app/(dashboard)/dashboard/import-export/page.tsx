@@ -196,17 +196,28 @@ export default function ImportExportPage() {
             name,
             primary_muscle: inferMuscleFromName(name),
             mechanic: inferMechanicFromName(name),
-            difficulty: 'intermediate',
-            is_custom: true,
-            created_by: user.id,
+            movement_pattern: inferMovementPattern(name),
           }));
           
-          const { data: createdExercises } = await supabase
+          const { data: createdExercises, error: exerciseError } = await supabase
             .from('exercises')
             .insert(newExercises)
             .select('id, name');
           
-          if (createdExercises) {
+          if (exerciseError) {
+            console.error('Exercise create error:', exerciseError);
+            // If batch fails due to duplicates, try one by one
+            for (const ex of newExercises) {
+              const { data: singleEx } = await supabase
+                .from('exercises')
+                .upsert(ex, { onConflict: 'name' })
+                .select('id, name')
+                .single();
+              if (singleEx) {
+                exerciseCache.set(singleEx.name.toLowerCase().trim(), singleEx.id);
+              }
+            }
+          } else if (createdExercises) {
             for (const ex of createdExercises as Array<{ id: string; name: string }>) {
               exerciseCache.set(ex.name.toLowerCase().trim(), ex.id);
             }
@@ -999,5 +1010,39 @@ function inferMechanicFromName(exerciseName: string): string {
   }
   
   return 'isolation';
+}
+
+function inferMovementPattern(exerciseName: string): string {
+  const name = exerciseName.toLowerCase();
+  
+  if (name.includes('bench') || name.includes('push') || name.includes('fly') || name.includes('press') && name.includes('chest')) {
+    return 'horizontal_push';
+  }
+  if (name.includes('row') || name.includes('pull') && !name.includes('down')) {
+    return 'horizontal_pull';
+  }
+  if (name.includes('overhead') || name.includes('shoulder press') || name.includes('military')) {
+    return 'vertical_push';
+  }
+  if (name.includes('pulldown') || name.includes('pull-up') || name.includes('pullup') || name.includes('chin')) {
+    return 'vertical_pull';
+  }
+  if (name.includes('squat') || name.includes('leg press') || name.includes('lunge')) {
+    return 'squat';
+  }
+  if (name.includes('deadlift') || name.includes('rdl') || name.includes('hip thrust')) {
+    return 'hinge';
+  }
+  if (name.includes('curl') && !name.includes('leg')) {
+    return 'curl';
+  }
+  if (name.includes('extension') || name.includes('pushdown') || name.includes('tricep')) {
+    return 'extension';
+  }
+  if (name.includes('lateral') || name.includes('raise') || name.includes('fly')) {
+    return 'isolation';
+  }
+  
+  return 'compound'; // Default
 }
 
