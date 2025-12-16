@@ -12,6 +12,16 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { formatWeight } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
+import { 
+  getInjuryRisk, 
+  getSafeAlternatives, 
+  autoSwapForInjuries,
+  getInjuryDescription,
+  INJURY_LABELS,
+  type InjuryArea,
+  type InjuryContext,
+  type InjuryRisk
+} from '@/services/injuryAwareSwapper';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -58,79 +68,36 @@ interface ExerciseHistoryData {
   totalSessions: number;
 }
 
-// Map injury areas to muscles/patterns that might be aggravated
-const INJURY_RISK_MAP: Record<string, { muscles: string[]; patterns: string[]; keywords: string[] }> = {
-  lower_back: { 
-    muscles: ['back', 'hamstrings', 'glutes'], 
-    patterns: ['squat', 'deadlift', 'row', 'hip_hinge'],
-    keywords: ['deadlift', 'squat', 'row', 'good morning', 'hyperextension', 'back extension']
-  },
-  upper_back: { 
-    muscles: ['back', 'shoulders'], 
-    patterns: ['row', 'vertical_pull'],
-    keywords: ['row', 'pull-up', 'pulldown', 'shrug']
-  },
-  neck: { 
-    muscles: ['shoulders', 'back'], 
-    patterns: ['overhead', 'vertical_push'],
-    keywords: ['overhead', 'press', 'shrug', 'upright row']
-  },
-  shoulder_left: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up'] },
-  shoulder_right: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up'] },
-  elbow_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
-  elbow_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
-  wrist_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
-  wrist_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
-  hip_left: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
-  hip_right: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
-  knee_left: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
-  knee_right: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
-  ankle_left: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
-  ankle_right: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
-  chest: { muscles: ['chest'], patterns: ['push', 'fly'], keywords: ['bench', 'fly', 'press', 'push-up', 'dip'] },
-};
-
-// Check if an exercise might aggravate any reported injuries
+// Wrapper to convert injuries array to get risk info using new intelligent swapper
 function getExerciseInjuryRisk(
   exercise: Exercise, 
   injuries: { area: string; severity: 1 | 2 | 3 }[]
-): { isRisky: boolean; severity: number; reasons: string[] } {
-  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [] };
+): { isRisky: boolean; severity: number; reasons: string[]; risk: InjuryRisk } {
+  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [], risk: 'safe' };
   
-  const exerciseName = exercise.name.toLowerCase();
-  const exerciseMuscle = exercise.primaryMuscle.toLowerCase();
-  const reasons: string[] = [];
+  let worstRisk: InjuryRisk = 'safe';
   let maxSeverity = 0;
+  const reasons: string[] = [];
   
   for (const injury of injuries) {
-    const riskMap = INJURY_RISK_MAP[injury.area];
-    if (!riskMap) continue;
+    const risk = getInjuryRisk(exercise, injury.area as InjuryArea);
     
-    let isMatch = false;
-    
-    // Check muscle match
-    if (riskMap.muscles.some(m => exerciseMuscle.includes(m.toLowerCase()))) {
-      isMatch = true;
-      reasons.push(`Targets ${exercise.primaryMuscle} (may stress ${injury.area.replace('_', ' ')})`);
-    }
-    
-    // Check keyword match in exercise name
-    if (riskMap.keywords.some(kw => exerciseName.includes(kw.toLowerCase()))) {
-      isMatch = true;
-      if (reasons.length === 0) {
-        reasons.push(`Exercise type may stress ${injury.area.replace('_', ' ')}`);
-      }
-    }
-    
-    if (isMatch) {
+    if (risk === 'avoid') {
+      worstRisk = 'avoid';
       maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`May aggravate ${INJURY_LABELS[injury.area] || injury.area}`);
+    } else if (risk === 'caution' && worstRisk !== 'avoid') {
+      worstRisk = 'caution';
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`Use caution (${INJURY_LABELS[injury.area] || injury.area})`);
     }
   }
   
   return {
-    isRisky: reasons.length > 0,
+    isRisky: worstRisk !== 'safe',
     severity: maxSeverity,
-    reasons: Array.from(new Set(reasons)) // Remove duplicates
+    reasons: Array.from(new Set(reasons)),
+    risk: worstRisk
   };
 }
 
@@ -1080,57 +1047,60 @@ export default function WorkoutPage() {
   // Auto-adjust message state
   const [autoAdjustMessage, setAutoAdjustMessage] = useState<string | null>(null);
 
-  // Auto-swap or remove exercises based on injuries
+  // Auto-swap or remove exercises based on injuries using intelligent injury-aware swapper
   const autoAdjustForInjuries = async (injuries: { area: string; severity: 1 | 2 | 3 }[]) => {
     if (injuries.length === 0 || blocks.length === 0) return;
     
     const supabase = createUntypedClient();
     const adjustments: string[] = [];
     
-    // Find risky exercises (severity 2 or 3)
-    const riskyExercises = blocks
-      .map((block) => {
-        const risk = getExerciseInjuryRisk(block.exercise, injuries);
-        return { block, risk };
-      })
-      .filter(({ risk }) => risk.isRisky && risk.severity >= 2);
+    // Convert to InjuryContext format
+    const injuryContexts: InjuryContext[] = injuries.map(i => ({
+      area: i.area as InjuryArea,
+      severity: i.severity
+    }));
     
-    if (riskyExercises.length === 0) return;
+    // Build full exercise list from available exercises
+    const fullExercises: Exercise[] = availableExercises.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      primaryMuscle: ex.primary_muscle,
+      secondaryMuscles: ex.secondary_muscles || [],
+      mechanic: ex.mechanic,
+      defaultRepRange: [8, 12] as [number, number],
+      defaultRir: 2,
+      minWeightIncrementKg: 2.5,
+      formCues: [],
+      commonMistakes: [],
+      setupNote: '',
+      movementPattern: '',
+      equipmentRequired: [],
+    }));
     
-    for (const { block, risk } of riskyExercises) {
-      // Find a safe alternative from available exercises
-      const safeAlternative = availableExercises.find(ex => {
-        // Must target same muscle
-        if (ex.primary_muscle !== block.exercise.primaryMuscle) return false;
-        // Must not be the same exercise
-        if (ex.id === block.exercise.id) return false;
-        // Must not already be in workout
-        if (blocks.some(b => b.exercise.id === ex.id)) return false;
-        
-        // Check if this alternative would also be risky
-        const altRisk = getExerciseInjuryRisk(
-          { ...block.exercise, name: ex.name, primaryMuscle: ex.primary_muscle },
-          injuries
-        );
-        
-        return !altRisk.isRisky || altRisk.severity < 2;
-      });
+    // Get auto-swap results from the intelligent swapper
+    const workoutExercises = blocks.map(b => ({ id: b.id, exercise: b.exercise }));
+    const swapResults = autoSwapForInjuries(workoutExercises, fullExercises, injuryContexts);
+    
+    if (swapResults.length === 0) return;
+    
+    for (const result of swapResults) {
+      const block = blocks.find(b => b.id === result.originalId);
+      if (!block) continue;
       
-      if (safeAlternative) {
-        // Auto-swap to safe alternative
+      if (result.action === 'swapped' && result.replacement) {
+        // Fetch full exercise data from database
         try {
-          // Fetch full exercise data
           const { data: fullExData } = await supabase
             .from('exercises')
             .select('*')
-            .eq('id', safeAlternative.id)
+            .eq('id', result.replacement.id)
             .single();
           
           if (fullExData) {
             // Update in database
             await supabase
               .from('exercise_blocks')
-              .update({ exercise_id: safeAlternative.id })
+              .update({ exercise_id: result.replacement.id })
               .eq('id', block.id);
             
             // Update local state
@@ -1158,16 +1128,16 @@ export default function WorkoutPage() {
             
             setBlocks(prevBlocks => prevBlocks.map(b => 
               b.id === block.id 
-                ? { ...b, exerciseId: safeAlternative.id, exercise: completeExercise }
+                ? { ...b, exerciseId: result.replacement!.id, exercise: completeExercise }
                 : b
             ));
             
-            adjustments.push(`Swapped ${block.exercise.name} → ${safeAlternative.name}`);
+            adjustments.push(`${result.originalName} → ${result.replacement.name}`);
           }
         } catch (err) {
           console.error('Failed to auto-swap exercise:', err);
         }
-      } else {
+      } else if (result.action === 'removed') {
         // No safe alternative - remove the exercise
         try {
           // Delete from database
@@ -1179,7 +1149,7 @@ export default function WorkoutPage() {
           // Update local state
           setBlocks(prevBlocks => prevBlocks.filter(b => b.id !== block.id));
           
-          adjustments.push(`Removed ${block.exercise.name} (no safe alternative)`);
+          adjustments.push(`Removed ${result.originalName}`);
         } catch (err) {
           console.error('Failed to remove exercise:', err);
         }

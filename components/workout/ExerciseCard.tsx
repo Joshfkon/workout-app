@@ -39,85 +39,65 @@ interface WarmupSetData {
   purpose: string;
 }
 
+import { 
+  getInjuryRisk, 
+  INJURY_LABELS,
+  type InjuryArea,
+  type InjuryRisk
+} from '@/services/injuryAwareSwapper';
+
 interface TemporaryInjury {
   area: string;
   severity: 1 | 2 | 3;
 }
 
-// Map injury areas to muscles/patterns that might be aggravated
-const INJURY_RISK_MAP: Record<string, { muscles: string[]; patterns: string[]; keywords: string[] }> = {
-  lower_back: { 
-    muscles: ['back', 'hamstrings', 'glutes'], 
-    patterns: ['squat', 'deadlift', 'row', 'hip_hinge'],
-    keywords: ['deadlift', 'squat', 'row', 'good morning', 'hyperextension', 'back extension', 'bent over', 'romanian']
-  },
-  upper_back: { 
-    muscles: ['back', 'shoulders'], 
-    patterns: ['row', 'vertical_pull'],
-    keywords: ['row', 'pull-up', 'pulldown', 'shrug']
-  },
-  neck: { 
-    muscles: ['shoulders', 'back'], 
-    patterns: ['overhead', 'vertical_push'],
-    keywords: ['overhead', 'press', 'shrug', 'upright row']
-  },
-  shoulder_left: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up', 'dip'] },
-  shoulder_right: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up', 'dip'] },
-  elbow_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
-  elbow_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
-  wrist_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
-  wrist_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
-  hip_left: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
-  hip_right: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
-  knee_left: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
-  knee_right: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
-  ankle_left: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
-  ankle_right: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
-  chest: { muscles: ['chest'], patterns: ['push', 'fly'], keywords: ['bench', 'fly', 'press', 'push-up', 'dip'] },
-};
-
-// Check if an exercise might aggravate any reported injuries
-function getExerciseInjuryRisk(
-  exerciseName: string, 
-  exerciseMuscle: string,
+// Wrapper to use the intelligent injury swapper service
+function getExerciseInjuryRiskFromService(
+  exercise: { name: string; primaryMuscle: string },
   injuries: TemporaryInjury[]
-): { isRisky: boolean; severity: number; reasons: string[] } {
-  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [] };
+): { isRisky: boolean; severity: number; reasons: string[]; risk: InjuryRisk } {
+  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [], risk: 'safe' };
   
-  const nameLower = exerciseName.toLowerCase();
-  const muscleLower = exerciseMuscle.toLowerCase();
-  const reasons: string[] = [];
+  let worstRisk: InjuryRisk = 'safe';
   let maxSeverity = 0;
+  const reasons: string[] = [];
   
   for (const injury of injuries) {
-    const riskMap = INJURY_RISK_MAP[injury.area];
-    if (!riskMap) continue;
+    const risk = getInjuryRisk(
+      { 
+        id: '', 
+        name: exercise.name, 
+        primaryMuscle: exercise.primaryMuscle,
+        secondaryMuscles: [],
+        mechanic: 'compound',
+        defaultRepRange: [8, 12] as [number, number],
+        defaultRir: 2,
+        minWeightIncrementKg: 2.5,
+        formCues: [],
+        commonMistakes: [],
+        setupNote: '',
+        movementPattern: '',
+        equipmentRequired: [],
+      }, 
+      injury.area as InjuryArea
+    );
     
-    let isMatch = false;
-    
-    // Check muscle match
-    if (riskMap.muscles.some(m => muscleLower.includes(m.toLowerCase()))) {
-      isMatch = true;
-      reasons.push(`Targets ${exerciseMuscle} (may stress ${injury.area.replace('_', ' ')})`);
-    }
-    
-    // Check keyword match in exercise name
-    if (riskMap.keywords.some(kw => nameLower.includes(kw.toLowerCase()))) {
-      isMatch = true;
-      if (reasons.length === 0) {
-        reasons.push(`Exercise type may stress ${injury.area.replace('_', ' ')}`);
-      }
-    }
-    
-    if (isMatch) {
+    if (risk === 'avoid') {
+      worstRisk = 'avoid';
       maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`May aggravate ${INJURY_LABELS[injury.area] || injury.area.replace('_', ' ')}`);
+    } else if (risk === 'caution' && worstRisk !== 'avoid') {
+      worstRisk = 'caution';
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`Use caution (${INJURY_LABELS[injury.area] || injury.area.replace('_', ' ')})`);
     }
   }
   
   return {
-    isRisky: reasons.length > 0,
+    isRisky: worstRisk !== 'safe',
     severity: maxSeverity,
-    reasons: Array.from(new Set(reasons))
+    reasons: Array.from(new Set(reasons)),
+    risk: worstRisk
   };
 }
 
@@ -205,7 +185,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     const similar = findSimilarExercises(exercise, availableExercises)
       .slice(0, 15) // Get more to filter
       .map(ex => {
-        const injuryRisk = getExerciseInjuryRisk(ex.name, ex.primaryMuscle, currentInjuries);
+        const injuryRisk = getExerciseInjuryRiskFromService({ name: ex.name, primaryMuscle: ex.primaryMuscle }, currentInjuries);
         return {
           exercise: ex,
           score: calculateSimilarityScore(exercise, ex),
@@ -1373,7 +1353,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       return true;
                     })
                     .map((alt) => {
-                      const altInjuryRisk = getExerciseInjuryRisk(alt.name, alt.primaryMuscle, currentInjuries);
+                      const altInjuryRisk = getExerciseInjuryRiskFromService({ name: alt.name, primaryMuscle: alt.primaryMuscle }, currentInjuries);
                       return (
                         <button
                           key={alt.id}
