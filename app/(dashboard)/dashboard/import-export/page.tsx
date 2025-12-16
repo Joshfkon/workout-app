@@ -1140,10 +1140,16 @@ function inferMuscleFromName(exerciseName: string): string {
     return 'traps';
   }
   
+  // Calves - check before triceps to catch "calf extension"
+  if (name.includes('calf') || name.includes('calves') || 
+      (name.includes('raise') && (name.includes('calf') || name.includes('heel')))) {
+    return 'calves';
+  }
+  
   // Triceps - check before chest (skullcrusher, pushdown, etc.)
   if (name.includes('tricep') || name.includes('skullcrusher') || name.includes('skull crusher') ||
       name.includes('pushdown') || name.includes('kickback') || 
-      (name.includes('extension') && !name.includes('leg') && !name.includes('back'))) {
+      (name.includes('extension') && !name.includes('leg') && !name.includes('back') && !name.includes('calf'))) {
     return 'triceps';
   }
   
@@ -1203,12 +1209,6 @@ function inferMuscleFromName(exerciseName: string): string {
   // Biceps
   if (name.includes('bicep') || (name.includes('curl') && !name.includes('leg') && !name.includes('ham'))) {
     return 'biceps';
-  }
-  
-  // Calves
-  if (name.includes('calf') || name.includes('calves') || 
-      (name.includes('raise') && (name.includes('calf') || name.includes('heel')))) {
-    return 'calves';
   }
   
   // Forearms
