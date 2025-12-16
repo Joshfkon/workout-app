@@ -92,6 +92,49 @@ export default function MesocyclePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDeleteMesocycle = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const supabase = createUntypedClient();
+      
+      // Delete associated workout sessions and exercise blocks first
+      const { data: sessions } = await supabase
+        .from('workout_sessions')
+        .select('id')
+        .eq('mesocycle_id', id);
+      
+      if (sessions && sessions.length > 0) {
+        const sessionIds = sessions.map((s: { id: string }) => s.id);
+        // Delete exercise blocks for these sessions
+        await supabase
+          .from('exercise_blocks')
+          .delete()
+          .in('workout_session_id', sessionIds);
+        // Delete the sessions
+        await supabase
+          .from('workout_sessions')
+          .delete()
+          .eq('mesocycle_id', id);
+      }
+      
+      // Delete the mesocycle
+      await supabase
+        .from('mesocycles')
+        .delete()
+        .eq('id', id);
+      
+      // Update local state
+      setMesocycles(mesocycles.filter(m => m.id !== id));
+      setConfirmDeleteId(null);
+    } catch (error) {
+      console.error('Failed to delete mesocycle:', error);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     async function fetchMesocycles() {
@@ -419,30 +462,6 @@ export default function MesocyclePage() {
         </>
       )}
 
-      {/* Past mesocycles */}
-      {pastMesocycles.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Past Mesocycles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {pastMesocycles.map((meso) => (
-                <div key={meso.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-surface-200">{meso.name}</p>
-                    <p className="text-sm text-surface-500">{meso.split_type} • {meso.total_weeks} weeks</p>
-                  </div>
-                  <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
-                    {meso.state}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Programming Logic - show when there's an active mesocycle */}
       {activeMesocycle && (
         <Card>
@@ -583,6 +602,63 @@ export default function MesocyclePage() {
                   Adjust based on readiness and performance
                 </p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Past mesocycles - at the bottom */}
+      {pastMesocycles.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Past Mesocycles</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pastMesocycles.map((meso) => (
+                <div key={meso.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-surface-200">{meso.name}</p>
+                    <p className="text-sm text-surface-500">
+                      {meso.split_type} • {meso.total_weeks} weeks • {new Date(meso.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
+                      {meso.state}
+                    </Badge>
+                    {confirmDeleteId === meso.id ? (
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => handleDeleteMesocycle(meso.id)}
+                          isLoading={deletingId === meso.id}
+                        >
+                          Confirm
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirmDeleteId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(meso.id)}
+                        className="p-1.5 text-surface-500 hover:text-danger-400 hover:bg-danger-500/10 rounded transition-colors"
+                        title="Delete mesocycle"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
