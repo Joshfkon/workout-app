@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -496,82 +496,50 @@ export default function SettingsPage() {
             valueFormatter={(v) => `${Math.floor(v / 60)}:${(v % 60).toString().padStart(2, '0')}`}
           />
 
-          <div className="space-y-3">
-            <label className="flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-surface-200">Show Form Cues</p>
                 <p className="text-xs text-surface-500">Display exercise form tips during workouts</p>
               </div>
-              <button
-                onClick={() => setShowFormCues(!showFormCues)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  showFormCues ? 'bg-primary-500' : 'bg-surface-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    showFormCues ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
+              <Toggle
+                checked={showFormCues}
+                onChange={setShowFormCues}
+              />
+            </div>
 
-            <label className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-surface-200">Show Warmup Suggestions</p>
                 <p className="text-xs text-surface-500">Display warmup protocol before exercises</p>
               </div>
-              <button
-                onClick={() => setShowWarmupSuggestions(!showWarmupSuggestions)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  showWarmupSuggestions ? 'bg-primary-500' : 'bg-surface-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    showWarmupSuggestions ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
+              <Toggle
+                checked={showWarmupSuggestions}
+                onChange={setShowWarmupSuggestions}
+              />
+            </div>
 
-            <label className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-surface-200">Prioritize Hypertrophy</p>
                 <p className="text-xs text-surface-500">Select S-tier exercises first (Nippard methodology)</p>
               </div>
-              <button
-                onClick={() => setPrioritizeHypertrophy(!prioritizeHypertrophy)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  prioritizeHypertrophy ? 'bg-primary-500' : 'bg-surface-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    prioritizeHypertrophy ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
+              <Toggle
+                checked={prioritizeHypertrophy}
+                onChange={setPrioritizeHypertrophy}
+              />
+            </div>
 
-            <label className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-surface-200">Skip Pre-Workout Check-In</p>
                 <p className="text-xs text-surface-500">Start workouts immediately without readiness questions</p>
               </div>
-              <button
-                onClick={() => setSkipPreWorkoutCheckIn(!skipPreWorkoutCheckIn)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  skipPreWorkoutCheckIn ? 'bg-primary-500' : 'bg-surface-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                    skipPreWorkoutCheckIn ? 'translate-x-7' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </label>
+              <Toggle
+                checked={skipPreWorkoutCheckIn}
+                onChange={setSkipPreWorkoutCheckIn}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
