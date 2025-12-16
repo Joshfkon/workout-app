@@ -10,6 +10,7 @@ import { convertWeight } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { TIER_FEATURES } from '@/lib/stripe';
+import { redeemPromoCode } from '@/lib/actions/promoCodes';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
@@ -47,6 +48,11 @@ export default function SettingsPage() {
   const [trainingAge, setTrainingAge] = useState('');
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
+  
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Convert display values when units change
   const handleUnitsChange = (newUnits: WeightUnit) => {
@@ -210,6 +216,30 @@ export default function SettingsPage() {
       setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRedeemPromo = async () => {
+    if (!promoCode.trim()) return;
+    
+    setPromoLoading(true);
+    setPromoResult(null);
+    
+    try {
+      const result = await redeemPromoCode(promoCode);
+      setPromoResult(result);
+      
+      if (result.success) {
+        setPromoCode('');
+        // Refresh the page after a short delay to show updated subscription
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch {
+      setPromoResult({ success: false, message: 'An error occurred. Please try again.' });
+    } finally {
+      setPromoLoading(false);
     }
   };
 
@@ -584,6 +614,44 @@ export default function SettingsPage() {
                 Calibrate
               </Button>
             </Link>
+          </div>
+
+          {/* Promo Code Redemption */}
+          <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+              </svg>
+              <p className="text-sm font-medium text-surface-200">Redeem Promo Code</p>
+            </div>
+            <p className="text-xs text-surface-400 mb-3">Have a promo code? Enter it below to unlock premium features.</p>
+            
+            <div className="flex gap-2">
+              <Input
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                placeholder="Enter code (e.g., FAMILY-ELITE-001)"
+                className="flex-1 uppercase"
+                disabled={promoLoading}
+              />
+              <Button 
+                onClick={handleRedeemPromo} 
+                disabled={!promoCode.trim() || promoLoading}
+                isLoading={promoLoading}
+              >
+                Redeem
+              </Button>
+            </div>
+
+            {promoResult && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${
+                promoResult.success 
+                  ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+                  : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+              }`}>
+                {promoResult.message}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
