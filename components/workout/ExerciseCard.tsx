@@ -171,14 +171,18 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [showRpeGuide, setShowRpeGuide] = useState(false);
-  const [showSwapModal, setShowSwapModal] = useState(showSwapOnMount);
+  const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
   
-  // Auto-show swap modal when showSwapOnMount changes to true
+  // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
     if (showSwapOnMount) {
-      setShowSwapModal(true);
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        setShowSwapModal(true);
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [showSwapOnMount]);
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');

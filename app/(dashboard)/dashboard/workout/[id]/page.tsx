@@ -915,6 +915,19 @@ export default function WorkoutPage() {
               });
           }
         }
+        
+        // Auto-adjust exercises if injuries were reported
+        if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
+          // Schedule auto-adjust after state updates
+          setTimeout(() => {
+            autoAdjustForInjuries(
+              checkInData.temporaryInjuries!.map(i => ({
+                area: i.area,
+                severity: i.severity,
+              }))
+            );
+          }, 500);
+        }
       }
       
       await supabase
@@ -1063,8 +1076,124 @@ export default function WorkoutPage() {
 
   // State for adding extra sets beyond target
   const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
+  
+  // Auto-adjust message state
+  const [autoAdjustMessage, setAutoAdjustMessage] = useState<string | null>(null);
 
-  // Handle changing target sets for an exercise
+  // Auto-swap or remove exercises based on injuries
+  const autoAdjustForInjuries = async (injuries: { area: string; severity: 1 | 2 | 3 }[]) => {
+    if (injuries.length === 0 || blocks.length === 0) return;
+    
+    const supabase = createUntypedClient();
+    const adjustments: string[] = [];
+    
+    // Find risky exercises (severity 2 or 3)
+    const riskyExercises = blocks
+      .map((block) => {
+        const risk = getExerciseInjuryRisk(block.exercise, injuries);
+        return { block, risk };
+      })
+      .filter(({ risk }) => risk.isRisky && risk.severity >= 2);
+    
+    if (riskyExercises.length === 0) return;
+    
+    for (const { block, risk } of riskyExercises) {
+      // Find a safe alternative from available exercises
+      const safeAlternative = availableExercises.find(ex => {
+        // Must target same muscle
+        if (ex.primary_muscle !== block.exercise.primaryMuscle) return false;
+        // Must not be the same exercise
+        if (ex.id === block.exercise.id) return false;
+        // Must not already be in workout
+        if (blocks.some(b => b.exercise.id === ex.id)) return false;
+        
+        // Check if this alternative would also be risky
+        const altRisk = getExerciseInjuryRisk(
+          { ...block.exercise, name: ex.name, primaryMuscle: ex.primary_muscle },
+          injuries
+        );
+        
+        return !altRisk.isRisky || altRisk.severity < 2;
+      });
+      
+      if (safeAlternative) {
+        // Auto-swap to safe alternative
+        try {
+          // Fetch full exercise data
+          const { data: fullExData } = await supabase
+            .from('exercises')
+            .select('*')
+            .eq('id', safeAlternative.id)
+            .single();
+          
+          if (fullExData) {
+            // Update in database
+            await supabase
+              .from('exercise_blocks')
+              .update({ exercise_id: safeAlternative.id })
+              .eq('id', block.id);
+            
+            // Update local state
+            const completeExercise: Exercise = {
+              id: fullExData.id,
+              name: fullExData.name,
+              primaryMuscle: fullExData.primary_muscle,
+              secondaryMuscles: fullExData.secondary_muscles || [],
+              mechanic: fullExData.mechanic,
+              defaultRepRange: fullExData.default_rep_range || [8, 12],
+              defaultRir: fullExData.default_rir || 2,
+              minWeightIncrementKg: fullExData.min_weight_increment_kg || 2.5,
+              formCues: fullExData.form_cues || [],
+              commonMistakes: fullExData.common_mistakes || [],
+              setupNote: fullExData.setup_note || '',
+              movementPattern: fullExData.movement_pattern || '',
+              equipmentRequired: fullExData.equipment_required || [],
+              hypertrophyScore: fullExData.hypertrophy_tier ? {
+                tier: fullExData.hypertrophy_tier,
+                stretchUnderLoad: fullExData.stretch_under_load || 3,
+                resistanceProfile: fullExData.resistance_profile || 3,
+                progressionEase: fullExData.progression_ease || 3,
+              } : undefined,
+            };
+            
+            setBlocks(prevBlocks => prevBlocks.map(b => 
+              b.id === block.id 
+                ? { ...b, exerciseId: safeAlternative.id, exercise: completeExercise }
+                : b
+            ));
+            
+            adjustments.push(`Swapped ${block.exercise.name} → ${safeAlternative.name}`);
+          }
+        } catch (err) {
+          console.error('Failed to auto-swap exercise:', err);
+        }
+      } else {
+        // No safe alternative - remove the exercise
+        try {
+          // Delete from database
+          await supabase
+            .from('exercise_blocks')
+            .delete()
+            .eq('id', block.id);
+          
+          // Update local state
+          setBlocks(prevBlocks => prevBlocks.filter(b => b.id !== block.id));
+          
+          adjustments.push(`Removed ${block.exercise.name} (no safe alternative)`);
+        } catch (err) {
+          console.error('Failed to remove exercise:', err);
+        }
+      }
+    }
+    
+    // Show adjustment message
+    if (adjustments.length > 0) {
+      setAutoAdjustMessage(`🔄 Auto-adjusted for injury: ${adjustments.join('; ')}`);
+      // Clear message after 8 seconds
+      setTimeout(() => setAutoAdjustMessage(null), 8000);
+    }
+  };
+
   // Handle applying injuries and saving to session
   const handleApplyInjuries = async () => {
     try {
@@ -1089,38 +1218,8 @@ export default function WorkoutPage() {
         })
         .eq('id', sessionId);
       
-      // Find exercises that need swapping and get alternatives
-      const riskyExercises = blocks
-        .map((block, idx) => {
-          const risk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
-          return { block, idx, risk };
-        })
-        .filter(({ risk }) => risk.isRisky && risk.severity >= 2);
-      
-      if (riskyExercises.length > 0) {
-        // Auto-fetch safe alternatives for risky exercises
-        for (const { block } of riskyExercises) {
-          // Find a safe alternative from available exercises
-          const safeAlternative = availableExercises.find(ex => {
-            // Must target same muscle
-            if (ex.primary_muscle !== block.exercise.primaryMuscle) return false;
-            
-            // Check if this alternative would also be risky
-            const altRisk = getExerciseInjuryRisk({
-              ...block.exercise,
-              name: ex.name,
-              primaryMuscle: ex.primary_muscle,
-            }, temporaryInjuries);
-            
-            return !altRisk.isRisky || altRisk.severity < 2;
-          });
-          
-          if (safeAlternative) {
-            // Offer the swap
-            console.log(`Found safe alternative for ${block.exercise.name}: ${safeAlternative.name}`);
-          }
-        }
-      }
+      // Auto-adjust exercises based on injuries
+      await autoAdjustForInjuries(temporaryInjuries);
       
       setShowInjuryModal(false);
     } catch (err) {
@@ -1684,6 +1783,24 @@ export default function WorkoutPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-8">
+      {/* Auto-adjust message */}
+      {autoAdjustMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
+          <div className="bg-primary-500/20 backdrop-blur-sm border border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+            <span className="text-primary-400 text-lg">🔄</span>
+            <p className="text-sm text-primary-200 flex-1">{autoAdjustMessage}</p>
+            <button 
+              onClick={() => setAutoAdjustMessage(null)}
+              className="text-primary-400 hover:text-primary-200"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Workout header */}
       <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
         <div>
