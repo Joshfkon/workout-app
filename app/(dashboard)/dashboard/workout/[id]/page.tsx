@@ -2029,6 +2029,7 @@ export default function WorkoutPage() {
                     warmupSets={isCurrent && block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
                     workingWeight={effectiveWorkingWeight}
                     showSwapOnMount={showSwapForInjury === block.id}
+                    currentInjuries={temporaryInjuries}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}

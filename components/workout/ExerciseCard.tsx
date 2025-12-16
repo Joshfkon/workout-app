@@ -39,6 +39,88 @@ interface WarmupSetData {
   purpose: string;
 }
 
+interface TemporaryInjury {
+  area: string;
+  severity: 1 | 2 | 3;
+}
+
+// Map injury areas to muscles/patterns that might be aggravated
+const INJURY_RISK_MAP: Record<string, { muscles: string[]; patterns: string[]; keywords: string[] }> = {
+  lower_back: { 
+    muscles: ['back', 'hamstrings', 'glutes'], 
+    patterns: ['squat', 'deadlift', 'row', 'hip_hinge'],
+    keywords: ['deadlift', 'squat', 'row', 'good morning', 'hyperextension', 'back extension', 'bent over', 'romanian']
+  },
+  upper_back: { 
+    muscles: ['back', 'shoulders'], 
+    patterns: ['row', 'vertical_pull'],
+    keywords: ['row', 'pull-up', 'pulldown', 'shrug']
+  },
+  neck: { 
+    muscles: ['shoulders', 'back'], 
+    patterns: ['overhead', 'vertical_push'],
+    keywords: ['overhead', 'press', 'shrug', 'upright row']
+  },
+  shoulder_left: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up', 'dip'] },
+  shoulder_right: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up', 'dip'] },
+  elbow_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
+  elbow_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
+  wrist_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
+  wrist_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
+  hip_left: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
+  hip_right: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
+  knee_left: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
+  knee_right: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
+  ankle_left: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
+  ankle_right: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
+  chest: { muscles: ['chest'], patterns: ['push', 'fly'], keywords: ['bench', 'fly', 'press', 'push-up', 'dip'] },
+};
+
+// Check if an exercise might aggravate any reported injuries
+function getExerciseInjuryRisk(
+  exerciseName: string, 
+  exerciseMuscle: string,
+  injuries: TemporaryInjury[]
+): { isRisky: boolean; severity: number; reasons: string[] } {
+  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [] };
+  
+  const nameLower = exerciseName.toLowerCase();
+  const muscleLower = exerciseMuscle.toLowerCase();
+  const reasons: string[] = [];
+  let maxSeverity = 0;
+  
+  for (const injury of injuries) {
+    const riskMap = INJURY_RISK_MAP[injury.area];
+    if (!riskMap) continue;
+    
+    let isMatch = false;
+    
+    // Check muscle match
+    if (riskMap.muscles.some(m => muscleLower.includes(m.toLowerCase()))) {
+      isMatch = true;
+      reasons.push(`Targets ${exerciseMuscle} (may stress ${injury.area.replace('_', ' ')})`);
+    }
+    
+    // Check keyword match in exercise name
+    if (riskMap.keywords.some(kw => nameLower.includes(kw.toLowerCase()))) {
+      isMatch = true;
+      if (reasons.length === 0) {
+        reasons.push(`Exercise type may stress ${injury.area.replace('_', ' ')}`);
+      }
+    }
+    
+    if (isMatch) {
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+    }
+  }
+  
+  return {
+    isRisky: reasons.length > 0,
+    severity: maxSeverity,
+    reasons: Array.from(new Set(reasons))
+  };
+}
+
 interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
@@ -59,6 +141,7 @@ interface ExerciseCardProps {
   warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
+  currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -82,6 +165,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   warmupSets = [],
   workingWeight = 0,
   showSwapOnMount = false,
+  currentInjuries = [],
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -110,16 +194,38 @@ export const ExerciseCard = memo(function ExerciseCard({
     isSwiping: boolean;
   }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
 
-  // Calculate similar exercises for swap suggestions
+  // Calculate similar exercises for swap suggestions, filtering out injury-risky ones
   const similarExercises = useMemo(() => {
     if (availableExercises.length === 0) return [];
-    return findSimilarExercises(exercise, availableExercises)
-      .slice(0, 8)
-      .map(ex => ({
-        exercise: ex,
-        score: calculateSimilarityScore(exercise, ex)
-      }));
-  }, [exercise, availableExercises]);
+    
+    const similar = findSimilarExercises(exercise, availableExercises)
+      .slice(0, 15) // Get more to filter
+      .map(ex => {
+        const injuryRisk = getExerciseInjuryRisk(ex.name, ex.primaryMuscle, currentInjuries);
+        return {
+          exercise: ex,
+          score: calculateSimilarityScore(exercise, ex),
+          injuryRisk
+        };
+      });
+    
+    // Sort: safe exercises first, then by similarity score
+    return similar.sort((a, b) => {
+      // Safe exercises come first
+      if (!a.injuryRisk.isRisky && b.injuryRisk.isRisky) return -1;
+      if (a.injuryRisk.isRisky && !b.injuryRisk.isRisky) return 1;
+      // Then by severity (lower is better)
+      if (a.injuryRisk.severity !== b.injuryRisk.severity) {
+        return a.injuryRisk.severity - b.injuryRisk.severity;
+      }
+      // Then by similarity score
+      return b.score - a.score;
+    }).slice(0, 8);
+  }, [exercise, availableExercises, currentInjuries]);
+  
+  // Count safe alternatives
+  const safeAlternatives = similarExercises.filter(s => !s.injuryRisk.isRisky);
+  const hasInjuries = currentInjuries.length > 0;
 
   // State for pending set inputs (one per pending set)
   const [pendingInputs, setPendingInputs] = useState<{
@@ -1150,7 +1256,26 @@ export const ExerciseCard = memo(function ExerciseCard({
               {swapTab === 'similar' ? (
                 // Similar exercises with match scores
                 <>
-                  {similarExercises.map(({ exercise: alt, score }) => (
+                  {/* Injury warning banner */}
+                  {hasInjuries && (
+                    <div className={`mb-3 p-3 rounded-lg ${
+                      safeAlternatives.length > 0 
+                        ? 'bg-success-500/10 border border-success-500/20' 
+                        : 'bg-warning-500/10 border border-warning-500/20'
+                    }`}>
+                      {safeAlternatives.length > 0 ? (
+                        <p className="text-xs text-success-400">
+                          ✓ <span className="font-medium">{safeAlternatives.length} safe alternative{safeAlternatives.length !== 1 ? 's' : ''}</span> found that won&apos;t aggravate your injury
+                        </p>
+                      ) : (
+                        <p className="text-xs text-warning-400">
+                          ⚠️ <span className="font-medium">No safe alternatives found</span> - all similar exercises may aggravate your injury. Consider skipping this exercise.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                
+                  {similarExercises.map(({ exercise: alt, score, injuryRisk }) => (
                     <button
                       key={alt.id}
                       onClick={() => {
@@ -1159,13 +1284,40 @@ export const ExerciseCard = memo(function ExerciseCard({
                           setShowSwapModal(false);
                         }
                       }}
-                      className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                      className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
+                        injuryRisk.isRisky 
+                          ? 'hover:bg-danger-500/10 opacity-60' 
+                          : 'hover:bg-surface-800'
+                      }`}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-surface-100 truncate">{alt.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium truncate ${injuryRisk.isRisky ? 'text-surface-400' : 'text-surface-100'}`}>
+                            {alt.name}
+                          </p>
+                          {injuryRisk.isRisky && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                              injuryRisk.severity === 3 
+                                ? 'bg-danger-500/20 text-danger-400' 
+                                : 'bg-warning-500/20 text-warning-400'
+                            }`}>
+                              ⚠️ {injuryRisk.severity === 3 ? 'Risky' : 'Caution'}
+                            </span>
+                          )}
+                          {!injuryRisk.isRisky && hasInjuries && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-success-400 flex-shrink-0">
+                              ✓ Safe
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-surface-500 capitalize">
                           {alt.primaryMuscle} • {alt.mechanic}
                         </p>
+                        {injuryRisk.isRisky && injuryRisk.reasons.length > 0 && (
+                          <p className="text-[10px] text-danger-400/70 mt-0.5">
+                            {injuryRisk.reasons[0]}
+                          </p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <div 
@@ -1198,6 +1350,14 @@ export const ExerciseCard = memo(function ExerciseCard({
               ) : (
                 // Browse all exercises with search/filter
                 <>
+                  {/* Injury warning in browse tab */}
+                  {hasInjuries && (
+                    <div className="mb-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                      <p className="text-xs text-warning-400">
+                        ⚠️ Exercises marked with warnings may aggravate your injury
+                      </p>
+                    </div>
+                  )}
                   {availableExercises
                     .filter(ex => {
                       // Don't show the current exercise
@@ -1208,28 +1368,48 @@ export const ExerciseCard = memo(function ExerciseCard({
                       if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
                       return true;
                     })
-                    .map((alt) => (
-                      <button
-                        key={alt.id}
-                        onClick={() => {
-                          if (onExerciseSwap) {
-                            onExerciseSwap(alt);
-                            setShowSwapModal(false);
-                          }
-                        }}
-                        className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-surface-100 truncate">{alt.name}</p>
-                          <p className="text-xs text-surface-500 capitalize">
-                            {alt.primaryMuscle} • {alt.mechanic}
-                          </p>
-                        </div>
-                        <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    ))}
+                    .map((alt) => {
+                      const altInjuryRisk = getExerciseInjuryRisk(alt.name, alt.primaryMuscle, currentInjuries);
+                      return (
+                        <button
+                          key={alt.id}
+                          onClick={() => {
+                            if (onExerciseSwap) {
+                              onExerciseSwap(alt);
+                              setShowSwapModal(false);
+                            }
+                          }}
+                          className={`w-full p-3 text-left rounded-lg transition-colors flex items-center gap-3 ${
+                            altInjuryRisk.isRisky 
+                              ? 'hover:bg-danger-500/10 opacity-60' 
+                              : 'hover:bg-surface-800'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className={`font-medium truncate ${altInjuryRisk.isRisky ? 'text-surface-400' : 'text-surface-100'}`}>
+                                {alt.name}
+                              </p>
+                              {altInjuryRisk.isRisky && (
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                                  altInjuryRisk.severity === 3 
+                                    ? 'bg-danger-500/20 text-danger-400' 
+                                    : 'bg-warning-500/20 text-warning-400'
+                                }`}>
+                                  ⚠️
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-surface-500 capitalize">
+                              {alt.primaryMuscle} • {alt.mechanic}
+                            </p>
+                          </div>
+                          <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      );
+                    })}
                   {availableExercises.filter(ex => {
                     if (ex.id === exercise.id) return false;
                     if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
@@ -1243,6 +1423,29 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </>
               )}
             </div>
+            
+            {/* Footer with Skip option */}
+            {hasInjuries && onExerciseDelete && (
+              <div className="p-3 border-t border-surface-700 bg-surface-800/50">
+                <button
+                  onClick={() => {
+                    if (onExerciseDelete) {
+                      onExerciseDelete();
+                      setShowSwapModal(false);
+                    }
+                  }}
+                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                  Skip this exercise (due to injury)
+                </button>
+                <p className="text-[10px] text-surface-500 text-center mt-1.5">
+                  This will remove the exercise from today&apos;s workout
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
