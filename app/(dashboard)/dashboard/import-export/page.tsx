@@ -190,38 +190,45 @@ export default function ImportExportPage() {
           }
         }
         
-        // Batch create new exercises
+        // Batch create new exercises (as custom exercises owned by user)
         if (uniqueExerciseNames.size > 0) {
-          const newExercises = Array.from(uniqueExerciseNames).map(name => ({
-            name,
-            primary_muscle: inferMuscleFromName(name),
-            mechanic: inferMechanicFromName(name),
-            movement_pattern: inferMovementPattern(name),
-          }));
+          console.log(`Creating ${uniqueExerciseNames.size} new custom exercises`);
           
-          const { data: createdExercises, error: exerciseError } = await supabase
-            .from('exercises')
-            .insert(newExercises)
-            .select('id, name');
-          
-          if (exerciseError) {
-            console.error('Exercise create error:', exerciseError);
-            // If batch fails due to duplicates, try one by one
-            for (const ex of newExercises) {
-              const { data: singleEx } = await supabase
+          // Insert one by one since RLS requires is_custom and created_by
+          for (const name of Array.from(uniqueExerciseNames)) {
+            try {
+              const { data: newEx, error: exError } = await supabase
                 .from('exercises')
-                .upsert(ex, { onConflict: 'name' })
+                .insert({
+                  name,
+                  primary_muscle: inferMuscleFromName(name),
+                  mechanic: inferMechanicFromName(name),
+                  movement_pattern: inferMovementPattern(name),
+                  is_custom: true,
+                  created_by: user.id,
+                })
                 .select('id, name')
                 .single();
-              if (singleEx) {
-                exerciseCache.set(singleEx.name.toLowerCase().trim(), singleEx.id);
+              
+              if (exError) {
+                // If it already exists, try to find it
+                const { data: existing } = await supabase
+                  .from('exercises')
+                  .select('id, name')
+                  .ilike('name', name)
+                  .single();
+                if (existing) {
+                  exerciseCache.set(existing.name.toLowerCase().trim(), existing.id);
+                }
+              } else if (newEx) {
+                exerciseCache.set(newEx.name.toLowerCase().trim(), newEx.id);
               }
-            }
-          } else if (createdExercises) {
-            for (const ex of createdExercises as Array<{ id: string; name: string }>) {
-              exerciseCache.set(ex.name.toLowerCase().trim(), ex.id);
+            } catch (err) {
+              console.error('Failed to create exercise:', name, err);
             }
           }
+          
+          console.log(`Exercise cache now has ${exerciseCache.size} entries`);
         }
         
         setImportProgress({ current: 2, total: 5, currentItem: 'Step 3/5: Creating workout sessions...' });
