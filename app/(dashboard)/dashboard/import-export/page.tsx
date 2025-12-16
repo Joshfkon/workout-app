@@ -29,6 +29,12 @@ export default function ImportExportPage() {
     total: number;
     currentItem: string;
   } | null>(null);
+  
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteType, setDeleteType] = useState<'workouts' | 'nutrition' | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<{ success: boolean; count: number } | null>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,6 +62,83 @@ export default function ImportExportPage() {
       });
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteAll = async (type: 'workouts' | 'nutrition') => {
+    setIsDeleting(true);
+    setDeleteResult(null);
+    
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      setIsDeleting(false);
+      return;
+    }
+    
+    try {
+      if (type === 'workouts') {
+        // First get all workout sessions for this user
+        const { data: sessions } = await supabase
+          .from('workout_sessions')
+          .select('id')
+          .eq('user_id', user.id);
+        
+        if (sessions && sessions.length > 0) {
+          const sessionIds = sessions.map((s: { id: string }) => s.id);
+          
+          // Delete set_logs for these sessions (via exercise_blocks)
+          const { data: blocks } = await supabase
+            .from('exercise_blocks')
+            .select('id')
+            .in('workout_session_id', sessionIds);
+          
+          if (blocks && blocks.length > 0) {
+            const blockIds = blocks.map((b: { id: string }) => b.id);
+            await supabase
+              .from('set_logs')
+              .delete()
+              .in('exercise_block_id', blockIds);
+          }
+          
+          // Delete exercise_blocks
+          await supabase
+            .from('exercise_blocks')
+            .delete()
+            .in('workout_session_id', sessionIds);
+          
+          // Delete workout_sessions
+          await supabase
+            .from('workout_sessions')
+            .delete()
+            .eq('user_id', user.id);
+          
+          setDeleteResult({ success: true, count: sessions.length });
+        } else {
+          setDeleteResult({ success: true, count: 0 });
+        }
+      } else if (type === 'nutrition') {
+        // Delete all nutrition logs
+        const { data: logs } = await supabase
+          .from('nutrition_logs')
+          .select('id')
+          .eq('user_id', user.id);
+        
+        await supabase
+          .from('nutrition_logs')
+          .delete()
+          .eq('user_id', user.id);
+        
+        setDeleteResult({ success: true, count: logs?.length || 0 });
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setDeleteResult({ success: false, count: 0 });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteType(null);
     }
   };
 
@@ -686,6 +769,82 @@ export default function ImportExportPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Danger Zone */}
+          <Card className="border-danger-500/30">
+            <CardHeader>
+              <CardTitle className="text-danger-400">⚠️ Danger Zone</CardTitle>
+              <p className="text-sm text-surface-400 mt-1">
+                Permanently delete all your data. This cannot be undone!
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {deleteResult && (
+                <div className={`p-4 rounded-lg ${
+                  deleteResult.success 
+                    ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+                    : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+                }`}>
+                  {deleteResult.success 
+                    ? `✅ Successfully deleted ${deleteResult.count} items`
+                    : '❌ Failed to delete data. Please try again.'}
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button 
+                  variant="outline" 
+                  className="border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+                  onClick={() => { setDeleteType('workouts'); setShowDeleteConfirm(true); }}
+                  disabled={isDeleting}
+                >
+                  🗑️ Delete All Workout History
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+                  onClick={() => { setDeleteType('nutrition'); setShowDeleteConfirm(true); }}
+                  disabled={isDeleting}
+                >
+                  🗑️ Delete All Nutrition Logs
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 max-w-md mx-4 shadow-xl">
+            <div className="text-center">
+              <div className="text-4xl mb-4">⚠️</div>
+              <h3 className="text-xl font-bold text-surface-100 mb-2">
+                Delete All {deleteType === 'workouts' ? 'Workout History' : 'Nutrition Logs'}?
+              </h3>
+              <p className="text-surface-400 mb-6">
+                This will permanently delete <strong>all</strong> your {deleteType === 'workouts' ? 'workouts, exercises, and sets' : 'food logs'}. 
+                This action cannot be undone.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button 
+                  variant="ghost" 
+                  onClick={() => { setShowDeleteConfirm(false); setDeleteType(null); }}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  className="bg-danger-500 hover:bg-danger-600 text-white"
+                  onClick={() => deleteType && handleDeleteAll(deleteType)}
+                  isLoading={isDeleting}
+                >
+                  Yes, Delete Everything
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
