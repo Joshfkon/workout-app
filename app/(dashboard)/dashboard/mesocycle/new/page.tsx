@@ -60,29 +60,36 @@ export default function NewMesocyclePage() {
 
   // Calculate estimated exercises based on time
   const getExerciseEstimate = (minutes: number) => {
-    // Rough estimate: 8-10 min per exercise (including rest)
+    // Rough estimate: 6-8 min per exercise (including rest) for compounds, 4-6 for isolation
+    // Quick workouts: fewer exercises, longer rest between sets for quality
+    if (minutes <= 20) {
+      return { min: 2, max: 3 }; // Quick workout: focus on 2-3 key exercises
+    }
+    if (minutes <= 30) {
+      return { min: 3, max: 4 }; // Short workout: 3-4 focused exercises
+    }
     const minExercises = Math.floor(minutes / 10);
     const maxExercises = Math.floor(minutes / 7);
-    return { min: Math.max(3, minExercises), max: Math.min(12, maxExercises) };
+    return { min: Math.max(4, minExercises), max: Math.min(12, maxExercises) };
   };
   
   const exerciseEstimate = getExerciseEstimate(sessionDurationMinutes);
 
   // Optimal session duration based on training frequency
-  const getOptimalSessionTime = (days: number): { min: number; optimal: number; max: number; reason: string } => {
+  const getOptimalSessionTime = (days: number): { min: number; optimal: number; max: number; quickMin: number; reason: string } => {
     switch (days) {
       case 2:
-        return { min: 60, optimal: 75, max: 90, reason: 'Full body 2x/week needs longer sessions to hit all muscle groups' };
+        return { min: 60, optimal: 75, max: 90, quickMin: 30, reason: 'Full body 2x/week needs longer sessions to hit all muscle groups' };
       case 3:
-        return { min: 50, optimal: 60, max: 75, reason: 'Full body or PPL works well with moderate session length' };
+        return { min: 50, optimal: 60, max: 75, quickMin: 25, reason: 'Full body or PPL works well with moderate session length' };
       case 4:
-        return { min: 45, optimal: 55, max: 70, reason: 'Upper/Lower split allows focused training per session' };
+        return { min: 45, optimal: 55, max: 70, quickMin: 20, reason: 'Upper/Lower split allows focused training per session' };
       case 5:
-        return { min: 40, optimal: 50, max: 65, reason: 'Higher frequency allows shorter, more focused sessions' };
+        return { min: 40, optimal: 50, max: 65, quickMin: 15, reason: 'Higher frequency allows shorter, more focused sessions' };
       case 6:
-        return { min: 35, optimal: 45, max: 60, reason: 'PPL 2x/week - keep sessions efficient to manage recovery' };
+        return { min: 35, optimal: 45, max: 60, quickMin: 15, reason: 'PPL 2x/week - keep sessions efficient to manage recovery' };
       default:
-        return { min: 45, optimal: 60, max: 75, reason: 'Standard recommendation' };
+        return { min: 45, optimal: 60, max: 75, quickMin: 20, reason: 'Standard recommendation' };
     }
   };
 
@@ -91,24 +98,29 @@ export default function NewMesocyclePage() {
     const totalMinutes = days * minutesPerSession;
     const totalHours = totalMinutes / 60;
     
-    // Optimal ranges for hypertrophy (natural lifters)
-    const minEffective = 3; // hours/week
+    // Adjusted ranges - recognize that even minimal training has benefits
+    const quickWorkout = 1.5; // hours/week - "quick workout" threshold
+    const minEffective = 2.5; // hours/week - minimum for solid results
     const optimalMin = 4;
     const optimalMax = 6;
     const maxRecoverable = 8;
     
-    let status: 'too_low' | 'low' | 'optimal' | 'high' | 'too_high';
+    let status: 'quick' | 'minimal' | 'low' | 'optimal' | 'high' | 'too_high';
     let message: string;
     let color: string;
     
-    if (totalHours < minEffective) {
-      status = 'too_low';
-      message = `${totalHours.toFixed(1)} hrs/week may be insufficient for optimal hypertrophy. Consider adding time or days.`;
-      color = 'text-danger-400';
+    if (totalHours < quickWorkout) {
+      status = 'quick';
+      message = `${totalHours.toFixed(1)} hrs/week is a "quick workout" schedule. We'll maximize efficiency with S-tier exercises only.`;
+      color = 'text-accent-400';
+    } else if (totalHours < minEffective) {
+      status = 'minimal';
+      message = `${totalHours.toFixed(1)} hrs/week is minimal but effective. Focus on the highest-impact exercises.`;
+      color = 'text-warning-400';
     } else if (totalHours < optimalMin) {
       status = 'low';
-      message = `${totalHours.toFixed(1)} hrs/week is on the lower end. You'll progress, but more volume could help.`;
-      color = 'text-warning-400';
+      message = `${totalHours.toFixed(1)} hrs/week is moderate. You'll make solid progress with focused effort.`;
+      color = 'text-surface-300';
     } else if (totalHours <= optimalMax) {
       status = 'optimal';
       message = `${totalHours.toFixed(1)} hrs/week is in the optimal range for hypertrophy!`;
@@ -347,7 +359,23 @@ export default function NewMesocyclePage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-surface-100">Create Mesocycle</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-surface-100">Create Mesocycle</h1>
+          <div className="group relative">
+            <button className="w-5 h-5 rounded-full bg-surface-700 hover:bg-surface-600 text-surface-400 text-xs flex items-center justify-center">
+              ?
+            </button>
+            <div className="absolute left-0 top-7 w-72 p-3 bg-surface-800 border border-surface-700 rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+              <p className="text-sm font-medium text-surface-200 mb-1">What is a Mesocycle?</p>
+              <p className="text-xs text-surface-400">
+                A <span className="text-primary-400">mesocycle</span> is a training block lasting 4-8 weeks, designed to achieve specific goals. It includes progressive overload weeks followed by a deload week to manage fatigue and maximize adaptation.
+              </p>
+              <p className="text-xs text-surface-500 mt-2">
+                Think of it as a &ldquo;chapter&rdquo; in your training story—focused, structured, and building toward the next phase.
+              </p>
+            </div>
+          </div>
+        </div>
         <p className="text-surface-400 mt-1">
           AI-assisted training plan based on your profile
         </p>
@@ -486,13 +514,14 @@ export default function NewMesocyclePage() {
 
             <Slider
               label="Time per Session"
-              min={30}
+              min={15}
               max={120}
-              step={15}
+              step={5}
               value={sessionDurationMinutes}
               onChange={(e) => setSessionDurationMinutes(parseInt(e.target.value))}
               valueFormatter={(v) => `${v} min`}
               marks={[
+                { value: 15, label: '15' },
                 { value: 30, label: '30' },
                 { value: 45, label: '45' },
                 { value: 60, label: '60' },
@@ -500,6 +529,22 @@ export default function NewMesocyclePage() {
                 { value: 120, label: '120' },
               ]}
             />
+
+            {/* Quick workout mode indicator */}
+            {sessionDurationMinutes <= 25 && (
+              <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">⚡</span>
+                  <span className="font-medium text-accent-400">Quick Workout Mode</span>
+                </div>
+                <p className="text-xs text-surface-400">
+                  Short on time? No problem! We&apos;ll prioritize the most effective exercises (S-tier) for maximum results. 
+                  {sessionDurationMinutes <= 20 
+                    ? ' Expect 2-3 exercises per session focusing on compounds.'
+                    : ' Expect 3-4 exercises per session with compound focus.'}
+                </p>
+              </div>
+            )}
 
             {/* Optimal session recommendation */}
             <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
@@ -526,11 +571,17 @@ export default function NewMesocyclePage() {
               </div>
               <p className="text-xs text-surface-400">{optimalTime.reason}</p>
               
-              {/* Session time warning */}
-              {sessionDurationMinutes < optimalTime.min && (
-                <div className="flex items-start gap-2 p-2 bg-warning-500/10 rounded text-warning-400 text-xs">
-                  <span>⚠️</span>
-                  <span>Your session time ({sessionDurationMinutes} min) is below optimal. Consider {optimalTime.optimal} min for best results.</span>
+              {/* Session time messaging */}
+              {sessionDurationMinutes <= 25 && (
+                <div className="flex items-start gap-2 p-2 bg-accent-500/10 rounded text-accent-400 text-xs">
+                  <span>⚡</span>
+                  <span>Quick workout mode: We&apos;ll select only the highest-impact S-tier exercises to maximize your limited time.</span>
+                </div>
+              )}
+              {sessionDurationMinutes > 25 && sessionDurationMinutes < optimalTime.min && (
+                <div className="flex items-start gap-2 p-2 bg-surface-800 rounded text-surface-400 text-xs">
+                  <span>💡</span>
+                  <span>Shorter than optimal ({sessionDurationMinutes} vs {optimalTime.optimal} min), but totally workable. We&apos;ll prioritize the best exercises.</span>
                 </div>
               )}
               {sessionDurationMinutes > optimalTime.max && (
@@ -545,7 +596,9 @@ export default function NewMesocyclePage() {
             <div className={`p-4 rounded-lg border ${
               volumeAssessment.status === 'optimal' 
                 ? 'bg-success-500/10 border-success-500/20' 
-                : volumeAssessment.status === 'too_low' || volumeAssessment.status === 'too_high'
+                : volumeAssessment.status === 'quick'
+                ? 'bg-accent-500/10 border-accent-500/20'
+                : volumeAssessment.status === 'too_high'
                 ? 'bg-danger-500/10 border-danger-500/20'
                 : 'bg-warning-500/10 border-warning-500/20'
             }`}>
@@ -782,7 +835,9 @@ export default function NewMesocyclePage() {
             <div className={`p-3 rounded-lg border ${
               volumeAssessment.status === 'optimal' 
                 ? 'bg-success-500/10 border-success-500/20' 
-                : volumeAssessment.status === 'too_low' || volumeAssessment.status === 'too_high'
+                : volumeAssessment.status === 'quick'
+                ? 'bg-accent-500/10 border-accent-500/20'
+                : volumeAssessment.status === 'too_high'
                 ? 'bg-danger-500/10 border-danger-500/20'
                 : 'bg-warning-500/10 border-warning-500/20'
             }`}>

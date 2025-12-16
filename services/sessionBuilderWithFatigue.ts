@@ -84,6 +84,8 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
 /**
  * Select exercises for a muscle group considering equipment, experience, injury, SFR,
  * and hypertrophy effectiveness (Nippard methodology)
+ * 
+ * @param quickWorkoutMode - When true, only S and A tier exercises are selected (for time-constrained workouts)
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
@@ -91,7 +93,8 @@ function selectExercisesWithFatigue(
   profile: ExtendedUserProfile,
   fatigueManager: SessionFatigueManager,
   startingPosition: number,
-  prioritizeHypertrophy: boolean = true
+  prioritizeHypertrophy: boolean = true,
+  quickWorkoutMode: boolean = false
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
@@ -103,6 +106,17 @@ function selectExercisesWithFatigue(
       profile.availableEquipment.includes(e.equipment) &&
       !profile.injuryHistory.includes(muscle)
   );
+
+  // QUICK WORKOUT MODE: Only S and A tier exercises (maximum efficiency)
+  if (quickWorkoutMode) {
+    const topTierCandidates = candidates.filter((e) => 
+      ['S', 'A'].includes(e.hypertrophyScore?.tier || '')
+    );
+    // Use top tier if available, otherwise fall back to all
+    if (topTierCandidates.length > 0) {
+      candidates = topTierCandidates;
+    }
+  }
 
   // Filter by difficulty - but always allow S-tier and A-tier exercises regardless of difficulty
   // (these are the best exercises and should be available to everyone with proper coaching)
@@ -128,14 +142,12 @@ function selectExercisesWithFatigue(
     candidates = allExercises.filter((e) => e.primaryMuscle === muscle);
   }
 
-  // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound/isolation, 3) SFR
+  // Sort by: 1) Hypertrophy tier (S > A > B > C > D > F), 2) Compound/isolation, 3) SFR
   candidates.sort((a, b) => {
-    // First: Hypertrophy tier (S-tier exercises first)
-    if (prioritizeHypertrophy) {
-      const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
-      const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
-      if (aTier !== bTier) return aTier - bTier;
-    }
+    // ALWAYS sort by hypertrophy tier first - S-tier exercises should come first
+    const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
+    const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
+    if (aTier !== bTier) return aTier - bTier;
     
     // Second: Compounds first for early positions (when fresher)
     if (startingPosition <= 2) {
@@ -243,7 +255,8 @@ export function buildDetailedSessionWithFatigue(
   weekInMesocycle: number,
   totalMesocycleWeeks: number,
   periodizationModel: PeriodizationModel,
-  weeklyProgression: WeeklyProgression
+  weeklyProgression: WeeklyProgression,
+  quickWorkoutMode: boolean = false
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -296,8 +309,8 @@ export function buildDetailedSessionWithFatigue(
       setsThisSession = Math.max(1, Math.round(setsThisSession * fatigueReduction));
     }
 
-    // Select exercises with fatigue awareness
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition);
+    // Select exercises with fatigue awareness (prioritize S-tier in quick workout mode)
+    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode);
 
     for (const selection of selectedExercises) {
       // Determine position category
@@ -428,7 +441,8 @@ export function buildDUPSession(
   currentDay: number,
   dupDayType: DUPDayType,
   weekInMesocycle: number,
-  totalMesocycleWeeks: number
+  totalMesocycleWeeks: number,
+  quickWorkoutMode: boolean = false
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -470,7 +484,7 @@ export function buildDUPSession(
     setsThisSession = Math.round(setsThisSession * volumeModifiers[dupDayType]);
     setsThisSession = Math.max(1, setsThisSession);
 
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition);
+    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode);
 
     for (const selection of selectedExercises) {
       const isCompound = selection.exercise.pattern !== 'isolation';
@@ -743,12 +757,21 @@ export function generateFullMesocycleWithFatigue(
   const warnings: string[] = [];
   const programNotes: string[] = [];
 
+  // Determine if quick workout mode (under 25 minutes per session)
+  const quickWorkoutMode = sessionMinutes <= 25;
+  if (quickWorkoutMode) {
+    programNotes.push(`⚡ Quick Workout Mode: Only S-tier and A-tier exercises will be selected for maximum efficiency`);
+  }
+
   // Step 1: Calculate recovery factors
   const recoveryFactors = calculateRecoveryFactors(profile);
   warnings.push(...recoveryFactors.warnings);
 
-  // Step 2: Create fatigue budget
-  const fatigueBudgetConfig = createFatigueBudget(profile);
+  // Step 2: Create fatigue budget (reduced for quick workouts)
+  const baseFatigueBudget = createFatigueBudget(profile);
+  const fatigueBudgetConfig = quickWorkoutMode 
+    ? { ...baseFatigueBudget, systemicLimit: baseFatigueBudget.systemicLimit * 0.6 }
+    : baseFatigueBudget;
   programNotes.push(`Systemic fatigue limit: ${fatigueBudgetConfig.systemicLimit}/session`);
   programNotes.push(`Minimum SFR threshold: ${fatigueBudgetConfig.minSFRThreshold}`);
 
@@ -820,7 +843,8 @@ export function generateFullMesocycleWithFatigue(
           dayCounter,
           dupRotation[dupIndex % 3],
           weekNum,
-          periodization.mesocycleWeeks
+          periodization.mesocycleWeeks,
+          quickWorkoutMode
         );
         dupIndex++;
       } else {
@@ -834,7 +858,8 @@ export function generateFullMesocycleWithFatigue(
           weekNum,
           periodization.mesocycleWeeks,
           periodization.model,
-          weekProgression
+          weekProgression,
+          quickWorkoutMode
         );
       }
 
