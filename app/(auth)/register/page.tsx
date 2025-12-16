@@ -53,7 +53,15 @@ export default function RegisterPage() {
       });
 
       if (signUpError) {
-        setError(signUpError.message);
+        // Check for duplicate email error
+        if (signUpError.message.toLowerCase().includes('already registered') ||
+            signUpError.message.toLowerCase().includes('already exists') ||
+            signUpError.message.toLowerCase().includes('user already') ||
+            signUpError.status === 422) {
+          setError('EMAIL_EXISTS');
+        } else {
+          setError(signUpError.message);
+        }
         return;
       }
 
@@ -150,7 +158,24 @@ export default function RegisterPage() {
 
           {error && (
             <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
-              <p className="text-sm text-danger-400">{error}</p>
+              {error === 'EMAIL_EXISTS' ? (
+                <div>
+                  <p className="text-sm text-danger-400 font-medium">
+                    An account with this email already exists.
+                  </p>
+                  <p className="text-sm text-surface-400 mt-1">
+                    <Link href="/login" className="text-primary-400 hover:text-primary-300 underline">
+                      Sign in instead
+                    </Link>
+                    {' '}or{' '}
+                    <Link href="/forgot-password" className="text-primary-400 hover:text-primary-300 underline">
+                      reset your password
+                    </Link>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-danger-400">{error}</p>
+              )}
             </div>
           )}
 
