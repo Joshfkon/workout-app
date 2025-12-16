@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
@@ -14,19 +15,31 @@ const inchesToCm = (inches: number) => inches * 2.54;
 const kgToLbs = (kg: number) => kg * 2.20462;
 const lbsToKg = (lbs: number) => lbs / 2.20462;
 
-// Body fat visual reference images descriptions
-const BODY_FAT_REFERENCES = {
+// Convert total inches to feet and inches
+const inchesToFeetInches = (totalInches: number) => {
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches % 12);
+  return { feet, inches };
+};
+
+// Convert feet and inches to total inches
+const feetInchesToInches = (feet: number, inches: number) => {
+  return feet * 12 + inches;
+};
+
+// Body fat visual reference with clickable values
+const BODY_FAT_OPTIONS = {
   male: [
-    { range: '8-10%', description: 'Very lean, visible abs, vascular' },
-    { range: '12-15%', description: 'Athletic, some ab definition' },
-    { range: '18-20%', description: 'Average, soft midsection' },
-    { range: '25%+', description: 'Higher body fat, no ab definition' },
+    { value: 9, label: '9%', description: 'Hard Abs' },
+    { value: 12, label: '12%', description: 'Faint Abs' },
+    { value: 15, label: '15%', description: 'Flat Stomach' },
+    { value: 20, label: '20%', description: 'Soft Everything' },
   ],
   female: [
-    { range: '15-18%', description: 'Very lean, visible abs' },
-    { range: '20-23%', description: 'Athletic, toned' },
-    { range: '25-28%', description: 'Average, feminine shape' },
-    { range: '32%+', description: 'Higher body fat' },
+    { value: 16, label: '16%', description: 'Very lean, visible abs' },
+    { value: 20, label: '20%', description: 'Athletic, toned' },
+    { value: 25, label: '25%', description: 'Average, feminine shape' },
+    { value: 32, label: '32%', description: 'Higher body fat' },
   ]
 };
 
@@ -50,9 +63,13 @@ export default function OnboardingBodyCompPage() {
   // Form state - stored in display units
   const [sex, setSex] = useState<'male' | 'female'>('male');
   const [heightDisplay, setHeightDisplay] = useState<string>('');
+  // For imperial: feet and inches
+  const [heightFeet, setHeightFeet] = useState<string>('');
+  const [heightInches, setHeightInches] = useState<string>('');
   const [weightDisplay, setWeightDisplay] = useState<string>('');
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
   const [useDexa, setUseDexa] = useState(false);
+  const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
   
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
@@ -62,9 +79,18 @@ export default function OnboardingBodyCompPage() {
   
   // Convert display values to metric for calculations
   const getHeightCm = () => {
-    if (!heightDisplay) return 0;
-    const val = parseFloat(heightDisplay);
-    return units === 'lb' ? inchesToCm(val) : val;
+    if (units === 'lb') {
+      // Imperial: use feet + inches
+      const feet = parseFloat(heightFeet) || 0;
+      const inches = parseFloat(heightInches) || 0;
+      if (feet === 0 && inches === 0) return 0;
+      const totalInches = feetInchesToInches(feet, inches);
+      return inchesToCm(totalInches);
+    } else {
+      // Metric: use cm
+      if (!heightDisplay) return 0;
+      return parseFloat(heightDisplay);
+    }
   };
   
   const getWeightKg = () => {
@@ -109,10 +135,14 @@ export default function OnboardingBodyCompPage() {
       
       if (userData?.height_cm) {
         // Convert to display units
-        const displayHeight = units === 'lb' 
-          ? cmToInches(userData.height_cm).toFixed(1)
-          : String(userData.height_cm);
-        setHeightDisplay(displayHeight);
+        if (units === 'lb') {
+          const totalInches = cmToInches(userData.height_cm);
+          const { feet, inches } = inchesToFeetInches(totalInches);
+          setHeightFeet(String(feet));
+          setHeightInches(String(inches));
+        } else {
+          setHeightDisplay(String(userData.height_cm));
+        }
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
@@ -140,7 +170,7 @@ export default function OnboardingBodyCompPage() {
       setBodyComp(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heightDisplay, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units]);
+  }, [heightDisplay, heightFeet, heightInches, weightDisplay, bodyFatPercent, useDexa, existingDexa, sex, units]);
   
   const handleUseDexa = () => {
     if (existingDexa) {
@@ -375,15 +405,45 @@ export default function OnboardingBodyCompPage() {
               hint="Used for strength percentile comparisons"
             />
             
-            <Input
-              label={`Height (${units === 'lb' ? 'inches' : 'cm'})`}
-              type="number"
-              value={heightDisplay}
-              onChange={(e) => setHeightDisplay(e.target.value)}
-              placeholder={units === 'lb' ? '69' : '175'}
-              min={units === 'lb' ? 40 : 100}
-              max={units === 'lb' ? 96 : 250}
-            />
+            {units === 'lb' ? (
+              <div>
+                <label className="block text-sm font-medium text-surface-200 mb-2">Height</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      value={heightFeet}
+                      onChange={(e) => setHeightFeet(e.target.value)}
+                      placeholder="5"
+                      min={3}
+                      max={8}
+                    />
+                    <span className="text-xs text-surface-500 mt-1 block text-center">feet</span>
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      value={heightInches}
+                      onChange={(e) => setHeightInches(e.target.value)}
+                      placeholder="9"
+                      min={0}
+                      max={11}
+                    />
+                    <span className="text-xs text-surface-500 mt-1 block text-center">inches</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Input
+                label="Height (cm)"
+                type="number"
+                value={heightDisplay}
+                onChange={(e) => setHeightDisplay(e.target.value)}
+                placeholder="175"
+                min={100}
+                max={250}
+              />
+            )}
             
             <Input
               label={`Weight (${units === 'lb' ? 'lbs' : 'kg'})`}
@@ -402,39 +462,107 @@ export default function OnboardingBodyCompPage() {
             />
             
             <div>
-              <Input
-                label="Body Fat %"
-                type="number"
-                value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
-                onChange={(e) => {
-                  setUseDexa(false);
-                  setBodyFatPercent(e.target.value);
-                }}
-                placeholder="15"
-                min={3}
-                max={60}
-                step={0.5}
-                disabled={useDexa}
-                hint={useDexa ? 'Using DEXA scan data' : 'Estimate if you don\'t know'}
-              />
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Body Fat %"
+                    type="number"
+                    value={useDexa && existingDexa ? String(existingDexa.body_fat_percent) : bodyFatPercent}
+                    onChange={(e) => {
+                      setUseDexa(false);
+                      setBodyFatPercent(e.target.value);
+                    }}
+                    placeholder="15"
+                    min={3}
+                    max={60}
+                    step={0.5}
+                    disabled={useDexa}
+                    hint={useDexa ? 'Using DEXA scan data' : ''}
+                  />
+                </div>
+                {!useDexa && (
+                  <Button 
+                    type="button"
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowBodyFatGuide(!showBodyFatGuide)}
+                    className="mb-1"
+                  >
+                    {showBodyFatGuide ? 'Hide Guide' : '📷 Visual Guide'}
+                  </Button>
+                )}
+              </div>
               
-              {/* Body fat reference guide */}
-              {!useDexa && (
-                <div className="mt-2 p-3 bg-surface-800/50 rounded-lg">
-                  <p className="text-xs text-surface-500 mb-2">Visual reference ({sex}):</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {BODY_FAT_REFERENCES[sex].map((ref) => (
-                      <button
-                        key={ref.range}
-                        type="button"
-                        onClick={() => setBodyFatPercent(ref.range.split('-')[0].replace('%', ''))}
-                        className="p-2 text-left rounded bg-surface-800 hover:bg-surface-700 transition-colors"
-                      >
-                        <p className="text-sm font-medium text-surface-200">{ref.range}</p>
-                        <p className="text-xs text-surface-500">{ref.description}</p>
-                      </button>
-                    ))}
-                  </div>
+              {/* Body fat visual guide */}
+              {!useDexa && showBodyFatGuide && (
+                <div className="mt-3 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
+                  <p className="text-sm font-medium text-surface-200 mb-3">
+                    Tap a body fat level that looks closest to you ({sex === 'male' ? 'Male' : 'Female'}):
+                  </p>
+                  
+                  {sex === 'male' ? (
+                    <>
+                      {/* Visual guide image for males */}
+                      <div className="rounded-lg overflow-hidden mb-3 relative">
+                        <Image 
+                          src="/images/body-fat-guide-male.png" 
+                          alt="Male body fat percentage visual guide"
+                          width={600}
+                          height={600}
+                          className="w-full h-auto"
+                          priority
+                        />
+                      </div>
+                      
+                      {/* Clickable options */}
+                      <div className="grid grid-cols-4 gap-2">
+                        {BODY_FAT_OPTIONS.male.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setBodyFatPercent(String(option.value));
+                              setShowBodyFatGuide(false);
+                            }}
+                            className={`p-2 rounded-lg text-center transition-all ${
+                              bodyFatPercent === String(option.value)
+                                ? 'bg-primary-500 text-white'
+                                : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                            }`}
+                          >
+                            <p className="text-lg font-bold">{option.label}</p>
+                            <p className="text-xs opacity-75">{option.description}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    // Female options (no image yet, but keep text options)
+                    <div className="grid grid-cols-2 gap-2">
+                      {BODY_FAT_OPTIONS.female.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setBodyFatPercent(String(option.value));
+                            setShowBodyFatGuide(false);
+                          }}
+                          className={`p-3 rounded-lg text-left transition-all ${
+                            bodyFatPercent === String(option.value)
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-700 hover:bg-surface-600 text-surface-200'
+                          }`}
+                        >
+                          <p className="text-lg font-bold">{option.label}</p>
+                          <p className="text-xs opacity-75">{option.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-surface-500 mt-3 text-center">
+                    Don&apos;t worry about being exact — an estimate is fine!
+                  </p>
                 </div>
               )}
             </div>
