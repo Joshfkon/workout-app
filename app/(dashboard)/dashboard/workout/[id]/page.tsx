@@ -2040,7 +2040,9 @@ export default function WorkoutPage() {
                               className="ml-2 underline font-medium"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                // Set and then immediately reset so it can be triggered again
                                 setShowSwapForInjury(block.id);
+                                setTimeout(() => setShowSwapForInjury(null), 200);
                               }}
                             >
                               Swap exercise?

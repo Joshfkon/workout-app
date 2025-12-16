@@ -158,11 +158,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
     if (showSwapOnMount) {
-      // Small delay to ensure component is fully mounted
-      const timer = setTimeout(() => {
-        setShowSwapModal(true);
-      }, 100);
-      return () => clearTimeout(timer);
+      setShowSwapModal(true);
     }
   }, [showSwapOnMount]);
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
