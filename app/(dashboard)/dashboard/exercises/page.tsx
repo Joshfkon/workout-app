@@ -108,6 +108,12 @@ export default function ExercisesPage() {
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
   const { preferences } = useUserPreferences();
   const unit = preferences.units;
+  
+  // Edit exercise state
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const [editMuscle, setEditMuscle] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     async function fetchExercises() {
@@ -287,6 +293,50 @@ export default function ExercisesPage() {
     }
   };
 
+  const handleEditExercise = (exercise: Exercise) => {
+    setEditingExercise(exercise);
+    setEditMuscle(exercise.primary_muscle);
+    setSaveResult(null);
+  };
+
+  const handleSaveExercise = async () => {
+    if (!editingExercise || !editMuscle) return;
+    
+    setIsSaving(true);
+    setSaveResult(null);
+    
+    try {
+      const supabase = createUntypedClient();
+      
+      const { error } = await supabase
+        .from('exercises')
+        .update({ primary_muscle: editMuscle })
+        .eq('id', editingExercise.id);
+      
+      if (error) throw error;
+      
+      // Update local state
+      setExercises(prev => prev.map(ex => 
+        ex.id === editingExercise.id 
+          ? { ...ex, primary_muscle: editMuscle }
+          : ex
+      ));
+      
+      setSaveResult({ success: true, message: '✅ Exercise updated successfully!' });
+      
+      // Close modal after a short delay
+      setTimeout(() => {
+        setEditingExercise(null);
+        setSaveResult(null);
+      }, 1500);
+    } catch (error) {
+      console.error('Failed to update exercise:', error);
+      setSaveResult({ success: false, message: '❌ Failed to update exercise. Please try again.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const filteredExercises = exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     const matchesMuscle = !selectedMuscle || ex.primary_muscle === selectedMuscle;
@@ -390,48 +440,65 @@ export default function ExercisesPage() {
                 className={`transition-all ${isExpanded ? 'ring-1 ring-primary-500/30' : 'hover:border-surface-700'}`}
               >
                 {/* Header - always visible */}
-                <button
-                  onClick={() => toggleExpand(exercise.id)}
-                  className="w-full text-left"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-surface-100">{exercise.name}</h3>
-                        {exercise.hypertrophy_tier && (
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
-                            {exercise.hypertrophy_tier}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm text-surface-500 capitalize">
-                          {exercise.primary_muscle}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => toggleExpand(exercise.id)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-surface-100">{exercise.name}</h3>
+                      {exercise.hypertrophy_tier && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
+                          {exercise.hypertrophy_tier}
                         </span>
-                        <span className="text-surface-700">•</span>
-                        <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
-                          {exercise.mechanic}
-                        </Badge>
-                        {history && history.totalSessions > 0 && (
-                          <>
-                            <span className="text-surface-700">•</span>
-                            <span className="text-xs text-primary-400">
-                              {history.totalSessions} sessions
-                            </span>
-                          </>
-                        )}
-                      </div>
+                      )}
                     </div>
-                    <svg 
-                      className={`w-5 h-5 text-surface-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                      fill="none" 
-                      viewBox="0 0 24 24" 
-                      stroke="currentColor"
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-sm text-surface-500 capitalize">
+                        {exercise.primary_muscle}
+                      </span>
+                      <span className="text-surface-700">•</span>
+                      <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
+                        {exercise.mechanic}
+                      </Badge>
+                      {history && history.totalSessions > 0 && (
+                        <>
+                          <span className="text-surface-700">•</span>
+                          <span className="text-xs text-primary-400">
+                            {history.totalSessions} sessions
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditExercise(exercise);
+                      }}
+                      className="p-1.5 text-surface-500 hover:text-primary-400 hover:bg-surface-800 rounded transition-colors"
+                      title="Edit exercise"
                     >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => toggleExpand(exercise.id)}
+                      className="p-1"
+                    >
+                      <svg 
+                        className={`w-5 h-5 text-surface-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
                   </div>
-                </button>
+                </div>
 
                 {/* Expanded content */}
                 {isExpanded && (
@@ -874,6 +941,89 @@ export default function ExercisesPage() {
             Try adjusting your search or filters
           </p>
         </Card>
+      )}
+
+      {/* Edit Exercise Modal */}
+      {editingExercise && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <Card className="w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-surface-100">Edit Exercise</h3>
+                <button
+                  onClick={() => setEditingExercise(null)}
+                  className="p-1 text-surface-400 hover:text-surface-200 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-surface-400 mb-1">Exercise Name</label>
+                  <p className="text-surface-100 font-medium">{editingExercise.name}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-surface-400 mb-2">Primary Muscle Group</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {MUSCLE_GROUPS.map((muscle) => (
+                      <button
+                        key={muscle}
+                        onClick={() => setEditMuscle(muscle)}
+                        className={`px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
+                          editMuscle === muscle
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                        }`}
+                      >
+                        {muscle}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {saveResult && (
+                  <div className={`p-3 rounded-lg text-sm ${
+                    saveResult.success 
+                      ? 'bg-success-500/10 text-success-400 border border-success-500/20'
+                      : 'bg-danger-500/10 text-danger-400 border border-danger-500/20'
+                  }`}>
+                    {saveResult.message}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setEditingExercise(null)}
+                    className="flex-1"
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveExercise}
+                    className="flex-1"
+                    disabled={isSaving || editMuscle === editingExercise.primary_muscle}
+                  >
+                    {isSaving ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );

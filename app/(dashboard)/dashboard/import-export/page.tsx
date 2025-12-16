@@ -1128,49 +1128,77 @@ function parseDate(dateStr: string): string | null {
 function inferMuscleFromName(exerciseName: string): string {
   const name = exerciseName.toLowerCase();
   
-  // Abs - check first to catch crunch, ab, sit-up
+  // Abs/Core - check first to catch many variations
   if (name.includes('crunch') || name.includes('ab ') || name.includes('abdominal') || 
       name.includes('sit-up') || name.includes('situp') || name.includes('plank') ||
-      name.includes('leg raise') && !name.includes('calf')) {
+      name.includes('pallof') || name.includes('palloff') || // Pallof press is core
+      name.includes('side bend') || name.includes('oblique') ||
+      name.includes('woodchop') || name.includes('wood chop') ||
+      name.includes('dead bug') || name.includes('hollow') ||
+      name.includes('90/90') || name.includes('90 90') || // 90/90 leg lift
+      (name.includes('leg raise') && !name.includes('calf')) ||
+      (name.includes('leg lift') && !name.includes('calf'))) {
     return 'abs';
   }
   
-  // Traps - check before back
-  if (name.includes('shrug') || name.includes('trap bar') && !name.includes('deadlift')) {
+  // Chest - check early for push-up, dip, chest exercises
+  if (name.includes('push-up') || name.includes('pushup') || name.includes('push up') ||
+      name.includes('chest dip') || name.includes('dip') && name.includes('chest') ||
+      name.includes('bench press') || name.includes('chest press') || name.includes('chest fly') || 
+      name.includes('pec deck') || name.includes('pec fly') || name.includes('cable fly') ||
+      name.includes('dumbbell fly') || name.includes('incline press') || name.includes('decline press') ||
+      name.includes('floor press') ||
+      (name.includes('fly') && (name.includes('chest') || name.includes('pec') || name.includes('cable')))) {
+    return 'chest';
+  }
+  
+  // Shoulders - check before back for Arnold press, overhead movements
+  if (name.includes('arnold') || // Arnold press
+      name.includes('shoulder') || name.includes('lateral raise') || name.includes('front raise') ||
+      name.includes('side raise') || name.includes('delt') || name.includes('military') ||
+      name.includes('overhead press') || name.includes('ohp') ||
+      name.includes('upright row') || name.includes('face pull') ||
+      name.includes('reverse fly') || name.includes('rear delt')) {
+    return 'shoulders';
+  }
+  
+  // Biceps - check before back for curls
+  if (name.includes('bicep') || name.includes('hammer curl') || name.includes('preacher') ||
+      name.includes('concentration') || name.includes('ez curl') || name.includes('ez bar curl') ||
+      (name.includes('curl') && !name.includes('leg') && !name.includes('ham') && 
+       !name.includes('wrist') && !name.includes('reverse'))) {
+    return 'biceps';
+  }
+  
+  // Triceps - check before back
+  if (name.includes('tricep') || name.includes('skullcrusher') || name.includes('skull crusher') ||
+      name.includes('pushdown') || name.includes('push down') ||
+      (name.includes('dip') && !name.includes('chest')) || // Regular dips are triceps-focused
+      name.includes('kickback') && !name.includes('glute') || 
+      (name.includes('extension') && !name.includes('leg') && !name.includes('back') && 
+       !name.includes('calf') && !name.includes('hip'))) {
+    return 'triceps';
+  }
+  
+  // Traps
+  if (name.includes('shrug') || (name.includes('trap') && !name.includes('deadlift'))) {
     return 'traps';
   }
   
-  // Calves - check before triceps to catch "calf extension"
+  // Calves
   if (name.includes('calf') || name.includes('calves') || 
       (name.includes('raise') && (name.includes('calf') || name.includes('heel')))) {
     return 'calves';
   }
   
-  // Triceps - check before chest (skullcrusher, pushdown, etc.)
-  if (name.includes('tricep') || name.includes('skullcrusher') || name.includes('skull crusher') ||
-      name.includes('pushdown') || name.includes('kickback') || 
-      (name.includes('extension') && !name.includes('leg') && !name.includes('back') && !name.includes('calf'))) {
-    return 'triceps';
-  }
-  
-  // Rear delts / Back - check "reverse fly" before general "fly"
-  if (name.includes('reverse fly') || name.includes('rear delt') || name.includes('face pull')) {
-    return 'shoulders'; // Rear delts are part of shoulders
-  }
-  
   // Back exercises
-  if (name.includes('row') || name.includes('lat pull') || name.includes('pulldown') || 
-      name.includes('pull-up') || name.includes('pullup') || name.includes('chin-up') ||
-      name.includes('chinup') || name.includes('back extension') || name.includes('hyper')) {
+  if (name.includes('row') && !name.includes('upright') || 
+      name.includes('lat pull') || name.includes('pulldown') || name.includes('pull down') ||
+      name.includes('pull-up') || name.includes('pullup') || name.includes('pull up') ||
+      name.includes('chin-up') || name.includes('chinup') || name.includes('chin up') ||
+      name.includes('back extension') || name.includes('hyper') ||
+      name.includes('iso-lateral') || name.includes('iso lateral')) {
     return 'back';
-  }
-  
-  // Chest - be more specific, don't just match "fly" or "push"
-  if (name.includes('bench press') || name.includes('chest press') || name.includes('chest fly') || 
-      name.includes('pec deck') || name.includes('pec fly') || name.includes('cable fly') ||
-      name.includes('dumbbell fly') || name.includes('incline press') || name.includes('decline press') ||
-      (name.includes('fly') && (name.includes('chest') || name.includes('pec') || name.includes('cable')))) {
-    return 'chest';
   }
   
   // Hip adductors/abductors
@@ -1178,50 +1206,43 @@ function inferMuscleFromName(exerciseName: string): string {
     return 'adductors';
   }
   if (name.includes('abductor') || name.includes('abduction')) {
-    return 'glutes'; // Hip abductors are basically glutes
-  }
-  
-  // Glutes
-  if (name.includes('glute') || name.includes('hip thrust') || name.includes('kickback') && name.includes('glute')) {
     return 'glutes';
   }
   
-  // Shoulders - front raise, lateral raise, overhead press
-  if (name.includes('shoulder') || name.includes('lateral raise') || name.includes('front raise') ||
-      name.includes('side raise') || name.includes('delt') || name.includes('military') ||
-      name.includes('overhead press') || name.includes('ohp')) {
-    return 'shoulders';
+  // Glutes
+  if (name.includes('glute') || name.includes('hip thrust') || 
+      (name.includes('kickback') && name.includes('glute'))) {
+    return 'glutes';
   }
   
   // Hamstrings
   if (name.includes('hamstring') || name.includes('leg curl') || name.includes('lying curl') ||
-      name.includes('seated curl') && name.includes('leg') || name.includes('rdl') ||
-      name.includes('romanian') || name.includes('stiff leg')) {
+      (name.includes('seated curl') && name.includes('leg')) || name.includes('rdl') ||
+      name.includes('romanian') || name.includes('stiff leg') ||
+      name.includes('good morning')) {
     return 'hamstrings';
   }
   
   // Quads
   if (name.includes('squat') || name.includes('leg press') || name.includes('leg extension') ||
-      name.includes('quad') || name.includes('lunge') || name.includes('hack')) {
+      name.includes('quad') || name.includes('lunge') || name.includes('hack') ||
+      name.includes('step up') || name.includes('step-up') ||
+      name.includes('split squat') || name.includes('sissy')) {
     return 'quads';
   }
   
-  // Biceps
-  if (name.includes('bicep') || (name.includes('curl') && !name.includes('leg') && !name.includes('ham'))) {
-    return 'biceps';
-  }
-  
   // Forearms
-  if (name.includes('forearm') || name.includes('wrist curl') || name.includes('grip')) {
+  if (name.includes('forearm') || name.includes('wrist curl') || name.includes('grip') ||
+      name.includes('reverse curl')) {
     return 'forearms';
   }
   
   // Deadlift variations
   if (name.includes('deadlift') || name.includes('trap bar')) {
-    return 'hamstrings'; // Primary for conventional deadlift
+    return 'hamstrings';
   }
   
-  // Default to back (more common than chest as a catch-all)
+  // Default to back (safer catch-all for unknown exercises)
   return 'back';
 }
 
