@@ -1442,17 +1442,27 @@ export default function WorkoutPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setAllCollapsed(!allCollapsed)}
-            className="p-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-surface-400 transition-colors"
+            className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+              allCollapsed 
+                ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400' 
+                : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+            }`}
             title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
           >
             {allCollapsed ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                <span className="hidden sm:inline">Expand</span>
+              </>
             ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+                <span className="hidden sm:inline">Collapse</span>
+              </>
             )}
           </button>
           <Button variant="ghost" onClick={handleOpenAddExercise}>
@@ -1622,14 +1632,30 @@ export default function WorkoutPage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
-                    {block.exercise.name}
-                    {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
-                      <span className="text-surface-500 font-normal text-sm ml-1">
-                        ({block.exercise.equipmentRequired[0]})
+                  <div className="flex items-center gap-2">
+                    <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
+                      {block.exercise.name}
+                      {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
+                        <span className="text-surface-500 font-normal text-sm ml-1">
+                          ({block.exercise.equipmentRequired[0]})
+                        </span>
+                      )}
+                    </p>
+                    {/* Tier badge */}
+                    {block.exercise.hypertrophyScore?.tier && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
+                        block.exercise.hypertrophyScore.tier === 'S' 
+                          ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
+                          : block.exercise.hypertrophyScore.tier === 'A' 
+                            ? 'bg-emerald-500/30 text-emerald-400'
+                            : block.exercise.hypertrophyScore.tier === 'B'
+                              ? 'bg-blue-500/30 text-blue-400'
+                              : 'bg-surface-600 text-surface-400'
+                      }`}>
+                        {block.exercise.hypertrophyScore.tier}
                       </span>
                     )}
-                  </p>
+                  </div>
                   <p className="text-xs text-surface-500">
                     {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
                   </p>
@@ -1642,8 +1668,8 @@ export default function WorkoutPage() {
                 )}
               </div>
 
-              {/* Expanded content for current exercise (or when not collapsed) */}
-              {isCurrent && !allCollapsed && (() => {
+              {/* Expanded content - show all exercises when in expanded mode */}
+              {!allCollapsed && (() => {
                 // Calculate AI recommended weight first so it can be used for warmup
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
@@ -1689,16 +1715,16 @@ export default function WorkoutPage() {
                         equipmentRequired: [],
                       }))
                     )}
-                    isActive
+                    isActive={isCurrent}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
-                    warmupSets={block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
+                    warmupSets={isCurrent && block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
                     workingWeight={effectiveWorkingWeight}
                   />
 
-                  {/* Exercise complete actions */}
-                  {isComplete && addingExtraSet !== block.id && (
+                  {/* Exercise complete actions - only show for current exercise */}
+                  {isCurrent && isComplete && addingExtraSet !== block.id && (
                     <div className="flex justify-center gap-3 py-4">
                       <Button 
                         variant="outline" 
@@ -1718,8 +1744,8 @@ export default function WorkoutPage() {
                 );
               })()}
 
-              {/* Collapsed preview for non-current exercises or when all collapsed */}
-              {(!isCurrent || allCollapsed) && (
+              {/* Collapsed preview - show when all collapsed */}
+              {allCollapsed && (
                 <div 
                   className={`ml-11 p-3 rounded-lg cursor-pointer transition-colors ${
                     isComplete ? 'bg-success-500/5 border border-success-500/20' : 'bg-surface-800/30 hover:bg-surface-800/50'
