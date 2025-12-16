@@ -506,7 +506,7 @@ export default function WorkoutPage() {
         // Fetch mesocycle info if this workout is part of one
         const { data: mesocycleData } = await supabase
           .from('mesocycles')
-          .select('name, start_date, weeks')
+          .select('name, start_date, total_weeks')
           .eq('user_id', sessionData.user_id)
           .eq('is_active', true)
           .single();
@@ -549,7 +549,7 @@ export default function WorkoutPage() {
           const startDate = new Date(mesocycleData.start_date);
           const now = new Date();
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-          userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.weeks);
+          userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.total_weeks);
         }
         
         // Generate coach message with profile and context
@@ -580,7 +580,7 @@ export default function WorkoutPage() {
               workoutType: inferredWorkoutType,
               weekInMesocycle: userContext.weekInMesocycle,
               mesocycleName: userContext.mesocycleName,
-              totalWeeks: mesocycleData?.weeks,
+              totalWeeks: mesocycleData?.total_weeks,
             };
             const result = await generateWorkoutCoachNotes(aiInput);
             setAiCoachNotes(result.notes);

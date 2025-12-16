@@ -87,9 +87,9 @@ export default function WorkoutPage() {
               id,
               name,
               start_date,
-              weeks,
+              total_weeks,
               days_per_week,
-              split,
+              split_type,
               workout_sessions!inner (
                 id,
                 state,
@@ -129,7 +129,7 @@ export default function WorkoutPage() {
           const mesocycle = mesocycleResult.data;
           const startDate = new Date(mesocycle.start_date);
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-          const currentWeek = Math.min(weeksSinceStart, mesocycle.weeks);
+          const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
 
           // Count completed workouts from already-fetched data
           const weeklyCount = mesocycle.workout_sessions?.filter(
@@ -140,11 +140,11 @@ export default function WorkoutPage() {
             id: mesocycle.id,
             name: mesocycle.name,
             startDate: mesocycle.start_date,
-            weeks: mesocycle.weeks,
+            weeks: mesocycle.total_weeks,
             currentWeek,
             daysPerWeek: mesocycle.days_per_week || 3,
             workoutsThisWeek: weeklyCount,
-            split: mesocycle.split || 'custom',
+            split: mesocycle.split_type || 'custom',
           });
         }
       } catch (error) {

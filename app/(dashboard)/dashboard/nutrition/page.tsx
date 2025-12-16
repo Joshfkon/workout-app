@@ -14,7 +14,7 @@ import type {
   CustomFood,
   MealType,
 } from '@/types/nutrition';
-import type { FoodSearchResult } from '@/services/fatSecretService';
+import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import {
   LineChart,

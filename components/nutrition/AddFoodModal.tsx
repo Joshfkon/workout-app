@@ -5,7 +5,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/fatSecretService';
+import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { MealType, CustomFood } from '@/types/nutrition';
 

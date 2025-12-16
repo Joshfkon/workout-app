@@ -124,7 +124,7 @@ export default function DashboardPage() {
         const { data: mesocycles, error: mesoError } = await supabase
           .from('mesocycles')
           .select(`
-            id, name, start_date, weeks, split_type, days_per_week, state, is_active,
+            id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
             workout_sessions (id, planned_date, state, completed_at)
           `)
           .eq('user_id', user.id)
@@ -135,7 +135,13 @@ export default function DashboardPage() {
         }
         
         // Find active mesocycle - check both is_active flag and state field
-        const mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
+        // Also accept any mesocycle (even planned state) if no active one exists
+        let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
+        
+        // Fallback: if no explicitly active mesocycle, use the most recent one that isn't completed
+        if (!mesocycle && mesocycles && mesocycles.length > 0) {
+          mesocycle = mesocycles.find((m: any) => m.state !== 'completed') || null;
+        }
 
         if (mesocycle) {
           const startDate = new Date(mesocycle.start_date);
@@ -147,8 +153,8 @@ export default function DashboardPage() {
             id: mesocycle.id,
             name: mesocycle.name,
             startDate: mesocycle.start_date,
-            weeks: mesocycle.weeks,
-            currentWeek: Math.min(weeksSinceStart, mesocycle.weeks),
+            weeks: mesocycle.total_weeks,
+            currentWeek: Math.min(weeksSinceStart, mesocycle.total_weeks),
             workoutsCompleted: completed,
             totalWorkouts: sessions.length,
             splitType: mesocycle.split_type,
