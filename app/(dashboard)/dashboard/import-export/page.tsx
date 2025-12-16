@@ -320,16 +320,19 @@ export default function ImportExportPage() {
               continue;
             }
             
-            allBlocks.push({
-              workout_session_id: sessionId,
-              exercise_id: exerciseId,
-              order: order++,
-              target_sets: exercise.sets.length,
-              target_rep_range: [8, 12],
-              target_rir: 2,
-              _workout_key: key,
-              _exercise_name: exercise.name,
-            });
+            // Only add block if there are sets (target_sets must be >= 1)
+            if (exercise.sets.length > 0) {
+              allBlocks.push({
+                workout_session_id: sessionId,
+                exercise_id: exerciseId,
+                order: order++,
+                target_sets: Math.max(1, exercise.sets.length),
+                target_rep_range: [8, 12],
+                target_rir: 2,
+                _workout_key: key,
+                _exercise_name: exercise.name,
+              });
+            }
           }
         }
         
@@ -396,16 +399,19 @@ export default function ImportExportPage() {
             
             let setNumber = 1;
             for (const set of exercise.sets) {
+              // Skip sets with invalid reps (0 or null)
+              if (!set.reps || set.reps < 1) continue;
+              
               const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
               // RPE must be between 1-10, default to 7 if not provided or invalid
               const rpeValue = set.rpe && set.rpe >= 1 && set.rpe <= 10 ? set.rpe : 7;
               allSetLogs.push({
                 exercise_block_id: blockId,
                 set_number: setNumber++,
-                weight_kg: weightKg,
-                reps: set.reps || 0,
+                weight_kg: Math.max(0, weightKg || 0), // weight can be 0 (bodyweight)
+                reps: set.reps,
                 rpe: rpeValue,
-                is_warmup: false,
+                is_warmup: set.isWarmup || false,
                 logged_at: date,
               });
             }

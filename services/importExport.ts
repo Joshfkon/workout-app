@@ -63,6 +63,7 @@ export interface ParsedStrongWorkout {
       reps: number;
       rpe?: number;
       notes?: string;
+      isWarmup?: boolean;
     }[];
   }[];
   duration?: number;
@@ -208,7 +209,7 @@ export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
     // Check if this is a warmup set (Strong uses 'W' in Set Order sometimes)
     const isWarmup = row['Set Order']?.toString().toUpperCase().includes('W');
     
-    // Only add non-warmup sets with actual data
+    // Only add sets with actual data (reps > 0)
     if (reps > 0 || weight > 0) {
       exercise.sets.push({
         weight,
@@ -216,6 +217,7 @@ export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
         reps,
         rpe,
         notes: row.Notes || undefined,
+        isWarmup,
       });
     }
   }
