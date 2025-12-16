@@ -240,18 +240,26 @@ export default function ImportExportPage() {
             completion_percent: 100,
           }));
           
-          const { data: sessions } = await supabase
+          const { data: sessions, error: sessionError } = await supabase
             .from('workout_sessions')
             .insert(sessionsToInsert)
             .select('id');
           
+          if (sessionError) {
+            console.error('Session insert error:', sessionError);
+          }
+          
           if (sessions) {
+            console.log(`Inserted ${sessions.length} sessions in batch`);
             sessions.forEach((session: { id: string }, idx: number) => {
               const key = `${batch[idx].workout.date}_${batch[idx].workout.workoutName}`;
               sessionMap.set(key, session.id);
             });
           }
         }
+        
+        console.log(`Sessions created: ${sessionMap.size}`);
+        console.log(`Exercise cache size: ${exerciseCache.size}`);
         
         setImportProgress({ current: 3, total: 5, currentItem: 'Step 4/5: Creating exercise blocks...' });
         
@@ -295,22 +303,33 @@ export default function ImportExportPage() {
         // Insert blocks in batches and track their IDs
         const blockMap: Map<string, string> = new Map(); // "sessionId_exerciseName" -> block id
         
+        console.log(`Total blocks to insert: ${allBlocks.length}`);
+        
         for (let i = 0; i < allBlocks.length; i += BATCH_SIZE) {
           const batch = allBlocks.slice(i, i + BATCH_SIZE);
           const blocksToInsert = batch.map(({ _workout_key, _exercise_name, ...block }) => block);
           
-          const { data: blocks } = await supabase
+          const { data: blocks, error: blockError } = await supabase
             .from('exercise_blocks')
             .insert(blocksToInsert)
             .select('id');
           
+          if (blockError) {
+            console.error('Block insert error:', blockError);
+          }
+          
           if (blocks) {
+            console.log(`Inserted ${blocks.length} blocks in batch`);
             blocks.forEach((block: { id: string }, idx: number) => {
               const original = batch[idx];
               blockMap.set(`${original.workout_session_id}_${original._exercise_name.toLowerCase()}`, block.id);
             });
+          } else {
+            console.log('No blocks returned from insert');
           }
         }
+        
+        console.log(`Block map size: ${blockMap.size}`);
         
         setImportProgress({ current: 4, total: 5, currentItem: 'Step 5/5: Creating set logs...' });
         
@@ -349,11 +368,20 @@ export default function ImportExportPage() {
           }
         }
         
+        console.log(`Total set logs to insert: ${allSetLogs.length}`);
+        
         // Insert set logs in batches
+        let setLogsInserted = 0;
         for (let i = 0; i < allSetLogs.length; i += BATCH_SIZE) {
           const batch = allSetLogs.slice(i, i + BATCH_SIZE);
-          await supabase.from('set_logs').insert(batch);
+          const { error: setError } = await supabase.from('set_logs').insert(batch);
+          if (setError) {
+            console.error('Set log insert error:', setError);
+          } else {
+            setLogsInserted += batch.length;
+          }
         }
+        console.log(`Set logs inserted: ${setLogsInserted}`);
         
         setImportProgress({ current: 5, total: 5, currentItem: 'Complete!' });
         
