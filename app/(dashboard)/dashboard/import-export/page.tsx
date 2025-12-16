@@ -22,6 +22,13 @@ export default function ImportExportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [previewData, setPreviewData] = useState<ParsedStrongWorkout[] | ParsedLoseItEntry[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Progress tracking
+  const [importProgress, setImportProgress] = useState<{
+    current: number;
+    total: number;
+    currentItem: string;
+  } | null>(null);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,12 +63,15 @@ export default function ImportExportPage() {
     if (!previewData || !importSource) return;
 
     setIsProcessing(true);
+    setImportProgress({ current: 0, total: previewData.length, currentItem: 'Starting...' });
+    
     const supabase = createUntypedClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       setResult({ success: false, imported: 0, skipped: 0, errors: ['Not logged in'] });
       setIsProcessing(false);
+      setImportProgress(null);
       return;
     }
 
@@ -72,7 +82,19 @@ export default function ImportExportPage() {
         let skipped = 0;
         const errors: string[] = [];
 
-        for (const workout of workouts) {
+        for (let i = 0; i < workouts.length; i++) {
+          const workout = workouts[i];
+          setImportProgress({
+            current: i + 1,
+            total: workouts.length,
+            currentItem: `${workout.workoutName} (${workout.date})`,
+          });
+          
+          // Small delay to ensure smooth progress updates and prevent overwhelming the database
+          if (i > 0 && i % 10 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          
           try {
             // Parse date (Strong uses various formats)
             const workoutDate = parseDate(workout.date);
@@ -175,7 +197,19 @@ export default function ImportExportPage() {
         let skipped = 0;
         const errors: string[] = [];
 
-        for (const entry of entries) {
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          setImportProgress({
+            current: i + 1,
+            total: entries.length,
+            currentItem: entry.name,
+          });
+          
+          // Small delay to ensure smooth progress updates and prevent overwhelming the database
+          if (i > 0 && i % 10 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          
           try {
             const logDate = parseDate(entry.date);
             if (!logDate) {
@@ -221,6 +255,7 @@ export default function ImportExportPage() {
       });
     } finally {
       setIsProcessing(false);
+      setImportProgress(null);
       setPreviewData(null);
     }
   };
@@ -483,14 +518,37 @@ export default function ImportExportPage() {
                   )}
                 </div>
 
-                <div className="flex gap-3 mt-4">
-                  <Button onClick={handleImport} isLoading={isProcessing} className="flex-1">
-                    Import {previewData.length} Items
-                  </Button>
-                  <Button variant="ghost" onClick={() => setPreviewData(null)}>
-                    Cancel
-                  </Button>
-                </div>
+                {/* Progress Bar */}
+                {importProgress && (
+                  <div className="mt-4 p-4 bg-surface-800 rounded-lg border border-surface-700">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-surface-300">Importing...</span>
+                      <span className="text-surface-400">
+                        {importProgress.current} / {importProgress.total}
+                      </span>
+                    </div>
+                    <div className="w-full bg-surface-700 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-primary-500 to-primary-400 h-full rounded-full transition-all duration-300 ease-out"
+                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-surface-500 mt-2 truncate">
+                      📝 {importProgress.currentItem}
+                    </p>
+                  </div>
+                )}
+
+                {!importProgress && (
+                  <div className="flex gap-3 mt-4">
+                    <Button onClick={handleImport} isLoading={isProcessing} className="flex-1">
+                      Import {previewData.length} Items
+                    </Button>
+                    <Button variant="ghost" onClick={() => setPreviewData(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
