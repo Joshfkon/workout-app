@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -56,6 +56,82 @@ interface ExerciseHistoryData {
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
+}
+
+// Map injury areas to muscles/patterns that might be aggravated
+const INJURY_RISK_MAP: Record<string, { muscles: string[]; patterns: string[]; keywords: string[] }> = {
+  lower_back: { 
+    muscles: ['back', 'hamstrings', 'glutes'], 
+    patterns: ['squat', 'deadlift', 'row', 'hip_hinge'],
+    keywords: ['deadlift', 'squat', 'row', 'good morning', 'hyperextension', 'back extension']
+  },
+  upper_back: { 
+    muscles: ['back', 'shoulders'], 
+    patterns: ['row', 'vertical_pull'],
+    keywords: ['row', 'pull-up', 'pulldown', 'shrug']
+  },
+  neck: { 
+    muscles: ['shoulders', 'back'], 
+    patterns: ['overhead', 'vertical_push'],
+    keywords: ['overhead', 'press', 'shrug', 'upright row']
+  },
+  shoulder_left: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up'] },
+  shoulder_right: { muscles: ['shoulders', 'chest'], patterns: ['push', 'press'], keywords: ['press', 'fly', 'raise', 'push-up'] },
+  elbow_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
+  elbow_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'extension'], keywords: ['curl', 'extension', 'press', 'pushdown'] },
+  wrist_left: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
+  wrist_right: { muscles: ['biceps', 'triceps'], patterns: ['curl', 'press'], keywords: ['curl', 'press', 'fly'] },
+  hip_left: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
+  hip_right: { muscles: ['quads', 'hamstrings', 'glutes'], patterns: ['squat', 'lunge'], keywords: ['squat', 'lunge', 'leg press', 'hip'] },
+  knee_left: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
+  knee_right: { muscles: ['quads', 'hamstrings'], patterns: ['squat', 'leg'], keywords: ['squat', 'lunge', 'leg extension', 'leg press', 'leg curl'] },
+  ankle_left: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
+  ankle_right: { muscles: ['calves'], patterns: ['calf'], keywords: ['calf', 'jump', 'squat'] },
+  chest: { muscles: ['chest'], patterns: ['push', 'fly'], keywords: ['bench', 'fly', 'press', 'push-up', 'dip'] },
+};
+
+// Check if an exercise might aggravate any reported injuries
+function getExerciseInjuryRisk(
+  exercise: Exercise, 
+  injuries: { area: string; severity: 1 | 2 | 3 }[]
+): { isRisky: boolean; severity: number; reasons: string[] } {
+  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [] };
+  
+  const exerciseName = exercise.name.toLowerCase();
+  const exerciseMuscle = exercise.primaryMuscle.toLowerCase();
+  const reasons: string[] = [];
+  let maxSeverity = 0;
+  
+  for (const injury of injuries) {
+    const riskMap = INJURY_RISK_MAP[injury.area];
+    if (!riskMap) continue;
+    
+    let isMatch = false;
+    
+    // Check muscle match
+    if (riskMap.muscles.some(m => exerciseMuscle.includes(m.toLowerCase()))) {
+      isMatch = true;
+      reasons.push(`Targets ${exercise.primaryMuscle} (may stress ${injury.area.replace('_', ' ')})`);
+    }
+    
+    // Check keyword match in exercise name
+    if (riskMap.keywords.some(kw => exerciseName.includes(kw.toLowerCase()))) {
+      isMatch = true;
+      if (reasons.length === 0) {
+        reasons.push(`Exercise type may stress ${injury.area.replace('_', ' ')}`);
+      }
+    }
+    
+    if (isMatch) {
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+    }
+  }
+  
+  return {
+    isRisky: reasons.length > 0,
+    severity: maxSeverity,
+    reasons: Array.from(new Set(reasons)) // Remove duplicates
+  };
 }
 
 // Calculate E1RM using Brzycki formula
@@ -344,6 +420,12 @@ export default function WorkoutPage() {
   const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
   const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
   const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
+  
+  // Injury report modal state
+  const [showInjuryModal, setShowInjuryModal] = useState(false);
+  const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
+  const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
+  const [selectedInjurySeverity, setSelectedInjurySeverity] = useState<1 | 2 | 3>(1);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -1465,6 +1547,18 @@ export default function WorkoutPage() {
               </>
             )}
           </button>
+          <button
+            onClick={() => setShowInjuryModal(true)}
+            className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+              temporaryInjuries.length > 0
+                ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
+                : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+            }`}
+            title="Report pain or injury"
+          >
+            <span>🤕</span>
+            <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
+          </button>
           <Button variant="ghost" onClick={handleOpenAddExercise}>
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1632,33 +1726,72 @@ export default function WorkoutPage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
-                      {block.exercise.name}
-                      {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
-                        <span className="text-surface-500 font-normal text-sm ml-1">
-                          ({block.exercise.equipmentRequired[0]})
-                        </span>
-                      )}
-                    </p>
-                    {/* Tier badge */}
-                    {block.exercise.hypertrophyScore?.tier && (
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
-                        block.exercise.hypertrophyScore.tier === 'S' 
-                          ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
-                          : block.exercise.hypertrophyScore.tier === 'A' 
-                            ? 'bg-emerald-500/30 text-emerald-400'
-                            : block.exercise.hypertrophyScore.tier === 'B'
-                              ? 'bg-blue-500/30 text-blue-400'
-                              : 'bg-surface-600 text-surface-400'
-                      }`}>
-                        {block.exercise.hypertrophyScore.tier}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-surface-500">
-                    {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                  </p>
+                  {(() => {
+                    const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
+                    return (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
+                            {block.exercise.name}
+                            {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
+                              <span className="text-surface-500 font-normal text-sm ml-1">
+                                ({block.exercise.equipmentRequired[0]})
+                              </span>
+                            )}
+                          </p>
+                          {/* Tier badge */}
+                          {block.exercise.hypertrophyScore?.tier && (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
+                              block.exercise.hypertrophyScore.tier === 'S' 
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
+                                : block.exercise.hypertrophyScore.tier === 'A' 
+                                  ? 'bg-emerald-500/30 text-emerald-400'
+                                  : block.exercise.hypertrophyScore.tier === 'B'
+                                    ? 'bg-blue-500/30 text-blue-400'
+                                    : 'bg-surface-600 text-surface-400'
+                            }`}>
+                              {block.exercise.hypertrophyScore.tier}
+                            </span>
+                          )}
+                          {/* Injury risk warning */}
+                          {injuryRisk.isRisky && (
+                            <span 
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
+                                injuryRisk.severity === 3 
+                                  ? 'bg-danger-500/20 text-danger-400' 
+                                  : injuryRisk.severity === 2
+                                    ? 'bg-warning-500/20 text-warning-400'
+                                    : 'bg-surface-600 text-surface-400'
+                              }`}
+                              title={injuryRisk.reasons.join(', ')}
+                            >
+                              ⚠️ {injuryRisk.severity === 3 ? 'Avoid' : injuryRisk.severity === 2 ? 'Caution' : 'Note'}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-surface-500">
+                          {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
+                        </p>
+                        {/* Show injury warning detail */}
+                        {injuryRisk.isRisky && isCurrent && (
+                          <div className={`mt-1 text-xs ${
+                            injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
+                          }`}>
+                            ⚠️ {injuryRisk.reasons[0]}
+                            <button 
+                              className="ml-2 underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // This will trigger the exercise swap in ExerciseCard
+                              }}
+                            >
+                              Swap exercise?
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 {isCurrent && (
                   <Badge variant="info" size="sm">Current</Badge>
@@ -2028,6 +2161,179 @@ export default function WorkoutPage() {
                   Create & Add
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Injury Report Modal */}
+      {showInjuryModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowInjuryModal(false)}
+          />
+          
+          <div className="relative w-full max-w-md max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🤕</span>
+                <h2 className="text-lg font-semibold text-surface-100">Report Pain/Injury</h2>
+              </div>
+              <button
+                onClick={() => setShowInjuryModal(false)}
+                className="p-2 text-surface-400 hover:text-surface-200"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <p className="text-sm text-surface-400">
+                Tell us about any pain or discomfort. We&apos;ll suggest exercise swaps to avoid aggravating it.
+              </p>
+
+              {/* Current injuries */}
+              {temporaryInjuries.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-surface-300">Currently reported:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {temporaryInjuries.map(injury => {
+                      const areaLabels: Record<string, string> = {
+                        lower_back: '🔻 Lower Back', upper_back: '🔺 Upper Back', neck: '🦴 Neck',
+                        shoulder_left: '💪 Left Shoulder', shoulder_right: '💪 Right Shoulder',
+                        elbow_left: '🦾 Left Elbow', elbow_right: '🦾 Right Elbow',
+                        wrist_left: '🤚 Left Wrist', wrist_right: '🤚 Right Wrist',
+                        hip_left: '🦵 Left Hip', hip_right: '🦵 Right Hip',
+                        knee_left: '🦿 Left Knee', knee_right: '🦿 Right Knee',
+                        ankle_left: '🦶 Left Ankle', ankle_right: '🦶 Right Ankle',
+                        chest: '❤️ Chest', other: '⚠️ Other'
+                      };
+                      const severityLabels = ['Mild', 'Moderate', 'Significant'];
+                      return (
+                        <div 
+                          key={injury.area}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                            injury.severity === 3 
+                              ? 'bg-danger-500/20 text-danger-400' 
+                              : injury.severity === 2 
+                                ? 'bg-warning-500/20 text-warning-400'
+                                : 'bg-surface-700 text-surface-300'
+                          }`}
+                        >
+                          <span>{areaLabels[injury.area] || injury.area}</span>
+                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
+                          <button
+                            onClick={() => setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== injury.area))}
+                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Add new injury */}
+              <div className="space-y-3 p-4 bg-surface-800/50 rounded-lg">
+                <p className="text-xs font-medium text-surface-300">Add an issue:</p>
+                
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">Area affected</label>
+                  <select
+                    value={selectedInjuryArea}
+                    onChange={(e) => setSelectedInjuryArea(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                  >
+                    <option value="">Select area...</option>
+                    <optgroup label="Back & Core">
+                      <option value="lower_back">🔻 Lower Back</option>
+                      <option value="upper_back">🔺 Upper Back</option>
+                      <option value="neck">🦴 Neck</option>
+                      <option value="chest">❤️ Chest</option>
+                    </optgroup>
+                    <optgroup label="Upper Body">
+                      <option value="shoulder_left">💪 Left Shoulder</option>
+                      <option value="shoulder_right">💪 Right Shoulder</option>
+                      <option value="elbow_left">🦾 Left Elbow</option>
+                      <option value="elbow_right">🦾 Right Elbow</option>
+                      <option value="wrist_left">🤚 Left Wrist</option>
+                      <option value="wrist_right">🤚 Right Wrist</option>
+                    </optgroup>
+                    <optgroup label="Lower Body">
+                      <option value="hip_left">🦵 Left Hip</option>
+                      <option value="hip_right">🦵 Right Hip</option>
+                      <option value="knee_left">🦿 Left Knee</option>
+                      <option value="knee_right">🦿 Right Knee</option>
+                      <option value="ankle_left">🦶 Left Ankle</option>
+                      <option value="ankle_right">🦶 Right Ankle</option>
+                    </optgroup>
+                    <option value="other">⚠️ Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">Severity</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(level => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setSelectedInjurySeverity(level as 1 | 2 | 3)}
+                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                          selectedInjurySeverity === level
+                            ? level === 3 
+                              ? 'bg-danger-500 text-white'
+                              : level === 2
+                                ? 'bg-warning-500 text-black'
+                                : 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                        }`}
+                      >
+                        {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    if (selectedInjuryArea && !temporaryInjuries.some(i => i.area === selectedInjuryArea)) {
+                      setTemporaryInjuries([...temporaryInjuries, { area: selectedInjuryArea, severity: selectedInjurySeverity }]);
+                      setSelectedInjuryArea('');
+                      setSelectedInjurySeverity(1);
+                    }
+                  }}
+                  disabled={!selectedInjuryArea || temporaryInjuries.some(i => i.area === selectedInjuryArea)}
+                  className="w-full"
+                >
+                  + Add to List
+                </Button>
+              </div>
+
+              {/* What will happen info */}
+              {temporaryInjuries.length > 0 && (
+                <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                  <p className="text-xs text-primary-400 font-medium mb-1">What happens now?</p>
+                  <p className="text-xs text-surface-400">
+                    We&apos;ll flag exercises that could aggravate these areas. You can easily swap them for safer alternatives.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-surface-800">
+              <Button onClick={() => setShowInjuryModal(false)} className="w-full">
+                {temporaryInjuries.length > 0 ? 'Apply & Continue Workout' : 'Close'}
+              </Button>
             </div>
           </div>
         </div>

@@ -295,6 +295,20 @@ export interface WorkoutSession {
 }
 
 /**
+ * Temporary injury reported before or during workout
+ */
+export interface TemporaryInjury {
+  /** Body area affected */
+  area: 'lower_back' | 'upper_back' | 'neck' | 'shoulder_left' | 'shoulder_right' | 'elbow_left' | 'elbow_right' | 'wrist_left' | 'wrist_right' | 'hip_left' | 'hip_right' | 'knee_left' | 'knee_right' | 'ankle_left' | 'ankle_right' | 'chest' | 'other';
+  
+  /** Severity: 1=mild discomfort, 2=moderate pain, 3=significant pain */
+  severity: 1 | 2 | 3;
+  
+  /** Brief description (optional) */
+  description?: string;
+}
+
+/**
  * Pre-workout check-in for auto-regulation adjustments
  */
 export interface PreWorkoutCheckIn {
@@ -315,6 +329,9 @@ export interface PreWorkoutCheckIn {
   
   /** Calculated readiness score (0-100) based on check-in factors */
   readinessScore: number;
+  
+  /** Temporary injuries or pain to avoid during this workout */
+  temporaryInjuries?: TemporaryInjury[];
 }
 
 // ============ EXERCISE BLOCK ============

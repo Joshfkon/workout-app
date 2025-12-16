@@ -1,9 +1,30 @@
 'use client';
 
 import { useState } from 'react';
-import { Button, Card, Slider } from '@/components/ui';
-import type { PreWorkoutCheckIn, Rating } from '@/types/schema';
+import { Button, Card, Slider, Badge } from '@/components/ui';
+import type { PreWorkoutCheckIn, Rating, TemporaryInjury } from '@/types/schema';
 import { calculateReadinessScore, getReadinessInterpretation } from '@/services/fatigueEngine';
+
+// Injury area options with display names
+const INJURY_AREAS: { value: TemporaryInjury['area']; label: string; icon: string }[] = [
+  { value: 'lower_back', label: 'Lower Back', icon: '🔻' },
+  { value: 'upper_back', label: 'Upper Back', icon: '🔺' },
+  { value: 'neck', label: 'Neck', icon: '🦴' },
+  { value: 'shoulder_left', label: 'Left Shoulder', icon: '💪' },
+  { value: 'shoulder_right', label: 'Right Shoulder', icon: '💪' },
+  { value: 'elbow_left', label: 'Left Elbow', icon: '🦾' },
+  { value: 'elbow_right', label: 'Right Elbow', icon: '🦾' },
+  { value: 'wrist_left', label: 'Left Wrist', icon: '🤚' },
+  { value: 'wrist_right', label: 'Right Wrist', icon: '🤚' },
+  { value: 'hip_left', label: 'Left Hip', icon: '🦵' },
+  { value: 'hip_right', label: 'Right Hip', icon: '🦵' },
+  { value: 'knee_left', label: 'Left Knee', icon: '🦿' },
+  { value: 'knee_right', label: 'Right Knee', icon: '🦿' },
+  { value: 'ankle_left', label: 'Left Ankle', icon: '🦶' },
+  { value: 'ankle_right', label: 'Right Ankle', icon: '🦶' },
+  { value: 'chest', label: 'Chest', icon: '❤️' },
+  { value: 'other', label: 'Other', icon: '⚠️' },
+];
 
 interface ReadinessCheckInProps {
   onSubmit: (checkIn: PreWorkoutCheckIn) => void;
@@ -17,6 +38,25 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
   const [stressLevel, setStressLevel] = useState<Rating>(3);
   const [nutritionRating, setNutritionRating] = useState<Rating>(3);
   const [bodyweight, setBodyweight] = useState('');
+  const [showInjurySection, setShowInjurySection] = useState(false);
+  const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
+  const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
+  const [selectedSeverity, setSelectedSeverity] = useState<1 | 2 | 3>(1);
+
+  const addInjury = () => {
+    if (selectedArea) {
+      // Check if already added
+      if (!temporaryInjuries.some(i => i.area === selectedArea)) {
+        setTemporaryInjuries([...temporaryInjuries, { area: selectedArea, severity: selectedSeverity }]);
+      }
+      setSelectedArea('');
+      setSelectedSeverity(1);
+    }
+  };
+
+  const removeInjury = (area: TemporaryInjury['area']) => {
+    setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== area));
+  };
 
   const readinessScore = calculateReadinessScore({
     sleepHours,
@@ -35,6 +75,7 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
       nutritionRating,
       bodyweightKg: bodyweight ? parseFloat(bodyweight) : null,
       readinessScore,
+      temporaryInjuries: temporaryInjuries.length > 0 ? temporaryInjuries : undefined,
     };
     onSubmit(checkIn);
   };
@@ -184,6 +225,148 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently }: Readin
             />
             <span className="text-surface-400">kg</span>
           </div>
+        </div>
+
+        {/* Temporary Injury Section */}
+        <div className="border-t border-surface-700 pt-4">
+          <button
+            type="button"
+            onClick={() => setShowInjurySection(!showInjurySection)}
+            className="flex items-center justify-between w-full text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🤕</span>
+              <span className="text-sm font-medium text-surface-200">
+                Dealing with pain or injury today?
+              </span>
+            </div>
+            <svg 
+              className={`w-5 h-5 text-surface-400 transition-transform ${showInjurySection ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {/* Current injuries display */}
+          {temporaryInjuries.length > 0 && !showInjurySection && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {temporaryInjuries.map(injury => {
+                const areaInfo = INJURY_AREAS.find(a => a.value === injury.area);
+                return (
+                  <Badge 
+                    key={injury.area} 
+                    variant={injury.severity === 3 ? 'danger' : injury.severity === 2 ? 'warning' : 'default'}
+                  >
+                    {areaInfo?.icon} {areaInfo?.label}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
+
+          {showInjurySection && (
+            <div className="mt-4 space-y-4 p-4 bg-surface-800/50 rounded-lg">
+              <p className="text-xs text-surface-400">
+                Tell us about any temporary pain or injury. We&apos;ll adjust your workout to avoid aggravating it.
+              </p>
+
+              {/* Current injuries */}
+              {temporaryInjuries.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-surface-300">Current issues:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {temporaryInjuries.map(injury => {
+                      const areaInfo = INJURY_AREAS.find(a => a.value === injury.area);
+                      const severityLabels = ['Mild', 'Moderate', 'Significant'];
+                      return (
+                        <div 
+                          key={injury.area}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                            injury.severity === 3 
+                              ? 'bg-danger-500/20 text-danger-400' 
+                              : injury.severity === 2 
+                                ? 'bg-warning-500/20 text-warning-400'
+                                : 'bg-surface-700 text-surface-300'
+                          }`}
+                        >
+                          <span>{areaInfo?.icon}</span>
+                          <span>{areaInfo?.label}</span>
+                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
+                          <button
+                            onClick={() => removeInjury(injury.area)}
+                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Add injury form */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-surface-300 mb-1.5">Area affected</label>
+                  <select
+                    value={selectedArea}
+                    onChange={(e) => setSelectedArea(e.target.value as TemporaryInjury['area'])}
+                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                  >
+                    <option value="">Select area...</option>
+                    {INJURY_AREAS.filter(area => !temporaryInjuries.some(i => i.area === area.value)).map(area => (
+                      <option key={area.value} value={area.value}>
+                        {area.icon} {area.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-surface-300 mb-1.5">Severity</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(level => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setSelectedSeverity(level as 1 | 2 | 3)}
+                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                          selectedSeverity === level
+                            ? level === 3 
+                              ? 'bg-danger-500 text-white'
+                              : level === 2
+                                ? 'bg-warning-500 text-black'
+                                : 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                        }`}
+                      >
+                        {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-surface-500 mt-1">
+                    {selectedSeverity === 1 && 'Slight discomfort - can work around it'}
+                    {selectedSeverity === 2 && 'Noticeable pain - need to be careful'}
+                    {selectedSeverity === 3 && 'Significant pain - avoid stressing this area'}
+                  </p>
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={addInjury}
+                  disabled={!selectedArea}
+                  className="w-full"
+                >
+                  + Add to List
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Readiness Score Display */}
