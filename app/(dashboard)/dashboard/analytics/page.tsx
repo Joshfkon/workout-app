@@ -83,53 +83,81 @@ interface ExercisePerformance {
 }
 
 // Strength standards relative to bodyweight (intermediate male, approximate)
-// These are multipliers for 1RM relative to bodyweight
+// ONLY for free-weight compound movements with reliable powerlifting/research data
+// Machine exercises are excluded - leverage varies by manufacturer
+// Isolation exercises are excluded - no competitive standards exist
 const STRENGTH_STANDARDS: Record<string, number> = {
-  // Compound exercises
+  // Barbell compound movements (most reliable data)
   'Barbell Back Squat': 1.5,
+  'Back Squat': 1.5,
+  'Squat': 1.5,
   'Front Squat': 1.2,
   'Conventional Deadlift': 1.75,
+  'Deadlift': 1.75,
   'Sumo Deadlift': 1.75,
   'Romanian Deadlift': 1.2,
+  'RDL': 1.2,
   'Barbell Bench Press': 1.25,
+  'Bench Press': 1.25,
+  'Flat Bench Press': 1.25,
   'Incline Barbell Press': 1.0,
+  'Incline Bench Press': 1.0,
+  'Decline Bench Press': 1.3,
   'Standing Overhead Press': 0.75,
+  'Overhead Press': 0.75,
+  'Military Press': 0.75,
   'Barbell Row': 1.0,
-  'Pendulum Squat': 1.4,
-  'Hack Squat': 1.4,
-  'Leg Press': 2.5,
+  'Bent Over Row': 1.0,
+  'Pendlay Row': 1.0,
   'Hip Thrust': 1.5,
-  // Isolation exercises
-  'Barbell Curl': 0.4,
-  'EZ Bar Curl': 0.4,
-  'Dumbbell Curl': 0.2, // Per arm
-  'Lat Pulldown': 0.9,
-  'Cable Row': 0.8,
-  'Leg Extension': 0.6,
-  'Leg Curl': 0.5,
-  'Lying Leg Curl': 0.5,
-  'Seated Leg Curl': 0.5,
-  'Tricep Pushdown': 0.35,
-  'Lateral Raise': 0.1, // Per arm
-  'Face Pull': 0.3,
+  'Barbell Hip Thrust': 1.5,
+  // Dumbbell compound movements (fairly reliable)
+  'Dumbbell Bench Press': 0.35, // Per arm
+  'Dumbbell Incline Press': 0.3, // Per arm
+  'Dumbbell Shoulder Press': 0.25, // Per arm
+  'Dumbbell Row': 0.4, // Per arm
+  // Weighted bodyweight movements
+  'Pull-up': 0.3, // Added weight as % of BW
+  'Chin-up': 0.35,
+  'Dip': 0.4,
+  'Weighted Pull-up': 0.3,
+  'Weighted Dip': 0.4,
 };
 
-// Default strength standard for unknown exercises based on muscle group
-const DEFAULT_STANDARDS: Record<string, number> = {
-  chest: 1.0,
-  back: 0.9,
-  shoulders: 0.6,
-  biceps: 0.35,
-  triceps: 0.5,
-  quads: 1.3,
-  hamstrings: 0.8,
-  glutes: 1.2,
-  calves: 1.0,
-  abs: 0.5,
-  adductors: 0.6,
-  forearms: 0.3,
-  traps: 0.5,
-};
+// Exercises that should NOT show relative strength (machines, cables, isolation)
+// These have unreliable standards due to equipment variation or lack of data
+function hasReliableStandard(exerciseName: string): boolean {
+  const name = exerciseName.toLowerCase();
+  
+  // Exclude machines - leverage varies by manufacturer
+  if (name.includes('machine') || name.includes('smith') || 
+      name.includes('cable') || name.includes('pec deck') ||
+      name.includes('lat pulldown') || name.includes('pulldown') ||
+      name.includes('leg press') || name.includes('hack squat') ||
+      name.includes('leg extension') || name.includes('leg curl') ||
+      name.includes('chest press') || name.includes('shoulder press machine') ||
+      name.includes('iso-lateral') || name.includes('hammer strength') ||
+      name.includes('cybex') || name.includes('nautilus') ||
+      name.includes('seated row') || name.includes('t-bar')) {
+    return false;
+  }
+  
+  // Exclude isolation movements - no competitive standards
+  if (name.includes('curl') && !name.includes('deadlift') || // Bicep curls, but not RDL
+      name.includes('extension') || name.includes('pushdown') ||
+      name.includes('fly') || name.includes('flye') ||
+      name.includes('raise') || name.includes('lateral') ||
+      name.includes('rear delt') || name.includes('face pull') ||
+      name.includes('shrug') || name.includes('calf') ||
+      name.includes('crunch') || name.includes('ab ')) {
+    return false;
+  }
+  
+  // Check if it's in our standards list
+  return Object.keys(STRENGTH_STANDARDS).some(
+    standard => name.includes(standard.toLowerCase()) || standard.toLowerCase().includes(name)
+  );
+}
 
 // Optimal weekly sets by experience level
 const OPTIMAL_WEEKLY_VOLUME: Record<string, Record<string, number>> = {
@@ -1229,8 +1257,8 @@ export default function AnalyticsPage() {
                     </div>
                     <p className="text-xs text-surface-500 mt-1">
                       {strengthViewMode === 'absolute' 
-                        ? 'Ranked by estimated 1RM • Gauges show relative strength' 
-                        : 'Ranked by strength relative to bodyweight standards'}
+                        ? 'Ranked by estimated 1RM' 
+                        : 'Ranked by relative strength (compounds with reliable data first)'}
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -1238,25 +1266,44 @@ export default function AnalyticsPage() {
                       {(() => {
                         const userWeight = latestScan?.weightKg || 80; // Default to 80kg if no scan
                         
+                        // Helper to get standard - only for exercises with reliable data
+                        const getStandard = (name: string): number | null => {
+                          // Check exact matches first
+                          if (STRENGTH_STANDARDS[name]) return STRENGTH_STANDARDS[name];
+                          // Check partial matches
+                          const lowerName = name.toLowerCase();
+                          for (const [key, value] of Object.entries(STRENGTH_STANDARDS)) {
+                            if (lowerName.includes(key.toLowerCase()) || key.toLowerCase().includes(lowerName)) {
+                              return value;
+                            }
+                          }
+                          return null;
+                        };
+
                         const sortedExercises = [...analytics.topExercises].sort((a, b) => {
                           if (strengthViewMode === 'absolute') {
                             return b.estimatedE1RM - a.estimatedE1RM;
                           }
-                          // Relative strength: compare to expected standard
-                          const standardA = STRENGTH_STANDARDS[a.exerciseName] || DEFAULT_STANDARDS[a.primaryMuscle] || 0.5;
-                          const standardB = STRENGTH_STANDARDS[b.exerciseName] || DEFAULT_STANDARDS[b.primaryMuscle] || 0.5;
+                          // Relative strength: only compare exercises with reliable standards
+                          const standardA = getStandard(a.exerciseName);
+                          const standardB = getStandard(b.exerciseName);
+                          // If neither has standard, sort by absolute
+                          if (!standardA && !standardB) return b.estimatedE1RM - a.estimatedE1RM;
+                          // Put exercises with standards first
+                          if (!standardA) return 1;
+                          if (!standardB) return -1;
                           const relativeA = a.estimatedE1RM / (userWeight * standardA);
                           const relativeB = b.estimatedE1RM / (userWeight * standardB);
                           return relativeB - relativeA;
-                        }).slice(0, 8);
+                        }).slice(0, 10);
 
                         return sortedExercises.map((exercise, idx) => {
-                          const standard = STRENGTH_STANDARDS[exercise.exerciseName] || DEFAULT_STANDARDS[exercise.primaryMuscle] || 0.5;
-                          const expectedE1RM = userWeight * standard;
-                          const relativeStrength = (exercise.estimatedE1RM / expectedE1RM) * 100;
+                          const standard = getStandard(exercise.exerciseName);
+                          const showGauge = standard !== null && hasReliableStandard(exercise.exerciseName);
+                          const expectedE1RM = standard ? userWeight * standard : 0;
+                          const relativeStrength = standard ? (exercise.estimatedE1RM / expectedE1RM) * 100 : 0;
                           
                           // Strength level thresholds (% of intermediate standard)
-                          // Beginner: <50%, Novice: 50-75%, Intermediate: 75-100%, Advanced: 100-125%, Elite: >125%
                           const getStrengthLevel = (pct: number) => {
                             if (pct >= 125) return { label: 'Elite', color: 'text-purple-400', bgColor: 'bg-purple-500' };
                             if (pct >= 100) return { label: 'Advanced', color: 'text-success-400', bgColor: 'bg-success-500' };
@@ -1266,7 +1313,7 @@ export default function AnalyticsPage() {
                           };
                           
                           const strengthLevel = getStrengthLevel(relativeStrength);
-                          const gaugeWidth = Math.min(relativeStrength, 150); // Cap at 150% for display
+                          const gaugeWidth = Math.min(relativeStrength, 150);
                           
                           return (
                             <Link
@@ -1288,32 +1335,40 @@ export default function AnalyticsPage() {
                                     </p>
                                   </div>
                                   
-                                  {/* Relative Strength Gauge */}
-                                  <div className="mt-2">
-                                    <div className="flex items-center justify-between text-xs mb-1">
-                                      <span className={strengthLevel.color}>{strengthLevel.label}</span>
-                                      <span className="text-surface-500">
-                                        {Math.round(relativeStrength)}% of standard
+                                  {/* Relative Strength Gauge - only for free weight compounds */}
+                                  {showGauge ? (
+                                    <div className="mt-2">
+                                      <div className="flex items-center justify-between text-xs mb-1">
+                                        <span className={strengthLevel.color}>{strengthLevel.label}</span>
+                                        <span className="text-surface-500">
+                                          {Math.round(relativeStrength)}% of standard
+                                        </span>
+                                      </div>
+                                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden relative">
+                                        {/* Tier markers */}
+                                        <div className="absolute top-0 bottom-0 left-[33%] w-px bg-surface-600" title="Novice" />
+                                        <div className="absolute top-0 bottom-0 left-[50%] w-px bg-surface-600" title="Intermediate" />
+                                        <div className="absolute top-0 bottom-0 left-[66%] w-px bg-surface-600" title="Advanced" />
+                                        <div className="absolute top-0 bottom-0 left-[83%] w-px bg-surface-600" title="Elite" />
+                                        
+                                        {/* Progress bar */}
+                                        <div
+                                          className={`h-full rounded-full transition-all duration-500 ${strengthLevel.bgColor}`}
+                                          style={{ width: `${(gaugeWidth / 150) * 100}%` }}
+                                        />
+                                      </div>
+                                      <div className="flex justify-between text-[10px] text-surface-600 mt-0.5">
+                                        <span>Beginner</span>
+                                        <span>Elite</span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="mt-1">
+                                      <span className="text-xs text-surface-500 italic">
+                                        Machine/isolation - no reliable standard
                                       </span>
                                     </div>
-                                    <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden relative">
-                                      {/* Tier markers */}
-                                      <div className="absolute top-0 bottom-0 left-[33%] w-px bg-surface-600" title="Novice" />
-                                      <div className="absolute top-0 bottom-0 left-[50%] w-px bg-surface-600" title="Intermediate" />
-                                      <div className="absolute top-0 bottom-0 left-[66%] w-px bg-surface-600" title="Advanced" />
-                                      <div className="absolute top-0 bottom-0 left-[83%] w-px bg-surface-600" title="Elite" />
-                                      
-                                      {/* Progress bar */}
-                                      <div
-                                        className={`h-full rounded-full transition-all duration-500 ${strengthLevel.bgColor}`}
-                                        style={{ width: `${(gaugeWidth / 150) * 100}%` }}
-                                      />
-                                    </div>
-                                    <div className="flex justify-between text-[10px] text-surface-600 mt-0.5">
-                                      <span>Beginner</span>
-                                      <span>Elite</span>
-                                    </div>
-                                  </div>
+                                  )}
                                   
                                   <div className="flex items-center gap-3 mt-2 text-xs text-surface-500">
                                     <span>Best: {formatWeight(exercise.bestWeight, units)} × {exercise.bestReps}</span>
