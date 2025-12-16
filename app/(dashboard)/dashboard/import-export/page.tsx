@@ -161,164 +161,204 @@ export default function ImportExportPage() {
     try {
       if (importSource === 'strong') {
         const workouts = previewData as ParsedStrongWorkout[];
-        let imported = 0;
-        let skipped = 0;
         const errors: string[] = [];
         
-        // Cache exercise lookups to avoid repeated DB queries
+        setImportProgress({ current: 0, total: 5, currentItem: 'Step 1/5: Loading existing exercises...' });
+        
+        // STEP 1: Pre-load ALL existing exercises into cache
         const exerciseCache: Map<string, string> = new Map();
-
-        for (let i = 0; i < workouts.length; i++) {
-          const workout = workouts[i];
-          setImportProgress({
-            current: i + 1,
-            total: workouts.length,
-            currentItem: `${workout.workoutName} (${workout.date})`,
-          });
-          
-          // Small delay to ensure smooth progress updates and prevent overwhelming the database
-          if (i > 0 && i % 10 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 50));
-          }
-          
-          try {
-            // Parse date (Strong uses various formats)
-            const workoutDate = parseDate(workout.date);
-            if (!workoutDate) {
-              skipped++;
-              continue;
-            }
-
-            // Create workout session
-            const { data: session, error: sessionError } = await supabase
-              .from('workout_sessions')
-              .insert({
-                user_id: user.id,
-                planned_date: workoutDate,
-                state: 'completed',
-                started_at: workoutDate,
-                completed_at: workoutDate,
-                session_notes: workout.notes,
-                completion_percent: 100,
-              })
-              .select()
-              .single();
-
-            if (sessionError || !session) {
-              errors.push(`Failed to import workout from ${workout.date}`);
-              continue;
-            }
-
-            // Import exercises
-            let order = 1;
-            const allSetLogs: Array<{
-              exercise_block_id: string;
-              weight_kg: number;
-              reps: number;
-              rpe?: number;
-              is_warmup: boolean;
-              logged_at: string;
-            }> = [];
-
-            for (const exercise of workout.exercises) {
-              // Skip exercises with no sets
-              if (!exercise.sets || exercise.sets.length === 0) continue;
-              
-              const exerciseNameLower = exercise.name.toLowerCase().trim();
-              let exerciseId = exerciseCache.get(exerciseNameLower);
-              
-              if (!exerciseId) {
-                // Find or create exercise in database
-                const { data: existingExercise } = await supabase
-                  .from('exercises')
-                  .select('id')
-                  .ilike('name', exercise.name)
-                  .single();
-
-                if (existingExercise) {
-                  exerciseId = existingExercise.id;
-                } else {
-                  // Create new exercise
-                  const { data: newExercise, error: exError } = await supabase
-                    .from('exercises')
-                    .insert({
-                      name: exercise.name,
-                      primary_muscle: inferMuscleFromName(exercise.name),
-                      mechanic: inferMechanicFromName(exercise.name),
-                      difficulty: 'intermediate',
-                      is_custom: true,
-                      created_by: user.id,
-                    })
-                    .select()
-                    .single();
-                  
-                  if (exError) {
-                    console.error('Failed to create exercise:', exercise.name, exError);
-                  }
-                  if (newExercise) {
-                    exerciseId = newExercise.id;
-                  }
-                }
-                
-                // Cache the result
-                if (exerciseId) {
-                  exerciseCache.set(exerciseNameLower, exerciseId);
-                }
-              }
-
-              if (exerciseId) {
-                // Create exercise block
-                const { data: block, error: blockError } = await supabase
-                  .from('exercise_blocks')
-                  .insert({
-                    workout_session_id: session.id,
-                    exercise_id: exerciseId,
-                    order: order++,
-                    target_sets: exercise.sets.length,
-                    target_rep_range: [8, 12],
-                    target_rir: 2,
-                  })
-                  .select()
-                  .single();
-
-                if (blockError) {
-                  console.error('Failed to create exercise block:', blockError);
-                }
-
-                if (block) {
-                  // Batch set logs for this exercise
-                  for (const set of exercise.sets) {
-                    const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
-                    allSetLogs.push({
-                      exercise_block_id: block.id,
-                      weight_kg: weightKg,
-                      reps: set.reps,
-                      rpe: set.rpe,
-                      is_warmup: false,
-                      logged_at: workoutDate,
-                    });
-                  }
-                }
-              }
-            }
-
-            // Batch insert all set logs for this workout (much faster!)
-            if (allSetLogs.length > 0) {
-              const { error: setError } = await supabase
-                .from('set_logs')
-                .insert(allSetLogs);
-              
-              if (setError) {
-                console.error('Failed to insert set logs:', setError);
-              }
-            }
-
-            imported++;
-          } catch (err) {
-            skipped++;
+        const { data: allExercises } = await supabase
+          .from('exercises')
+          .select('id, name');
+        
+        if (allExercises) {
+          for (const ex of allExercises as Array<{ id: string; name: string }>) {
+            exerciseCache.set(ex.name.toLowerCase().trim(), ex.id);
           }
         }
-
+        
+        setImportProgress({ current: 1, total: 5, currentItem: 'Step 2/5: Creating new exercises...' });
+        
+        // STEP 2: Find all unique exercises we need to create
+        const uniqueExerciseNames = new Set<string>();
+        for (const workout of workouts) {
+          for (const exercise of workout.exercises) {
+            const nameLower = exercise.name.toLowerCase().trim();
+            if (!exerciseCache.has(nameLower)) {
+              uniqueExerciseNames.add(exercise.name);
+            }
+          }
+        }
+        
+        // Batch create new exercises
+        if (uniqueExerciseNames.size > 0) {
+          const newExercises = Array.from(uniqueExerciseNames).map(name => ({
+            name,
+            primary_muscle: inferMuscleFromName(name),
+            mechanic: inferMechanicFromName(name),
+            difficulty: 'intermediate',
+            is_custom: true,
+            created_by: user.id,
+          }));
+          
+          const { data: createdExercises } = await supabase
+            .from('exercises')
+            .insert(newExercises)
+            .select('id, name');
+          
+          if (createdExercises) {
+            for (const ex of createdExercises as Array<{ id: string; name: string }>) {
+              exerciseCache.set(ex.name.toLowerCase().trim(), ex.id);
+            }
+          }
+        }
+        
+        setImportProgress({ current: 2, total: 5, currentItem: 'Step 3/5: Creating workout sessions...' });
+        
+        // STEP 3: Prepare and batch insert all workout sessions
+        const validWorkouts: Array<{ workout: ParsedStrongWorkout; date: string }> = [];
+        for (const workout of workouts) {
+          const workoutDate = parseDate(workout.date);
+          if (workoutDate) {
+            validWorkouts.push({ workout, date: workoutDate });
+          }
+        }
+        
+        // Insert sessions in batches of 100
+        const BATCH_SIZE = 100;
+        const sessionMap: Map<string, string> = new Map(); // workout key -> session id
+        
+        for (let i = 0; i < validWorkouts.length; i += BATCH_SIZE) {
+          const batch = validWorkouts.slice(i, i + BATCH_SIZE);
+          const sessionsToInsert = batch.map(({ workout, date }) => ({
+            user_id: user.id,
+            planned_date: date,
+            state: 'completed',
+            started_at: date,
+            completed_at: date,
+            session_notes: workout.notes || null,
+            completion_percent: 100,
+          }));
+          
+          const { data: sessions } = await supabase
+            .from('workout_sessions')
+            .insert(sessionsToInsert)
+            .select('id');
+          
+          if (sessions) {
+            sessions.forEach((session: { id: string }, idx: number) => {
+              const key = `${batch[idx].workout.date}_${batch[idx].workout.workoutName}`;
+              sessionMap.set(key, session.id);
+            });
+          }
+        }
+        
+        setImportProgress({ current: 3, total: 5, currentItem: 'Step 4/5: Creating exercise blocks...' });
+        
+        // STEP 4: Batch insert all exercise blocks
+        const allBlocks: Array<{
+          workout_session_id: string;
+          exercise_id: string;
+          order: number;
+          target_sets: number;
+          target_rep_range: number[];
+          target_rir: number;
+          _workout_key: string;
+          _exercise_name: string;
+        }> = [];
+        
+        for (const { workout, date } of validWorkouts) {
+          const key = `${workout.date}_${workout.workoutName}`;
+          const sessionId = sessionMap.get(key);
+          if (!sessionId) continue;
+          
+          let order = 1;
+          for (const exercise of workout.exercises) {
+            if (!exercise.sets || exercise.sets.length === 0) continue;
+            
+            const exerciseId = exerciseCache.get(exercise.name.toLowerCase().trim());
+            if (!exerciseId) continue;
+            
+            allBlocks.push({
+              workout_session_id: sessionId,
+              exercise_id: exerciseId,
+              order: order++,
+              target_sets: exercise.sets.length,
+              target_rep_range: [8, 12],
+              target_rir: 2,
+              _workout_key: key,
+              _exercise_name: exercise.name,
+            });
+          }
+        }
+        
+        // Insert blocks in batches and track their IDs
+        const blockMap: Map<string, string> = new Map(); // "sessionId_exerciseName" -> block id
+        
+        for (let i = 0; i < allBlocks.length; i += BATCH_SIZE) {
+          const batch = allBlocks.slice(i, i + BATCH_SIZE);
+          const blocksToInsert = batch.map(({ _workout_key, _exercise_name, ...block }) => block);
+          
+          const { data: blocks } = await supabase
+            .from('exercise_blocks')
+            .insert(blocksToInsert)
+            .select('id');
+          
+          if (blocks) {
+            blocks.forEach((block: { id: string }, idx: number) => {
+              const original = batch[idx];
+              blockMap.set(`${original.workout_session_id}_${original._exercise_name.toLowerCase()}`, block.id);
+            });
+          }
+        }
+        
+        setImportProgress({ current: 4, total: 5, currentItem: 'Step 5/5: Creating set logs...' });
+        
+        // STEP 5: Batch insert all set logs
+        const allSetLogs: Array<{
+          exercise_block_id: string;
+          weight_kg: number;
+          reps: number;
+          rpe?: number;
+          is_warmup: boolean;
+          logged_at: string;
+        }> = [];
+        
+        for (const { workout, date } of validWorkouts) {
+          const key = `${workout.date}_${workout.workoutName}`;
+          const sessionId = sessionMap.get(key);
+          if (!sessionId) continue;
+          
+          for (const exercise of workout.exercises) {
+            if (!exercise.sets || exercise.sets.length === 0) continue;
+            
+            const blockId = blockMap.get(`${sessionId}_${exercise.name.toLowerCase()}`);
+            if (!blockId) continue;
+            
+            for (const set of exercise.sets) {
+              const weightKg = set.weightUnit === 'lb' ? set.weight / 2.20462 : set.weight;
+              allSetLogs.push({
+                exercise_block_id: blockId,
+                weight_kg: weightKg,
+                reps: set.reps,
+                rpe: set.rpe,
+                is_warmup: false,
+                logged_at: date,
+              });
+            }
+          }
+        }
+        
+        // Insert set logs in batches
+        for (let i = 0; i < allSetLogs.length; i += BATCH_SIZE) {
+          const batch = allSetLogs.slice(i, i + BATCH_SIZE);
+          await supabase.from('set_logs').insert(batch);
+        }
+        
+        setImportProgress({ current: 5, total: 5, currentItem: 'Complete!' });
+        
+        const imported = sessionMap.size;
+        const skipped = workouts.length - imported;
         setResult({ success: true, imported, skipped, errors });
       } else if (importSource === 'loseit') {
         const entries = previewData as ParsedLoseItEntry[];
