@@ -227,7 +227,35 @@ export default function OnboardingBodyCompPage() {
         </div>
         
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome to HyperTrack!</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Welcome to HyperTracker!</h1>
+          <p className="text-surface-400 mb-6">
+            Your AI-powered hypertrophy training and nutrition companion.
+          </p>
+          
+          {/* Feature highlights */}
+          <div className="grid grid-cols-2 gap-3 mb-6 text-left">
+            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
+              <span className="text-lg">🏋️</span>
+              <p className="text-sm font-medium text-surface-200 mt-1">Smart Workouts</p>
+              <p className="text-xs text-surface-500">AI mesocycle planning</p>
+            </div>
+            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
+              <span className="text-lg">🍎</span>
+              <p className="text-sm font-medium text-surface-200 mt-1">Nutrition Tracking</p>
+              <p className="text-xs text-surface-500">300K+ food database</p>
+            </div>
+            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
+              <span className="text-lg">🤖</span>
+              <p className="text-sm font-medium text-surface-200 mt-1">AI Coaching</p>
+              <p className="text-xs text-surface-500">Personalized advice</p>
+            </div>
+            <div className="p-3 bg-surface-800/50 rounded-lg border border-surface-700">
+              <span className="text-lg">📊</span>
+              <p className="text-sm font-medium text-surface-200 mt-1">Body Analytics</p>
+              <p className="text-xs text-surface-500">DEXA & FFMI tracking</p>
+            </div>
+          </div>
+          
           <p className="text-surface-400">
             First, which measurement system do you prefer?
           </p>

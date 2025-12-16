@@ -383,12 +383,46 @@ function CompleteContent() {
       {/* What's next */}
       <Card className="bg-surface-800/50">
         <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-2">What&apos;s Next?</h3>
+          <h3 className="text-lg font-semibold text-white mb-2">You&apos;re All Set! 🎉</h3>
           <p className="text-surface-400 mb-4">
-            Your calibration data is now being used to provide accurate weight recommendations 
-            across all exercises. HyperTrack will suggest weights based on your tested strength 
-            levels and adjust as you progress.
+            Your calibration data is now powering personalized recommendations across the entire app. 
+            Here&apos;s what you can do now:
           </p>
+          
+          <div className="grid sm:grid-cols-2 gap-3 mb-4">
+            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">🏋️</span>
+                <span className="font-medium text-surface-200">Create Mesocycle</span>
+              </div>
+              <p className="text-xs text-surface-500">AI-generated training blocks with S-tier exercises</p>
+            </div>
+            
+            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">🍎</span>
+                <span className="font-medium text-surface-200">Track Nutrition</span>
+              </div>
+              <p className="text-xs text-surface-500">Log meals, set macro targets, scan barcodes</p>
+            </div>
+            
+            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">🤖</span>
+                <span className="font-medium text-surface-200">AI Coaching</span>
+              </div>
+              <p className="text-xs text-surface-500">Get personalized advice before every workout</p>
+            </div>
+            
+            <div className="p-3 bg-surface-900/50 rounded-lg border border-surface-700">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-lg">📊</span>
+                <span className="font-medium text-surface-200">Track Progress</span>
+              </div>
+              <p className="text-xs text-surface-500">Body comp, strength gains, volume trends</p>
+            </div>
+          </div>
+          
           <ul className="space-y-2 text-sm text-surface-400">
             <li className="flex items-center gap-2">
               <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -400,13 +434,13 @@ function CompleteContent() {
               <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Smart mesocycle generation based on your strength profile
+              Smart macro targets based on your body composition
             </li>
             <li className="flex items-center gap-2">
               <svg className="w-5 h-5 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              Progress tracking with percentile comparisons
+              Fatigue management and auto-deload detection
             </li>
           </ul>
         </CardContent>

@@ -61,8 +61,8 @@ export default async function Home() {
             <br />Grow Faster
           </h1>
           <p className="text-lg sm:text-xl text-surface-400 mb-10 leading-relaxed px-2">
-            Science-based hypertrophy training with intelligent auto-regulation.
-            Track volume, manage fatigue, and optimize your gains.
+            Science-based hypertrophy training with AI coaching and nutrition tracking.
+            Track volume, manage fatigue, hit your macros, and optimize your gains.
           </p>
         </div>
 
@@ -100,8 +100,8 @@ export default async function Home() {
           </Link>
         </div>
 
-        {/* Feature highlights */}
-        <div className="mt-16 sm:mt-20 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-4xl animate-slide-up px-2" style={{ animationDelay: '0.2s' }}>
+        {/* Feature highlights - Row 1 */}
+        <div className="mt-16 sm:mt-20 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-5xl animate-slide-up px-2" style={{ animationDelay: '0.2s' }}>
           <FeatureCard
             icon={
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -130,6 +130,40 @@ export default async function Home() {
             description="Pre-workout readiness checks and smart deload recommendations"
           />
         </div>
+        
+        {/* Feature highlights - Row 2 */}
+        <div className="mt-4 sm:mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-5xl animate-slide-up px-2" style={{ animationDelay: '0.25s' }}>
+          <FeatureCard
+            icon={
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            }
+            title="AI Coaching"
+            description="Get personalized workout advice from AI that knows your history and goals"
+            accent
+          />
+          <FeatureCard
+            icon={
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            }
+            title="Nutrition & Macros"
+            description="Track food with USDA database, smart macro calculator, and auto-updating targets"
+            accent
+          />
+          <FeatureCard
+            icon={
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+              </svg>
+            }
+            title="S-Tier Exercises"
+            description="Every exercise rated for hypertrophy effectiveness—only the best make the cut"
+            accent
+          />
+        </div>
       </div>
     </div>
   );
@@ -138,15 +172,25 @@ export default async function Home() {
 function FeatureCard({ 
   icon, 
   title, 
-  description 
+  description,
+  accent = false,
 }: { 
   icon: React.ReactNode; 
   title: string; 
   description: string;
+  accent?: boolean;
 }) {
   return (
-    <div className="card p-6 hover:border-surface-700 transition-colors group">
-      <div className="w-12 h-12 rounded-lg bg-surface-800 flex items-center justify-center text-primary-400 mb-4 group-hover:bg-primary-500/10 transition-colors">
+    <div className={`card p-6 transition-colors group ${
+      accent 
+        ? 'border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-transparent hover:border-primary-500/50' 
+        : 'hover:border-surface-700'
+    }`}>
+      <div className={`w-12 h-12 rounded-lg flex items-center justify-center mb-4 transition-colors ${
+        accent
+          ? 'bg-primary-500/20 text-primary-400 group-hover:bg-primary-500/30'
+          : 'bg-surface-800 text-primary-400 group-hover:bg-primary-500/10'
+      }`}>
         {icon}
       </div>
       <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
