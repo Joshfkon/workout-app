@@ -2,10 +2,11 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Card, CardContent, Button, Badge } from '@/components/ui';
+import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
 import { PricingCard } from '@/components/subscription';
 import { useSubscription } from '@/hooks/useSubscription';
 import { TIER_FEATURES, SubscriptionTier } from '@/lib/stripe';
+import { redeemPromoCode } from '@/lib/actions/promoCodes';
 
 // Wrapper component that uses useSearchParams
 function PricingContent() {
@@ -13,6 +14,11 @@ function PricingContent() {
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  
+  // Promo code state
+  const [promoCode, setPromoCode] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ success: boolean; message: string } | null>(null);
   
   const { 
     tier: currentTier, 
@@ -51,6 +57,30 @@ function PricingContent() {
       setMessage({ type: 'error', text: 'An error occurred. Please try again.' });
     } finally {
       setLoadingTier(null);
+    }
+  };
+
+  const handleRedeemPromo = async () => {
+    if (!promoCode.trim()) return;
+    
+    setPromoLoading(true);
+    setPromoResult(null);
+    
+    try {
+      const result = await redeemPromoCode(promoCode);
+      setPromoResult(result);
+      
+      if (result.success) {
+        setPromoCode('');
+        // Refresh the page after a short delay to show updated subscription
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
+      }
+    } catch {
+      setPromoResult({ success: false, message: 'An error occurred. Please try again.' });
+    } finally {
+      setPromoLoading(false);
     }
   };
 
@@ -100,6 +130,50 @@ function PricingContent() {
           {message.text}
         </div>
       )}
+
+      {/* Promo Code Box */}
+      <Card className="border-primary-500/20 bg-gradient-to-r from-primary-500/5 to-accent-500/5">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-primary-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-semibold text-surface-100">Have a Promo Code?</h3>
+              <p className="text-sm text-surface-400">Enter your code below to unlock premium features instantly</p>
+            </div>
+          </div>
+          
+          <div className="flex gap-3">
+            <Input
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              placeholder="Enter promo code"
+              className="flex-1 uppercase"
+              disabled={promoLoading}
+            />
+            <Button 
+              onClick={handleRedeemPromo} 
+              disabled={!promoCode.trim() || promoLoading}
+              isLoading={promoLoading}
+            >
+              Redeem
+            </Button>
+          </div>
+
+          {promoResult && (
+            <div className={`mt-4 p-3 rounded-lg text-sm ${
+              promoResult.success 
+                ? 'bg-success-500/10 border border-success-500/20 text-success-400'
+                : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
+            }`}>
+              {promoResult.message}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Billing Period Toggle */}
       <div className="flex justify-center">

@@ -52,7 +52,16 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
     .eq('is_active', true)
     .single();
 
-  if (codeError || !promoCode) {
+  if (codeError) {
+    console.error('Promo code lookup error:', codeError);
+    // Check if it's a "relation does not exist" error (table not created)
+    if (codeError.message?.includes('relation') || codeError.code === '42P01') {
+      return { success: false, message: 'Promo code system is not yet configured. Please contact support.' };
+    }
+    return { success: false, message: 'Invalid promo code. Please check and try again.' };
+  }
+  
+  if (!promoCode) {
     return { success: false, message: 'Invalid promo code. Please check and try again.' };
   }
 
@@ -118,6 +127,9 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
 
   if (redemptionError) {
     console.error('Error creating redemption:', redemptionError);
+    if (redemptionError.message?.includes('relation') || redemptionError.code === '42P01') {
+      return { success: false, message: 'Promo code system is not yet configured. Please contact support.' };
+    }
     return { success: false, message: 'Failed to redeem code. Please try again.' };
   }
 
