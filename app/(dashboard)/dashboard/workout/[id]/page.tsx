@@ -1826,6 +1826,7 @@ export default function WorkoutPage() {
           exerciseBlocks={blocks}
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
+          unit={preferences.units}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
         />

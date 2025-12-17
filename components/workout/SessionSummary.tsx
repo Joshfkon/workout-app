@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
-import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup } from '@/types/schema';
-import { formatDuration } from '@/lib/utils';
+import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup, WeightUnit } from '@/types/schema';
+import { formatDuration, formatWeight } from '@/lib/utils';
 
 interface ExerciseWithHistory {
   exerciseId: string;
@@ -20,6 +20,7 @@ interface SessionSummaryProps {
   exerciseBlocks: ExerciseBlock[];
   allSets: SetLog[];
   exerciseHistories?: Record<string, ExerciseWithHistory>;
+  unit?: WeightUnit;
   onSubmit?: (data: {
     sessionRpe: number;
     pumpRating: number;
@@ -27,6 +28,9 @@ interface SessionSummaryProps {
   }) => void;
   readOnly?: boolean;
 }
+
+// Convert kg to lbs
+const kgToLbs = (kg: number) => Math.round(kg * 2.20462 * 10) / 10;
 
 // Calculate estimated 1RM using Epley formula
 function calculateE1RM(weight: number, reps: number): number {
@@ -47,9 +51,20 @@ export function SessionSummary({
   exerciseBlocks,
   allSets,
   exerciseHistories,
+  unit = 'kg',
   onSubmit,
   readOnly = false,
 }: SessionSummaryProps) {
+  // Helper to display weight in user's preferred unit
+  const displayWeight = (kg: number, decimals: number = 0) => {
+    if (unit === 'lb') {
+      const lbs = kgToLbs(kg);
+      return decimals > 0 ? lbs.toFixed(decimals) : Math.round(lbs);
+    }
+    return decimals > 0 ? kg.toFixed(decimals) : Math.round(kg);
+  };
+  
+  const weightUnit = unit === 'lb' ? 'lbs' : 'kg';
   const [sessionRpe, setSessionRpe] = useState(session.sessionRpe || 7);
   const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
   const [notes, setNotes] = useState(session.sessionNotes || '');
@@ -332,8 +347,8 @@ export function SessionSummary({
                 <div>
                   <p className="font-medium text-surface-100">{pr.exerciseName}</p>
                   <p className="text-xs text-surface-400">
-                    {pr.type === 'e1rm' && `New Est. 1RM: ${pr.value}kg`}
-                    {pr.type === 'weight' && `New Weight PR: ${pr.value}kg`}
+                    {pr.type === 'e1rm' && `New Est. 1RM: ${displayWeight(pr.value)}${weightUnit}`}
+                    {pr.type === 'weight' && `New Weight PR: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'reps' && `New Reps PR: ${pr.value} reps`}
                   </p>
                 </div>
@@ -382,7 +397,10 @@ export function SessionSummary({
               <span className="text-xs text-surface-400">Total Volume</span>
             </div>
             <p className="text-xl font-bold text-blue-400">
-              {totalVolume >= 1000 ? `${(totalVolume / 1000).toFixed(1)}k` : Math.round(totalVolume)} kg
+              {(() => {
+                const vol = unit === 'lb' ? kgToLbs(totalVolume) : totalVolume;
+                return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k` : Math.round(vol);
+              })()} {weightUnit}
             </p>
           </div>
           <div className="p-3 bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/20 rounded-lg">
@@ -492,7 +510,7 @@ export function SessionSummary({
                 <div key={muscle}>
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-surface-300 capitalize">{muscle}</span>
-                    <span className="text-surface-400">{sets} sets · {Math.round(volume)}kg</span>
+                    <span className="text-surface-400">{sets} sets · {displayWeight(volume)}{weightUnit}</span>
                   </div>
                   <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
                     <div 
@@ -614,14 +632,14 @@ export function SessionSummary({
                           <span>•</span>
                           <span>{exercise.sets.length} sets</span>
                           <span>•</span>
-                          <span>{Math.round(exercise.totalVolume)}kg vol</span>
+                          <span>{displayWeight(exercise.totalVolume)}{weightUnit} vol</span>
                           <span>•</span>
                           <span>RPE {exercise.avgRpe}</span>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-primary-400">
-                          {exercise.maxWeight}kg
+                          {displayWeight(exercise.maxWeight)}{weightUnit}
                         </p>
                         <p className="text-xs text-surface-500">top weight</p>
                       </div>
@@ -639,7 +657,7 @@ export function SessionSummary({
                         {/* Quick stats */}
                         <div className="grid grid-cols-4 gap-2 py-3">
                           <div className="text-center">
-                            <p className="text-sm font-bold text-surface-200">{exercise.bestE1RM}kg</p>
+                            <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.bestE1RM)}{weightUnit}</p>
                             <p className="text-xs text-surface-500">Est. 1RM</p>
                           </div>
                           <div className="text-center">
@@ -647,8 +665,8 @@ export function SessionSummary({
                             <p className="text-xs text-surface-500">Max Reps</p>
                           </div>
                           <div className="text-center">
-                            <p className="text-sm font-bold text-surface-200">{Math.round(exercise.totalVolume)}</p>
-                            <p className="text-xs text-surface-500">Volume</p>
+                            <p className="text-sm font-bold text-surface-200">{displayWeight(exercise.totalVolume)}</p>
+                            <p className="text-xs text-surface-500">Vol ({weightUnit})</p>
                           </div>
                           <div className="text-center">
                             <p className="text-sm font-bold text-surface-200">{exercise.avgRpe}</p>
@@ -686,7 +704,7 @@ export function SessionSummary({
                                 >
                                   <td className="px-2 py-1.5 text-surface-400">{idx + 1}</td>
                                   <td className="px-2 py-1.5 text-center font-medium text-surface-200">
-                                    {set.weightKg}kg
+                                    {displayWeight(set.weightKg)}{weightUnit}
                                   </td>
                                   <td className="px-2 py-1.5 text-center text-surface-200">
                                     {set.reps}
@@ -726,7 +744,7 @@ export function SessionSummary({
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-yellow-400">🏆 New Personal Record!</span>
                               <span className="text-surface-300">
-                                {exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm}kg → <span className="font-bold text-yellow-400">{exercise.bestE1RM}kg</span>
+                                {displayWeight(exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm || 0)}{weightUnit} → <span className="font-bold text-yellow-400">{displayWeight(exercise.bestE1RM)}{weightUnit}</span>
                               </span>
                             </div>
                           </div>
