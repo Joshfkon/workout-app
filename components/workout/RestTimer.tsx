@@ -29,6 +29,8 @@ export function RestTimer({
   const [isRunning, setIsRunning] = useState(false);
   const [initialSeconds, setInitialSeconds] = useState(defaultSeconds);
   const [isFinished, setIsFinished] = useState(false);
+  const [finishedAt, setFinishedAt] = useState<number | null>(null); // Track when timer finished
+  const [timeSinceFinished, setTimeSinceFinished] = useState(0); // Seconds since finished
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
@@ -37,6 +39,20 @@ export function RestTimer({
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
+
+  // Track time since finished
+  useEffect(() => {
+    if (isFinished && finishedAt) {
+      const updateTimeSince = () => {
+        setTimeSinceFinished(Math.floor((Date.now() - finishedAt) / 1000));
+      };
+      updateTimeSince();
+      const interval = setInterval(updateTimeSince, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setTimeSinceFinished(0);
+    }
+  }, [isFinished, finishedAt]);
 
   const playAlarm = useCallback(() => {
     // Play 3 beeps with increasing frequency
@@ -97,6 +113,7 @@ export function RestTimer({
           setInitialSeconds(state.duration);
           setIsRunning(false);
           setIsFinished(true);
+          setFinishedAt(state.endTime); // Use the actual end time
           // Clear stored state
           localStorage.removeItem(TIMER_STORAGE_KEY);
           // Play alarm since user just returned
@@ -151,6 +168,7 @@ export function RestTimer({
               setSeconds(0);
               setIsRunning(false);
               setIsFinished(true);
+              setFinishedAt(Date.now());
               localStorage.removeItem(TIMER_STORAGE_KEY);
               if (!hasPlayedAlarm.current) {
                 hasPlayedAlarm.current = true;
@@ -165,13 +183,17 @@ export function RestTimer({
           // Fallback to simple decrement
           setSeconds((prev) => {
             if (prev <= 1) {
-              setIsRunning(false);
-              setIsFinished(true);
-              if (!hasPlayedAlarm.current) {
-                hasPlayedAlarm.current = true;
-                playAlarm();
-                onCompleteRef.current?.();
-              }
+              // Schedule state updates for next tick to avoid batching issues
+              setTimeout(() => {
+                setIsRunning(false);
+                setIsFinished(true);
+                setFinishedAt(Date.now());
+                if (!hasPlayedAlarm.current) {
+                  hasPlayedAlarm.current = true;
+                  playAlarm();
+                  onCompleteRef.current?.();
+                }
+              }, 0);
               return 0;
             }
             return prev - 1;
@@ -200,6 +222,7 @@ export function RestTimer({
   const resetTimer = () => {
     setIsRunning(false);
     setIsFinished(false);
+    setFinishedAt(null);
     setSeconds(initialSeconds);
     hasPlayedAlarm.current = false;
     localStorage.removeItem(TIMER_STORAGE_KEY);
@@ -252,13 +275,20 @@ export function RestTimer({
 
       {/* Finished message */}
       {isFinished && (
-        <div className="text-center mb-2">
-          <span className="inline-flex items-center gap-2 px-3 py-1 bg-success-500/20 text-success-400 rounded-full text-sm font-medium">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        <div className="text-center mb-2 space-y-1">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-success-500/30 text-success-300 rounded-full text-base font-bold animate-pulse">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
-            Rest Complete - Start Next Set!
-          </span>
+            REST COMPLETE!
+          </div>
+          {timeSinceFinished > 0 && (
+            <p className="text-sm text-success-400/80">
+              Finished {timeSinceFinished < 60 
+                ? `${timeSinceFinished}s ago` 
+                : `${Math.floor(timeSinceFinished / 60)}m ${timeSinceFinished % 60}s ago`}
+            </p>
+          )}
         </div>
       )}
 
