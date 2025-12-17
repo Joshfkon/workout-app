@@ -401,6 +401,7 @@ export default function WorkoutPage() {
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
+  const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
   const [selectedInjurySeverity, setSelectedInjurySeverity] = useState<1 | 2 | 3>(1);
   
@@ -597,6 +598,11 @@ export default function WorkoutPage() {
         
         if (profile) {
           setUserProfile(profile);
+        }
+        
+        // Store user's goal for check-in component
+        if (userData?.goal) {
+          setUserGoal(userData.goal as 'bulk' | 'cut' | 'recomp' | 'maintain');
         }
         
         // Build user context for personalized coaching
@@ -1785,6 +1791,7 @@ export default function WorkoutPage() {
           onSkipPermanently={handleSkipCheckInPermanently}
           unit={preferences.units}
           todayNutrition={todayNutrition || undefined}
+          userGoal={userGoal}
         />
       </div>
     );

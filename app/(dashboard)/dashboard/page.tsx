@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimati
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
+import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 
 interface NutritionTotals {
   calories: number;
@@ -113,6 +114,8 @@ export default function DashboardPage() {
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(null);
   const [isLoggingWeight, setIsLoggingWeight] = useState(false);
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>('maintain');
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -120,10 +123,23 @@ export default function DashboardPage() {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+        
+        setUserId(user.id);
 
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+        
+        // Fetch user profile to get goal
+        const { data: userProfile } = await supabase
+          .from('users')
+          .select('goal')
+          .eq('id', user.id)
+          .single();
+        
+        if (userProfile?.goal) {
+          setUserGoal(userProfile.goal);
+        }
 
         // Fetch active mesocycle with workout sessions
         // Check both is_active flag and state='active' for backwards compatibility
@@ -568,6 +584,14 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ===== DAILY CHECK-IN ===== */}
+      {userId && (
+        <DailyCheckIn 
+          userId={userId} 
+          userGoal={userGoal}
+        />
       )}
 
       {/* ===== TODAY'S NUTRITION ===== */}

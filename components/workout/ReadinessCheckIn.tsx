@@ -44,9 +44,10 @@ interface ReadinessCheckInProps {
   onSkipPermanently?: () => void;
   unit?: WeightUnit;
   todayNutrition?: TodayNutrition;
+  userGoal?: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition }: ReadinessCheckInProps) {
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition, userGoal }: ReadinessCheckInProps) {
   const [sleepHours, setSleepHours] = useState(7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
   const [stressLevel, setStressLevel] = useState<Rating>(3);
@@ -55,6 +56,13 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
   const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
   const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
   const [selectedSeverity, setSelectedSeverity] = useState<1 | 2 | 3>(1);
+  
+  // Cut-specific tracking for refeed detection
+  const [focusRating, setFocusRating] = useState<Rating>(3);
+  const [libidoRating, setLibidoRating] = useState<Rating>(3);
+  
+  // Show cut-specific questions when user is cutting
+  const isOnCut = userGoal === 'cut';
   
   // Calculate nutrition rating from logged data
   const getNutritionRating = (): Rating => {
@@ -109,6 +117,23 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
   });
 
   const interpretation = getReadinessInterpretation(readinessScore);
+  
+  // Calculate if refeed is recommended (for cuts)
+  const calculateRefeedRecommended = (): boolean => {
+    if (!isOnCut) return false;
+    
+    // Refeed indicators: low focus, low libido, poor sleep, low energy
+    const lowFocus = focusRating <= 2;
+    const lowLibido = libidoRating <= 2;
+    const poorSleep = sleepQuality <= 2;
+    const highStress = stressLevel <= 2;
+    
+    // Recommend refeed if multiple indicators are present
+    const indicatorCount = [lowFocus, lowLibido, poorSleep, highStress].filter(Boolean).length;
+    return indicatorCount >= 2 || (lowFocus && lowLibido);
+  };
+  
+  const refeedRecommended = calculateRefeedRecommended();
 
   const handleSubmit = () => {
     // Convert bodyweight to kg if entered in lbs
@@ -126,15 +151,23 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
       bodyweightKg,
       readinessScore,
       temporaryInjuries: temporaryInjuries.length > 0 ? temporaryInjuries : undefined,
+      // Include cut-specific metrics if on a cut
+      ...(isOnCut && {
+        focusRating,
+        libidoRating,
+        refeedRecommended,
+      }),
     };
     onSubmit(checkIn);
   };
 
-  const getRatingLabel = (rating: Rating, type: 'sleep' | 'stress' | 'nutrition') => {
+  const getRatingLabel = (rating: Rating, type: 'sleep' | 'stress' | 'nutrition' | 'focus' | 'libido') => {
     const labels = {
       sleep: ['Terrible', 'Poor', 'Okay', 'Good', 'Great'],
       stress: ['Very High', 'High', 'Moderate', 'Low', 'Very Low'],
       nutrition: ['Poor', 'Below Average', 'Average', 'Good', 'Excellent'],
+      focus: ['Very Foggy', 'Foggy', 'Normal', 'Sharp', 'Very Sharp'],
+      libido: ['Very Low', 'Low', 'Normal', 'High', 'Very High'],
     };
     return labels[type][rating - 1];
   };
@@ -231,6 +264,89 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
           </div>
           <p className="text-xs text-surface-500 mt-1">1 = Very High Stress, 5 = Very Low Stress</p>
         </div>
+
+        {/* Cut-specific: Focus & Libido (for refeed detection) */}
+        {isOnCut && (
+          <div className="p-4 bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-xl space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🎯</span>
+              <div>
+                <p className="text-sm font-medium text-surface-100">Cut Health Check</p>
+                <p className="text-xs text-surface-400">These help us detect when you might need a refeed</p>
+              </div>
+            </div>
+            
+            {/* Focus Rating */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-surface-200">
+                  Mental Focus / Clarity
+                </label>
+                <span className={`text-sm ${focusRating <= 2 ? 'text-amber-400' : 'text-primary-400'}`}>
+                  {getRatingLabel(focusRating, 'focus')}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
+                  <button
+                    key={rating}
+                    onClick={() => setFocusRating(rating)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      focusRating === rating
+                        ? rating <= 2 ? 'bg-amber-500 text-white' : 'bg-primary-500 text-white'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                    }`}
+                  >
+                    {rating}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Libido Rating */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-surface-200">
+                  Libido / Drive
+                </label>
+                <span className={`text-sm ${libidoRating <= 2 ? 'text-amber-400' : 'text-primary-400'}`}>
+                  {getRatingLabel(libidoRating, 'libido')}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
+                  <button
+                    key={rating}
+                    onClick={() => setLibidoRating(rating)}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      libidoRating === rating
+                        ? rating <= 2 ? 'bg-amber-500 text-white' : 'bg-primary-500 text-white'
+                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                    }`}
+                  >
+                    {rating}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-surface-500 mt-1">A drop in libido can indicate hormonal stress from dieting</p>
+            </div>
+            
+            {/* Refeed Alert */}
+            {refeedRecommended && (
+              <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <span className="text-lg">⚠️</span>
+                  <div>
+                    <p className="text-sm font-medium text-amber-400">Refeed Recommended</p>
+                    <p className="text-xs text-surface-300 mt-1">
+                      Low focus and libido can indicate your body needs more fuel. Consider a higher-carb day to restore glycogen and hormonal balance.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Today's Nutrition (from logging) */}
         <div className="p-4 bg-surface-800/50 rounded-lg">

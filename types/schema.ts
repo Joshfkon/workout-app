@@ -327,11 +327,62 @@ export interface PreWorkoutCheckIn {
   /** Current bodyweight in kg */
   bodyweightKg: number | null;
   
+  /** Mental focus/clarity rating (1-5) - important for detecting need for refeed during cut */
+  focusRating?: Rating | null;
+  
+  /** Libido rating (1-5) - important indicator of hormonal health during cut */
+  libidoRating?: Rating | null;
+  
   /** Calculated readiness score (0-100) based on check-in factors */
   readinessScore: number;
   
+  /** Whether a refeed might be needed (calculated from focus, libido, etc.) */
+  refeedRecommended?: boolean;
+  
   /** Temporary injuries or pain to avoid during this workout */
   temporaryInjuries?: TemporaryInjury[];
+}
+
+/**
+ * Daily check-in for tracking wellness indicators
+ */
+export interface DailyCheckIn {
+  id: string;
+  userId: string;
+  date: string;
+  
+  /** Hours of sleep */
+  sleepHours?: number | null;
+  
+  /** Sleep quality (1-5) */
+  sleepQuality?: Rating | null;
+  
+  /** Energy level (1-5) */
+  energyLevel?: Rating | null;
+  
+  /** Mental focus/clarity (1-5) */
+  focusRating?: Rating | null;
+  
+  /** Libido (1-5) - hormonal health indicator */
+  libidoRating?: Rating | null;
+  
+  /** Mood (1-5) */
+  moodRating?: Rating | null;
+  
+  /** Stress level (1-5, 1=high stress, 5=low stress) */
+  stressLevel?: Rating | null;
+  
+  /** Muscle soreness level (1-5, 1=very sore, 5=no soreness) */
+  sorenessLevel?: Rating | null;
+  
+  /** Hunger level (1-5, 1=very hungry, 5=satisfied) */
+  hungerLevel?: Rating | null;
+  
+  /** Free-form notes */
+  notes?: string;
+  
+  /** Timestamp */
+  createdAt: string;
 }
 
 // ============ EXERCISE BLOCK ============
