@@ -4,6 +4,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui';
 import { formatDuration } from '@/lib/utils';
 
+const TIMER_STORAGE_KEY = 'workout_rest_timer';
+
+interface TimerState {
+  endTime: number; // Unix timestamp when timer should complete
+  duration: number; // Original duration in seconds
+  isRunning: boolean;
+}
+
 interface RestTimerProps {
   defaultSeconds?: number;
   autoStart?: boolean;
@@ -18,10 +26,17 @@ export function RestTimer({
   onDismiss,
 }: RestTimerProps) {
   const [seconds, setSeconds] = useState(defaultSeconds);
-  const [isRunning, setIsRunning] = useState(autoStart);
+  const [isRunning, setIsRunning] = useState(false);
   const [initialSeconds, setInitialSeconds] = useState(defaultSeconds);
   const [isFinished, setIsFinished] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasPlayedAlarm = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+
+  // Keep onComplete ref up to date
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const playAlarm = useCallback(() => {
     // Play 3 beeps with increasing frequency
@@ -61,30 +76,124 @@ export function RestTimer({
     }
   }, []);
 
-  // Timer logic
+  // Load timer state from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (stored) {
+        const state: TimerState = JSON.parse(stored);
+        const now = Date.now();
+        const remaining = Math.ceil((state.endTime - now) / 1000);
+        
+        if (state.isRunning && remaining > 0) {
+          // Timer was running and still has time left
+          setSeconds(remaining);
+          setInitialSeconds(state.duration);
+          setIsRunning(true);
+          hasPlayedAlarm.current = false;
+        } else if (state.isRunning && remaining <= 0) {
+          // Timer finished while page was away - show finished state
+          setSeconds(0);
+          setInitialSeconds(state.duration);
+          setIsRunning(false);
+          setIsFinished(true);
+          // Clear stored state
+          localStorage.removeItem(TIMER_STORAGE_KEY);
+          // Play alarm since user just returned
+          if (!hasPlayedAlarm.current) {
+            hasPlayedAlarm.current = true;
+            playAlarm();
+            onCompleteRef.current?.();
+          }
+        }
+      } else if (autoStart) {
+        // No stored state, but autoStart requested
+        startTimer(defaultSeconds);
+      }
+    } catch (e) {
+      console.log('Could not restore timer state');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save timer state to localStorage when running
+  const saveTimerState = useCallback((running: boolean, endTime: number, duration: number) => {
+    if (running) {
+      const state: TimerState = { endTime, duration, isRunning: true };
+      localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(state));
+    } else {
+      localStorage.removeItem(TIMER_STORAGE_KEY);
+    }
+  }, []);
+
+  // Start timer with duration
+  const startTimer = useCallback((duration: number) => {
+    const endTime = Date.now() + duration * 1000;
+    setSeconds(duration);
+    setIsRunning(true);
+    setIsFinished(false);
+    hasPlayedAlarm.current = false;
+    saveTimerState(true, endTime, duration);
+  }, [saveTimerState]);
+
+  // Timer logic - uses timestamp-based calculation for accuracy
   useEffect(() => {
     if (isRunning && seconds > 0) {
       intervalRef.current = setInterval(() => {
-        setSeconds((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            setIsFinished(true);
-            playAlarm();
-            onComplete?.();
-            return 0;
+        // Read end time from storage and calculate remaining
+        try {
+          const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+          if (stored) {
+            const state: TimerState = JSON.parse(stored);
+            const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
+            
+            if (remaining <= 0) {
+              setSeconds(0);
+              setIsRunning(false);
+              setIsFinished(true);
+              localStorage.removeItem(TIMER_STORAGE_KEY);
+              if (!hasPlayedAlarm.current) {
+                hasPlayedAlarm.current = true;
+                playAlarm();
+                onCompleteRef.current?.();
+              }
+            } else {
+              setSeconds(remaining);
+            }
           }
-          return prev - 1;
-        });
-      }, 1000);
+        } catch (e) {
+          // Fallback to simple decrement
+          setSeconds((prev) => {
+            if (prev <= 1) {
+              setIsRunning(false);
+              setIsFinished(true);
+              if (!hasPlayedAlarm.current) {
+                hasPlayedAlarm.current = true;
+                playAlarm();
+                onCompleteRef.current?.();
+              }
+              return 0;
+            }
+            return prev - 1;
+          });
+        }
+      }, 250); // Check more frequently for better accuracy when returning from background
     }
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, seconds, onComplete, playAlarm]);
+  }, [isRunning, seconds, playAlarm]);
 
   const toggleTimer = () => {
-    setIsRunning(!isRunning);
+    if (isRunning) {
+      // Pause
+      setIsRunning(false);
+      localStorage.removeItem(TIMER_STORAGE_KEY);
+    } else {
+      // Start/Resume
+      startTimer(seconds);
+    }
     setIsFinished(false);
   };
 
@@ -92,11 +201,20 @@ export function RestTimer({
     setIsRunning(false);
     setIsFinished(false);
     setSeconds(initialSeconds);
+    hasPlayedAlarm.current = false;
+    localStorage.removeItem(TIMER_STORAGE_KEY);
   };
 
   const addTime = (amount: number) => {
-    setSeconds((prev) => Math.max(0, prev + amount));
+    const newSeconds = Math.max(0, seconds + amount);
+    setSeconds(newSeconds);
     setIsFinished(false);
+    
+    // Update stored end time if running
+    if (isRunning) {
+      const endTime = Date.now() + newSeconds * 1000;
+      saveTimerState(true, endTime, initialSeconds);
+    }
   };
 
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
@@ -241,6 +359,8 @@ export function RestTimer({
               setInitialSeconds(preset);
               setIsRunning(false);
               setIsFinished(false);
+              hasPlayedAlarm.current = false;
+              localStorage.removeItem(TIMER_STORAGE_KEY);
             }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               initialSeconds === preset
