@@ -136,8 +136,8 @@ export function CreateCustomFoodModal({
             </p>
           </div>
           <Toggle
-            enabled={isPerGram}
-            onToggle={() => setIsPerGram(!isPerGram)}
+            checked={isPerGram}
+            onChange={(checked) => setIsPerGram(checked)}
             size="md"
           />
         </div>
