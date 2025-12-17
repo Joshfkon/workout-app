@@ -852,7 +852,10 @@ export const ExerciseCard = memo(function ExerciseCard({
               <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
               <th className="px-2 py-2 text-center text-surface-400 font-medium">
                 <button 
-                  onClick={() => setShowRpeGuide(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowRpeGuide(true);
+                  }}
                   className="inline-flex items-center gap-1 hover:text-primary-400 transition-colors"
                 >
                   RPE
