@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Card, Button, Badge, Input } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -1741,8 +1741,9 @@ export default function WorkoutPage() {
 
   if (phase === 'loading') {
     return (
-      <div className="max-w-lg mx-auto py-8 text-center">
-        <p className="text-surface-400">Loading workout...</p>
+      <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
+        <LoadingAnimation type="barbell" size="lg" />
+        <p className="mt-4 text-surface-400">Loading workout...</p>
       </div>
     );
   }

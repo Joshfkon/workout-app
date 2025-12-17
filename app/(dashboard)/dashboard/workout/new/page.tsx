@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -690,8 +690,9 @@ function NewWorkoutContent() {
 export default function NewWorkoutPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <LoadingAnimation type="dumbbell" size="lg" />
+        <p className="mt-4 text-surface-400">Setting up your workout...</p>
       </div>
     }>
       <NewWorkoutContent />

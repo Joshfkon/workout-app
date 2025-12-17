@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
@@ -308,8 +308,9 @@ export default function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center py-20">
+        <LoadingAnimation type="heartbeat" size="lg" />
+        <p className="mt-4 text-surface-400">Loading dashboard...</p>
       </div>
     );
   }
