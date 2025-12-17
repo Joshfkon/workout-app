@@ -837,13 +837,12 @@ export default function WorkoutPage() {
 
         const today = new Date().toISOString().split('T')[0];
 
-        // Fetch today's food log entries
+        // Fetch today's food log entries (logged_at is a DATE column, not timestamp)
         const { data: foodEntries } = await supabase
           .from('food_log')
           .select('calories, protein, carbs, fat')
           .eq('user_id', user.id)
-          .gte('logged_at', `${today}T00:00:00`)
-          .lt('logged_at', `${today}T23:59:59`);
+          .eq('logged_at', today);
 
         // Fetch nutrition targets
         const { data: targets } = await supabase
