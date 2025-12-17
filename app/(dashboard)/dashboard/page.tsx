@@ -116,6 +116,27 @@ export default function DashboardPage() {
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>('maintain');
+  const [debugError, setDebugError] = useState<string | null>(null);
+
+  // Debug: Catch global errors
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      setDebugError(`Global Error: ${event.message} at ${event.filename}:${event.lineno}`);
+      console.error('Global error caught:', event);
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const msg = reason instanceof Error ? reason.message : String(reason);
+      setDebugError(`Unhandled Rejection: ${msg}`);
+      console.error('Unhandled rejection:', reason);
+    };
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleRejection);
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleRejection);
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -364,31 +385,43 @@ export default function DashboardPage() {
   }, []);
 
   const handleAddFood = async (food: any) => {
-    const supabase = createUntypedClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error('handleAddFood: No user found');
+        return;
+      }
 
-    await supabase.from('food_log').insert({
-      user_id: user.id,
-      food_name: food.food_name,
-      serving_size: food.serving_size,
-      servings: food.servings,
-      calories: food.calories,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-      meal_type: food.meal_type,
-      source: food.source || 'manual',
-      logged_at: new Date().toISOString().split('T')[0],
-    });
+      const { error } = await supabase.from('food_log').insert({
+        user_id: user.id,
+        food_name: food.food_name,
+        serving_size: food.serving_size,
+        servings: food.servings,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        meal_type: food.meal_type,
+        source: food.source || 'manual',
+        logged_at: new Date().toISOString().split('T')[0],
+      });
 
-    setNutritionTotals((prev) => ({
-      calories: prev.calories + food.calories,
-      protein: prev.protein + food.protein,
-      carbs: prev.carbs + food.carbs,
-      fat: prev.fat + food.fat,
-    }));
-    setShowQuickLogger(false);
+      if (error) {
+        console.error('handleAddFood: Supabase error:', error);
+        return;
+      }
+
+      setNutritionTotals((prev) => ({
+        calories: prev.calories + food.calories,
+        protein: prev.protein + food.protein,
+        carbs: prev.carbs + food.carbs,
+        fat: prev.fat + food.fat,
+      }));
+      setShowQuickLogger(false);
+    } catch (err) {
+      console.error('handleAddFood: Exception:', err);
+    }
   };
 
   const handleSaveWeight = async () => {
@@ -473,6 +506,19 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Debug Error Display */}
+      {debugError && (
+        <div className="p-3 bg-red-900/50 border border-red-500 rounded-lg">
+          <p className="text-xs text-red-300 font-mono break-all">{debugError}</p>
+          <button 
+            onClick={() => setDebugError(null)} 
+            className="mt-2 text-xs text-red-400 underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {/* ===== TODAY'S WORKOUT ===== */}
       {todaysWorkout ? (
         <Card className={`overflow-hidden border-2 ${

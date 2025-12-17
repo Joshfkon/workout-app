@@ -98,7 +98,12 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
   };
 
   const handleBarcodeProduct = (product: NonNullable<BarcodeSearchResult['product']>) => {
-    setBarcodeProduct(product);
+    try {
+      console.log('[QuickFoodLogger] Product received:', product?.name);
+      setBarcodeProduct(product);
+    } catch (err) {
+      console.error('[QuickFoodLogger] Error setting product:', err);
+    }
   };
 
   const handleAddBarcodeProduct = async () => {
