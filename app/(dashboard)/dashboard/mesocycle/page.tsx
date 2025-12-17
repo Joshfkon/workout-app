@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { generateWarmupProtocol } from '@/services/progressionEngine';
 import type { Split, MuscleGroup } from '@/types/schema';
 
 interface Mesocycle {
@@ -228,14 +229,48 @@ export default function MesocyclePage() {
         // Create exercise blocks
         const blocks = [];
         let order = 1;
+        const seenMuscles = new Set<string>();
         
         for (const muscle of todayWorkout.muscles) {
           const muscleExercises = exercisesByMuscle[muscle] || [];
           // Pick up to 2 exercises per muscle
           const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
           
+          let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
+          
           for (const exercise of selected) {
             const isCompound = exercise.mechanic === 'compound';
+            
+            // Generate warmup for first exercise of each muscle group (if compound)
+            let warmupSets: any[] = [];
+            if (isFirstExerciseForMuscle && isCompound) {
+              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2 
+                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]] 
+                : [8, 12]) as [number, number];
+              
+              warmupSets = generateWarmupProtocol({
+                workingWeight: 60, // Default working weight, will be adjusted in workout
+                exercise: {
+                  id: exercise.id,
+                  name: exercise.name,
+                  primaryMuscle: exercise.primary_muscle,
+                  secondaryMuscles: [],
+                  mechanic: isCompound ? 'compound' : 'isolation',
+                  defaultRepRange: repRange,
+                  defaultRir: exercise.default_rir || 2,
+                  minWeightIncrementKg: 2.5, // Standard barbell increment
+                  formCues: [],
+                  commonMistakes: [],
+                  equipmentRequired: [],
+                  setupNote: '',
+                  movementPattern: 'compound',
+                },
+                isFirstExercise: order === 1, // First exercise overall gets general warmup
+              });
+              seenMuscles.add(muscle);
+              isFirstExerciseForMuscle = false;
+            }
+            
             blocks.push({
               workout_session_id: session.id,
               exercise_id: exercise.id,
@@ -246,7 +281,7 @@ export default function MesocyclePage() {
               target_weight_kg: 0, // Will be filled from history or user input
               target_rest_seconds: isCompound ? 180 : 90,
               suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
-              warmup_protocol: [],
+              warmup_protocol: { sets: warmupSets },
             });
           }
         }
