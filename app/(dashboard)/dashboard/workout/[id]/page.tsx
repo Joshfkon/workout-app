@@ -1801,6 +1801,20 @@ export default function WorkoutPage() {
     // Check if this is a previously completed workout (viewing from history)
     const isViewingCompleted = session.state === 'completed' && !!session.completedAt;
     
+    // Build exercise histories for PR detection in summary
+    const exerciseHistoriesForSummary = Object.entries(exerciseHistories).reduce((acc, [exerciseId, history]) => {
+      acc[exerciseId] = {
+        exerciseId,
+        exerciseName: blocks.find(b => b.exerciseId === exerciseId)?.exercise?.name || 'Exercise',
+        previousBest: history.personalRecord ? {
+          weight: history.personalRecord.weightKg,
+          reps: history.personalRecord.reps,
+          e1rm: history.personalRecord.e1rm,
+        } : undefined,
+      };
+      return acc;
+    }, {} as Record<string, { exerciseId: string; exerciseName: string; previousBest?: { weight: number; reps: number; e1rm: number } }>);
+    
     return (
       <div className="py-8">
         <SessionSummary
@@ -1811,6 +1825,7 @@ export default function WorkoutPage() {
           }}
           exerciseBlocks={blocks}
           allSets={completedSets}
+          exerciseHistories={exerciseHistoriesForSummary}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
         />
