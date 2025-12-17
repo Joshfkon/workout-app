@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights';
+type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots';
 
 interface LoadingAnimationProps {
   type?: AnimationType;
@@ -53,29 +53,33 @@ export function LoadingAnimation({
   return (
     <div className="flex flex-col items-center justify-center gap-4">
       {type === 'barbell' && (
-        <div className={`relative ${sizeClasses[size]}`}>
-          {/* Barbell bar */}
-          <div className="absolute top-1/2 left-0 right-0 h-1 bg-gradient-to-r from-surface-600 via-surface-400 to-surface-600 rounded-full transform -translate-y-1/2" />
-          
-          {/* Left weight plate - bouncing */}
+        <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
+          {/* Entire barbell moves up and down like a bench press */}
           <div 
-            className="absolute left-0 top-1/2 w-3 h-8 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm transform -translate-y-1/2 animate-bounce"
-            style={{ animationDelay: '0ms', animationDuration: '600ms' }}
-          />
-          <div 
-            className="absolute left-3 top-1/2 w-2 h-6 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm transform -translate-y-1/2 animate-bounce"
-            style={{ animationDelay: '100ms', animationDuration: '600ms' }}
-          />
-          
-          {/* Right weight plate - bouncing */}
-          <div 
-            className="absolute right-0 top-1/2 w-3 h-8 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm transform -translate-y-1/2 animate-bounce"
-            style={{ animationDelay: '0ms', animationDuration: '600ms' }}
-          />
-          <div 
-            className="absolute right-3 top-1/2 w-2 h-6 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm transform -translate-y-1/2 animate-bounce"
-            style={{ animationDelay: '100ms', animationDuration: '600ms' }}
-          />
+            className="flex items-center"
+            style={{ animation: 'barbellLift 0.8s ease-in-out infinite' }}
+          >
+            {/* Left plates */}
+            <div className="flex items-center">
+              <div className="w-2 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm" />
+              <div className="w-1.5 h-8 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm" />
+            </div>
+            
+            {/* Bar */}
+            <div className="w-12 h-1.5 bg-gradient-to-r from-surface-500 via-surface-300 to-surface-500 rounded-full" />
+            
+            {/* Right plates */}
+            <div className="flex items-center">
+              <div className="w-1.5 h-8 bg-gradient-to-b from-accent-400 to-accent-600 rounded-sm" />
+              <div className="w-2 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm" />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes barbellLift {
+              0%, 100% { transform: translateY(8px); }
+              50% { transform: translateY(-8px); }
+            }
+          `}</style>
         </div>
       )}
 
@@ -174,6 +178,109 @@ export function LoadingAnimation({
           <div className="absolute inset-0 rounded-full bg-primary-500/30 animate-ping" />
           <div className="absolute inset-2 rounded-full bg-primary-500/50 animate-ping" style={{ animationDelay: '0.2s' }} />
           <div className="absolute inset-4 rounded-full bg-primary-500 animate-pulse" />
+        </div>
+      )}
+
+      {type === 'kettlebell' && (
+        <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
+          <div style={{ animation: 'kettlebellSwing 1s ease-in-out infinite', transformOrigin: 'top center' }}>
+            {/* Handle */}
+            <div className="w-6 h-3 border-4 border-surface-400 rounded-t-full mx-auto" />
+            {/* Body */}
+            <div className="w-10 h-10 bg-gradient-to-b from-surface-500 to-surface-700 rounded-full -mt-1 flex items-center justify-center">
+              <div className="w-4 h-4 bg-surface-800 rounded-full" />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes kettlebellSwing {
+              0%, 100% { transform: rotate(-20deg); }
+              50% { transform: rotate(20deg); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {type === 'muscle' && (
+        <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
+          <svg 
+            viewBox="0 0 64 64" 
+            className="w-full h-full"
+            style={{ animation: 'muscleFlex 0.8s ease-in-out infinite' }}
+          >
+            {/* Flexing arm/bicep */}
+            <path 
+              fill="url(#muscleGradient)" 
+              d="M20 45 Q15 40, 18 30 Q20 20, 28 18 Q35 16, 40 22 Q48 30, 44 38 Q42 42, 38 44 Q32 48, 20 45"
+            />
+            {/* Muscle definition line */}
+            <path 
+              fill="none" 
+              stroke="rgba(255,255,255,0.3)" 
+              strokeWidth="1.5"
+              d="M28 24 Q34 28, 36 35"
+            />
+            <defs>
+              <linearGradient id="muscleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="rgb(var(--primary-400))" />
+                <stop offset="100%" stopColor="rgb(var(--primary-600))" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <style jsx>{`
+            @keyframes muscleFlex {
+              0%, 100% { transform: scale(1) rotate(-5deg); }
+              50% { transform: scale(1.15) rotate(5deg); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {type === 'spinner' && (
+        <div className={`relative ${sizeClasses[size]}`}>
+          <svg className="w-full h-full animate-spin" viewBox="0 0 50 50">
+            <circle
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              className="text-surface-700"
+            />
+            <circle
+              cx="25"
+              cy="25"
+              r="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray="80, 200"
+              strokeDashoffset="0"
+              className="text-primary-500"
+            />
+          </svg>
+        </div>
+      )}
+
+      {type === 'dots' && (
+        <div className={`flex items-center justify-center gap-2 ${sizeClasses[size]}`}>
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-3 h-3 bg-primary-500 rounded-full"
+              style={{
+                animation: 'dotBounce 0.6s ease-in-out infinite',
+                animationDelay: `${i * 0.15}s`,
+              }}
+            />
+          ))}
+          <style jsx>{`
+            @keyframes dotBounce {
+              0%, 100% { transform: translateY(0); opacity: 0.5; }
+              50% { transform: translateY(-8px); opacity: 1; }
+            }
+          `}</style>
         </div>
       )}
 
