@@ -165,6 +165,18 @@ export const ExerciseCard = memo(function ExerciseCard({
       setShowSwapModal(true);
     }
   }, [showSwapOnMount]);
+  
+  // Reset warmup completion state when this exercise becomes active
+  // This ensures warmups are fresh when switching exercises out of order
+  const prevIsActiveRef = useRef(isActive);
+  useEffect(() => {
+    // Only reset if we just became active (wasn't active before, now is)
+    if (isActive && !prevIsActiveRef.current) {
+      setCompletedWarmups(new Set());
+    }
+    prevIsActiveRef.current = isActive;
+  }, [isActive]);
+  
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
   const [editReps, setEditReps] = useState('');
@@ -1592,6 +1604,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.sets.length === nextProps.sets.length &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.unit === nextProps.unit &&
-    prevProps.recommendedWeight === nextProps.recommendedWeight
+    prevProps.recommendedWeight === nextProps.recommendedWeight &&
+    prevProps.warmupSets?.length === nextProps.warmupSets?.length &&
+    prevProps.workingWeight === nextProps.workingWeight
   );
 });
