@@ -205,7 +205,7 @@ export default function DashboardPage() {
         }
 
         // Fetch nutrition data, today's weight, and user preferences
-        const [nutritionResult, targetsResult, weightResult, prefsResult] = await Promise.all([
+        const [nutritionResult, targetsResult, prefsResult] = await Promise.all([
           supabase
             .from('food_log')
             .select('calories, protein, carbs, fat')
@@ -217,17 +217,29 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .single(),
           supabase
-            .from('weight_log')
-            .select('weight, unit')
-            .eq('user_id', user.id)
-            .eq('logged_at', todayStr)
-            .single(),
-          supabase
             .from('user_preferences')
             .select('weight_unit')
             .eq('user_id', user.id)
             .single(),
         ]);
+        
+        // Fetch today's weight separately to handle potential missing unit column
+        let weightResult = await supabase
+          .from('weight_log')
+          .select('weight, unit')
+          .eq('user_id', user.id)
+          .eq('logged_at', todayStr)
+          .maybeSingle();
+        
+        // If unit column doesn't exist, try without it
+        if (weightResult.error?.message?.includes('column "unit"')) {
+          weightResult = await supabase
+            .from('weight_log')
+            .select('weight')
+            .eq('user_id', user.id)
+            .eq('logged_at', todayStr)
+            .maybeSingle();
+        }
 
         if (nutritionResult.data) {
           const totals = nutritionResult.data.reduce(
@@ -248,7 +260,7 @@ export default function DashboardPage() {
 
         // Set today's weight if logged
         if (weightResult.data) {
-          setTodaysWeight({ weight: weightResult.data.weight, unit: weightResult.data.unit });
+          setTodaysWeight({ weight: weightResult.data.weight, unit: weightResult.data.unit || 'lb' });
         }
 
         // Set user's preferred weight unit
@@ -259,18 +271,30 @@ export default function DashboardPage() {
         // Fetch weight history (last 30 days)
         const thirtyDaysAgo = new Date(today);
         thirtyDaysAgo.setDate(today.getDate() - 30);
-        const { data: weightHistoryData } = await supabase
+        const { data: weightHistoryData, error: historyError } = await supabase
           .from('weight_log')
           .select('logged_at, weight, unit')
           .eq('user_id', user.id)
           .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
           .order('logged_at', { ascending: true });
 
-        if (weightHistoryData && weightHistoryData.length > 0) {
-          setWeightHistory(weightHistoryData.map((w: any) => ({
+        // If unit column doesn't exist, try without it
+        let finalHistoryData = weightHistoryData;
+        if (historyError?.message?.includes('column "unit"')) {
+          const { data: fallbackData } = await supabase
+            .from('weight_log')
+            .select('logged_at, weight')
+            .eq('user_id', user.id)
+            .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+            .order('logged_at', { ascending: true });
+          finalHistoryData = fallbackData;
+        }
+
+        if (finalHistoryData && finalHistoryData.length > 0) {
+          setWeightHistory(finalHistoryData.map((w: any) => ({
             date: w.logged_at,
             weight: w.weight,
-            unit: w.unit,
+            unit: w.unit || 'lb', // Default to lb if unit column doesn't exist
           })));
         }
 
@@ -364,29 +388,49 @@ export default function DashboardPage() {
       const today = new Date().toISOString().split('T')[0];
 
       // First try to update existing entry for today
-      const { data: existing } = await supabase
+      const { data: existing, error: selectError } = await supabase
         .from('weight_log')
         .select('id')
         .eq('user_id', user.id)
         .eq('logged_at', today)
-        .single();
+        .maybeSingle();
+
+      if (selectError) {
+        console.error('Error checking existing weight:', selectError);
+      }
 
       let error;
       if (existing) {
-        // Update existing entry
-        const result = await supabase.from('weight_log').update({
+        // Update existing entry - try with unit first, fall back without
+        let result = await supabase.from('weight_log').update({
           weight: weight,
           unit: weightUnit,
         }).eq('id', existing.id);
+        
+        // If unit column doesn't exist, try without it
+        if (result.error?.message?.includes('column "unit"')) {
+          result = await supabase.from('weight_log').update({
+            weight: weight,
+          }).eq('id', existing.id);
+        }
         error = result.error;
       } else {
-        // Insert new entry
-        const result = await supabase.from('weight_log').insert({
+        // Insert new entry - try with unit first, fall back without
+        let result = await supabase.from('weight_log').insert({
           user_id: user.id,
           logged_at: today,
           weight: weight,
           unit: weightUnit,
         });
+        
+        // If unit column doesn't exist, try without it
+        if (result.error?.message?.includes('column "unit"')) {
+          result = await supabase.from('weight_log').insert({
+            user_id: user.id,
+            logged_at: today,
+            weight: weight,
+          });
+        }
         error = result.error;
       }
 

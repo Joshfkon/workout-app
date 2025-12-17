@@ -255,31 +255,53 @@ export default function NutritionPage() {
     const weightKg = isLbs ? weight * 0.453592 : weight;
 
     // First try to update existing entry for today
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from('weight_log')
       .select('id')
       .eq('user_id', user.id)
       .eq('logged_at', date)
-      .single();
+      .maybeSingle();
+
+    if (selectError) {
+      console.error('Error checking existing weight:', selectError);
+    }
 
     let error;
     if (existing) {
-      // Update existing entry
-      const result = await supabase.from('weight_log').update({
+      // Update existing entry - try with unit first, fall back without
+      let result = await supabase.from('weight_log').update({
         weight: weight,
         unit: isLbs ? 'lb' : 'kg',
         notes: notes,
       }).eq('id', existing.id);
+      
+      // If unit column doesn't exist, try without it
+      if (result.error?.message?.includes('column "unit"')) {
+        result = await supabase.from('weight_log').update({
+          weight: weight,
+          notes: notes,
+        }).eq('id', existing.id);
+      }
       error = result.error;
     } else {
-      // Insert new entry
-      const result = await supabase.from('weight_log').insert({
+      // Insert new entry - try with unit first, fall back without
+      let result = await supabase.from('weight_log').insert({
         user_id: user.id,
         logged_at: date,
         weight: weight,
         unit: isLbs ? 'lb' : 'kg',
         notes: notes,
       });
+      
+      // If unit column doesn't exist, try without it
+      if (result.error?.message?.includes('column "unit"')) {
+        result = await supabase.from('weight_log').insert({
+          user_id: user.id,
+          logged_at: date,
+          weight: weight,
+          notes: notes,
+        });
+      }
       error = result.error;
     }
 
