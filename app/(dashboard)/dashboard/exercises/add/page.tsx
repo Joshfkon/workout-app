@@ -16,6 +16,7 @@ export default function AddExercisePage() {
   const [primaryMuscle, setPrimaryMuscle] = useState('');
   const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>([]);
   const [mechanic, setMechanic] = useState<'compound' | 'isolation'>('isolation');
+  const [hypertrophyTier, setHypertrophyTier] = useState<'S' | 'A' | 'B' | 'C' | 'D'>('B');
   const [minReps, setMinReps] = useState('8');
   const [maxReps, setMaxReps] = useState('12');
   const [defaultRir, setDefaultRir] = useState('2');
@@ -70,6 +71,7 @@ export default function AddExercisePage() {
         form_cues: cuesArray,
         common_mistakes: [],
         setup_note: setupNote || null,
+        hypertrophy_tier: hypertrophyTier,
       });
 
       if (insertError) {
@@ -179,6 +181,49 @@ export default function AddExercisePage() {
                   <div className="font-medium">Isolation</div>
                   <div className="text-xs opacity-75 mt-1">Single-joint movement</div>
                 </button>
+              </div>
+            </div>
+
+            {/* Hypertrophy Tier */}
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-2">
+                Hypertrophy Effectiveness
+              </label>
+              <p className="text-xs text-surface-500 mb-3">
+                How effective is this exercise for muscle growth? S-tier = best, D-tier = least effective.
+              </p>
+              <div className="flex gap-2">
+                {(['S', 'A', 'B', 'C', 'D'] as const).map((tier) => {
+                  const tierColors = {
+                    S: 'border-yellow-500 bg-yellow-500/20 text-yellow-400',
+                    A: 'border-emerald-500 bg-emerald-500/20 text-emerald-400',
+                    B: 'border-blue-500 bg-blue-500/20 text-blue-400',
+                    C: 'border-orange-500 bg-orange-500/20 text-orange-400',
+                    D: 'border-surface-500 bg-surface-500/20 text-surface-400',
+                  };
+                  const tierDescriptions = {
+                    S: 'Elite - Best in class',
+                    A: 'Excellent',
+                    B: 'Good',
+                    C: 'Moderate',
+                    D: 'Limited',
+                  };
+                  return (
+                    <button
+                      key={tier}
+                      type="button"
+                      onClick={() => setHypertrophyTier(tier)}
+                      className={`flex-1 py-3 px-2 rounded-lg border-2 text-center transition-all ${
+                        hypertrophyTier === tier
+                          ? tierColors[tier]
+                          : 'border-surface-700 text-surface-500 hover:border-surface-600'
+                      }`}
+                    >
+                      <div className="text-lg font-bold">{tier}</div>
+                      <div className="text-[10px] opacity-75 mt-0.5 leading-tight">{tierDescriptions[tier]}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
