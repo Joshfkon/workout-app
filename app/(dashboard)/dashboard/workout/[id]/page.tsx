@@ -1029,9 +1029,9 @@ export default function WorkoutPage() {
         loggedAt: loggedAt,
       };
       
-      // Update local state
-      setCompletedSets([...completedSets, newSet]);
-      setCurrentSetNumber(currentSetNumber + 1);
+      // Update local state using functional updates to avoid stale closures
+      setCompletedSets(prevSets => [...prevSets, newSet]);
+      setCurrentSetNumber(prev => prev + 1);
       setShowRestTimer(true);
       setError(null);
     } catch (err) {

@@ -157,6 +157,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
+  const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
   
   // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
@@ -456,7 +457,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   };
 
   const completePendingSet = (index: number) => {
-    if (!onSetComplete) return;
+    // Prevent double-clicks
+    if (isCompletingSet || !onSetComplete) return;
     
     const input = pendingInputs[index];
     if (!input) return;
@@ -469,6 +471,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       return;
     }
     
+    // Lock to prevent double-clicks
+    setIsCompletingSet(true);
+    
     // Convert from display unit to kg
     const weightKg = inputWeightToKg(weightNum, unit);
     
@@ -477,6 +482,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       reps: repsNum,
       rpe: rpeNum,
     });
+    
+    // Unlock after a short delay (the parent will update completedSets)
+    setTimeout(() => setIsCompletingSet(false), 500);
   };
 
   const getQualityPreview = (input: { weight: string; reps: string; rpe: string }): { quality: SetQuality; reason: string } | null => {
@@ -1150,13 +1158,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-2 py-1.5">
                     <button
                       onClick={() => completePendingSet(index)}
-                      disabled={!input.weight || !input.reps || !input.rpe}
+                      disabled={!input.weight || !input.reps || !input.rpe || isCompletingSet}
                       className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
                       title="Complete set"
                     >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
+                      {isCompletingSet ? (
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </button>
                   </td>
                 </tr>
