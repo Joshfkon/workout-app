@@ -30,9 +30,23 @@
     border-color: var(--border);
   }
 
+  /* Prevent zoom on mobile - makes it feel more like a native app */
+  html {
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   body {
     @apply bg-[var(--background)] text-[var(--foreground)];
     font-feature-settings: "rlig" 1, "calt" 1;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent zoom on input focus (iOS) */
+  input, select, textarea {
+    font-size: 16px !important;
   }
 
   /* Custom scrollbar */
