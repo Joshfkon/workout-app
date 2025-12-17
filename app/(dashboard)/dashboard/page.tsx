@@ -112,6 +112,7 @@ export default function DashboardPage() {
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(null);
   const [isLoggingWeight, setIsLoggingWeight] = useState(false);
+  const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>([]);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -255,6 +256,24 @@ export default function DashboardPage() {
           setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
         }
 
+        // Fetch weight history (last 30 days)
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const { data: weightHistoryData } = await supabase
+          .from('weight_log')
+          .select('logged_at, weight, unit')
+          .eq('user_id', user.id)
+          .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+          .order('logged_at', { ascending: true });
+
+        if (weightHistoryData && weightHistoryData.length > 0) {
+          setWeightHistory(weightHistoryData.map((w: any) => ({
+            date: w.logged_at,
+            weight: w.weight,
+            unit: w.unit,
+          })));
+        }
+
         // Fetch weekly volume by muscle
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - today.getDay());
@@ -344,15 +363,32 @@ export default function DashboardPage() {
       const weight = parseFloat(weightInput);
       const today = new Date().toISOString().split('T')[0];
 
-      const { error } = await supabase.from('weight_log').upsert(
-        {
+      // First try to update existing entry for today
+      const { data: existing } = await supabase
+        .from('weight_log')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('logged_at', today)
+        .single();
+
+      let error;
+      if (existing) {
+        // Update existing entry
+        const result = await supabase.from('weight_log').update({
+          weight: weight,
+          unit: weightUnit,
+        }).eq('id', existing.id);
+        error = result.error;
+      } else {
+        // Insert new entry
+        const result = await supabase.from('weight_log').insert({
           user_id: user.id,
           logged_at: today,
           weight: weight,
           unit: weightUnit,
-        },
-        { onConflict: 'user_id,logged_at' }
-      );
+        });
+        error = result.error;
+      }
 
       if (error) throw error;
 
@@ -651,23 +687,83 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : todaysWeight ? (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                  <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                  </svg>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-surface-100">
+                      {todaysWeight.weight} <span className="text-base font-normal text-surface-400">{todaysWeight.unit}</span>
+                    </p>
+                    <p className="text-xs text-surface-500">Logged today</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-surface-100">
-                    {todaysWeight.weight} <span className="text-base font-normal text-surface-400">{todaysWeight.unit}</span>
-                  </p>
-                  <p className="text-xs text-surface-500">Logged today</p>
-                </div>
+                <Link href="/dashboard/nutrition">
+                  <Button variant="ghost" size="sm">History →</Button>
+                </Link>
               </div>
-              <Link href="/dashboard/nutrition">
-                <Button variant="ghost" size="sm">History →</Button>
-              </Link>
+              
+              {/* Weight Trend Graph */}
+              {weightHistory.length >= 2 && (
+                <div className="pt-2 border-t border-surface-800">
+                  <div className="flex items-center justify-between text-xs text-surface-500 mb-2">
+                    <span>30 Day Trend</span>
+                    {(() => {
+                      const first = weightHistory[0]?.weight || 0;
+                      const last = weightHistory[weightHistory.length - 1]?.weight || 0;
+                      const diff = last - first;
+                      const diffFormatted = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
+                      return (
+                        <span className={diff > 0 ? 'text-warning-400' : diff < 0 ? 'text-success-400' : 'text-surface-400'}>
+                          {diffFormatted} {weightUnit}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="h-16 flex items-end gap-0.5">
+                    {(() => {
+                      // Normalize weights for display and convert if needed
+                      const normalizedHistory = weightHistory.map(w => {
+                        // Convert to user's preferred unit
+                        let displayWeight = w.weight;
+                        if (w.unit !== weightUnit) {
+                          displayWeight = w.unit === 'kg' ? w.weight * 2.20462 : w.weight * 0.453592;
+                        }
+                        return { ...w, displayWeight };
+                      });
+                      const weights = normalizedHistory.map(w => w.displayWeight);
+                      const min = Math.min(...weights);
+                      const max = Math.max(...weights);
+                      const range = max - min || 1;
+                      
+                      // Show last 14 data points or all if less
+                      const displayData = normalizedHistory.slice(-14);
+                      
+                      return displayData.map((entry, i) => {
+                        const heightPercent = ((entry.displayWeight - min) / range) * 100;
+                        const height = Math.max(8, heightPercent); // Minimum 8% height
+                        const isLast = i === displayData.length - 1;
+                        return (
+                          <div
+                            key={entry.date}
+                            className="flex-1 group relative"
+                            title={`${new Date(entry.date).toLocaleDateString()}: ${entry.displayWeight.toFixed(1)} ${weightUnit}`}
+                          >
+                            <div
+                              className={`w-full rounded-sm transition-all ${isLast ? 'bg-primary-500' : 'bg-surface-600 group-hover:bg-surface-500'}`}
+                              style={{ height: `${height}%`, minHeight: '4px' }}
+                            />
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <button
