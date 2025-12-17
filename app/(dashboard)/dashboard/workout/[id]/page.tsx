@@ -2057,16 +2057,23 @@ export default function WorkoutPage() {
               key={block.id} 
               id={`exercise-${index}`}
               className={`transition-all duration-300 ${
-                isCurrent ? '' : 'opacity-80'
+                isCurrent ? '' : 'opacity-80 cursor-pointer'
               }`}
+              onClick={(e) => {
+                // Only activate if not already current and click wasn't on an interactive element
+                if (!isCurrent) {
+                  const target = e.target as HTMLElement;
+                  const isInteractive = target.closest('button, input, select, textarea, a');
+                  if (!isInteractive) {
+                    setCurrentBlockIndex(index);
+                    setCurrentSetNumber(blockSets.length + 1);
+                  }
+                }
+              }}
             >
               {/* Exercise header with status */}
               <div 
-                className={`flex items-center gap-3 mb-2 cursor-pointer`}
-                onClick={() => {
-                  setCurrentBlockIndex(index);
-                  setCurrentSetNumber(blockSets.length + 1);
-                }}
+                className={`flex items-center gap-3 mb-2 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                   isComplete 
