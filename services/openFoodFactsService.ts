@@ -95,23 +95,21 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
  */
 async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<BarcodeSearchResult> {
   try {
+    // Note: Can't set User-Agent in browser due to CORS, but Open Food Facts works without it
     const response = await fetch(
-      `https://world.openfoodfacts.org/api/v2/product/${cleanBarcode}.json`,
-      {
-        headers: {
-          'User-Agent': 'HyperTrack-App/1.0 (https://hypertrack.app)',
-        },
-      }
+      `https://world.openfoodfacts.org/api/v2/product/${cleanBarcode}.json`
     );
 
     if (!response.ok) {
-      return { found: false, error: 'Failed to fetch product data' };
+      console.error('Open Food Facts API error:', response.status, response.statusText);
+      return { found: false, error: `API error: ${response.status}` };
     }
 
     const data = await response.json();
 
     if (data.status !== 1 || !data.product) {
-      return { found: false, error: 'Product not found in Open Food Facts' };
+      // Not an error, just not found in this database
+      return { found: false };
     }
 
     const product: OpenFoodFactsProduct = data.product;
@@ -180,12 +178,7 @@ async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<Barcode
 export async function searchOpenFoodFacts(query: string, limit: number = 10): Promise<BarcodeSearchResult['product'][]> {
   try {
     const response = await fetch(
-      `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${limit}`,
-      {
-        headers: {
-          'User-Agent': 'HyperTrack-App/1.0 (https://hypertrack.app)',
-        },
-      }
+      `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=${limit}`
     );
 
     if (!response.ok) {

@@ -22,6 +22,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const [isScanning, setIsScanning] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
   const scannerRef = useRef<Html5Qrcode | null>(null);
@@ -69,16 +70,17 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       );
     } catch (err) {
       setIsScanning(false);
+      setErrorType('info'); // Camera issues are informational, not critical errors
       if (err instanceof Error) {
         if (err.message.includes('Permission')) {
-          setError('Camera permission denied. Please allow camera access or enter barcode manually.');
+          setError('Camera permission denied. Enter barcode manually below.');
         } else if (err.message.includes('NotFoundError')) {
-          setError('No camera found. Please enter barcode manually.');
+          setError('No camera found. Enter barcode manually below.');
         } else {
-          setError(`Failed to start camera: ${err.message}`);
+          setError(`Camera unavailable. Enter barcode manually below.`);
         }
       } else {
-        setError('Failed to start camera. Please enter barcode manually.');
+        setError('Camera unavailable. Enter barcode manually below.');
       }
     }
   };
@@ -97,6 +99,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const handleBarcodeLookup = async (barcode: string) => {
     setIsLookingUp(true);
     setError(null);
+    setErrorType('info');
 
     try {
       // If using onScan mode, just pass the barcode to parent
@@ -106,16 +109,27 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       }
 
       // If using onProductFound mode, look up the barcode ourselves
+      console.log('Looking up barcode:', barcode);
       const result = await lookupBarcode(barcode);
+      console.log('Barcode lookup result:', result);
 
       if (result.found && result.product && onProductFound) {
         onProductFound(result.product);
       } else {
-        setError(result.error || 'Product not found. Try a different barcode or search manually.');
+        // Distinguish between "not found" and actual errors
+        if (result.error && result.error.includes('API error')) {
+          setError('Unable to reach food database. Check your connection and try again.');
+          setErrorType('error');
+        } else {
+          setError('Product not found. Try searching by name instead.');
+          setErrorType('info');
+        }
         setLastScanned(null);
       }
     } catch (err) {
-      setError('Failed to look up product. Please try again.');
+      console.error('Barcode lookup error:', err);
+      setError('Something went wrong. Please try again.');
+      setErrorType('error');
       setLastScanned(null);
     } finally {
       setIsLookingUp(false);
@@ -210,10 +224,25 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               </div>
             </div>
 
-            {/* Error message */}
+            {/* Error/Info message */}
             {error && (
-              <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg">
-                <p className="text-sm text-danger-400">{error}</p>
+              <div className={`p-2 rounded-lg flex items-center gap-2 ${
+                errorType === 'error' 
+                  ? 'bg-danger-500/10 border border-danger-500/20' 
+                  : 'bg-surface-700/50'
+              }`}>
+                {errorType === 'error' ? (
+                  <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                <p className={`text-sm ${errorType === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
+                  {error}
+                </p>
               </div>
             )}
           </>
