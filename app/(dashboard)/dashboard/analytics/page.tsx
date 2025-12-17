@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
 import { FFMIGauge } from '@/components/analytics/FFMIGauge';
+import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup } from '@/types/schema';
@@ -262,6 +263,7 @@ export default function AnalyticsPage() {
   // Strength state
   const [strengthProfile, setStrengthProfile] = useState<StrengthProfile | null>(null);
   const [sex, setSex] = useState<'male' | 'female'>('male');
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -312,6 +314,8 @@ export default function AnalyticsPage() {
         router.push('/login');
         return;
       }
+      
+      setUserId(user.id);
 
       try {
         // Fetch user profile
@@ -910,6 +914,11 @@ export default function AnalyticsPage() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Body Measurements */}
+          {userId && (
+            <BodyMeasurements userId={userId} unit={units === 'lb' ? 'in' : 'cm'} />
           )}
 
           {/* No data state */}
