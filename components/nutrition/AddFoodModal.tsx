@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
 import { BarcodeScanner } from './BarcodeScanner';
-import type { MealType, CustomFood } from '@/types/nutrition';
+import type { MealType, CustomFood, FrequentFood } from '@/types/nutrition';
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -28,9 +28,17 @@ interface AddFoodModalProps {
   defaultMealType: MealType;
   recentFoods?: FoodSearchResult[];
   customFoods?: CustomFood[];
+  frequentFoods?: FrequentFood[];
 }
 
 type Tab = 'search' | 'recent' | 'custom' | 'manual' | 'barcode';
+
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
+};
 
 export function AddFoodModal({
   isOpen,
@@ -39,6 +47,7 @@ export function AddFoodModal({
   defaultMealType,
   recentFoods = [],
   customFoods = [],
+  frequentFoods = [],
 }: AddFoodModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('search');
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,10 +55,12 @@ export function AddFoodModal({
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
+  const [selectedCustomFood, setSelectedCustomFood] = useState<CustomFood | null>(null);
 
   // Form state
   const [servings, setServings] = useState('1');
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
+  const [grams, setGrams] = useState('100');
 
   // Manual entry
   const [manualFood, setManualFood] = useState({
@@ -67,6 +78,40 @@ export function AddFoodModal({
   const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [selectedServingIndex, setSelectedServingIndex] = useState(0);
+  const [filterQuery, setFilterQuery] = useState('');
+
+  // Reset meal type when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setMealType(defaultMealType);
+    }
+  }, [isOpen, defaultMealType]);
+
+  // Get frequent foods for the selected meal type
+  const frequentFoodsForMeal = useMemo(() => {
+    return frequentFoods
+      .filter(f => f.meal_type === mealType)
+      .sort((a, b) => b.times_logged - a.times_logged)
+      .slice(0, 5);
+  }, [frequentFoods, mealType]);
+
+  // Filter custom foods based on search
+  const filteredCustomFoods = useMemo(() => {
+    if (!filterQuery.trim()) return customFoods;
+    const query = filterQuery.toLowerCase();
+    return customFoods.filter(f => 
+      f.food_name.toLowerCase().includes(query)
+    );
+  }, [customFoods, filterQuery]);
+
+  // Filter recent foods based on search
+  const filteredRecentFoods = useMemo(() => {
+    if (!filterQuery.trim()) return recentFoods;
+    const query = filterQuery.toLowerCase();
+    return recentFoods.filter(f => 
+      f.name.toLowerCase().includes(query)
+    );
+  }, [recentFoods, filterQuery]);
 
   const handleBarcodeScanned = async (barcode: string) => {
     setBarcodeError('');
@@ -114,6 +159,7 @@ export function AddFoodModal({
 
   const handleSelectFood = async (food: FoodSearchResult) => {
     setSelectedFood(food);
+    setSelectedCustomFood(null);
     setServings('1');
     setSelectedServingIndex(0);
     
@@ -132,6 +178,13 @@ export function AddFoodModal({
         setIsLoadingDetails(false);
       }
     }
+  };
+
+  const handleSelectCustomFood = (food: CustomFood) => {
+    setSelectedCustomFood(food);
+    setSelectedFood(null);
+    setServings('1');
+    setGrams('100');
   };
 
   const handleAddSelectedFood = async () => {
@@ -177,6 +230,59 @@ export function AddFoodModal({
     }
   };
 
+  const handleAddCustomFood = async () => {
+    if (!selectedCustomFood) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      if (selectedCustomFood.is_per_gram && selectedCustomFood.calories_per_100g) {
+        // Calculate from grams
+        const gramsNum = parseFloat(grams) || 0;
+        const multiplier = gramsNum / 100;
+        
+        await onAdd({
+          food_name: selectedCustomFood.food_name,
+          serving_size: `${gramsNum}g`,
+          servings: 1,
+          calories: Math.round((selectedCustomFood.calories_per_100g || 0) * multiplier),
+          protein: Math.round((selectedCustomFood.protein_per_100g || 0) * multiplier * 10) / 10,
+          carbs: Math.round((selectedCustomFood.carbs_per_100g || 0) * multiplier * 10) / 10,
+          fat: Math.round((selectedCustomFood.fat_per_100g || 0) * multiplier * 10) / 10,
+          meal_type: mealType,
+          source: 'custom',
+        });
+      } else {
+        // Use per-serving values
+        const servingsNum = parseFloat(servings);
+        if (!servingsNum || servingsNum <= 0) {
+          setError('Please enter a valid serving amount');
+          setIsSubmitting(false);
+          return;
+        }
+
+        await onAdd({
+          food_name: selectedCustomFood.food_name,
+          serving_size: selectedCustomFood.serving_size || '1 serving',
+          servings: servingsNum,
+          calories: Math.round(selectedCustomFood.calories * servingsNum),
+          protein: Math.round((selectedCustomFood.protein || 0) * servingsNum * 10) / 10,
+          carbs: Math.round((selectedCustomFood.carbs || 0) * servingsNum * 10) / 10,
+          fat: Math.round((selectedCustomFood.fat || 0) * servingsNum * 10) / 10,
+          meal_type: mealType,
+          source: 'custom',
+        });
+      }
+
+      resetAndClose();
+    } catch (err) {
+      setError('Failed to add food. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAddManualFood = async () => {
     if (!manualFood.food_name || !manualFood.calories) {
       setError('Please enter at least food name and calories');
@@ -213,7 +319,7 @@ export function AddFoodModal({
     }
   };
 
-  const handleAddCustomFood = async (food: CustomFood) => {
+  const handleAddFrequentFood = async (food: FrequentFood) => {
     setIsSubmitting(true);
     setError('');
 
@@ -222,12 +328,12 @@ export function AddFoodModal({
         food_name: food.food_name,
         serving_size: food.serving_size || '1 serving',
         servings: 1,
-        calories: food.calories,
-        protein: food.protein || 0,
-        carbs: food.carbs || 0,
-        fat: food.fat || 0,
+        calories: Math.round(food.avg_calories),
+        protein: Math.round(food.avg_protein * 10) / 10,
+        carbs: Math.round(food.avg_carbs * 10) / 10,
+        fat: Math.round(food.avg_fat * 10) / 10,
         meal_type: mealType,
-        source: 'custom',
+        source: 'manual',
       });
 
       resetAndClose();
@@ -242,7 +348,10 @@ export function AddFoodModal({
     setSearchQuery('');
     setSearchResults([]);
     setSelectedFood(null);
+    setSelectedCustomFood(null);
     setServings('1');
+    setGrams('100');
+    setFilterQuery('');
     setManualFood({
       food_name: '',
       serving_size: '1 serving',
@@ -257,6 +366,19 @@ export function AddFoodModal({
     onClose();
   };
 
+  // Calculate live nutrition for per-gram custom foods
+  const customFoodNutrition = useMemo(() => {
+    if (!selectedCustomFood?.is_per_gram) return null;
+    const gramsNum = parseFloat(grams) || 0;
+    const multiplier = gramsNum / 100;
+    return {
+      calories: Math.round((selectedCustomFood.calories_per_100g || 0) * multiplier),
+      protein: Math.round((selectedCustomFood.protein_per_100g || 0) * multiplier * 10) / 10,
+      carbs: Math.round((selectedCustomFood.carbs_per_100g || 0) * multiplier * 10) / 10,
+      fat: Math.round((selectedCustomFood.fat_per_100g || 0) * multiplier * 10) / 10,
+    };
+  }, [selectedCustomFood, grams]);
+
   return (
     <Modal
       isOpen={isOpen}
@@ -265,23 +387,6 @@ export function AddFoodModal({
       size="lg"
     >
       <div className="space-y-4">
-        {/* Tabs */}
-        <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
-          {(['search', 'barcode', 'recent', 'custom', 'manual'] as Tab[]).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
-                activeTab === tab
-                  ? 'border-primary-500 text-primary-400'
-                  : 'border-transparent text-surface-400 hover:text-surface-200'
-              }`}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
-
         {/* Meal Type Selector */}
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-1">
@@ -297,6 +402,54 @@ export function AddFoodModal({
               { value: 'snack', label: 'Snack' },
             ]}
           />
+        </div>
+
+        {/* Frequent Foods for this Meal */}
+        {frequentFoodsForMeal.length > 0 && !selectedFood && !selectedCustomFood && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-surface-400 uppercase tracking-wide">
+              Your {MEAL_LABELS[mealType]} Foods
+            </p>
+            <div className="space-y-1">
+              {frequentFoodsForMeal.map((food, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleAddFrequentFood(food)}
+                  disabled={isSubmitting}
+                  className="w-full p-2 bg-surface-800/50 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-surface-200">{food.food_name}</p>
+                    <p className="text-xs text-surface-500">
+                      {Math.round(food.avg_calories)} cal • {food.times_logged}x logged
+                    </p>
+                  </div>
+                  <span className="text-primary-400 text-sm">+ Add</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
+          {(['search', 'barcode', 'recent', 'custom', 'manual'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => {
+                setActiveTab(tab);
+                setSelectedFood(null);
+                setSelectedCustomFood(null);
+              }}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+                activeTab === tab
+                  ? 'border-primary-500 text-primary-400'
+                  : 'border-transparent text-surface-400 hover:text-surface-200'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
         </div>
 
         {error && (
@@ -482,57 +635,195 @@ export function AddFoodModal({
 
         {/* Recent Foods Tab */}
         {activeTab === 'recent' && (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {recentFoods.length === 0 ? (
-              <p className="text-center text-surface-400 py-8">No recent foods yet</p>
-            ) : (
-              recentFoods.slice(0, 20).map((food, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSelectFood(food)}
-                  className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-surface-100">{food.name}</h4>
-                      <p className="text-sm text-surface-400">{food.servingSize}</p>
+          <div className="space-y-4">
+            <Input
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              placeholder="Filter recent foods..."
+              className="w-full"
+            />
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {filteredRecentFoods.length === 0 ? (
+                <p className="text-center text-surface-400 py-8">
+                  {filterQuery ? 'No matching foods found' : 'No recent foods yet'}
+                </p>
+              ) : (
+                filteredRecentFoods.slice(0, 20).map((food, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSelectFood(food)}
+                    className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium text-surface-100">{food.name}</h4>
+                        <p className="text-sm text-surface-400">{food.servingSize}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-surface-100">{food.calories} cal</p>
+                        <p className="text-sm text-surface-400">{food.protein}g protein</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium text-surface-100">{food.calories} cal</p>
-                      <p className="text-sm text-surface-400">{food.protein}g protein</p>
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         )}
 
         {/* Custom Foods Tab */}
         {activeTab === 'custom' && (
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {customFoods.length === 0 ? (
-              <p className="text-center text-surface-400 py-8">No custom foods yet</p>
-            ) : (
-              customFoods.map((food) => (
-                <button
-                  key={food.id}
-                  onClick={() => handleAddCustomFood(food)}
-                  disabled={isSubmitting}
-                  className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors disabled:opacity-50"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-surface-100">{food.food_name}</h4>
-                      <p className="text-sm text-surface-400">{food.serving_size}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium text-surface-100">{food.calories} cal</p>
-                      <p className="text-sm text-surface-400">{food.protein}g protein</p>
-                    </div>
+          <div className="space-y-4">
+            <Input
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              placeholder="Filter custom foods..."
+              className="w-full"
+            />
+            
+            {selectedCustomFood ? (
+              <div className="space-y-4 p-4 bg-surface-800 rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-medium text-surface-100">{selectedCustomFood.food_name}</h3>
+                    <p className="text-xs text-primary-400">
+                      {selectedCustomFood.is_per_gram ? 'Per 100g' : selectedCustomFood.serving_size}
+                    </p>
                   </div>
-                </button>
-              ))
+                  <button
+                    onClick={() => setSelectedCustomFood(null)}
+                    className="text-surface-400 hover:text-surface-200"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {selectedCustomFood.is_per_gram ? (
+                  <>
+                    {/* Gram Input with Live Calculation */}
+                    <div>
+                      <label className="block text-sm font-medium text-surface-300 mb-1">
+                        Amount (grams)
+                      </label>
+                      <Input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={grams}
+                        onChange={(e) => setGrams(e.target.value)}
+                      />
+                    </div>
+
+                    {/* Live Calculated Nutrition */}
+                    {customFoodNutrition && (
+                      <div className="grid grid-cols-4 gap-2 text-sm p-3 bg-surface-900/50 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-surface-100">{customFoodNutrition.calories}</p>
+                          <p className="text-xs text-surface-400">Calories</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-medium text-surface-100">{customFoodNutrition.protein}g</p>
+                          <p className="text-xs text-surface-400">Protein</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-medium text-surface-100">{customFoodNutrition.carbs}g</p>
+                          <p className="text-xs text-surface-400">Carbs</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-medium text-surface-100">{customFoodNutrition.fat}g</p>
+                          <p className="text-xs text-surface-400">Fat</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {/* Nutrition Info */}
+                    <div className="grid grid-cols-4 gap-2 text-sm">
+                      <div>
+                        <p className="text-surface-400">Calories</p>
+                        <p className="font-medium text-surface-100">{selectedCustomFood.calories}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Protein</p>
+                        <p className="font-medium text-surface-100">{selectedCustomFood.protein || 0}g</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Carbs</p>
+                        <p className="font-medium text-surface-100">{selectedCustomFood.carbs || 0}g</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Fat</p>
+                        <p className="font-medium text-surface-100">{selectedCustomFood.fat || 0}g</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-surface-300 mb-1">
+                        Number of Servings
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        value={servings}
+                        onChange={(e) => setServings(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
+                <Button
+                  onClick={handleAddCustomFood}
+                  variant="primary"
+                  disabled={isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? 'Adding...' : 'Add to Log'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {filteredCustomFoods.length === 0 ? (
+                  <p className="text-center text-surface-400 py-8">
+                    {filterQuery ? 'No matching custom foods' : 'No custom foods yet'}
+                  </p>
+                ) : (
+                  filteredCustomFoods.map((food) => (
+                    <button
+                      key={food.id}
+                      onClick={() => handleSelectCustomFood(food)}
+                      className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium text-surface-100">{food.food_name}</h4>
+                          <p className="text-sm text-surface-400">
+                            {food.is_per_gram 
+                              ? `${food.calories_per_100g} cal per 100g`
+                              : food.serving_size
+                            }
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium text-surface-100">
+                            {food.is_per_gram 
+                              ? `${food.protein_per_100g || 0}g`
+                              : `${food.calories} cal`
+                            }
+                          </p>
+                          <p className="text-sm text-surface-400">
+                            {food.is_per_gram 
+                              ? 'protein/100g'
+                              : `${food.protein || 0}g protein`
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             )}
           </div>
         )}

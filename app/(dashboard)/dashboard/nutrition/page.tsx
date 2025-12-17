@@ -7,12 +7,14 @@ import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
 import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
 import { NutritionTargetsModal } from '@/components/nutrition/NutritionTargetsModal';
 import { MacroCalculatorModal } from '@/components/nutrition/MacroCalculatorModal';
+import { CreateCustomFoodModal } from '@/components/nutrition/CreateCustomFoodModal';
 import type {
   FoodLogEntry,
   WeightLogEntry,
   NutritionTargets,
   CustomFood,
   MealType,
+  FrequentFood,
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
@@ -49,6 +51,7 @@ export default function NutritionPage() {
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
+  const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
 
@@ -58,6 +61,8 @@ export default function NutritionPage() {
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
+  const [showCreateCustomFood, setShowCreateCustomFood] = useState(false);
+  const [editingCustomFood, setEditingCustomFood] = useState<CustomFood | null>(null);
   
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
@@ -114,6 +119,51 @@ export default function NutritionPage() {
         .order('created_at', { ascending: false });
 
       setCustomFoods(customFoodsData || []);
+
+      // Load frequent foods (aggregated from food_log)
+      const { data: frequentData } = await supabase
+        .from('food_log')
+        .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(500);
+
+      if (frequentData && frequentData.length > 0) {
+        // Aggregate frequent foods by meal_type and food_name
+        const frequencyMap = new Map<string, FrequentFood>();
+        
+        for (const entry of frequentData) {
+          if (!entry.food_name) continue;
+          const key = `${entry.meal_type}:${entry.food_name}`;
+          const existing = frequencyMap.get(key);
+          const servingsNum = entry.servings || 1;
+          
+          if (existing) {
+            // Update running average
+            const totalLogs = existing.times_logged + 1;
+            existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
+            existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
+            existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
+            existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
+            existing.times_logged = totalLogs;
+          } else {
+            frequencyMap.set(key, {
+              user_id: user.id,
+              meal_type: entry.meal_type as MealType,
+              food_name: entry.food_name,
+              serving_size: entry.serving_size,
+              avg_calories: (entry.calories || 0) / servingsNum,
+              avg_protein: (entry.protein || 0) / servingsNum,
+              avg_carbs: (entry.carbs || 0) / servingsNum,
+              avg_fat: (entry.fat || 0) / servingsNum,
+              times_logged: 1,
+              last_logged: new Date().toISOString(),
+            });
+          }
+        }
+        
+        setFrequentFoods(Array.from(frequencyMap.values()));
+      }
 
       // Load user profile data for macro calculator
       const profileData: UserProfileData = {};
@@ -234,6 +284,74 @@ export default function NutritionPage() {
 
     if (error) {
       console.error('Error deleting food:', error);
+      return;
+    }
+
+    await loadData();
+  }
+
+  async function handleSaveCustomFood(food: Omit<CustomFood, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (editingCustomFood) {
+      // Update existing
+      const { error } = await supabase
+        .from('custom_foods')
+        .update({
+          food_name: food.food_name,
+          serving_size: food.serving_size,
+          calories: food.calories,
+          protein: food.protein,
+          carbs: food.carbs,
+          fat: food.fat,
+          is_per_gram: food.is_per_gram,
+          calories_per_100g: food.calories_per_100g,
+          protein_per_100g: food.protein_per_100g,
+          carbs_per_100g: food.carbs_per_100g,
+          fat_per_100g: food.fat_per_100g,
+          barcode: food.barcode,
+        })
+        .eq('id', editingCustomFood.id);
+
+      if (error) {
+        console.error('Error updating custom food:', error);
+        throw error;
+      }
+    } else {
+      // Create new
+      const { error } = await supabase.from('custom_foods').insert({
+        user_id: user.id,
+        food_name: food.food_name,
+        serving_size: food.serving_size,
+        calories: food.calories,
+        protein: food.protein,
+        carbs: food.carbs,
+        fat: food.fat,
+        is_per_gram: food.is_per_gram,
+        calories_per_100g: food.calories_per_100g,
+        protein_per_100g: food.protein_per_100g,
+        carbs_per_100g: food.carbs_per_100g,
+        fat_per_100g: food.fat_per_100g,
+        barcode: food.barcode,
+      });
+
+      if (error) {
+        console.error('Error creating custom food:', error);
+        throw error;
+      }
+    }
+
+    await loadData();
+  }
+
+  async function handleDeleteCustomFood(id: string) {
+    if (!confirm('Delete this custom food?')) return;
+
+    const { error } = await supabase.from('custom_foods').delete().eq('id', id);
+
+    if (error) {
+      console.error('Error deleting custom food:', error);
       return;
     }
 
@@ -494,6 +612,9 @@ export default function NutritionPage() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={showWeightLog ? undefined : () => setShowWeightLog(true)}>
             Log Weight
+          </Button>
+          <Button variant="secondary" onClick={() => setShowCreateCustomFood(true)}>
+            + Custom Food
           </Button>
           <Button variant="primary" onClick={() => setShowMacroCalculator(true)}>
             🧮 Calculate Macros
@@ -832,6 +953,17 @@ export default function NutritionPage() {
         defaultMealType={selectedMealType}
         recentFoods={recentFoods}
         customFoods={customFoods}
+        frequentFoods={frequentFoods}
+      />
+
+      <CreateCustomFoodModal
+        isOpen={showCreateCustomFood}
+        onClose={() => {
+          setShowCreateCustomFood(false);
+          setEditingCustomFood(null);
+        }}
+        onSave={handleSaveCustomFood}
+        editingFood={editingCustomFood}
       />
 
       <WeightLogModal

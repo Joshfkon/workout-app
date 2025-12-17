@@ -32,8 +32,29 @@ export interface CustomFood {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  // Per-gram tracking (optional)
+  is_per_gram?: boolean;
+  calories_per_100g?: number | null;
+  protein_per_100g?: number | null;
+  carbs_per_100g?: number | null;
+  fat_per_100g?: number | null;
+  // Barcode scanning
+  barcode?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface FrequentFood {
+  user_id: string;
+  meal_type: MealType;
+  food_name: string;
+  serving_size: string | null;
+  avg_calories: number;
+  avg_protein: number;
+  avg_carbs: number;
+  avg_fat: number;
+  times_logged: number;
+  last_logged: string;
 }
 
 export interface WeightLogEntry {
