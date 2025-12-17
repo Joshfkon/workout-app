@@ -36,6 +36,107 @@ const MEAL_TYPES: { type: MealType; label: string; emoji: string }[] = [
   { type: 'snack', label: 'Snacks', emoji: '🍎' },
 ];
 
+// Convert food names to proper title case (fix ALL CAPS from USDA/databases)
+function toTitleCase(str: string): string {
+  if (!str) return '';
+  // If it's mostly uppercase, convert to title case
+  const upperCount = (str.match(/[A-Z]/g) || []).length;
+  const letterCount = (str.match(/[a-zA-Z]/g) || []).length;
+  const isUpperCase = letterCount > 0 && upperCount / letterCount > 0.7;
+  
+  if (isUpperCase) {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => {
+        // Keep certain words lowercase
+        if (['with', 'and', 'or', 'the', 'a', 'an', 'of', 'in', 'on'].includes(word) && word !== str.toLowerCase().split(' ')[0]) {
+          return word;
+        }
+        // Keep brand abbreviations like "NF" uppercase
+        if (word.length <= 2 && word === word.toUpperCase()) {
+          return word.toUpperCase();
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(' ');
+  }
+  return str;
+}
+
+// Get a food icon based on the food name
+function getFoodIcon(foodName: string): string {
+  const name = foodName.toLowerCase();
+  
+  // Proteins
+  if (name.includes('chicken') || name.includes('poultry')) return '🍗';
+  if (name.includes('beef') || name.includes('steak')) return '🥩';
+  if (name.includes('fish') || name.includes('salmon') || name.includes('tuna')) return '🐟';
+  if (name.includes('egg')) return '🥚';
+  if (name.includes('turkey')) return '🦃';
+  if (name.includes('pork') || name.includes('bacon') || name.includes('ham')) return '🥓';
+  if (name.includes('shrimp') || name.includes('prawn')) return '🦐';
+  
+  // Drinks
+  if (name.includes('shake') || name.includes('smoothie') || name.includes('protein')) return '🥤';
+  if (name.includes('milk')) return '🥛';
+  if (name.includes('coffee')) return '☕';
+  if (name.includes('tea')) return '🍵';
+  if (name.includes('juice') || name.includes('drink')) return '🧃';
+  if (name.includes('water')) return '💧';
+  
+  // Carbs & grains
+  if (name.includes('rice')) return '🍚';
+  if (name.includes('bread') || name.includes('toast')) return '🍞';
+  if (name.includes('pasta') || name.includes('spaghetti') || name.includes('noodle')) return '🍝';
+  if (name.includes('cereal') || name.includes('oat')) return '🥣';
+  if (name.includes('pizza')) return '🍕';
+  if (name.includes('sandwich') || name.includes('sub') || name.includes('wrap')) return '🥪';
+  if (name.includes('burrito') || name.includes('taco')) return '🌯';
+  if (name.includes('burger')) return '🍔';
+  
+  // Vegetables
+  if (name.includes('salad') || name.includes('lettuce')) return '🥗';
+  if (name.includes('broccoli')) return '🥦';
+  if (name.includes('carrot')) return '🥕';
+  if (name.includes('potato') || name.includes('fries')) return '🥔';
+  if (name.includes('corn')) return '🌽';
+  if (name.includes('tomato')) return '🍅';
+  if (name.includes('avocado')) return '🥑';
+  
+  // Fruits
+  if (name.includes('apple')) return '🍎';
+  if (name.includes('banana')) return '🍌';
+  if (name.includes('orange')) return '🍊';
+  if (name.includes('strawberr') || name.includes('berry')) return '🍓';
+  if (name.includes('grape')) return '🍇';
+  if (name.includes('peach')) return '🍑';
+  if (name.includes('watermelon') || name.includes('melon')) return '🍉';
+  
+  // Dairy
+  if (name.includes('cheese')) return '🧀';
+  if (name.includes('yogurt') || name.includes('greek')) return '🥛';
+  if (name.includes('butter')) return '🧈';
+  if (name.includes('ice cream')) return '🍦';
+  
+  // Snacks & treats
+  if (name.includes('cookie') || name.includes('biscuit')) return '🍪';
+  if (name.includes('chocolate') || name.includes('candy')) return '🍫';
+  if (name.includes('cake') || name.includes('puff') || name.includes('pastry')) return '🧁';
+  if (name.includes('donut') || name.includes('doughnut')) return '🍩';
+  if (name.includes('bar') || name.includes('granola')) return '🍫';
+  if (name.includes('chip') || name.includes('crisp')) return '🍟';
+  if (name.includes('nut') || name.includes('almond') || name.includes('peanut')) return '🥜';
+  if (name.includes('popcorn')) return '🍿';
+  
+  // Supplements
+  if (name.includes('vitamin') || name.includes('supplement') || name.includes('creatine')) return '💊';
+  if (name.includes('whey') || name.includes('casein')) return '🥤';
+  
+  // Default
+  return '🍽️';
+}
+
 // User profile data for macro calculator
 interface UserProfileData {
   weightLbs?: number;
@@ -845,48 +946,47 @@ export default function NutritionPage() {
               {meal.entries.length === 0 ? (
                 <p className="text-center text-surface-400 py-4">No foods logged yet</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {meal.entries.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg"
+                      className="flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group"
                     >
-                      <div className="flex-1">
-                        <div className="font-medium text-surface-100">{entry.food_name}</div>
-                        <div className="text-sm text-surface-400">
-                          {entry.servings > 1 && `${entry.servings}x `}
+                      {/* Food Icon */}
+                      <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
+                        {getFoodIcon(entry.food_name)}
+                      </div>
+                      
+                      {/* Food Name & Serving */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-surface-100 truncate">
+                          {toTitleCase(entry.food_name)}
+                        </div>
+                        <div className="text-sm text-surface-500">
+                          {entry.servings > 1 && `${entry.servings} × `}
                           {entry.serving_size}
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="font-medium text-surface-100">
-                            {Math.round(entry.calories)} cal
-                          </div>
-                          <div className="text-sm text-surface-400">
-                            P: {Math.round(entry.protein || 0)}g · C: {Math.round(entry.carbs || 0)}g · F:{' '}
-                            {Math.round(entry.fat || 0)}g
-                          </div>
+                      
+                      {/* Calories & Macros */}
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-semibold text-surface-100">
+                          {Math.round(entry.calories)}
                         </div>
-                        <button
-                          onClick={() => handleDeleteFood(entry.id)}
-                          className="text-surface-400 hover:text-danger-400 transition-colors"
-                        >
-                          <svg
-                            className="w-5 h-5"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
+                        <div className="text-xs text-surface-500">
+                          P:{Math.round(entry.protein || 0)} · C:{Math.round(entry.carbs || 0)} · F:{Math.round(entry.fat || 0)}
+                        </div>
                       </div>
+                      
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleDeleteFood(entry.id)}
+                        className="text-surface-600 hover:text-danger-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
                   ))}
                 </div>
