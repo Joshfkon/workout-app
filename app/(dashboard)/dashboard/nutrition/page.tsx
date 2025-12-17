@@ -254,13 +254,18 @@ export default function NutritionPage() {
     const isLbs = prefs?.weight_unit === 'lb';
     const weightKg = isLbs ? weight * 0.453592 : weight;
 
-    const { error } = await supabase.from('weight_log').upsert({
-      user_id: user.id,
-      logged_at: date,
-      weight: weight,
-      unit: isLbs ? 'lb' : 'kg',
-      notes: notes,
-    });
+    const { error } = await supabase.from('weight_log').upsert(
+      {
+        user_id: user.id,
+        logged_at: date,
+        weight: weight,
+        unit: isLbs ? 'lb' : 'kg',
+        notes: notes,
+      },
+      {
+        onConflict: 'user_id,logged_at', // Specify the unique constraint columns
+      }
+    );
 
     if (error) {
       console.error('Error saving weight:', error);

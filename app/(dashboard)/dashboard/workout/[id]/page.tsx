@@ -930,14 +930,18 @@ export default function WorkoutPage() {
         if (checkInData.bodyweightKg) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
+            const today = new Date().toISOString().split('T')[0];
             await supabase
               .from('weight_log')
-              .insert({
-                user_id: user.id,
-                weight_kg: checkInData.bodyweightKg,
-                source: 'manual',
-                logged_at: new Date().toISOString(),
-              });
+              .upsert(
+                {
+                  user_id: user.id,
+                  weight: checkInData.bodyweightKg,
+                  unit: 'kg',
+                  logged_at: today,
+                },
+                { onConflict: 'user_id,logged_at' }
+              );
           }
         }
         

@@ -107,6 +107,11 @@ export default function DashboardPage() {
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
   const [showQuickLogger, setShowQuickLogger] = useState(false);
+  const [showWeightLogger, setShowWeightLogger] = useState(false);
+  const [weightInput, setWeightInput] = useState('');
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(null);
+  const [isLoggingWeight, setIsLoggingWeight] = useState(false);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -198,8 +203,8 @@ export default function DashboardPage() {
           }
         }
 
-        // Fetch nutrition data
-        const [nutritionResult, targetsResult] = await Promise.all([
+        // Fetch nutrition data, today's weight, and user preferences
+        const [nutritionResult, targetsResult, weightResult, prefsResult] = await Promise.all([
           supabase
             .from('food_log')
             .select('calories, protein, carbs, fat')
@@ -208,6 +213,17 @@ export default function DashboardPage() {
           supabase
             .from('nutrition_targets')
             .select('calories, protein, carbs, fat')
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('weight_log')
+            .select('weight, unit')
+            .eq('user_id', user.id)
+            .eq('logged_at', todayStr)
+            .single(),
+          supabase
+            .from('user_preferences')
+            .select('weight_unit')
             .eq('user_id', user.id)
             .single(),
         ]);
@@ -227,6 +243,16 @@ export default function DashboardPage() {
 
         if (targetsResult.data) {
           setNutritionTargets(targetsResult.data);
+        }
+
+        // Set today's weight if logged
+        if (weightResult.data) {
+          setTodaysWeight({ weight: weightResult.data.weight, unit: weightResult.data.unit });
+        }
+
+        // Set user's preferred weight unit
+        if (prefsResult.data?.weight_unit) {
+          setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
         }
 
         // Fetch weekly volume by muscle
@@ -304,6 +330,40 @@ export default function DashboardPage() {
       fat: prev.fat + food.fat,
     }));
     setShowQuickLogger(false);
+  };
+
+  const handleSaveWeight = async () => {
+    if (!weightInput || isNaN(parseFloat(weightInput))) return;
+    
+    setIsLoggingWeight(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const weight = parseFloat(weightInput);
+      const today = new Date().toISOString().split('T')[0];
+
+      const { error } = await supabase.from('weight_log').upsert(
+        {
+          user_id: user.id,
+          logged_at: today,
+          weight: weight,
+          unit: weightUnit,
+        },
+        { onConflict: 'user_id,logged_at' }
+      );
+
+      if (error) throw error;
+
+      setTodaysWeight({ weight, unit: weightUnit });
+      setWeightInput('');
+      setShowWeightLogger(false);
+    } catch (err) {
+      console.error('Failed to save weight:', err);
+    } finally {
+      setIsLoggingWeight(false);
+    }
   };
 
   if (isLoading) {
@@ -526,6 +586,99 @@ export default function DashboardPage() {
                 <Button variant="outline" size="sm">Set Up Targets</Button>
               </Link>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ===== TODAY'S WEIGHT ===== */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <span>⚖️</span> Today&apos;s Weight
+            </CardTitle>
+            {!showWeightLogger && todaysWeight && (
+              <button
+                onClick={() => setShowWeightLogger(true)}
+                className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                title="Update weight"
+              >
+                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {showWeightLogger ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="0.1"
+                placeholder={`Weight (${weightUnit})`}
+                value={weightInput}
+                onChange={(e) => setWeightInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSaveWeight()}
+                className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                autoFocus
+              />
+              <select
+                value={weightUnit}
+                onChange={(e) => setWeightUnit(e.target.value as 'lb' | 'kg')}
+                className="px-2 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="lb">lbs</option>
+                <option value="kg">kg</option>
+              </select>
+              <Button
+                size="sm"
+                onClick={handleSaveWeight}
+                disabled={!weightInput || isLoggingWeight}
+              >
+                {isLoggingWeight ? '...' : 'Save'}
+              </Button>
+              <button
+                onClick={() => {
+                  setShowWeightLogger(false);
+                  setWeightInput('');
+                }}
+                className="p-2 text-surface-400 hover:text-surface-300 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : todaysWeight ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-surface-100">
+                    {todaysWeight.weight} <span className="text-base font-normal text-surface-400">{todaysWeight.unit}</span>
+                  </p>
+                  <p className="text-xs text-surface-500">Logged today</p>
+                </div>
+              </div>
+              <Link href="/dashboard/nutrition">
+                <Button variant="ghost" size="sm">History →</Button>
+              </Link>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowWeightLogger(true)}
+              className="w-full py-4 border-2 border-dashed border-surface-700 rounded-lg text-surface-400 hover:border-primary-500 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Log your weight
+            </button>
           )}
         </CardContent>
       </Card>
