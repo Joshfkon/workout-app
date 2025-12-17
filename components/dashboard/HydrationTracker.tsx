@@ -41,7 +41,7 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
       .eq('logged_at', today);
 
     if (hydrationData) {
-      const total = hydrationData.reduce((sum, entry) => sum + (entry.amount_ml || 0), 0);
+      const total = hydrationData.reduce((sum: number, entry: { amount_ml?: number }) => sum + (entry.amount_ml || 0), 0);
       setTodayTotal(total);
     }
 
