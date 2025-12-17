@@ -237,44 +237,41 @@ export const ExerciseCard = memo(function ExerciseCard({
     const currentCount = completedSets.length;
     prevCompletedCountRef.current = currentCount;
     
-    // If a set was just completed (count increased), shift the pending inputs
-    // Don't reinitialize - just remove the first entry which was the completed set
+    // If a set was just completed (count increased), update all pending inputs
+    // based on the just-completed set's performance
     if (currentCount > prevCount) {
-      setPendingInputs(prev => {
-        // Remove the first N entries that were completed
-        const setsCompleted = currentCount - prevCount;
-        const remaining = prev.slice(setsCompleted);
-        
-        // If we have fewer pending inputs than needed, add new ones
-        const targetRpe = 10 - block.targetRir;
-        const lastCompleted = completedSets[completedSets.length - 1];
-        
-        while (remaining.length < pendingSetsCount) {
-          let defaultWeight: number;
-          let defaultReps: number;
-          
-          if (lastCompleted) {
-            const lastRpe = lastCompleted.rpe;
-            if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
-              defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-            } else {
-              defaultWeight = lastCompleted.weightKg;
-            }
-            defaultReps = lastCompleted.reps;
-          } else {
-            defaultWeight = suggestedWeight;
-            defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
-          }
-          
-          remaining.push({
-            weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
-            reps: String(defaultReps),
-            rpe: String(targetRpe),
-          });
+      const targetRpe = 10 - block.targetRir;
+      const lastCompleted = completedSets[completedSets.length - 1];
+      
+      // Calculate smart defaults based on the just-completed set
+      let smartWeight: number;
+      let smartReps: number;
+      
+      if (lastCompleted) {
+        const lastRpe = lastCompleted.rpe;
+        // If RPE was off target, adjust weight suggestion
+        if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
+          smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
+        } else {
+          smartWeight = lastCompleted.weightKg;
         }
-        
-        return remaining;
-      });
+        smartReps = lastCompleted.reps;
+      } else {
+        smartWeight = suggestedWeight;
+        smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+      }
+      
+      // Create updated pending inputs - all based on the last completed set
+      const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
+      for (let i = 0; i < pendingSetsCount; i++) {
+        updatedInputs.push({
+          weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
+          reps: String(smartReps),
+          rpe: String(targetRpe),
+        });
+      }
+      
+      setPendingInputs(updatedInputs);
       return;
     }
     
