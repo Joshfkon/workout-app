@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
+import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 
 interface NutritionTotals {
   calories: number;
@@ -973,6 +974,11 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ===== BODY MEASUREMENTS ===== */}
+      {userId && (
+        <BodyMeasurements userId={userId} unit={weightUnit === 'lb' ? 'in' : 'cm'} />
+      )}
 
       {/* ===== WEEKLY VOLUME ===== */}
       <Card>
