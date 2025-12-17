@@ -58,50 +58,53 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
   const [history, setHistory] = useState<MeasurementHistory[]>([]);
   const [lastMeasurement, setLastMeasurement] = useState<MeasurementHistory | null>(null);
   const [displayUnit, setDisplayUnit] = useState<'in' | 'cm'>(unit);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadMeasurements();
-  }, [userId]);
+    const loadMeasurements = async () => {
+      const supabase = createUntypedClient();
+      const today = new Date().toISOString().split('T')[0];
 
-  const loadMeasurements = async () => {
-    const supabase = createUntypedClient();
-    const today = new Date().toISOString().split('T')[0];
+      // Get today's measurements
+      const { data: todayData } = await supabase
+        .from('body_measurements')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('logged_at', today)
+        .single();
 
-    // Get today's measurements
-    const { data: todayData } = await supabase
-      .from('body_measurements')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('logged_at', today)
-      .single();
-
-    if (todayData) {
-      const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = todayData;
-      setMeasurements(measurementData);
-    }
-
-    // Get last 5 measurement entries
-    const { data: historyData } = await supabase
-      .from('body_measurements')
-      .select('*')
-      .eq('user_id', userId)
-      .order('logged_at', { ascending: false })
-      .limit(5);
-
-    if (historyData && historyData.length > 0) {
-      const formattedHistory = historyData.map(entry => {
-        const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = entry;
-        return { logged_at, measurements: measurementData };
-      });
-      setHistory(formattedHistory);
-      
-      // Set last measurement for comparison (skip today if it exists)
-      const previousEntry = formattedHistory.find(h => h.logged_at !== today);
-      if (previousEntry) {
-        setLastMeasurement(previousEntry);
+      if (todayData) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = todayData;
+        setMeasurements(measurementData);
       }
-    }
-  };
+
+      // Get last 5 measurement entries
+      const { data: historyData } = await supabase
+        .from('body_measurements')
+        .select('*')
+        .eq('user_id', userId)
+        .order('logged_at', { ascending: false })
+        .limit(5);
+
+      if (historyData && historyData.length > 0) {
+        const formattedHistory = historyData.map((entry: Record<string, unknown>) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = entry;
+          return { logged_at: logged_at as string, measurements: measurementData as Measurements };
+        });
+        setHistory(formattedHistory);
+        
+        // Set last measurement for comparison (skip today if it exists)
+        const previousEntry = formattedHistory.find(h => h.logged_at !== today);
+        if (previousEntry) {
+          setLastMeasurement(previousEntry);
+        }
+      }
+    };
+
+    loadMeasurements();
+  }, [userId, refreshKey]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -127,7 +130,7 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
       });
 
     if (!error) {
-      await loadMeasurements();
+      setRefreshKey(k => k + 1); // Trigger reload
       setIsEditing(false);
     }
     setIsSaving(false);
