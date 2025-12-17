@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
 import { BarcodeScanner } from './BarcodeScanner';
-import type { MealType, CustomFood, FrequentFood } from '@/types/nutrition';
+import type { MealType, CustomFood, FrequentFood, SystemFood } from '@/types/nutrition';
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -29,9 +29,19 @@ interface AddFoodModalProps {
   recentFoods?: FoodSearchResult[];
   customFoods?: CustomFood[];
   frequentFoods?: FrequentFood[];
+  systemFoods?: SystemFood[];
 }
 
-type Tab = 'search' | 'recent' | 'custom' | 'manual' | 'barcode';
+type Tab = 'search' | 'quick' | 'recent' | 'custom' | 'manual' | 'barcode';
+
+const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
+  protein: { label: 'Proteins', emoji: '🥩' },
+  carbs: { label: 'Carbs', emoji: '🍚' },
+  fats: { label: 'Fats', emoji: '🥜' },
+  vegetables: { label: 'Vegetables', emoji: '🥦' },
+  fruits: { label: 'Fruits', emoji: '🍎' },
+  supplements: { label: 'Supplements', emoji: '💪' },
+};
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'Breakfast',
@@ -48,6 +58,7 @@ export function AddFoodModal({
   recentFoods = [],
   customFoods = [],
   frequentFoods = [],
+  systemFoods = [],
 }: AddFoodModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('search');
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +67,8 @@ export function AddFoodModal({
   const [searchError, setSearchError] = useState('');
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | FoodSearchResultWithServings | null>(null);
   const [selectedCustomFood, setSelectedCustomFood] = useState<CustomFood | null>(null);
+  const [selectedSystemFood, setSelectedSystemFood] = useState<SystemFood | null>(null);
+  const [systemFoodCategory, setSystemFoodCategory] = useState<string>('all');
 
   // Form state
   const [servings, setServings] = useState('1');
@@ -113,6 +126,34 @@ export function AddFoodModal({
       f.name.toLowerCase().includes(query)
     );
   }, [recentFoods, filterQuery]);
+
+  // Filter system foods based on category and search
+  const filteredSystemFoods = useMemo(() => {
+    let foods = systemFoods;
+    
+    if (systemFoodCategory !== 'all') {
+      foods = foods.filter(f => f.category === systemFoodCategory);
+    }
+    
+    if (filterQuery.trim()) {
+      const query = filterQuery.toLowerCase();
+      foods = foods.filter(f => f.name.toLowerCase().includes(query));
+    }
+    
+    return foods;
+  }, [systemFoods, systemFoodCategory, filterQuery]);
+
+  // Group system foods by category for display
+  const groupedSystemFoods = useMemo(() => {
+    const groups: Record<string, SystemFood[]> = {};
+    for (const food of filteredSystemFoods) {
+      if (!groups[food.category]) {
+        groups[food.category] = [];
+      }
+      groups[food.category].push(food);
+    }
+    return groups;
+  }, [filteredSystemFoods]);
 
   const handleBarcodeScanned = async (barcode: string) => {
     setBarcodeError('');
@@ -184,6 +225,7 @@ export function AddFoodModal({
   const handleSelectCustomFood = (food: CustomFood) => {
     setSelectedCustomFood(food);
     setSelectedFood(null);
+    setSelectedSystemFood(null);
     setServings('1');
     // Set weight to match the food's reference amount if it's per-weight
     if (food.is_per_weight && food.reference_amount) {
@@ -192,6 +234,46 @@ export function AddFoodModal({
     } else {
       setWeightAmount('100');
       setWeightUnit('g');
+    }
+  };
+
+  const handleSelectSystemFood = (food: SystemFood) => {
+    setSelectedSystemFood(food);
+    setSelectedFood(null);
+    setSelectedCustomFood(null);
+    setWeightAmount('100');
+    setWeightUnit('g');
+  };
+
+  const handleAddSystemFood = async () => {
+    if (!selectedSystemFood) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const inputAmount = parseFloat(weightAmount) || 100;
+      // Convert oz to grams if needed
+      const gramsAmount = weightUnit === 'oz' ? inputAmount * 28.3495 : inputAmount;
+      const multiplier = gramsAmount / 100;
+
+      await onAdd({
+        food_name: selectedSystemFood.name,
+        serving_size: `${inputAmount}${weightUnit}`,
+        servings: 1,
+        calories: Math.round(selectedSystemFood.calories_per_100g * multiplier),
+        protein: Math.round(selectedSystemFood.protein_per_100g * multiplier * 10) / 10,
+        carbs: Math.round(selectedSystemFood.carbs_per_100g * multiplier * 10) / 10,
+        fat: Math.round(selectedSystemFood.fat_per_100g * multiplier * 10) / 10,
+        meal_type: mealType,
+        source: 'manual',
+      });
+
+      resetAndClose();
+    } catch (err) {
+      setError('Failed to add food. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -371,10 +453,12 @@ export function AddFoodModal({
     setSearchResults([]);
     setSelectedFood(null);
     setSelectedCustomFood(null);
+    setSelectedSystemFood(null);
     setServings('1');
     setWeightAmount('100');
     setWeightUnit('g');
     setFilterQuery('');
+    setSystemFoodCategory('all');
     setManualFood({
       food_name: '',
       serving_size: '1 serving',
@@ -388,6 +472,23 @@ export function AddFoodModal({
     setSelectedServingIndex(0);
     onClose();
   };
+
+  // Calculate live nutrition for system foods
+  const systemFoodNutrition = useMemo(() => {
+    if (!selectedSystemFood) return null;
+    
+    const inputAmount = parseFloat(weightAmount) || 0;
+    // Convert oz to grams if needed
+    const gramsAmount = weightUnit === 'oz' ? inputAmount * 28.3495 : inputAmount;
+    const multiplier = gramsAmount / 100;
+    
+    return {
+      calories: Math.round(selectedSystemFood.calories_per_100g * multiplier),
+      protein: Math.round(selectedSystemFood.protein_per_100g * multiplier * 10) / 10,
+      carbs: Math.round(selectedSystemFood.carbs_per_100g * multiplier * 10) / 10,
+      fat: Math.round(selectedSystemFood.fat_per_100g * multiplier * 10) / 10,
+    };
+  }, [selectedSystemFood, weightAmount, weightUnit]);
 
   // Calculate live nutrition for per-weight custom foods
   const customFoodNutrition = useMemo(() => {
@@ -471,21 +572,29 @@ export function AddFoodModal({
 
         {/* Tabs */}
         <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
-          {(['search', 'barcode', 'recent', 'custom', 'manual'] as Tab[]).map((tab) => (
+          {([
+            { id: 'quick' as Tab, label: '⚡ Quick Add' },
+            { id: 'search' as Tab, label: 'Search' },
+            { id: 'barcode' as Tab, label: 'Barcode' },
+            { id: 'custom' as Tab, label: 'Custom' },
+            { id: 'manual' as Tab, label: 'Manual' },
+          ]).map((tab) => (
             <button
-              key={tab}
+              key={tab.id}
               onClick={() => {
-                setActiveTab(tab);
+                setActiveTab(tab.id);
                 setSelectedFood(null);
                 setSelectedCustomFood(null);
+                setSelectedSystemFood(null);
+                setFilterQuery('');
               }}
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
-                activeTab === tab
+                activeTab === tab.id
                   ? 'border-primary-500 text-primary-400'
                   : 'border-transparent text-surface-400 hover:text-surface-200'
               }`}
             >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -493,6 +602,166 @@ export function AddFoodModal({
         {error && (
           <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
             {error}
+          </div>
+        )}
+
+        {/* Quick Add Tab - System Foods */}
+        {activeTab === 'quick' && (
+          <div className="space-y-4">
+            {/* Search and Category Filter */}
+            <div className="flex gap-2">
+              <Input
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                placeholder="Search foods..."
+                className="flex-1"
+              />
+              <select
+                value={systemFoodCategory}
+                onChange={(e) => setSystemFoodCategory(e.target.value)}
+                className="px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="all">All</option>
+                <option value="protein">🥩 Proteins</option>
+                <option value="carbs">🍚 Carbs</option>
+                <option value="fats">🥜 Fats</option>
+                <option value="vegetables">🥦 Vegetables</option>
+                <option value="fruits">🍎 Fruits</option>
+                <option value="supplements">💪 Supplements</option>
+              </select>
+            </div>
+
+            {selectedSystemFood ? (
+              <div className="space-y-4 p-4 bg-surface-800 rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-medium text-surface-100">{selectedSystemFood.name}</h3>
+                    <p className="text-xs text-primary-400">
+                      {selectedSystemFood.calories_per_100g} cal per 100g
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedSystemFood(null)}
+                    className="text-surface-400 hover:text-surface-200"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Weight Input */}
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                    Your portion (weighed)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={weightAmount}
+                      onChange={(e) => setWeightAmount(e.target.value)}
+                      className="flex-1"
+                    />
+                    <select
+                      value={weightUnit}
+                      onChange={(e) => setWeightUnit(e.target.value as 'g' | 'oz')}
+                      className="px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    >
+                      <option value="g">grams</option>
+                      <option value="oz">oz</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Live Calculated Nutrition */}
+                {systemFoodNutrition && (
+                  <div className="grid grid-cols-4 gap-2 text-sm p-3 bg-surface-900/50 rounded-lg">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-surface-100">{systemFoodNutrition.calories}</p>
+                      <p className="text-xs text-surface-400">Calories</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-medium text-surface-100">{systemFoodNutrition.protein}g</p>
+                      <p className="text-xs text-surface-400">Protein</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-medium text-surface-100">{systemFoodNutrition.carbs}g</p>
+                      <p className="text-xs text-surface-400">Carbs</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-medium text-surface-100">{systemFoodNutrition.fat}g</p>
+                      <p className="text-xs text-surface-400">Fat</p>
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  onClick={handleAddSystemFood}
+                  variant="primary"
+                  disabled={isSubmitting}
+                  className="w-full"
+                >
+                  {isSubmitting ? 'Adding...' : 'Add to Log'}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {systemFoodCategory === 'all' ? (
+                  // Show grouped by category
+                  Object.entries(groupedSystemFoods).map(([category, foods]) => (
+                    <div key={category}>
+                      <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2 sticky top-0 bg-surface-900 py-1">
+                        {CATEGORY_LABELS[category]?.emoji} {CATEGORY_LABELS[category]?.label || category}
+                      </p>
+                      <div className="space-y-1">
+                        {foods.slice(0, 10).map((food) => (
+                          <button
+                            key={food.id}
+                            onClick={() => handleSelectSystemFood(food)}
+                            className="w-full p-2 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-surface-200">{food.name}</span>
+                              <span className="text-xs text-surface-500">
+                                {food.calories_per_100g} cal | {food.protein_per_100g}g P
+                              </span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  // Show flat list for filtered category
+                  <div className="space-y-1">
+                    {filteredSystemFoods.map((food) => (
+                      <button
+                        key={food.id}
+                        onClick={() => handleSelectSystemFood(food)}
+                        className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-medium text-surface-100">{food.name}</h4>
+                            <p className="text-sm text-surface-400">per 100g</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium text-surface-100">{food.calories_per_100g} cal</p>
+                            <p className="text-sm text-surface-400">{food.protein_per_100g}g protein</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {filteredSystemFoods.length === 0 && (
+                  <p className="text-center text-surface-400 py-8">
+                    No foods found matching your search
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

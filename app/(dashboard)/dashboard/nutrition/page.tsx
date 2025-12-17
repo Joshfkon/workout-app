@@ -15,6 +15,7 @@ import type {
   CustomFood,
   MealType,
   FrequentFood,
+  SystemFood,
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
@@ -52,6 +53,7 @@ export default function NutritionPage() {
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
+  const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
 
@@ -163,6 +165,17 @@ export default function NutritionPage() {
         }
         
         setFrequentFoods(Array.from(frequencyMap.values()));
+      }
+
+      // Load system foods (pre-populated bodybuilding foods)
+      const { data: systemFoodsData } = await supabase
+        .from('system_foods')
+        .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+        .eq('is_active', true)
+        .order('name');
+
+      if (systemFoodsData) {
+        setSystemFoods(systemFoodsData as SystemFood[]);
       }
 
       // Load user profile data for macro calculator
@@ -958,6 +971,7 @@ export default function NutritionPage() {
         recentFoods={recentFoods}
         customFoods={customFoods}
         frequentFoods={frequentFoods}
+        systemFoods={systemFoods}
       />
 
       <CreateCustomFoodModal

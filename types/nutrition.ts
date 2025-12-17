@@ -59,6 +59,17 @@ export interface FrequentFood {
   last_logged: string;
 }
 
+export interface SystemFood {
+  id: string;
+  name: string;
+  category: 'protein' | 'carbs' | 'fats' | 'vegetables' | 'fruits' | 'supplements';
+  subcategory: string | null;
+  calories_per_100g: number;
+  protein_per_100g: number;
+  carbs_per_100g: number;
+  fat_per_100g: number;
+}
+
 export interface WeightLogEntry {
   id: string;
   user_id: string;
