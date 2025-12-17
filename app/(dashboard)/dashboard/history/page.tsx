@@ -616,162 +616,184 @@ function HistoryPageContent() {
             const isExpanded = expandedWorkout === workout.id;
             
             return (
-              <Card key={workout.id} className="overflow-hidden">
-                <div className="p-4 sm:p-6">
-                  {/* Header row */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-surface-100">
-                          {workout.completed_at 
-                            ? formatDate(workout.completed_at)
-                            : formatDate(workout.planned_date)}
-                        </h3>
-                        <Badge 
-                          variant={workout.state === 'completed' ? 'success' : 'warning'}
-                          size="sm"
-                        >
-                          {workout.state === 'completed' ? 'Completed' : 'In Progress'}
-                        </Badge>
+              <Card key={workout.id} className="overflow-hidden group relative">
+                {/* Delete button - small icon in top right */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDeleteWorkout(workout.id, workout.state);
+                  }}
+                  disabled={deletingId === workout.id}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
+                  title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
+                >
+                  {deletingId === workout.id ? (
+                    <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Main clickable area */}
+                <Link href={`/dashboard/workout/${workout.id}`} className="block">
+                  <div className="p-4 sm:p-6 hover:bg-surface-800/30 transition-colors cursor-pointer">
+                    {/* Header row */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="flex-1 pr-8">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="text-lg font-semibold text-surface-100">
+                            {workout.completed_at 
+                              ? formatDate(workout.completed_at)
+                              : formatDate(workout.planned_date)}
+                          </h3>
+                          <Badge 
+                            variant={workout.state === 'completed' ? 'success' : 'warning'}
+                            size="sm"
+                          >
+                            {workout.state === 'completed' ? 'Completed' : 'In Progress'}
+                          </Badge>
+                          {workout.state === 'in_progress' && (
+                            <Badge variant="info" size="sm">
+                              Continue →
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-4 text-sm text-surface-400">
+                          {workout.completed_at && (
+                            <span>Finished at {formatTime(workout.completed_at)}</span>
+                          )}
+                          <span>{workout.exercises.length} exercises</span>
+                          <span>{workout.totalSets} sets</span>
+                          <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                          {workout.session_rpe && (
+                            <span className="flex items-center gap-1">
+                              RPE: <span className={workout.session_rpe >= 8 ? 'text-danger-400' : workout.session_rpe >= 6 ? 'text-warning-400' : 'text-surface-300'}>{workout.session_rpe}</span>
+                            </span>
+                          )}
+                          {workout.pump_rating && (
+                            <span>
+                              {workout.pump_rating === 5 && '🔥'}
+                              {workout.pump_rating === 4 && '😄'}
+                              {workout.pump_rating === 3 && '😊'}
+                              {workout.pump_rating === 2 && '🙂'}
+                              {workout.pump_rating === 1 && '😐'}
+                            </span>
+                          )}
+                        </div>
+                        {workout.session_notes && (
+                          <p className="mt-2 text-sm text-surface-500 line-clamp-2">
+                            {workout.session_notes}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex flex-wrap gap-4 text-sm text-surface-400">
-                        {workout.completed_at && (
-                          <span>Finished at {formatTime(workout.completed_at)}</span>
-                        )}
-                        <span>{workout.exercises.length} exercises</span>
-                        <span>{workout.totalSets} sets</span>
-                        <span>{formatWeight(workout.totalVolume, unit)} total</span>
-                        {workout.session_rpe && (
-                          <span className="flex items-center gap-1">
-                            RPE: <span className={workout.session_rpe >= 8 ? 'text-danger-400' : workout.session_rpe >= 6 ? 'text-warning-400' : 'text-surface-300'}>{workout.session_rpe}</span>
-                          </span>
-                        )}
-                        {workout.pump_rating && (
-                          <span>
-                            {workout.pump_rating === 5 && '🔥'}
-                            {workout.pump_rating === 4 && '😄'}
-                            {workout.pump_rating === 3 && '😊'}
-                            {workout.pump_rating === 2 && '🙂'}
-                            {workout.pump_rating === 1 && '😐'}
-                          </span>
-                        )}
-                      </div>
-                      {workout.session_notes && (
-                        <p className="mt-2 text-sm text-surface-500 line-clamp-2">
-                          {workout.session_notes}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      {workout.state === 'in_progress' && (
-                        <Link href={`/dashboard/workout/${workout.id}`}>
-                          <Button>Continue</Button>
-                        </Link>
-                      )}
-                      <Link href={`/dashboard/workout/${workout.id}`}>
-                        <Button variant="outline">View</Button>
-                      </Link>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => handleDeleteWorkout(workout.id, workout.state)}
-                        disabled={deletingId === workout.id}
-                        className="text-danger-400 hover:text-danger-300 hover:border-danger-400"
-                      >
-                        {deletingId === workout.id ? '...' : (workout.state === 'in_progress' ? 'Cancel' : 'Delete')}
-                      </Button>
                     </div>
                   </div>
+                </Link>
 
-                  {/* Exercise summary */}
-                  {workout.exercises.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-surface-800">
-                      <button
-                        onClick={() => toggleExpand(workout.id)}
-                        className="flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 transition-colors mb-3"
+                {/* Exercise summary - outside the link */}
+                {workout.exercises.length > 0 && (
+                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 border-t border-surface-800">
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleExpand(workout.id);
+                      }}
+                      className="flex items-center gap-2 text-sm text-surface-400 hover:text-surface-200 transition-colors py-3"
+                    >
+                      <svg 
+                        className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
                       >
-                        <svg 
-                          className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} 
-                          fill="none" 
-                          viewBox="0 0 24 24" 
-                          stroke="currentColor"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        {isExpanded ? 'Hide details' : 'Show exercise details'}
-                      </button>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      {isExpanded ? 'Hide details' : 'Show exercise details'}
+                    </button>
 
-                      {/* Quick exercise list */}
-                      {!isExpanded && (
-                        <div className="flex flex-wrap gap-2">
-                          {workout.exercises.map((exercise) => (
+                    {/* Quick exercise list */}
+                    {!isExpanded && (
+                      <div className="flex flex-wrap gap-2">
+                        {workout.exercises.map((exercise) => (
+                          <button
+                            key={exercise.id}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle);
+                            }}
+                            className="px-2 py-1 bg-surface-800 hover:bg-surface-700 rounded text-xs text-surface-300 transition-colors"
+                          >
+                            {exercise.name} ({exercise.sets.length})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Detailed exercise breakdown */}
+                    {isExpanded && (
+                      <div className="space-y-4">
+                        {workout.exercises.map((exercise) => (
+                          <div key={exercise.id} className="bg-surface-800/50 rounded-lg p-3">
                             <button
-                              key={exercise.id}
-                              onClick={() => fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle)}
-                              className="px-2 py-1 bg-surface-800 hover:bg-surface-700 rounded text-xs text-surface-300 transition-colors"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle);
+                              }}
+                              className="flex items-center justify-between mb-2 w-full text-left group"
                             >
-                              {exercise.name} ({exercise.sets.length})
+                              <h4 className="font-medium text-surface-200 group-hover:text-primary-400 transition-colors">
+                                {exercise.name}
+                                <svg className="w-4 h-4 inline ml-2 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                              </h4>
+                              <Badge variant="default" size="sm">
+                                {exercise.primaryMuscle}
+                              </Badge>
                             </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Detailed exercise breakdown */}
-                      {isExpanded && (
-                        <div className="space-y-4">
-                          {workout.exercises.map((exercise) => (
-                            <div key={exercise.id} className="bg-surface-800/50 rounded-lg p-3">
-                              <button
-                                onClick={() => fetchExerciseHistory(exercise.exerciseId, exercise.name, exercise.primaryMuscle)}
-                                className="flex items-center justify-between mb-2 w-full text-left group"
-                              >
-                                <h4 className="font-medium text-surface-200 group-hover:text-primary-400 transition-colors">
-                                  {exercise.name}
-                                  <svg className="w-4 h-4 inline ml-2 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                  </svg>
-                                </h4>
-                                <Badge variant="default" size="sm">
-                                  {exercise.primaryMuscle}
-                                </Badge>
-                              </button>
-                              
-                              {exercise.sets.length > 0 ? (
-                                <div className="space-y-1">
-                                  {exercise.sets.map((set, idx) => (
-                                    <div 
-                                      key={set.id} 
-                                      className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50"
-                                    >
-                                      <span className="text-surface-500 w-8">#{idx + 1}</span>
-                                      <span className="text-surface-200 font-medium">
-                                        {formatWeight(set.weight_kg, unit)}
+                            
+                            {exercise.sets.length > 0 ? (
+                              <div className="space-y-1">
+                                {exercise.sets.map((set, idx) => (
+                                  <div 
+                                    key={set.id} 
+                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50"
+                                  >
+                                    <span className="text-surface-500 w-8">#{idx + 1}</span>
+                                    <span className="text-surface-200 font-medium">
+                                      {formatWeight(set.weight_kg, unit)}
+                                    </span>
+                                    <span className="text-surface-400">×</span>
+                                    <span className="text-surface-200 font-medium">
+                                      {set.reps} reps
+                                    </span>
+                                    {set.rpe && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                        set.rpe >= 9 ? 'bg-danger-500/20 text-danger-400' :
+                                        set.rpe >= 7 ? 'bg-warning-500/20 text-warning-400' :
+                                        'bg-surface-700 text-surface-400'
+                                      }`}>
+                                        RPE {set.rpe}
                                       </span>
-                                      <span className="text-surface-400">×</span>
-                                      <span className="text-surface-200 font-medium">
-                                        {set.reps} reps
-                                      </span>
-                                      {set.rpe && (
-                                        <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                          set.rpe >= 9 ? 'bg-danger-500/20 text-danger-400' :
-                                          set.rpe >= 7 ? 'bg-warning-500/20 text-warning-400' :
-                                          'bg-surface-700 text-surface-400'
-                                        }`}>
-                                          RPE {set.rpe}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-surface-500">No sets recorded</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-surface-500">No sets recorded</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card>
             );
           })}
