@@ -19,6 +19,7 @@ import {
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
+import { getUnavailableEquipment } from '@/services/equipmentFilter';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -42,6 +43,7 @@ export default function NewMesocyclePage() {
   const [trainingAge, setTrainingAge] = useState<number>(1);
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
+  const [unavailableEquipmentIds, setUnavailableEquipmentIds] = useState<string[]>([]);
   
   // Form state
   const [name, setName] = useState('');
@@ -194,6 +196,10 @@ export default function NewMesocyclePage() {
             createdAt: scans[0].created_at,
           });
         }
+        
+        // Get unavailable gym equipment
+        const unavailable = await getUnavailableEquipment(user.id);
+        setUnavailableEquipmentIds(unavailable);
       }
     }
     
@@ -250,12 +256,12 @@ export default function NewMesocyclePage() {
       
       // Generate full program with extended profile and lagging areas
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
+      const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds);
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes]);
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds]);
 
   // Generate default name
   useEffect(() => {

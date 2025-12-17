@@ -11,6 +11,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
+import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
@@ -499,6 +500,9 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Detailed Gym Equipment */}
+      <GymEquipmentSettings />
 
       {/* Preferences */}
       <Card>

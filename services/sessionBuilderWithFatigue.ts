@@ -27,6 +27,8 @@ import type {
   Split,
 } from '@/types/schema';
 
+import { filterExercisesByEquipment } from './equipmentFilter';
+
 import {
   calculateRepRange,
   getDUPRepRange,
@@ -86,6 +88,7 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
  * and hypertrophy effectiveness (Nippard methodology)
  * 
  * @param quickWorkoutMode - When true, only S and A tier exercises are selected (for time-constrained workouts)
+ * @param unavailableEquipmentIds - Equipment IDs the user doesn't have access to (from gym equipment settings)
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
@@ -94,7 +97,8 @@ function selectExercisesWithFatigue(
   fatigueManager: SessionFatigueManager,
   startingPosition: number,
   prioritizeHypertrophy: boolean = true,
-  quickWorkoutMode: boolean = false
+  quickWorkoutMode: boolean = false,
+  unavailableEquipmentIds: string[] = []
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
@@ -106,6 +110,11 @@ function selectExercisesWithFatigue(
       profile.availableEquipment.includes(e.equipment) &&
       !profile.injuryHistory.includes(muscle)
   );
+  
+  // Filter by gym equipment preferences (machine-level filtering)
+  if (unavailableEquipmentIds.length > 0) {
+    candidates = filterExercisesByEquipment(candidates, unavailableEquipmentIds);
+  }
 
   // QUICK WORKOUT MODE: Only S and A tier exercises (maximum efficiency)
   if (quickWorkoutMode) {
@@ -256,7 +265,8 @@ export function buildDetailedSessionWithFatigue(
   totalMesocycleWeeks: number,
   periodizationModel: PeriodizationModel,
   weeklyProgression: WeeklyProgression,
-  quickWorkoutMode: boolean = false
+  quickWorkoutMode: boolean = false,
+  unavailableEquipmentIds: string[] = []
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -310,7 +320,7 @@ export function buildDetailedSessionWithFatigue(
     }
 
     // Select exercises with fatigue awareness (prioritize S-tier in quick workout mode)
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode);
+    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
 
     for (const selection of selectedExercises) {
       // Determine position category
@@ -442,7 +452,8 @@ export function buildDUPSession(
   dupDayType: DUPDayType,
   weekInMesocycle: number,
   totalMesocycleWeeks: number,
-  quickWorkoutMode: boolean = false
+  quickWorkoutMode: boolean = false,
+  unavailableEquipmentIds: string[] = []
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -484,7 +495,7 @@ export function buildDUPSession(
     setsThisSession = Math.round(setsThisSession * volumeModifiers[dupDayType]);
     setsThisSession = Math.max(1, setsThisSession);
 
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode);
+    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
 
     for (const selection of selectedExercises) {
       const isCompound = selection.exercise.pattern !== 'isolation';
@@ -767,7 +778,8 @@ export function generateFullMesocycleWithFatigue(
   daysPerWeek: number,
   profile: ExtendedUserProfile,
   sessionMinutes: number = 60,
-  laggingAreas?: string[]
+  laggingAreas?: string[],
+  unavailableEquipmentIds: string[] = []
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -859,7 +871,8 @@ export function generateFullMesocycleWithFatigue(
           dupRotation[dupIndex % 3],
           weekNum,
           periodization.mesocycleWeeks,
-          quickWorkoutMode
+          quickWorkoutMode,
+          unavailableEquipmentIds
         );
         dupIndex++;
       } else {
@@ -874,7 +887,8 @@ export function generateFullMesocycleWithFatigue(
           periodization.mesocycleWeeks,
           periodization.model,
           weekProgression,
-          quickWorkoutMode
+          quickWorkoutMode,
+          unavailableEquipmentIds
         );
       }
 

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
+import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
 interface NutritionTotals {
@@ -1035,6 +1036,11 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ===== HYDRATION ===== */}
+      {userId && (
+        <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} />
+      )}
 
       {/* ===== WEEKLY VOLUME ===== */}
       <Card>
