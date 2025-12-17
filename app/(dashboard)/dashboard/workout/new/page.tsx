@@ -21,6 +21,22 @@ interface CustomExerciseForm {
   mechanic: 'compound' | 'isolation';
 }
 
+type Goal = 'bulk' | 'cut' | 'maintain';
+
+/**
+ * Get rest period based on exercise type and user's goal
+ */
+function getRestPeriod(isCompound: boolean, goal: Goal): number {
+  if (goal === 'cut') {
+    return isCompound ? 120 : 60;  // 2min / 1min
+  }
+  if (goal === 'bulk') {
+    return isCompound ? 180 : 90;  // 3min / 1.5min
+  }
+  // maintain
+  return isCompound ? 150 : 75;    // 2.5min / 1.25min
+}
+
 function NewWorkoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -279,6 +295,15 @@ function NewWorkoutContent() {
       
       if (!user) throw new Error('You must be logged in');
 
+      // Fetch user's goal from profile
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+      
+      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+
       // Create workout session
       const { data: session, error: sessionError } = await supabase
         .from('workout_sessions')
@@ -339,7 +364,7 @@ function NewWorkoutContent() {
           target_rep_range: isCompound ? [6, 10] : [10, 15], // Lower reps for compounds
           target_rir: 2,
           target_weight_kg: 0, // Will be set during workout
-          target_rest_seconds: isCompound ? 180 : 90, // Longer rest for compounds
+          target_rest_seconds: getRestPeriod(isCompound, userGoal),
           suggestion_reason: 'Selected by user',
           warmup_protocol: { sets: warmupSets },
         };

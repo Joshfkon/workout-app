@@ -26,6 +26,25 @@ interface TodayWorkout {
   dayNumber: number;
 }
 
+type Goal = 'bulk' | 'cut' | 'maintain';
+
+/**
+ * Get rest period based on exercise type and user's goal
+ * - Compound exercises need more rest for recovery
+ * - Cutting: shorter rest for metabolic demand
+ * - Bulking: full rest for maximum performance
+ */
+function getRestPeriod(isCompound: boolean, goal: Goal): number {
+  if (goal === 'cut') {
+    return isCompound ? 120 : 60;  // 2min / 1min
+  }
+  if (goal === 'bulk') {
+    return isCompound ? 180 : 90;  // 3min / 1.5min
+  }
+  // maintain
+  return isCompound ? 150 : 75;    // 2.5min / 1.25min
+}
+
 // Get workout schedule based on split type
 function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): TodayWorkout | null {
   const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
@@ -177,6 +196,15 @@ export default function MesocyclePage() {
       
       if (!user) throw new Error('Not logged in');
 
+      // Fetch user's goal from profile
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+      
+      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+
       // Check if there's already a workout for today
       const today = new Date().toISOString().split('T')[0];
       const { data: existingWorkout } = await supabase
@@ -279,7 +307,7 @@ export default function MesocyclePage() {
               target_rep_range: exercise.default_rep_range || [8, 12],
               target_rir: exercise.default_rir || 2,
               target_weight_kg: 0, // Will be filled from history or user input
-              target_rest_seconds: isCompound ? 180 : 90,
+              target_rest_seconds: getRestPeriod(isCompound, userGoal),
               suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
               warmup_protocol: { sets: warmupSets },
             });
