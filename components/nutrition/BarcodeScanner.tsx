@@ -96,11 +96,18 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         setDebugInfo(`Not found.\nBarcode: ${barcode}\nResult: ${resultInfo}`);
         
         const errorText = result?.error || '';
-        if (errorText.includes('API error') || errorText.includes('fetch')) {
+        // Check for actual connection/server errors (not 404 which just means not found)
+        const isConnectionError = errorText.includes('fetch') || 
+                                   errorText.includes('network') ||
+                                   errorText.includes('500') ||
+                                   errorText.includes('503');
+        
+        if (isConnectionError) {
           setError('Unable to reach food database. Check your connection.');
           setErrorType('error');
         } else {
-          setError('Product not found. Try searching by name instead.');
+          // 404 or "not found" means the product just isn't in the database
+          setError('Product not found in database. Try searching by name instead.');
           setErrorType('info');
         }
         setIsLookingUp(false);
