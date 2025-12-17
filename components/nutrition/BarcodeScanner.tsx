@@ -41,6 +41,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const startScanner = async () => {
     setError(null);
     setIsScanning(true);
+    setDebugInfo('Starting camera...');
 
     try {
       const html5QrCode = new Html5Qrcode('barcode-reader');
@@ -54,23 +55,40 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           aspectRatio: 1.777778,
         },
         async (decodedText) => {
-          // Prevent duplicate scans
-          if (decodedText === lastScanned) return;
-          setLastScanned(decodedText);
+          // Wrap entire callback in try-catch to prevent crashes
+          try {
+            // Prevent duplicate scans
+            if (decodedText === lastScanned) return;
+            setLastScanned(decodedText);
+            setDebugInfo(`Scanned: ${decodedText}`);
 
-          // Stop scanner
-          await html5QrCode.stop();
-          setIsScanning(false);
+            // Stop scanner safely
+            try {
+              await html5QrCode.stop();
+            } catch (stopErr) {
+              console.warn('Scanner stop warning:', stopErr);
+            }
+            setIsScanning(false);
 
-          // Look up the barcode
-          await handleBarcodeLookup(decodedText);
+            // Look up the barcode
+            await handleBarcodeLookup(decodedText);
+          } catch (callbackErr) {
+            const msg = callbackErr instanceof Error ? callbackErr.message : String(callbackErr);
+            setDebugInfo(`Scan callback error: ${msg}\nBarcode: ${decodedText}`);
+            setError('Error processing barcode. See debug info below.');
+            setErrorType('error');
+            setIsScanning(false);
+          }
         },
         () => {
           // QR code not found - this fires continuously, ignore
         }
       );
+      setDebugInfo('Camera ready. Point at barcode.');
     } catch (err) {
       setIsScanning(false);
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setDebugInfo(`Camera error: ${errMsg}`);
       setErrorType('info'); // Camera issues are informational, not critical errors
       if (err instanceof Error) {
         if (err.message.includes('Permission')) {
@@ -78,7 +96,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         } else if (err.message.includes('NotFoundError')) {
           setError('No camera found. Enter barcode manually below.');
         } else {
-          setError(`Camera unavailable. Enter barcode manually below.`);
+          setError(`Camera unavailable: ${err.message}`);
         }
       } else {
         setError('Camera unavailable. Enter barcode manually below.');
@@ -106,23 +124,52 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     try {
       // If using onScan mode, just pass the barcode to parent
       if (onScan) {
-        await onScan(barcode);
+        try {
+          await onScan(barcode);
+        } catch (scanErr) {
+          const msg = scanErr instanceof Error ? scanErr.message : String(scanErr);
+          setDebugInfo(`onScan error: ${msg}\nBarcode: ${barcode}`);
+          setError('Failed to process barcode.');
+          setErrorType('error');
+        }
+        setIsLookingUp(false);
         return;
       }
 
       // If using onProductFound mode, look up the barcode ourselves
       setDebugInfo(`Looking up: ${barcode}...`);
-      const result = await lookupBarcode(barcode);
       
-      if (result.found && result.product && onProductFound) {
+      let result;
+      try {
+        result = await lookupBarcode(barcode);
+      } catch (lookupErr) {
+        const msg = lookupErr instanceof Error ? lookupErr.message : String(lookupErr);
+        setDebugInfo(`Lookup exception: ${msg}\nBarcode: ${barcode}`);
+        setError('Failed to look up barcode.');
+        setErrorType('error');
+        setLastScanned(null);
+        setIsLookingUp(false);
+        return;
+      }
+      
+      if (result && result.found && result.product && onProductFound) {
         setDebugInfo(`Found: ${result.product.name}`);
-        onProductFound(result.product);
+        try {
+          onProductFound(result.product);
+        } catch (cbErr) {
+          const msg = cbErr instanceof Error ? cbErr.message : String(cbErr);
+          setDebugInfo(`Callback error: ${msg}`);
+          setError('Failed to add product.');
+          setErrorType('error');
+        }
       } else {
         // Show detailed debug info
-        setDebugInfo(`Barcode: ${barcode}\nResult: ${JSON.stringify(result, null, 2)}`);
+        const resultStr = result ? JSON.stringify(result, null, 2) : 'null result';
+        setDebugInfo(`Barcode: ${barcode}\nResult: ${resultStr}`);
         
         // Distinguish between "not found" and actual errors
-        if (result.error && (result.error.includes('API error') || result.error.includes('fetch'))) {
+        const errorText = result?.error || '';
+        if (errorText.includes('API error') || errorText.includes('fetch') || errorText.includes('exception')) {
           setError('Unable to reach food database. Check your connection.');
           setErrorType('error');
         } else {
@@ -132,8 +179,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         setLastScanned(null);
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      setDebugInfo(`Error: ${errorMsg}\nBarcode: ${barcode}`);
+      // Catch-all for any unexpected errors
+      const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setDebugInfo(`Unexpected error: ${errorMsg}\nBarcode: ${barcode}`);
       setError('Something went wrong. See details below.');
       setErrorType('error');
       setLastScanned(null);
@@ -264,19 +312,15 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </div>
       </div>
 
-      {/* Debug info (visible to help troubleshoot) */}
-      {debugInfo && (
-        <div className="px-4 pb-4">
-          <details className="text-xs">
-            <summary className="text-surface-500 cursor-pointer hover:text-surface-300">
-              🔍 Debug Info (tap to expand)
-            </summary>
-            <pre className="mt-2 p-2 bg-surface-900 rounded text-surface-400 overflow-x-auto whitespace-pre-wrap text-[10px]">
-              {debugInfo}
-            </pre>
-          </details>
+      {/* Debug info (always visible for troubleshooting) */}
+      <div className="px-4 pb-4">
+        <div className="p-2 bg-surface-900/80 rounded-lg border border-surface-700">
+          <p className="text-[10px] text-surface-500 font-medium mb-1">🔍 Debug Log:</p>
+          <pre className="text-[10px] text-surface-400 overflow-x-auto whitespace-pre-wrap break-all">
+            {debugInfo || 'Waiting to scan...'}
+          </pre>
         </div>
-      )}
+      </div>
     </div>
   );
 }
