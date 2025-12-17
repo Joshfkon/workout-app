@@ -63,7 +63,7 @@ export async function getUnavailableEquipment(userId: string): Promise<string[]>
     .eq('user_id', userId)
     .eq('is_available', false);
   
-  return data?.map(e => e.equipment_id) || [];
+  return data?.map((e: { equipment_id: string }) => e.equipment_id) || [];
 }
 
 /**
