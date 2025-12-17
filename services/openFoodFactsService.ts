@@ -53,40 +53,57 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
   const cleanBarcode = barcode.replace(/\D/g, '');
   
   if (!cleanBarcode || cleanBarcode.length < 8) {
-    return { found: false, error: 'Invalid barcode - must be at least 8 digits' };
+    return { found: false, error: `Invalid barcode (${cleanBarcode.length} digits) - must be at least 8` };
   }
 
+  let offError: string | undefined;
+  let usdaError: string | undefined;
+
   // Try Open Food Facts first
-  const offResult = await lookupBarcodeOpenFoodFacts(cleanBarcode);
-  if (offResult.found && offResult.product) {
-    return offResult;
+  try {
+    const offResult = await lookupBarcodeOpenFoodFacts(cleanBarcode);
+    if (offResult.found && offResult.product) {
+      return { ...offResult, error: undefined };
+    }
+    offError = offResult.error;
+  } catch (err) {
+    offError = `OFF exception: ${err instanceof Error ? err.message : String(err)}`;
   }
 
   // Fall back to USDA if not found in Open Food Facts
-  console.log('Product not found in Open Food Facts, trying USDA...');
-  const usdaResult = await lookupBarcodeUSDA(cleanBarcode);
-  
-  if (usdaResult.food) {
-    return {
-      found: true,
-      product: {
-        name: usdaResult.food.name,
-        brand: usdaResult.food.brandName,
-        servingSize: usdaResult.food.servingSize,
-        servingQuantity: 100,
-        calories: usdaResult.food.calories,
-        protein: usdaResult.food.protein,
-        carbs: usdaResult.food.carbs,
-        fat: usdaResult.food.fat,
-        barcode: cleanBarcode,
-      },
-    };
+  try {
+    const usdaResult = await lookupBarcodeUSDA(cleanBarcode);
+    
+    if (usdaResult.food) {
+      return {
+        found: true,
+        product: {
+          name: usdaResult.food.name,
+          brand: usdaResult.food.brandName,
+          servingSize: usdaResult.food.servingSize,
+          servingQuantity: 100,
+          calories: usdaResult.food.calories,
+          protein: usdaResult.food.protein,
+          carbs: usdaResult.food.carbs,
+          fat: usdaResult.food.fat,
+          barcode: cleanBarcode,
+        },
+      };
+    }
+    usdaError = usdaResult.error;
+  } catch (err) {
+    usdaError = `USDA exception: ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  // Neither found it
+  // Neither found it - return detailed error for debugging
+  const errorDetails = [
+    offError ? `OFF: ${offError}` : 'OFF: not found',
+    usdaError ? `USDA: ${usdaError}` : 'USDA: not found',
+  ].join(' | ');
+  
   return { 
     found: false, 
-    error: 'Product not found in our databases. Try searching by name instead.' 
+    error: errorDetails
   };
 }
 

@@ -25,6 +25,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -100,6 +101,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     setIsLookingUp(true);
     setError(null);
     setErrorType('info');
+    setDebugInfo(`Scanning: ${barcode}`);
 
     try {
       // If using onScan mode, just pass the barcode to parent
@@ -109,16 +111,19 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       }
 
       // If using onProductFound mode, look up the barcode ourselves
-      console.log('Looking up barcode:', barcode);
+      setDebugInfo(`Looking up: ${barcode}...`);
       const result = await lookupBarcode(barcode);
-      console.log('Barcode lookup result:', result);
-
+      
       if (result.found && result.product && onProductFound) {
+        setDebugInfo(`Found: ${result.product.name}`);
         onProductFound(result.product);
       } else {
+        // Show detailed debug info
+        setDebugInfo(`Barcode: ${barcode}\nResult: ${JSON.stringify(result, null, 2)}`);
+        
         // Distinguish between "not found" and actual errors
-        if (result.error && result.error.includes('API error')) {
-          setError('Unable to reach food database. Check your connection and try again.');
+        if (result.error && (result.error.includes('API error') || result.error.includes('fetch'))) {
+          setError('Unable to reach food database. Check your connection.');
           setErrorType('error');
         } else {
           setError('Product not found. Try searching by name instead.');
@@ -127,8 +132,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         setLastScanned(null);
       }
     } catch (err) {
-      console.error('Barcode lookup error:', err);
-      setError('Something went wrong. Please try again.');
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      setDebugInfo(`Error: ${errorMsg}\nBarcode: ${barcode}`);
+      setError('Something went wrong. See details below.');
       setErrorType('error');
       setLastScanned(null);
     } finally {
@@ -257,6 +263,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           </p>
         </div>
       </div>
+
+      {/* Debug info (visible to help troubleshoot) */}
+      {debugInfo && (
+        <div className="px-4 pb-4">
+          <details className="text-xs">
+            <summary className="text-surface-500 cursor-pointer hover:text-surface-300">
+              🔍 Debug Info (tap to expand)
+            </summary>
+            <pre className="mt-2 p-2 bg-surface-900 rounded text-surface-400 overflow-x-auto whitespace-pre-wrap text-[10px]">
+              {debugInfo}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 }
