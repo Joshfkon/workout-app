@@ -19,26 +19,110 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const { onClose } = props;
   const onProductFound = 'onProductFound' in props ? props.onProductFound : undefined;
   const onScan = 'onScan' in props ? props.onScan : undefined;
+  
   const [isScanning, setIsScanning] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
-  const [lastScanned, setLastScanned] = useState<string | null>(null);
   const [manualBarcode, setManualBarcode] = useState('');
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string>('Waiting to scan...');
+  
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const isMountedRef = useRef(true);
+  const isProcessingRef = useRef(false);
+  const lastScannedRef = useRef<string | null>(null);
 
+  // Cleanup on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
-      // Cleanup scanner on unmount
-      if (scannerRef.current) {
-        scannerRef.current.stop().catch(() => {});
+      isMountedRef.current = false;
+      // Stop scanner on unmount
+      const scanner = scannerRef.current;
+      if (scanner) {
+        scannerRef.current = null;
+        scanner.stop().catch(() => {});
       }
     };
   }, []);
 
+  // Process barcode lookup
+  const processBarcode = async (barcode: string) => {
+    if (isProcessingRef.current) {
+      setDebugInfo(prev => prev + '\n[Skip: Already processing]');
+      return;
+    }
+    isProcessingRef.current = true;
+    
+    setDebugInfo(`Processing: ${barcode}`);
+    setIsLookingUp(true);
+    setError(null);
+
+    try {
+      // Mode 1: Just pass barcode to parent
+      if (onScan) {
+        setDebugInfo(`Calling onScan(${barcode})...`);
+        await onScan(barcode);
+        if (isMountedRef.current) {
+          setDebugInfo(`onScan complete`);
+          setIsLookingUp(false);
+        }
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // Mode 2: Look up barcode and return product
+      setDebugInfo(`Looking up: ${barcode}...`);
+      
+      const result = await lookupBarcode(barcode);
+      
+      if (!isMountedRef.current) {
+        console.log('[Scanner] Unmounted during lookup');
+        isProcessingRef.current = false;
+        return;
+      }
+
+      if (result && result.found && result.product) {
+        setDebugInfo(`Found: ${result.product.name}`);
+        
+        if (onProductFound) {
+          // This will cause parent to re-render and unmount us
+          onProductFound(result.product);
+        }
+      } else {
+        // Not found
+        const resultInfo = result ? JSON.stringify(result, null, 2) : 'null';
+        setDebugInfo(`Not found.\nBarcode: ${barcode}\nResult: ${resultInfo}`);
+        
+        const errorText = result?.error || '';
+        if (errorText.includes('API error') || errorText.includes('fetch')) {
+          setError('Unable to reach food database. Check your connection.');
+          setErrorType('error');
+        } else {
+          setError('Product not found. Try searching by name instead.');
+          setErrorType('info');
+        }
+        setIsLookingUp(false);
+      }
+    } catch (err) {
+      if (!isMountedRef.current) {
+        isProcessingRef.current = false;
+        return;
+      }
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setDebugInfo(`Error: ${msg}\nBarcode: ${barcode}`);
+      setError('Something went wrong. See debug info.');
+      setErrorType('error');
+      setIsLookingUp(false);
+    } finally {
+      isProcessingRef.current = false;
+    }
+  };
+
   const startScanner = async () => {
+    if (!isMountedRef.current) return;
+    
     setError(null);
     setIsScanning(true);
     setDebugInfo('Starting camera...');
@@ -55,41 +139,48 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           aspectRatio: 1.777778,
         },
         async (decodedText) => {
-          // Wrap entire callback in try-catch to prevent crashes
-          try {
-            // Prevent duplicate scans
-            if (decodedText === lastScanned) return;
-            setLastScanned(decodedText);
+          // Prevent duplicate scans
+          if (decodedText === lastScannedRef.current) return;
+          if (isProcessingRef.current) return;
+          
+          lastScannedRef.current = decodedText;
+          
+          if (isMountedRef.current) {
             setDebugInfo(`Scanned: ${decodedText}`);
+          }
 
-            // Stop scanner safely
+          // Stop scanner first
+          const scanner = scannerRef.current;
+          if (scanner) {
+            scannerRef.current = null;
             try {
-              await html5QrCode.stop();
-            } catch (stopErr) {
-              console.warn('Scanner stop warning:', stopErr);
+              await scanner.stop();
+            } catch (e) {
+              console.warn('[Scanner] Stop error:', e);
             }
+          }
+          
+          if (isMountedRef.current) {
             setIsScanning(false);
-
-            // Look up the barcode
-            await handleBarcodeLookup(decodedText);
-          } catch (callbackErr) {
-            const msg = callbackErr instanceof Error ? callbackErr.message : String(callbackErr);
-            setDebugInfo(`Scan callback error: ${msg}\nBarcode: ${decodedText}`);
-            setError('Error processing barcode. See debug info below.');
-            setErrorType('error');
-            setIsScanning(false);
+            await processBarcode(decodedText);
           }
         },
         () => {
-          // QR code not found - this fires continuously, ignore
+          // QR code not found - fires continuously, ignore
         }
       );
-      setDebugInfo('Camera ready. Point at barcode.');
+      
+      if (isMountedRef.current) {
+        setDebugInfo('Camera ready. Point at barcode.');
+      }
     } catch (err) {
+      if (!isMountedRef.current) return;
+      
       setIsScanning(false);
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setDebugInfo(`Camera error: ${errMsg}`);
-      setErrorType('info'); // Camera issues are informational, not critical errors
+      setErrorType('info');
+      
       if (err instanceof Error) {
         if (err.message.includes('Permission')) {
           setError('Camera permission denied. Enter barcode manually below.');
@@ -105,94 +196,23 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   };
 
   const stopScanner = async () => {
-    if (scannerRef.current) {
+    const scanner = scannerRef.current;
+    if (scanner) {
+      scannerRef.current = null;
       try {
-        await scannerRef.current.stop();
+        await scanner.stop();
       } catch {
-        // Ignore errors when stopping
+        // Ignore
       }
     }
-    setIsScanning(false);
-  };
-
-  const handleBarcodeLookup = async (barcode: string) => {
-    setIsLookingUp(true);
-    setError(null);
-    setErrorType('info');
-    setDebugInfo(`Scanning: ${barcode}`);
-
-    try {
-      // If using onScan mode, just pass the barcode to parent
-      if (onScan) {
-        try {
-          await onScan(barcode);
-        } catch (scanErr) {
-          const msg = scanErr instanceof Error ? scanErr.message : String(scanErr);
-          setDebugInfo(`onScan error: ${msg}\nBarcode: ${barcode}`);
-          setError('Failed to process barcode.');
-          setErrorType('error');
-        }
-        setIsLookingUp(false);
-        return;
-      }
-
-      // If using onProductFound mode, look up the barcode ourselves
-      setDebugInfo(`Looking up: ${barcode}...`);
-      
-      let result;
-      try {
-        result = await lookupBarcode(barcode);
-      } catch (lookupErr) {
-        const msg = lookupErr instanceof Error ? lookupErr.message : String(lookupErr);
-        setDebugInfo(`Lookup exception: ${msg}\nBarcode: ${barcode}`);
-        setError('Failed to look up barcode.');
-        setErrorType('error');
-        setLastScanned(null);
-        setIsLookingUp(false);
-        return;
-      }
-      
-      if (result && result.found && result.product && onProductFound) {
-        setDebugInfo(`Found: ${result.product.name}`);
-        try {
-          onProductFound(result.product);
-        } catch (cbErr) {
-          const msg = cbErr instanceof Error ? cbErr.message : String(cbErr);
-          setDebugInfo(`Callback error: ${msg}`);
-          setError('Failed to add product.');
-          setErrorType('error');
-        }
-      } else {
-        // Show detailed debug info
-        const resultStr = result ? JSON.stringify(result, null, 2) : 'null result';
-        setDebugInfo(`Barcode: ${barcode}\nResult: ${resultStr}`);
-        
-        // Distinguish between "not found" and actual errors
-        const errorText = result?.error || '';
-        if (errorText.includes('API error') || errorText.includes('fetch') || errorText.includes('exception')) {
-          setError('Unable to reach food database. Check your connection.');
-          setErrorType('error');
-        } else {
-          setError('Product not found. Try searching by name instead.');
-          setErrorType('info');
-        }
-        setLastScanned(null);
-      }
-    } catch (err) {
-      // Catch-all for any unexpected errors
-      const errorMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      setDebugInfo(`Unexpected error: ${errorMsg}\nBarcode: ${barcode}`);
-      setError('Something went wrong. See details below.');
-      setErrorType('error');
-      setLastScanned(null);
-    } finally {
-      setIsLookingUp(false);
+    if (isMountedRef.current) {
+      setIsScanning(false);
     }
   };
 
-  const handleManualLookup = async () => {
+  const handleManualLookup = () => {
     if (!manualBarcode.trim()) return;
-    await handleBarcodeLookup(manualBarcode.trim());
+    processBarcode(manualBarcode.trim());
   };
 
   return (
@@ -304,20 +324,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       </div>
 
       {/* Tips */}
-      <div className="px-4 pb-4">
-        <div className="p-3 bg-surface-900/50 rounded-lg">
+      <div className="px-4 pb-2">
+        <div className="p-2 bg-surface-900/50 rounded-lg">
           <p className="text-xs text-surface-500">
-            💡 <span className="font-medium">Tip:</span> Make sure the barcode is well-lit and in focus. Most packaged foods have barcodes on the back or bottom.
+            💡 Make sure the barcode is well-lit and in focus.
           </p>
         </div>
       </div>
 
-      {/* Debug info (always visible for troubleshooting) */}
+      {/* Debug info (always visible) */}
       <div className="px-4 pb-4">
-        <div className="p-2 bg-surface-900/80 rounded-lg border border-surface-700">
-          <p className="text-[10px] text-surface-500 font-medium mb-1">🔍 Debug Log:</p>
-          <pre className="text-[10px] text-surface-400 overflow-x-auto whitespace-pre-wrap break-all">
-            {debugInfo || 'Waiting to scan...'}
+        <div className="p-2 bg-black/50 rounded-lg border border-surface-700">
+          <p className="text-[10px] text-yellow-400 font-mono mb-1">🔍 DEBUG:</p>
+          <pre className="text-[10px] text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+            {debugInfo}
           </pre>
         </div>
       </div>
