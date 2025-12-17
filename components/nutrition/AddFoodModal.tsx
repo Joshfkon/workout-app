@@ -166,7 +166,7 @@ export function AddFoodModal({
       } else if (result.food) {
         setSelectedFood(result.food);
         setServings('1');
-        setActiveTab('search'); // Switch back to show the food details
+        setActiveTab('quick'); // Switch back to show the food details
       }
     } catch (err) {
       setBarcodeError('Failed to lookup barcode. Please try again.');
