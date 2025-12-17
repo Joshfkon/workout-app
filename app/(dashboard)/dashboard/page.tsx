@@ -696,38 +696,119 @@ export default function DashboardPage() {
               </div>
 
               {/* Macros */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-surface-500">Protein</span>
-                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
+              {(() => {
+                // Calculate expected progress based on time of day
+                // Assume eating window is 7am-9pm (14 hours)
+                const now = new Date();
+                const hours = now.getHours();
+                const minutes = now.getMinutes();
+                const currentTimeInHours = hours + minutes / 60;
+                
+                // Calculate expected % (7am = 0%, 9pm = 100%)
+                const startHour = 7;  // 7am
+                const endHour = 21;   // 9pm
+                const totalWindow = endHour - startHour; // 14 hours
+                
+                let expectedPercent: number;
+                if (currentTimeInHours <= startHour) {
+                  expectedPercent = 0;
+                } else if (currentTimeInHours >= endHour) {
+                  expectedPercent = 100;
+                } else {
+                  expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
+                }
+                
+                // Helper to get pace status
+                const getPaceStatus = (actual: number, target: number) => {
+                  const actualPercent = (actual / target) * 100;
+                  const diff = actualPercent - expectedPercent;
+                  
+                  if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
+                  if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
+                  return { status: 'on-track', color: 'text-success-400', icon: '✓' };
+                };
+                
+                const proteinPace = getPaceStatus(nutritionTotals.protein, nutritionTargets.protein);
+                const carbsPace = getPaceStatus(nutritionTotals.carbs, nutritionTargets.carbs);
+                const fatPace = getPaceStatus(nutritionTotals.fat, nutritionTargets.fat);
+                
+                return (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-surface-500">Protein</span>
+                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
+                      </div>
+                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-surface-600">/ {nutritionTargets.protein}g</p>
+                        <span className={`text-[10px] ${proteinPace.color}`}>{proteinPace.icon}</span>
+                      </div>
+                      {/* Pace indicator bar */}
+                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                        <div 
+                          className={`absolute h-full rounded-full ${
+                            proteinPace.status === 'ahead' ? 'bg-amber-500/60' : 
+                            proteinPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                          }`} 
+                          style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} 
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-surface-500">Carbs</span>
+                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
+                      </div>
+                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-surface-600">/ {nutritionTargets.carbs}g</p>
+                        <span className={`text-[10px] ${carbsPace.color}`}>{carbsPace.icon}</span>
+                      </div>
+                      {/* Pace indicator bar */}
+                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                        <div 
+                          className={`absolute h-full rounded-full ${
+                            carbsPace.status === 'ahead' ? 'bg-amber-500/60' : 
+                            carbsPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                          }`} 
+                          style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} 
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-surface-500">Fat</span>
+                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
+                      </div>
+                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-pink-500" style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between mt-0.5">
+                        <p className="text-xs text-surface-600">/ {nutritionTargets.fat}g</p>
+                        <span className={`text-[10px] ${fatPace.color}`}>{fatPace.icon}</span>
+                      </div>
+                      {/* Pace indicator bar */}
+                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                        <div 
+                          className={`absolute h-full rounded-full ${
+                            fatPace.status === 'ahead' ? 'bg-amber-500/60' : 
+                            fatPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                          }`} 
+                          style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} 
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.protein}g</p>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-surface-500">Carbs</span>
-                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
-                  </div>
-                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.carbs}g</p>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-surface-500">Fat</span>
-                    <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
-                  </div>
-                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-pink-500" style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} />
-                  </div>
-                  <p className="text-xs text-surface-600 mt-0.5">/ {nutritionTargets.fat}g</p>
-                </div>
-              </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="text-center py-6">
