@@ -1,4 +1,7 @@
 // Open Food Facts API Service - Free, open-source food database with barcode lookup
+// Combined with USDA fallback for better coverage
+
+import { lookupBarcode as lookupBarcodeUSDA } from './usdaService';
 
 export interface OpenFoodFactsProduct {
   code: string;
@@ -42,17 +45,56 @@ export interface BarcodeSearchResult {
 }
 
 /**
- * Look up a food product by its barcode using Open Food Facts API
+ * Look up a food product by its barcode
+ * Tries Open Food Facts first (better international coverage), then falls back to USDA
  */
 export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResult> {
-  try {
-    // Clean the barcode - remove any non-numeric characters
-    const cleanBarcode = barcode.replace(/\D/g, '');
-    
-    if (!cleanBarcode || cleanBarcode.length < 8) {
-      return { found: false, error: 'Invalid barcode' };
-    }
+  // Clean the barcode - remove any non-numeric characters
+  const cleanBarcode = barcode.replace(/\D/g, '');
+  
+  if (!cleanBarcode || cleanBarcode.length < 8) {
+    return { found: false, error: 'Invalid barcode - must be at least 8 digits' };
+  }
 
+  // Try Open Food Facts first
+  const offResult = await lookupBarcodeOpenFoodFacts(cleanBarcode);
+  if (offResult.found && offResult.product) {
+    return offResult;
+  }
+
+  // Fall back to USDA if not found in Open Food Facts
+  console.log('Product not found in Open Food Facts, trying USDA...');
+  const usdaResult = await lookupBarcodeUSDA(cleanBarcode);
+  
+  if (usdaResult.food) {
+    return {
+      found: true,
+      product: {
+        name: usdaResult.food.name,
+        brand: usdaResult.food.brandName,
+        servingSize: usdaResult.food.servingSize,
+        servingQuantity: 100,
+        calories: usdaResult.food.calories,
+        protein: usdaResult.food.protein,
+        carbs: usdaResult.food.carbs,
+        fat: usdaResult.food.fat,
+        barcode: cleanBarcode,
+      },
+    };
+  }
+
+  // Neither found it
+  return { 
+    found: false, 
+    error: 'Product not found in our databases. Try searching by name instead.' 
+  };
+}
+
+/**
+ * Look up a food product by its barcode using Open Food Facts API
+ */
+async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<BarcodeSearchResult> {
+  try {
     const response = await fetch(
       `https://world.openfoodfacts.org/api/v2/product/${cleanBarcode}.json`,
       {
@@ -69,7 +111,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
     const data = await response.json();
 
     if (data.status !== 1 || !data.product) {
-      return { found: false, error: 'Product not found in database' };
+      return { found: false, error: 'Product not found in Open Food Facts' };
     }
 
     const product: OpenFoodFactsProduct = data.product;
@@ -124,7 +166,7 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
       },
     };
   } catch (error) {
-    console.error('Barcode lookup error:', error);
+    console.error('Open Food Facts barcode lookup error:', error);
     return { 
       found: false, 
       error: error instanceof Error ? error.message : 'Failed to look up barcode' 
