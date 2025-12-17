@@ -74,9 +74,21 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
         .single();
 
       if (todayData) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = todayData;
-        setMeasurements(measurementData);
+        setMeasurements({
+          neck: todayData.neck,
+          shoulders: todayData.shoulders,
+          chest: todayData.chest,
+          left_bicep: todayData.left_bicep,
+          right_bicep: todayData.right_bicep,
+          left_forearm: todayData.left_forearm,
+          right_forearm: todayData.right_forearm,
+          waist: todayData.waist,
+          hips: todayData.hips,
+          left_thigh: todayData.left_thigh,
+          right_thigh: todayData.right_thigh,
+          left_calf: todayData.left_calf,
+          right_calf: todayData.right_calf,
+        });
       }
 
       // Get last 5 measurement entries
@@ -88,11 +100,24 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
         .limit(5);
 
       if (historyData && historyData.length > 0) {
-        const formattedHistory = historyData.map((entry: Record<string, unknown>) => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { id, user_id, logged_at, notes, created_at, updated_at, ...measurementData } = entry;
-          return { logged_at: logged_at as string, measurements: measurementData as Measurements };
-        });
+        const formattedHistory = historyData.map((entry: Record<string, unknown>) => ({
+          logged_at: entry.logged_at as string,
+          measurements: {
+            neck: entry.neck as number | undefined,
+            shoulders: entry.shoulders as number | undefined,
+            chest: entry.chest as number | undefined,
+            left_bicep: entry.left_bicep as number | undefined,
+            right_bicep: entry.right_bicep as number | undefined,
+            left_forearm: entry.left_forearm as number | undefined,
+            right_forearm: entry.right_forearm as number | undefined,
+            waist: entry.waist as number | undefined,
+            hips: entry.hips as number | undefined,
+            left_thigh: entry.left_thigh as number | undefined,
+            right_thigh: entry.right_thigh as number | undefined,
+            left_calf: entry.left_calf as number | undefined,
+            right_calf: entry.right_calf as number | undefined,
+          } as Measurements,
+        }));
         setHistory(formattedHistory);
         
         // Set last measurement for comparison (skip today if it exists)
