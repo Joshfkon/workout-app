@@ -364,6 +364,7 @@ export default function WorkoutPage() {
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
+  const [restTimerSeconds, setRestTimerSeconds] = useState<number | null>(null); // Custom rest time (for warmups)
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   
@@ -2025,10 +2026,16 @@ export default function WorkoutPage() {
       {/* Rest timer - fixed position overlay, no layout shift */}
       {showRestTimer && (
         <RestTimer
-          defaultSeconds={currentBlock.targetRestSeconds}
+          defaultSeconds={restTimerSeconds ?? currentBlock.targetRestSeconds}
           autoStart
-          onComplete={() => setShowRestTimer(false)}
-          onDismiss={() => setShowRestTimer(false)}
+          onComplete={() => {
+            setShowRestTimer(false);
+            setRestTimerSeconds(null); // Reset to default for next time
+          }}
+          onDismiss={() => {
+            setShowRestTimer(false);
+            setRestTimerSeconds(null);
+          }}
         />
       )}
 
@@ -2178,6 +2185,11 @@ export default function WorkoutPage() {
                     onSetComplete={(data) => {
                       handleSetComplete(data);
                       setAddingExtraSet(null);
+                      setRestTimerSeconds(null); // Use default working set rest time
+                      setShowRestTimer(true);
+                    }}
+                    onWarmupComplete={(restSeconds) => {
+                      setRestTimerSeconds(restSeconds);
                       setShowRestTimer(true);
                     }}
                     onSetEdit={handleSetEdit}

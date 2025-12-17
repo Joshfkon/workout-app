@@ -788,6 +788,19 @@ export interface GenerateWarmupInput {
 }
 
 /**
+ * Get appropriate rest time for a warmup set based on intensity
+ * Lighter warmups need less rest, heavier warmups need more
+ */
+function getWarmupRestSeconds(percentOfWorking: number): number {
+  if (percentOfWorking <= 0) return 30;   // Empty bar / general warmup
+  if (percentOfWorking <= 40) return 30;  // Very light
+  if (percentOfWorking <= 50) return 45;  // Light
+  if (percentOfWorking <= 70) return 60;  // Medium
+  if (percentOfWorking <= 85) return 75;  // Heavy
+  return 90;                               // Very heavy (potentiation)
+}
+
+/**
  * Generate a warmup protocol based on working weight
  */
 export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] {
@@ -801,6 +814,7 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
         percentOfWorking: 50,
         targetReps: 10,
         purpose: 'Light activation',
+        restSeconds: 30,
       },
     ];
   }
@@ -815,6 +829,7 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
       percentOfWorking: 0,
       targetReps: 10,
       purpose: 'General warmup - increase blood flow',
+      restSeconds: 30,
     });
   }
 
@@ -844,6 +859,7 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
       percentOfWorking: percent,
       targetReps: reps,
       purpose,
+      restSeconds: getWarmupRestSeconds(percent),
     });
   });
 

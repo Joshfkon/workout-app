@@ -37,6 +37,7 @@ interface WarmupSetData {
   percentOfWorking: number;
   targetReps: number;
   purpose: string;
+  restSeconds?: number;  // Rest time after this warmup set
 }
 
 import { 
@@ -111,6 +112,7 @@ interface ExerciseCardProps {
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
+  onWarmupComplete?: (restSeconds: number) => void;  // Callback when a warmup set is completed
   availableExercises?: Exercise[];  // All exercises for swap suggestions
   isActive?: boolean;
   unit?: WeightUnit;
@@ -135,6 +137,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onTargetSetsChange,
   onExerciseSwap,
   onExerciseDelete,
+  onWarmupComplete,
   availableExercises = [],
   isActive = false,
   unit = 'kg',
@@ -885,6 +888,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-2 py-2">
                     <button
                       onClick={() => {
+                        const wasCompleted = completedWarmups.has(warmup.setNumber);
+                        
                         setCompletedWarmups(prev => {
                           const next = new Set(prev);
                           if (next.has(warmup.setNumber)) {
@@ -894,6 +899,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                           }
                           return next;
                         });
+                        
+                        // Trigger rest timer when completing (not unchecking) a warmup
+                        if (!wasCompleted && onWarmupComplete) {
+                          // Use warmup rest time, default to 45s if not specified
+                          const restTime = warmup.restSeconds || 45;
+                          onWarmupComplete(restTime);
+                        }
                       }}
                       className={`p-2 rounded-lg transition-colors ${
                         isWarmupCompleted 

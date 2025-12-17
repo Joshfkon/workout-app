@@ -400,6 +400,9 @@ export interface WarmupSet {
   
   /** Purpose of this warmup set (e.g., 'activation', 'groove practice', 'potentiation') */
   purpose: string;
+  
+  /** Rest time in seconds after this warmup set (shorter than working sets) */
+  restSeconds: number;
 }
 
 // ============ SET LOG ============
