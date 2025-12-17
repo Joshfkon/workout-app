@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
 import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
@@ -462,8 +462,9 @@ export default function NutritionPage() {
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
-        <div className="flex items-center justify-center py-20">
-          <div className="text-surface-400">Loading...</div>
+        <div className="flex flex-col items-center justify-center py-20">
+          <LoadingAnimation type="kettlebell" size="lg" />
+          <p className="mt-4 text-surface-400">Loading nutrition data...</p>
         </div>
       </div>
     );

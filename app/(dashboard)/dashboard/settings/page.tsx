@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation } from '@/components/ui';
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -245,8 +245,9 @@ export default function SettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto">
-        <p className="text-surface-400">Loading settings...</p>
+      <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-20">
+        <LoadingAnimation type="spinner" size="lg" />
+        <p className="mt-4 text-surface-400">Loading settings...</p>
       </div>
     );
   }

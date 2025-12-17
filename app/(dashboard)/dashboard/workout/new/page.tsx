@@ -560,8 +560,9 @@ function NewWorkoutContent() {
           
           {isLoading ? (
             <Card>
-              <CardContent className="py-8 text-center">
-                <p className="text-surface-400">Loading exercises...</p>
+              <CardContent className="py-8 flex flex-col items-center justify-center">
+                <LoadingAnimation type="muscle" size="md" />
+                <p className="text-surface-400 mt-3">Loading exercises...</p>
               </CardContent>
             </Card>
           ) : (

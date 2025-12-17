@@ -1986,8 +1986,8 @@ export default function WorkoutPage() {
               {/* AI-Powered Coach Notes */}
               {isLoadingAiNotes ? (
                 <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center gap-3">
+                    <LoadingAnimation type="dots" size="sm" />
                     <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
                   </div>
                 </div>

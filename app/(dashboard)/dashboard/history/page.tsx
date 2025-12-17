@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { Card, Badge, Button, FullPageLoading } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -581,8 +581,8 @@ function HistoryPageContent() {
           <p className="text-surface-400 mt-1">Your past training sessions</p>
         </div>
         <Card className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="text-surface-400 mt-4">Loading...</p>
+          <LoadingAnimation type="dumbbell" size="md" />
+          <p className="text-surface-400 mt-4">Loading your workout history...</p>
         </Card>
       </div>
     );
