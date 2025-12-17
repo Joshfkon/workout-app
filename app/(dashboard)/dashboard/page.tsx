@@ -955,7 +955,20 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-surface-100">
-                      {todaysWeight.weight} <span className="text-base font-normal text-surface-400">{todaysWeight.unit}</span>
+                      {(() => {
+                        // Convert to user's preferred unit if needed
+                        let displayWeight = todaysWeight.weight;
+                        const storedUnit = todaysWeight.unit || 'kg';
+                        if (storedUnit !== weightUnit) {
+                          // Convert: stored in kg but user wants lb, or vice versa
+                          if (storedUnit === 'kg' && weightUnit === 'lb') {
+                            displayWeight = todaysWeight.weight * 2.20462;
+                          } else if (storedUnit === 'lb' && weightUnit === 'kg') {
+                            displayWeight = todaysWeight.weight / 2.20462;
+                          }
+                        }
+                        return displayWeight.toFixed(1);
+                      })()} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
                     </p>
                     <p className="text-xs text-surface-500">Logged today</p>
                   </div>
@@ -971,8 +984,13 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between text-xs text-surface-500 mb-2">
                     <span>30 Day Trend</span>
                     {(() => {
-                      const first = weightHistory[0]?.weight || 0;
-                      const last = weightHistory[weightHistory.length - 1]?.weight || 0;
+                      // Convert weights to user's preferred unit for diff calculation
+                      const convertWeight = (w: { weight: number; unit: string }) => {
+                        if (w.unit === weightUnit) return w.weight;
+                        return w.unit === 'kg' ? w.weight * 2.20462 : w.weight / 2.20462;
+                      };
+                      const first = weightHistory[0] ? convertWeight(weightHistory[0]) : 0;
+                      const last = weightHistory[weightHistory.length - 1] ? convertWeight(weightHistory[weightHistory.length - 1]) : 0;
                       const diff = last - first;
                       const diffFormatted = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
                       return (
