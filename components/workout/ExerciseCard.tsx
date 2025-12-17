@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
@@ -227,53 +227,105 @@ export const ExerciseCard = memo(function ExerciseCard({
   const displayWeight = (kg: number) => formatWeightValue(kg, unit);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
-  // Initialize pending inputs when sets change
+  // Track the last known completed sets count to detect changes
+  const prevCompletedCountRef = useRef(completedSets.length);
+  
+  // Initialize pending inputs when component mounts or when we need a full reset
+  // Only reinitialize when pendingSetsCount increases (sets were added) or on first mount
   useEffect(() => {
-    const newPendingInputs: { weight: string; reps: string; rpe: string }[] = [];
-    const targetRpe = 10 - block.targetRir;
+    const prevCount = prevCompletedCountRef.current;
+    const currentCount = completedSets.length;
+    prevCompletedCountRef.current = currentCount;
     
-    for (let i = 0; i < pendingSetsCount; i++) {
-      const setIndex = completedSets.length + i;
-      
-      // Try to get previous workout's data for this set
-      const prevSet = previousSets[setIndex];
-      
-      // Get the last completed set to use as reference
-      const lastCompleted = completedSets[completedSets.length - 1];
-      
-      let defaultWeight: number;
-      let defaultReps: number;
-      
-      if (lastCompleted) {
-        // Use last completed set from current workout
-        // Adjust weight based on RPE feedback
-        const lastRpe = lastCompleted.rpe;
-        if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
-          // RPE was off target, suggest adjusted weight
-          defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-        } else {
-          defaultWeight = lastCompleted.weightKg;
+    // If a set was just completed (count increased), shift the pending inputs
+    // Don't reinitialize - just remove the first entry which was the completed set
+    if (currentCount > prevCount) {
+      setPendingInputs(prev => {
+        // Remove the first N entries that were completed
+        const setsCompleted = currentCount - prevCount;
+        const remaining = prev.slice(setsCompleted);
+        
+        // If we have fewer pending inputs than needed, add new ones
+        const targetRpe = 10 - block.targetRir;
+        const lastCompleted = completedSets[completedSets.length - 1];
+        
+        while (remaining.length < pendingSetsCount) {
+          let defaultWeight: number;
+          let defaultReps: number;
+          
+          if (lastCompleted) {
+            const lastRpe = lastCompleted.rpe;
+            if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
+              defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
+            } else {
+              defaultWeight = lastCompleted.weightKg;
+            }
+            defaultReps = lastCompleted.reps;
+          } else {
+            defaultWeight = suggestedWeight;
+            defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+          }
+          
+          remaining.push({
+            weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
+            reps: String(defaultReps),
+            rpe: String(targetRpe),
+          });
         }
-        defaultReps = lastCompleted.reps;
-      } else if (prevSet) {
-        // Use previous workout's data
-        defaultWeight = prevSet.weightKg;
-        defaultReps = prevSet.reps;
-      } else {
-        // Use suggested weight and middle of rep range
-        defaultWeight = suggestedWeight;
-        defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
-      }
-      
-      newPendingInputs.push({
-        weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
-        reps: String(defaultReps),
-        rpe: String(targetRpe),
+        
+        return remaining;
       });
+      return;
     }
     
-    setPendingInputs(newPendingInputs);
-  }, [completedSets.length, pendingSetsCount, suggestedWeight, block.targetRepRange, block.targetRir]);
+    // Full initialization only if:
+    // - pendingInputs is empty and we need inputs
+    // - OR pendingSetsCount increased (new sets were added to the target)
+    if (pendingSetsCount > 0 && (pendingInputs.length === 0 || pendingInputs.length < pendingSetsCount)) {
+      const newPendingInputs: { weight: string; reps: string; rpe: string }[] = [];
+      const targetRpe = 10 - block.targetRir;
+      
+      for (let i = 0; i < pendingSetsCount; i++) {
+        // Keep existing input if available
+        if (i < pendingInputs.length && pendingInputs[i]) {
+          newPendingInputs.push(pendingInputs[i]);
+          continue;
+        }
+        
+        const setIndex = completedSets.length + i;
+        const prevSet = previousSets[setIndex];
+        const lastCompleted = completedSets[completedSets.length - 1];
+        
+        let defaultWeight: number;
+        let defaultReps: number;
+        
+        if (lastCompleted) {
+          const lastRpe = lastCompleted.rpe;
+          if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.5) {
+            defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
+          } else {
+            defaultWeight = lastCompleted.weightKg;
+          }
+          defaultReps = lastCompleted.reps;
+        } else if (prevSet) {
+          defaultWeight = prevSet.weightKg;
+          defaultReps = prevSet.reps;
+        } else {
+          defaultWeight = suggestedWeight;
+          defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+        }
+        
+        newPendingInputs.push({
+          weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
+          reps: String(defaultReps),
+          rpe: String(targetRpe),
+        });
+      }
+      
+      setPendingInputs(newPendingInputs);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedSets.length, pendingSetsCount]);
 
   // Swipe to delete handlers
   const handleTouchStart = (setId: string, e: React.TouchEvent) => {
