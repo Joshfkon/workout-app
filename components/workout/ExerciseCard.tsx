@@ -1030,7 +1030,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               ) : (
                 <tr
                   key={set.id}
-                  className="hover:bg-surface-800/30 group bg-success-500/5 relative"
+                  className="hover:bg-surface-800/30 group bg-success-500/5 relative overflow-hidden"
                   onTouchStart={(e) => handleTouchStart(set.id, e)}
                   onTouchMove={handleTouchMove}
                   onTouchEnd={() => handleTouchEnd(set.id, true)}
@@ -1038,14 +1038,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 >
                   {/* Delete reveal background for swipe */}
                   {swipeState.setId === set.id && swipeState.isSwiping && (
-                    <td 
-                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white"
-                      style={{ right: 0, position: 'absolute', height: '100%' }}
+                    <div 
+                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                    </td>
+                    </div>
                   )}
                   <td className="px-3 py-2.5 text-surface-300 font-medium">
                     {set.setNumber}
@@ -1108,7 +1107,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               return (
                 <tr 
                   key={`pending-${index}`} 
-                  className="bg-surface-800/30 relative"
+                  className="bg-surface-800/30 relative overflow-hidden"
                   onTouchStart={(e) => handleTouchStart(`pending-${index}`, e)}
                   onTouchMove={handleTouchMove}
                   onTouchEnd={() => handleTouchEnd(`pending-${index}`, false)}
@@ -1116,14 +1115,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 >
                   {/* Delete reveal background */}
                   {swipeState.setId === `pending-${index}` && swipeState.isSwiping && (
-                    <td 
-                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500/20 text-danger-400"
-                      style={{ right: 0, position: 'absolute', height: '100%' }}
+                    <div 
+                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                       </svg>
-                    </td>
+                    </div>
                   )}
                   <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
                   <td className="px-1 py-1.5">
