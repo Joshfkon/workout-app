@@ -56,7 +56,7 @@ export function GymEquipmentSettings() {
       
       // Default all equipment to available
       const defaultMap = new Map<string, boolean>();
-      typesData.forEach(eq => defaultMap.set(eq.id, true));
+      typesData.forEach((eq: EquipmentType) => defaultMap.set(eq.id, true));
       
       // Load user's equipment preferences
       const { data: userEqData } = await supabase
@@ -65,7 +65,7 @@ export function GymEquipmentSettings() {
         .eq('user_id', user.id);
 
       if (userEqData) {
-        userEqData.forEach(ue => defaultMap.set(ue.equipment_id, ue.is_available));
+        userEqData.forEach((ue: UserEquipment) => defaultMap.set(ue.equipment_id, ue.is_available));
       }
       
       setUserEquipment(defaultMap);
