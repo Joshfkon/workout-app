@@ -32,7 +32,7 @@ interface AddFoodModalProps {
   systemFoods?: SystemFood[];
 }
 
-type Tab = 'search' | 'quick' | 'recent' | 'custom' | 'manual' | 'barcode';
+type Tab = 'quick' | 'barcode' | 'custom' | 'manual';
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
   protein: { label: 'Proteins', emoji: '🥩' },
@@ -60,7 +60,7 @@ export function AddFoodModal({
   frequentFoods = [],
   systemFoods = [],
 }: AddFoodModalProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('search');
+  const [activeTab, setActiveTab] = useState<Tab>('quick');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<FoodSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -574,10 +574,9 @@ export function AddFoodModal({
         <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
           {([
             { id: 'quick' as Tab, label: '⚡ Quick Add' },
-            { id: 'search' as Tab, label: 'Search' },
-            { id: 'barcode' as Tab, label: 'Barcode' },
-            { id: 'custom' as Tab, label: 'Custom' },
-            { id: 'manual' as Tab, label: 'Manual' },
+            { id: 'barcode' as Tab, label: '📷 Barcode' },
+            { id: 'custom' as Tab, label: '📁 Custom' },
+            { id: 'manual' as Tab, label: '✏️ Manual' },
           ]).map((tab) => (
             <button
               key={tab.id}
@@ -765,159 +764,6 @@ export function AddFoodModal({
           </div>
         )}
 
-        {/* Search Tab */}
-        {activeTab === 'search' && (
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <Input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Search foods (e.g., '2 eggs and toast')"
-                className="flex-1"
-              />
-              <Button
-                onClick={handleSearch}
-                disabled={isSearching || !searchQuery.trim()}
-                variant="primary"
-              >
-                {isSearching ? 'Searching...' : 'Search'}
-              </Button>
-            </div>
-
-            {searchError && (
-              <p className="text-sm text-warning-400">{searchError}</p>
-            )}
-
-            {selectedFood ? (
-              <div className="space-y-4 p-4 bg-surface-800 rounded-lg">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-medium text-surface-100">{selectedFood.name}</h3>
-                    {selectedFood.brandName && (
-                      <p className="text-xs text-primary-400">{selectedFood.brandName}</p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setSelectedFood(null)}
-                    className="text-surface-400 hover:text-surface-200"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                {isLoadingDetails ? (
-                  <div className="text-center py-4 text-surface-400">
-                    Loading serving options...
-                  </div>
-                ) : (
-                  <>
-                    {/* Serving Size Selector */}
-                    {(() => {
-                      const foodWithServings = selectedFood as FoodSearchResultWithServings;
-                      const servings = foodWithServings.servings;
-                      if (!servings || servings.length <= 1) return null;
-                      return (
-                        <div>
-                          <label className="block text-sm font-medium text-surface-300 mb-1">
-                            Serving Size
-                          </label>
-                          <select
-                            value={selectedServingIndex}
-                            onChange={(e) => setSelectedServingIndex(parseInt(e.target.value))}
-                            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          >
-                            {servings.map((serving, idx) => (
-                              <option key={idx} value={idx}>
-                                {serving.description} ({serving.calories} cal)
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Nutrition Info */}
-                    <div className="grid grid-cols-4 gap-2 text-sm">
-                      {(() => {
-                        const foodWithServings = selectedFood as FoodSearchResultWithServings;
-                        const serving = foodWithServings.servings?.[selectedServingIndex];
-                        const cal = serving?.calories ?? selectedFood.calories;
-                        const prot = serving?.protein ?? selectedFood.protein;
-                        const carb = serving?.carbs ?? selectedFood.carbs;
-                        const f = serving?.fat ?? selectedFood.fat;
-                        return (
-                          <>
-                            <div>
-                              <p className="text-surface-400">Calories</p>
-                              <p className="font-medium text-surface-100">{cal}</p>
-                            </div>
-                            <div>
-                              <p className="text-surface-400">Protein</p>
-                              <p className="font-medium text-surface-100">{prot}g</p>
-                            </div>
-                            <div>
-                              <p className="text-surface-400">Carbs</p>
-                              <p className="font-medium text-surface-100">{carb}g</p>
-                            </div>
-                            <div>
-                              <p className="text-surface-400">Fat</p>
-                              <p className="font-medium text-surface-100">{f}g</p>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-surface-300 mb-1">
-                        Number of Servings
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0.1"
-                        value={servings}
-                        onChange={(e) => setServings(e.target.value)}
-                      />
-                    </div>
-
-                    <Button
-                      onClick={handleAddSelectedFood}
-                      variant="primary"
-                      disabled={isSubmitting}
-                      className="w-full"
-                    >
-                      {isSubmitting ? 'Adding...' : 'Add to Log'}
-                    </Button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {searchResults.map((food, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectFood(food)}
-                    className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium text-surface-100">{food.name}</h4>
-                        <p className="text-sm text-surface-400">{food.servingSize}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-surface-100">{food.calories} cal</p>
-                        <p className="text-sm text-surface-400">{food.protein}g protein</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Barcode Scanner Tab */}
         {activeTab === 'barcode' && (
           <div className="space-y-4">
@@ -934,49 +780,12 @@ export function AddFoodModal({
             ) : (
               <BarcodeScanner
                 onScan={handleBarcodeScanned}
-                onClose={() => setActiveTab('search')}
+                onClose={() => setActiveTab('quick')}
               />
             )}
           </div>
         )}
 
-        {/* Recent Foods Tab */}
-        {activeTab === 'recent' && (
-          <div className="space-y-4">
-            <Input
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Filter recent foods..."
-              className="w-full"
-            />
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {filteredRecentFoods.length === 0 ? (
-                <p className="text-center text-surface-400 py-8">
-                  {filterQuery ? 'No matching foods found' : 'No recent foods yet'}
-                </p>
-              ) : (
-                filteredRecentFoods.slice(0, 20).map((food, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectFood(food)}
-                    className="w-full p-3 bg-surface-800 hover:bg-surface-700 rounded-lg text-left transition-colors"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium text-surface-100">{food.name}</h4>
-                        <p className="text-sm text-surface-400">{food.servingSize}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium text-surface-100">{food.calories} cal</p>
-                        <p className="text-sm text-surface-400">{food.protein}g protein</p>
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Custom Foods Tab */}
         {activeTab === 'custom' && (

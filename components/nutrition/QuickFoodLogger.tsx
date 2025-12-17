@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui';
-import { searchFoods, type FoodSearchResult } from '@/services/usdaService';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { BarcodeSearchResult } from '@/services/openFoodFactsService';
+import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
 interface QuickFoodLoggerProps {
   onAdd: (food: {
@@ -15,19 +15,45 @@ interface QuickFoodLoggerProps {
     protein: number;
     carbs: number;
     fat: number;
-    meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+    meal_type: MealType;
     source: 'usda' | 'manual' | 'barcode';
   }) => Promise<void>;
   onClose: () => void;
+  frequentFoods?: FrequentFood[];
+  systemFoods?: SystemFood[];
+  defaultMealType?: MealType;
 }
 
-export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
-  const [mode, setMode] = useState<'search' | 'manual' | 'barcode'>('search');
+const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: '🌅 Breakfast',
+  lunch: '☀️ Lunch',
+  dinner: '🌙 Dinner',
+  snack: '🍎 Snack',
+};
+
+const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
+  protein: { label: 'Proteins', emoji: '🥩' },
+  carbs: { label: 'Carbs', emoji: '🍚' },
+  fats: { label: 'Fats', emoji: '🥜' },
+  vegetables: { label: 'Vegetables', emoji: '🥦' },
+  fruits: { label: 'Fruits', emoji: '🍎' },
+  supplements: { label: 'Supplements', emoji: '💪' },
+};
+
+export function QuickFoodLogger({ 
+  onAdd, 
+  onClose, 
+  frequentFoods = [], 
+  systemFoods = [],
+  defaultMealType = 'lunch',
+}: QuickFoodLoggerProps) {
+  const [mode, setMode] = useState<'foods' | 'barcode' | 'manual'>('foods');
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<FoodSearchResult[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
+  const [selectedFood, setSelectedFood] = useState<SystemFood | null>(null);
+  const [weightAmount, setWeightAmount] = useState('100');
+  const [weightUnit, setWeightUnit] = useState<'g' | 'oz'>('g');
 
   // Manual entry state
   const [manualName, setManualName] = useState('');
@@ -39,32 +65,72 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
   // Barcode product state
   const [barcodeProduct, setBarcodeProduct] = useState<NonNullable<BarcodeSearchResult['product']> | null>(null);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    setIsSearching(true);
-    try {
-      const result = await searchFoods(query);
-      setResults((result.foods || []).slice(0, 5));
-    } catch (error) {
-      console.error('Search failed:', error);
-    } finally {
-      setIsSearching(false);
-    }
-  };
+  // Get frequent foods for the selected meal type
+  const frequentFoodsForMeal = useMemo(() => {
+    return frequentFoods
+      .filter(f => f.meal_type === mealType)
+      .sort((a, b) => b.times_logged - a.times_logged)
+      .slice(0, 5);
+  }, [frequentFoods, mealType]);
 
-  const handleQuickAdd = async (food: FoodSearchResult) => {
+  // Filter system foods based on search
+  const filteredSystemFoods = useMemo(() => {
+    if (!query.trim()) return systemFoods.slice(0, 15);
+    const q = query.toLowerCase();
+    return systemFoods.filter(f => f.name.toLowerCase().includes(q)).slice(0, 20);
+  }, [systemFoods, query]);
+
+  // Calculate nutrition for selected system food
+  const calculatedNutrition = useMemo(() => {
+    if (!selectedFood) return null;
+    const inputAmount = parseFloat(weightAmount) || 0;
+    const gramsAmount = weightUnit === 'oz' ? inputAmount * 28.3495 : inputAmount;
+    const multiplier = gramsAmount / 100;
+    return {
+      calories: Math.round(selectedFood.calories_per_100g * multiplier),
+      protein: Math.round(selectedFood.protein_per_100g * multiplier * 10) / 10,
+      carbs: Math.round(selectedFood.carbs_per_100g * multiplier * 10) / 10,
+      fat: Math.round(selectedFood.fat_per_100g * multiplier * 10) / 10,
+    };
+  }, [selectedFood, weightAmount, weightUnit]);
+
+  const handleAddFrequentFood = async (food: FrequentFood) => {
     setIsAdding(true);
     try {
       await onAdd({
-        food_name: food.name,
-        serving_size: food.servingSize || '1 serving',
+        food_name: food.food_name,
+        serving_size: food.serving_size || '1 serving',
         servings: 1,
-        calories: food.calories,
-        protein: food.protein,
-        carbs: food.carbs,
-        fat: food.fat,
+        calories: Math.round(food.avg_calories),
+        protein: Math.round(food.avg_protein * 10) / 10,
+        carbs: Math.round(food.avg_carbs * 10) / 10,
+        fat: Math.round(food.avg_fat * 10) / 10,
         meal_type: mealType,
-        source: 'usda',
+        source: 'manual',
+      });
+      onClose();
+    } catch (error) {
+      console.error('Failed to add food:', error);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleAddSystemFood = async () => {
+    if (!selectedFood || !calculatedNutrition) return;
+    setIsAdding(true);
+    try {
+      const inputAmount = parseFloat(weightAmount) || 100;
+      await onAdd({
+        food_name: selectedFood.name,
+        serving_size: `${inputAmount}${weightUnit}`,
+        servings: 1,
+        calories: calculatedNutrition.calories,
+        protein: calculatedNutrition.protein,
+        carbs: calculatedNutrition.carbs,
+        fat: calculatedNutrition.fat,
+        meal_type: mealType,
+        source: 'manual',
       });
       onClose();
     } catch (error) {
@@ -136,7 +202,10 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
         {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((type) => (
           <button
             key={type}
-            onClick={() => setMealType(type)}
+            onClick={() => {
+              setMealType(type);
+              setSelectedFood(null);
+            }}
             className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
               mealType === type
                 ? 'bg-primary-500 text-white'
@@ -151,83 +220,166 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
       {/* Mode Toggle */}
       <div className="flex gap-1 bg-surface-900 p-1 rounded-lg">
         <button
-          onClick={() => { setMode('search'); setBarcodeProduct(null); }}
+          onClick={() => { setMode('foods'); setBarcodeProduct(null); setSelectedFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
-            mode === 'search'
+            mode === 'foods'
               ? 'bg-surface-700 text-white'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          Search
+          ⚡ Quick Add
         </button>
         <button
-          onClick={() => { setMode('barcode'); setBarcodeProduct(null); }}
+          onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'barcode'
               ? 'bg-surface-700 text-white'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-          </svg>
-          Scan
+          📷 Scan
         </button>
         <button
-          onClick={() => { setMode('manual'); setBarcodeProduct(null); }}
+          onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'manual'
               ? 'bg-surface-700 text-white'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          Manual
+          ✏️ Manual
         </button>
       </div>
 
-      {mode === 'search' ? (
+      {mode === 'foods' ? (
         <>
           {/* Search Input */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Search foods..."
-              className="flex-1 px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
-            />
-            <Button
-              onClick={handleSearch}
-              isLoading={isSearching}
-              size="sm"
-            >
-              Search
-            </Button>
-          </div>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSelectedFood(null); }}
+            placeholder="Search foods..."
+            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
+          />
 
-          {/* Results */}
-          {results.length > 0 && (
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {results.map((food, idx) => (
+          {selectedFood ? (
+            /* Selected Food - Weight Entry */
+            <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-surface-100">{selectedFood.name}</p>
+                  <p className="text-xs text-surface-400">{selectedFood.calories_per_100g} cal per 100g</p>
+                </div>
                 <button
-                  key={idx}
-                  onClick={() => handleQuickAdd(food)}
-                  disabled={isAdding}
-                  className="w-full p-3 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors disabled:opacity-50"
+                  onClick={() => setSelectedFood(null)}
+                  className="text-surface-400 hover:text-surface-200 text-lg"
                 >
-                  <p className="text-sm font-medium text-surface-200 truncate">{food.name}</p>
-                  <p className="text-xs text-surface-500 mt-0.5">
-                    {food.calories} cal · P: {food.protein}g · C: {food.carbs}g · F: {food.fat}g
-                  </p>
+                  ×
                 </button>
-              ))}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={weightAmount}
+                  onChange={(e) => setWeightAmount(e.target.value)}
+                  placeholder="100"
+                  className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100"
+                />
+                <select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value as 'g' | 'oz')}
+                  className="px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100"
+                >
+                  <option value="g">g</option>
+                  <option value="oz">oz</option>
+                </select>
+              </div>
+
+              {calculatedNutrition && (
+                <div className="grid grid-cols-4 gap-1 text-center text-xs">
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-surface-100">{calculatedNutrition.calories}</p>
+                    <p className="text-surface-500">cal</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-red-400">{calculatedNutrition.protein}g</p>
+                    <p className="text-surface-500">protein</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-yellow-400">{calculatedNutrition.carbs}g</p>
+                    <p className="text-surface-500">carbs</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-blue-400">{calculatedNutrition.fat}g</p>
+                    <p className="text-surface-500">fat</p>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleAddSystemFood}
+                isLoading={isAdding}
+                className="w-full"
+              >
+                Add to {mealType}
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {/* Frequent Foods for this Meal */}
+              {!query && frequentFoodsForMeal.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">
+                    Your {MEAL_LABELS[mealType].split(' ')[1]} favorites
+                  </p>
+                  <div className="space-y-1">
+                    {frequentFoodsForMeal.map((food, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleAddFrequentFood(food)}
+                        disabled={isAdding}
+                        className="w-full p-2 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-surface-200">{food.food_name}</p>
+                          <p className="text-xs text-surface-500">
+                            {Math.round(food.avg_calories)} cal · {food.times_logged}x
+                          </p>
+                        </div>
+                        <span className="text-primary-400 text-xs">+ Add</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* System Foods */}
+              {filteredSystemFoods.length > 0 && (
+                <div>
+                  {!query && <p className="text-xs font-medium text-surface-400 uppercase tracking-wide mb-2">All Foods</p>}
+                  <div className="space-y-1">
+                    {filteredSystemFoods.map((food) => (
+                      <button
+                        key={food.id}
+                        onClick={() => { setSelectedFood(food); setWeightAmount('100'); }}
+                        className="w-full p-2 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors"
+                      >
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-surface-200">{food.name}</span>
+                          <span className="text-xs text-surface-500">
+                            {food.calories_per_100g} cal | {food.protein_per_100g}g P
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {query && filteredSystemFoods.length === 0 && (
+                <p className="text-center text-surface-400 py-4 text-sm">No foods found</p>
+              )}
             </div>
           )}
         </>
@@ -367,4 +519,3 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
     </div>
   );
 }
-

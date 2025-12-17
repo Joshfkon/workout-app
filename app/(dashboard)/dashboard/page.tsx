@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
+import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
 interface NutritionTotals {
   calories: number;
@@ -117,6 +118,8 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>('maintain');
   const [debugError, setDebugError] = useState<string | null>(null);
+  const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
+  const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
   // Debug: Catch global errors
   useEffect(() => {
@@ -372,6 +375,60 @@ export default function DashboardPage() {
             .sort((a, b) => b.sets - a.sets);
 
           setMuscleVolume(stats);
+        }
+
+        // Load frequent foods (aggregated from food_log)
+        const { data: frequentData } = await supabase
+          .from('food_log')
+          .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(500);
+
+        if (frequentData && frequentData.length > 0) {
+          const frequencyMap = new Map<string, FrequentFood>();
+          
+          for (const entry of frequentData) {
+            if (!entry.food_name) continue;
+            const key = `${entry.meal_type}:${entry.food_name}`;
+            const existing = frequencyMap.get(key);
+            const servingsNum = entry.servings || 1;
+            
+            if (existing) {
+              const totalLogs = existing.times_logged + 1;
+              existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
+              existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
+              existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
+              existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
+              existing.times_logged = totalLogs;
+            } else {
+              frequencyMap.set(key, {
+                user_id: user.id,
+                meal_type: entry.meal_type as MealType,
+                food_name: entry.food_name,
+                serving_size: entry.serving_size,
+                avg_calories: (entry.calories || 0) / servingsNum,
+                avg_protein: (entry.protein || 0) / servingsNum,
+                avg_carbs: (entry.carbs || 0) / servingsNum,
+                avg_fat: (entry.fat || 0) / servingsNum,
+                times_logged: 1,
+                last_logged: new Date().toISOString(),
+              });
+            }
+          }
+          
+          setFrequentFoods(Array.from(frequencyMap.values()));
+        }
+
+        // Load system foods (pre-populated bodybuilding foods)
+        const { data: systemFoodsData } = await supabase
+          .from('system_foods')
+          .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+          .eq('is_active', true)
+          .order('name');
+
+        if (systemFoodsData) {
+          setSystemFoods(systemFoodsData as SystemFood[]);
         }
 
       } catch (error) {
@@ -666,7 +723,12 @@ export default function DashboardPage() {
         <CardContent>
           {showQuickLogger && (
             <div className="mb-4">
-              <QuickFoodLogger onAdd={handleAddFood} onClose={() => setShowQuickLogger(false)} />
+              <QuickFoodLogger 
+                onAdd={handleAddFood} 
+                onClose={() => setShowQuickLogger(false)} 
+                frequentFoods={frequentFoods}
+                systemFoods={systemFoods}
+              />
             </div>
           )}
           
