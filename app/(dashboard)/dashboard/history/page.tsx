@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { Card, Badge, Button } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -786,11 +786,7 @@ function HistoryPageContent() {
 
 export default function HistoryPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense fallback={<FullPageLoading text="Loading workout history..." type="barbell" />}>
       <HistoryPageContent />
     </Suspense>
   );

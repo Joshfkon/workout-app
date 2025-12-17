@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import type { Split, MuscleGroup } from '@/types/schema';
@@ -333,7 +333,7 @@ export default function MesocyclePage() {
 
       {isLoading ? (
         <Card className="text-center py-12">
-          <p className="text-surface-400">Loading...</p>
+          <LoadingAnimation type="reps" size="md" text="Loading your training plan..." />
         </Card>
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">
