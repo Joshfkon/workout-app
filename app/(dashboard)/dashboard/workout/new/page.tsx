@@ -55,6 +55,9 @@ function NewWorkoutContent() {
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<{ muscles: string[]; exercises: string[]; reason: string } | null>(null);
   
+  // Search filter for exercises
+  const [exerciseSearch, setExerciseSearch] = useState('');
+  
   // Custom exercise modal state
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
   const [customExerciseForm, setCustomExerciseForm] = useState<CustomExerciseForm>({
@@ -384,11 +387,25 @@ function NewWorkoutContent() {
     }
   };
 
-  // Group exercises by muscle
+  // Group exercises by muscle, filtered by search term
   const exercisesByMuscle = selectedMuscles.reduce((acc, muscle) => {
-    acc[muscle] = exercises.filter((e) => e.primary_muscle === muscle);
+    const muscleExercises = exercises.filter((e) => e.primary_muscle === muscle);
+    // Apply search filter if search term exists
+    if (exerciseSearch.trim()) {
+      const searchLower = exerciseSearch.toLowerCase().trim();
+      acc[muscle] = muscleExercises.filter((e) => 
+        e.name.toLowerCase().includes(searchLower)
+      );
+    } else {
+      acc[muscle] = muscleExercises;
+    }
     return acc;
   }, {} as Record<string, Exercise[]>);
+  
+  // Count total filtered exercises
+  const totalFilteredExercises = Object.values(exercisesByMuscle).reduce(
+    (sum, exs) => sum + exs.length, 0
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -503,6 +520,42 @@ function NewWorkoutContent() {
                 </div>
               </div>
             </div>
+          )}
+          
+          {/* Search bar */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="w-5 h-5 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search exercises..."
+              value={exerciseSearch}
+              onChange={(e) => setExerciseSearch(e.target.value)}
+              className="w-full pl-10 pr-10 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            />
+            {exerciseSearch && (
+              <button
+                onClick={() => setExerciseSearch('')}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-surface-500 hover:text-surface-300"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+          
+          {/* Search results count */}
+          {exerciseSearch && (
+            <p className="text-sm text-surface-400">
+              {totalFilteredExercises} exercise{totalFilteredExercises !== 1 ? 's' : ''} found
+              {totalFilteredExercises === 0 && (
+                <span className="ml-1">— try a different search or <button onClick={() => setExerciseSearch('')} className="text-primary-400 hover:underline">clear filter</button></span>
+              )}
+            </p>
           )}
           
           {isLoading ? (
