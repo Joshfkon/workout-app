@@ -54,6 +54,8 @@ export function SessionSummary({
   const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
   const [notes, setNotes] = useState(session.sessionNotes || '');
   const [showAllPRs, setShowAllPRs] = useState(false);
+  const [showExerciseDetails, setShowExerciseDetails] = useState(true);
+  const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
 
   // Calculate stats
   const workingSets = allSets.filter((s) => !s.isWarmup);
@@ -212,6 +214,60 @@ export function SessionSummary({
       exercise: exerciseBlocks.find(b => b.id === set.exerciseBlockId),
     }));
   }, [workingSets, exerciseBlocks]);
+
+  // Exercise details with sets
+  const exerciseDetails = useMemo(() => {
+    return exerciseBlocks.map(block => {
+      const exercise = (block as any).exercise;
+      const sets = workingSets.filter(s => s.exerciseBlockId === block.id);
+      const warmupSets = allSets.filter(s => s.exerciseBlockId === block.id && s.isWarmup);
+      
+      // Calculate stats for this exercise
+      const totalVolume = sets.reduce((sum, s) => sum + s.weightKg * s.reps, 0);
+      const maxWeight = sets.length > 0 ? Math.max(...sets.map(s => s.weightKg)) : 0;
+      const maxReps = sets.length > 0 ? Math.max(...sets.map(s => s.reps)) : 0;
+      const avgRpe = sets.length > 0 
+        ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10 
+        : 0;
+      const bestE1RM = sets.length > 0 
+        ? Math.max(...sets.map(s => calculateE1RM(s.weightKg, s.reps))) 
+        : 0;
+      
+      // Check if this exercise had a PR
+      const history = exerciseHistories?.[block.exerciseId || ''];
+      const hasPR = history?.previousBest && bestE1RM > history.previousBest.e1rm;
+      
+      return {
+        blockId: block.id,
+        exerciseId: block.exerciseId,
+        name: exercise?.name || 'Unknown Exercise',
+        muscle: exercise?.primaryMuscle || 'other',
+        sets,
+        warmupSets,
+        totalVolume,
+        maxWeight,
+        maxReps,
+        avgRpe,
+        bestE1RM,
+        hasPR,
+        targetSets: block.targetSets,
+        targetRepsMin: (block as any).targetRepsMin,
+        targetRepsMax: (block as any).targetRepsMax,
+      };
+    }).filter(e => e.sets.length > 0); // Only show exercises with completed sets
+  }, [exerciseBlocks, workingSets, allSets, exerciseHistories]);
+
+  const toggleExerciseExpanded = (blockId: string) => {
+    setExpandedExercises(prev => {
+      const next = new Set(prev);
+      if (next.has(blockId)) {
+        next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  };
 
   const handleSubmit = () => {
     if (onSubmit) {
@@ -511,6 +567,179 @@ export function SessionSummary({
           </div>
         </div>
       </Card>
+
+      {/* Exercise Details */}
+      {exerciseDetails.length > 0 && (
+        <Card>
+          <button
+            onClick={() => setShowExerciseDetails(!showExerciseDetails)}
+            className="w-full flex items-center justify-between mb-3"
+          >
+            <h3 className="text-sm font-medium text-surface-200 flex items-center gap-2">
+              <span>📋</span> Exercise Details ({exerciseDetails.length})
+            </h3>
+            <svg 
+              className={`w-5 h-5 text-surface-400 transition-transform ${showExerciseDetails ? 'rotate-180' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showExerciseDetails && (
+            <div className="space-y-3">
+              {exerciseDetails.map((exercise) => {
+                const isExpanded = expandedExercises.has(exercise.blockId);
+                return (
+                  <div 
+                    key={exercise.blockId}
+                    className="bg-surface-800/50 rounded-lg overflow-hidden"
+                  >
+                    {/* Exercise header */}
+                    <button
+                      onClick={() => toggleExerciseExpanded(exercise.blockId)}
+                      className="w-full p-3 flex items-center gap-3 hover:bg-surface-800 transition-colors"
+                    >
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-surface-100">{exercise.name}</span>
+                          {exercise.hasPR && (
+                            <Badge variant="warning" size="sm" className="bg-yellow-500/20 text-yellow-400">
+                              🏆 PR
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-surface-400">
+                          <span className="capitalize">{exercise.muscle}</span>
+                          <span>•</span>
+                          <span>{exercise.sets.length} sets</span>
+                          <span>•</span>
+                          <span>{Math.round(exercise.totalVolume)}kg vol</span>
+                          <span>•</span>
+                          <span>RPE {exercise.avgRpe}</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold text-primary-400">
+                          {exercise.maxWeight}kg
+                        </p>
+                        <p className="text-xs text-surface-500">top weight</p>
+                      </div>
+                      <svg 
+                        className={`w-4 h-4 text-surface-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Expanded set details */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 border-t border-surface-700">
+                        {/* Quick stats */}
+                        <div className="grid grid-cols-4 gap-2 py-3">
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-surface-200">{exercise.bestE1RM}kg</p>
+                            <p className="text-xs text-surface-500">Est. 1RM</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-surface-200">{exercise.maxReps}</p>
+                            <p className="text-xs text-surface-500">Max Reps</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-surface-200">{Math.round(exercise.totalVolume)}</p>
+                            <p className="text-xs text-surface-500">Volume</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-surface-200">{exercise.avgRpe}</p>
+                            <p className="text-xs text-surface-500">Avg RPE</p>
+                          </div>
+                        </div>
+
+                        {/* Set table */}
+                        <div className="bg-surface-900/50 rounded-lg overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-surface-500 text-xs">
+                                <th className="px-2 py-1.5 text-left">Set</th>
+                                <th className="px-2 py-1.5 text-center">Weight</th>
+                                <th className="px-2 py-1.5 text-center">Reps</th>
+                                <th className="px-2 py-1.5 text-center">RPE</th>
+                                <th className="px-2 py-1.5 text-right">Quality</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exercise.warmupSets.length > 0 && (
+                                <tr className="text-surface-500 bg-surface-800/30">
+                                  <td colSpan={5} className="px-2 py-1 text-xs">
+                                    Warmup: {exercise.warmupSets.length} sets
+                                  </td>
+                                </tr>
+                              )}
+                              {exercise.sets.map((set, idx) => (
+                                <tr 
+                                  key={set.id}
+                                  className={`border-t border-surface-800 ${
+                                    set.quality === 'stimulative' ? 'bg-success-500/5' :
+                                    set.quality === 'excessive' ? 'bg-danger-500/5' : ''
+                                  }`}
+                                >
+                                  <td className="px-2 py-1.5 text-surface-400">{idx + 1}</td>
+                                  <td className="px-2 py-1.5 text-center font-medium text-surface-200">
+                                    {set.weightKg}kg
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center text-surface-200">
+                                    {set.reps}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center">
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                      set.rpe >= 9 ? 'bg-red-500/20 text-red-400' :
+                                      set.rpe >= 8 ? 'bg-orange-500/20 text-orange-400' :
+                                      set.rpe >= 7 ? 'bg-yellow-500/20 text-yellow-400' :
+                                      'bg-green-500/20 text-green-400'
+                                    }`}>
+                                      {set.rpe}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right">
+                                    <span className={`text-xs ${
+                                      set.quality === 'stimulative' ? 'text-success-400' :
+                                      set.quality === 'effective' ? 'text-primary-400' :
+                                      set.quality === 'junk' ? 'text-surface-500' :
+                                      'text-danger-400'
+                                    }`}>
+                                      {set.quality === 'stimulative' ? '✓ Stim' :
+                                       set.quality === 'effective' ? '○ Eff' :
+                                       set.quality === 'junk' ? '— Junk' :
+                                       '⚠ Excess'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* E1RM comparison if PR */}
+                        {exercise.hasPR && exerciseHistories?.[exercise.exerciseId || '']?.previousBest && (
+                          <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-yellow-400">🏆 New Personal Record!</span>
+                              <span className="text-surface-300">
+                                {exerciseHistories[exercise.exerciseId || ''].previousBest?.e1rm}kg → <span className="font-bold text-yellow-400">{exercise.bestE1RM}kg</span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Session RPE */}
       <Card>
