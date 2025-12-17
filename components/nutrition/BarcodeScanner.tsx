@@ -4,19 +4,21 @@ import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { lookupBarcode, type BarcodeSearchResult } from '@/services/openFoodFactsService';
+import { createUntypedClient } from '@/lib/supabase/client';
 
 // Support two modes:
 // 1. onProductFound - scanner looks up barcode and returns full product
 // 2. onScan - scanner just returns the barcode string, parent handles lookup
 type BarcodeScannerProps = {
   onClose: () => void;
+  onCreateCustom?: (barcode: string) => void; // Called when user wants to create custom food
 } & (
   | { onProductFound: (product: NonNullable<BarcodeSearchResult['product']>) => void; onScan?: never }
   | { onScan: (barcode: string) => Promise<void>; onProductFound?: never }
 );
 
 export function BarcodeScanner(props: BarcodeScannerProps) {
-  const { onClose } = props;
+  const { onClose, onCreateCustom } = props;
   const onProductFound = 'onProductFound' in props ? props.onProductFound : undefined;
   const onScan = 'onScan' in props ? props.onScan : undefined;
   
@@ -26,6 +28,19 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [manualBarcode, setManualBarcode] = useState('');
   const [debugInfo, setDebugInfo] = useState<string>('Waiting to scan...');
+  const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
+  
+  // Custom food creation state
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customFood, setCustomFood] = useState({
+    name: '',
+    calories: '',
+    protein: '',
+    carbs: '',
+    fat: '',
+    servingSize: '1 serving',
+  });
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
   
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,6 +62,82 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     };
   }, []);
 
+  // Check custom foods database first
+  const checkCustomFoods = async (barcode: string): Promise<BarcodeSearchResult['product'] | null> => {
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data } = await supabase
+        .from('custom_foods')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('barcode', barcode)
+        .single();
+
+      if (data) {
+        return {
+          name: data.food_name,
+          servingSize: data.serving_size || '1 serving',
+          servingQuantity: 1,
+          calories: data.calories || 0,
+          protein: data.protein || 0,
+          carbs: data.carbs || 0,
+          fat: data.fat || 0,
+          barcode: barcode,
+        };
+      }
+    } catch {
+      // No custom food found
+    }
+    return null;
+  };
+
+  // Save custom food with barcode
+  const saveCustomFood = async () => {
+    if (!notFoundBarcode || !customFood.name.trim()) return;
+    
+    setIsSavingCustom(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      const { error } = await supabase.from('custom_foods').insert({
+        user_id: user.id,
+        food_name: customFood.name.trim(),
+        serving_size: customFood.servingSize || '1 serving',
+        calories: parseInt(customFood.calories) || 0,
+        protein: parseFloat(customFood.protein) || 0,
+        carbs: parseFloat(customFood.carbs) || 0,
+        fat: parseFloat(customFood.fat) || 0,
+        barcode: notFoundBarcode,
+      });
+
+      if (error) throw error;
+
+      // Now pass the custom food to the parent
+      if (onProductFound) {
+        onProductFound({
+          name: customFood.name.trim(),
+          servingSize: customFood.servingSize || '1 serving',
+          servingQuantity: 1,
+          calories: parseInt(customFood.calories) || 0,
+          protein: parseFloat(customFood.protein) || 0,
+          carbs: parseFloat(customFood.carbs) || 0,
+          fat: parseFloat(customFood.fat) || 0,
+          barcode: notFoundBarcode,
+        });
+      }
+    } catch (err) {
+      setError('Failed to save custom food');
+      setErrorType('error');
+    } finally {
+      setIsSavingCustom(false);
+    }
+  };
+
   // Process barcode lookup
   const processBarcode = async (barcode: string) => {
     if (isProcessingRef.current) {
@@ -58,6 +149,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     setDebugInfo(`Processing: ${barcode}`);
     setIsLookingUp(true);
     setError(null);
+    setNotFoundBarcode(null);
+    setShowCustomForm(false);
 
     try {
       // Mode 1: Just pass barcode to parent
@@ -72,8 +165,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         return;
       }
 
-      // Mode 2: Look up barcode and return product
-      setDebugInfo(`Looking up: ${barcode}...`);
+      // Check custom foods first
+      setDebugInfo(`Checking custom foods for: ${barcode}...`);
+      const customFood = await checkCustomFoods(barcode);
+      if (customFood) {
+        setDebugInfo(`Found in custom foods: ${customFood.name}`);
+        if (onProductFound) {
+          onProductFound(customFood);
+        }
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // Mode 2: Look up barcode in public databases
+      setDebugInfo(`Looking up in databases: ${barcode}...`);
       
       const result = await lookupBarcode(barcode);
       
@@ -91,9 +196,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           onProductFound(result.product);
         }
       } else {
-        // Not found
+        // Not found - offer to create custom food
         const resultInfo = result ? JSON.stringify(result, null, 2) : 'null';
         setDebugInfo(`Not found.\nBarcode: ${barcode}\nResult: ${resultInfo}`);
+        setNotFoundBarcode(barcode);
         
         const errorText = result?.error || '';
         // Check for actual connection/server errors (not 404 which just means not found)
@@ -107,7 +213,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           setErrorType('error');
         } else {
           // 404 or "not found" means the product just isn't in the database
-          setError('Product not found in database. Try searching by name instead.');
+          setError('Product not found. Create a custom entry?');
           setErrorType('info');
         }
         setIsLookingUp(false);
@@ -133,6 +239,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     setError(null);
     setIsScanning(true);
     setDebugInfo('Starting camera...');
+    setShowCustomForm(false);
 
     try {
       const html5QrCode = new Html5Qrcode('barcode-reader');
@@ -222,6 +329,111 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     processBarcode(manualBarcode.trim());
   };
 
+  // Show custom food creation form
+  if (showCustomForm && notFoundBarcode) {
+    return (
+      <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
+        <div className="flex items-center justify-between p-3 border-b border-surface-700">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">📝</span>
+            <span className="font-medium text-surface-100">Create Custom Food</span>
+          </div>
+          <button onClick={() => setShowCustomForm(false)} className="p-1 text-surface-400 hover:text-surface-200">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-surface-400 mb-2">
+            Barcode: <span className="font-mono text-surface-300">{notFoundBarcode}</span>
+          </p>
+          
+          <input
+            type="text"
+            value={customFood.name}
+            onChange={(e) => setCustomFood(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="Food name *"
+            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+          />
+          
+          <input
+            type="text"
+            value={customFood.servingSize}
+            onChange={(e) => setCustomFood(prev => ({ ...prev, servingSize: e.target.value }))}
+            placeholder="Serving size (e.g., 1 cup, 100g)"
+            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+          />
+          
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Calories *</label>
+              <input
+                type="number"
+                value={customFood.calories}
+                onChange={(e) => setCustomFood(prev => ({ ...prev, calories: e.target.value }))}
+                placeholder="0"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Protein (g)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customFood.protein}
+                onChange={(e) => setCustomFood(prev => ({ ...prev, protein: e.target.value }))}
+                placeholder="0"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Carbs (g)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customFood.carbs}
+                onChange={(e) => setCustomFood(prev => ({ ...prev, carbs: e.target.value }))}
+                placeholder="0"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Fat (g)</label>
+              <input
+                type="number"
+                step="0.1"
+                value={customFood.fat}
+                onChange={(e) => setCustomFood(prev => ({ ...prev, fat: e.target.value }))}
+                placeholder="0"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-2 pt-2">
+            <Button 
+              onClick={saveCustomFood} 
+              isLoading={isSavingCustom}
+              disabled={!customFood.name.trim() || !customFood.calories}
+              className="flex-1"
+            >
+              Save & Add
+            </Button>
+            <Button variant="secondary" onClick={() => setShowCustomForm(false)}>
+              Cancel
+            </Button>
+          </div>
+          
+          <p className="text-[10px] text-surface-500 text-center">
+            This food will be saved and automatically found when you scan this barcode again.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
       {/* Header */}
@@ -305,25 +517,42 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               </div>
             </div>
 
-            {/* Error/Info message */}
+            {/* Error/Info message with Create Custom button */}
             {error && (
-              <div className={`p-2 rounded-lg flex items-center gap-2 ${
+              <div className={`p-3 rounded-lg ${
                 errorType === 'error' 
                   ? 'bg-danger-500/10 border border-danger-500/20' 
                   : 'bg-surface-700/50'
               }`}>
-                {errorType === 'error' ? (
-                  <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                <div className="flex items-center gap-2">
+                  {errorType === 'error' ? (
+                    <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  )}
+                  <p className={`text-sm ${errorType === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
+                    {error}
+                  </p>
+                </div>
+                
+                {/* Show create custom button if barcode not found */}
+                {notFoundBarcode && errorType === 'info' && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setShowCustomForm(true)}
+                    className="mt-3 w-full"
+                  >
+                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create Custom Food
+                  </Button>
                 )}
-                <p className={`text-sm ${errorType === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
-                  {error}
-                </p>
               </div>
             )}
           </>
