@@ -253,6 +253,7 @@ export default function NewMesocyclePage() {
       const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas);
       setFullProgram(program);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
       userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes]);
 

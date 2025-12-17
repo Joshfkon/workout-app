@@ -121,7 +121,7 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
         setHistory(formattedHistory);
         
         // Set last measurement for comparison (skip today if it exists)
-        const previousEntry = formattedHistory.find(h => h.logged_at !== today);
+        const previousEntry = formattedHistory.find((h: MeasurementHistory) => h.logged_at !== today);
         if (previousEntry) {
           setLastMeasurement(previousEntry);
         }

@@ -239,6 +239,7 @@ export function QuickFoodLogger({ onAdd, onClose }: QuickFoodLoggerProps) {
             <div className="p-4 bg-surface-900 rounded-lg">
               {barcodeProduct.imageUrl && (
                 <div className="flex justify-center mb-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img 
                     src={barcodeProduct.imageUrl} 
                     alt={barcodeProduct.name}

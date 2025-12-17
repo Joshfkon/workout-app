@@ -150,6 +150,7 @@ export default function OnboardingBodyCompPage() {
     }
     
     fetchDexaData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Calculate body composition when inputs change
