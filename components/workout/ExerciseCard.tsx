@@ -462,11 +462,33 @@ export const ExerciseCard = memo(function ExerciseCard({
     const repsNum = parseInt(editReps);
     const rpeNum = parseFloat(editRpe);
     
-    if (!isNaN(weightNum) && !isNaN(repsNum) && !isNaN(rpeNum)) {
-      const weightKg = inputWeightToKg(weightNum, unit);
-      onSetEdit(editingSetId, { weightKg, reps: repsNum, rpe: rpeNum });
+    // Validate all fields have valid numbers
+    if (isNaN(weightNum) || isNaN(repsNum) || isNaN(rpeNum)) {
+      console.warn('Invalid edit values:', { editWeight, editReps, editRpe });
+      cancelEditing();
+      return;
     }
+    
+    // Validate reasonable ranges
+    if (repsNum < 1 || rpeNum < 1 || rpeNum > 10 || weightNum < 0) {
+      console.warn('Edit values out of range:', { weightNum, repsNum, rpeNum });
+      cancelEditing();
+      return;
+    }
+    
+    const weightKg = inputWeightToKg(weightNum, unit);
+    onSetEdit(editingSetId, { weightKg, reps: repsNum, rpe: rpeNum });
     cancelEditing();
+  };
+
+  // Handle Enter key to save edit
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === 'Escape') {
+      cancelEditing();
+    }
   };
 
   const getProgressionIcon = (type: ProgressionType | null) => {
@@ -870,8 +892,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                       value={editWeight}
                       onChange={(e) => setEditWeight(e.target.value)}
                       onFocus={(e) => e.target.select()}
+                      onKeyDown={handleEditKeyDown}
                       step="0.5"
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                      autoFocus
                     />
                   </td>
                   <td className="px-1 py-1.5">
@@ -880,6 +904,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       value={editReps}
                       onChange={(e) => setEditReps(e.target.value)}
                       onFocus={(e) => e.target.select()}
+                      onKeyDown={handleEditKeyDown}
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                     />
                   </td>
@@ -889,6 +914,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       value={editRpe}
                       onChange={(e) => setEditRpe(e.target.value)}
                       onFocus={(e) => e.target.select()}
+                      onKeyDown={handleEditKeyDown}
                       step="0.5"
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                     />

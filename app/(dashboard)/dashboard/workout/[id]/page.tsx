@@ -1036,15 +1036,17 @@ export default function WorkoutPage() {
   };
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number }) => {
-    // Update local state
-    setCompletedSets(completedSets.map(set => 
+    const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
+    
+    // Update local state using functional update to avoid stale closure
+    setCompletedSets(prevSets => prevSets.map(set => 
       set.id === setId 
         ? { 
             ...set, 
             weightKg: data.weightKg, 
             reps: data.reps, 
             rpe: data.rpe,
-            quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const,
+            quality,
           }
         : set
     ));
@@ -1056,12 +1058,14 @@ export default function WorkoutPage() {
         weight_kg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
-        quality: data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective',
+        quality,
       }).eq('id', setId);
       
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
+        // Revert local state on error - refetch from database
+        // For now, just show error; user can refresh if needed
       } else {
         setError(null);
       }
