@@ -32,12 +32,14 @@ export interface CustomFood {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
-  // Per-gram tracking (optional)
-  is_per_gram?: boolean;
-  calories_per_100g?: number | null;
-  protein_per_100g?: number | null;
-  carbs_per_100g?: number | null;
-  fat_per_100g?: number | null;
+  // Per-weight tracking (optional) - enter nutrition for a reference amount
+  is_per_weight?: boolean;
+  reference_amount?: number | null; // e.g., 28 (grams) or 1 (oz)
+  reference_unit?: 'g' | 'oz' | null; // grams or ounces
+  calories_per_ref?: number | null;
+  protein_per_ref?: number | null;
+  carbs_per_ref?: number | null;
+  fat_per_ref?: number | null;
   // Barcode scanning
   barcode?: string | null;
   created_at: string;

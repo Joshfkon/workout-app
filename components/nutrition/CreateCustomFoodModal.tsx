@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -20,7 +20,7 @@ export function CreateCustomFoodModal({
   onSave,
   editingFood,
 }: CreateCustomFoodModalProps) {
-  const [isPerGram, setIsPerGram] = useState(editingFood?.is_per_gram ?? false);
+  const [isPerWeight, setIsPerWeight] = useState(editingFood?.is_per_weight ?? false);
   const [foodName, setFoodName] = useState(editingFood?.food_name ?? '');
   const [servingSize, setServingSize] = useState(editingFood?.serving_size ?? '1 serving');
   
@@ -30,15 +30,37 @@ export function CreateCustomFoodModal({
   const [carbs, setCarbs] = useState(editingFood?.carbs?.toString() ?? '');
   const [fat, setFat] = useState(editingFood?.fat?.toString() ?? '');
   
-  // Per 100g values
-  const [caloriesPer100g, setCaloriesPer100g] = useState(editingFood?.calories_per_100g?.toString() ?? '');
-  const [proteinPer100g, setProteinPer100g] = useState(editingFood?.protein_per_100g?.toString() ?? '');
-  const [carbsPer100g, setCarbsPer100g] = useState(editingFood?.carbs_per_100g?.toString() ?? '');
-  const [fatPer100g, setFatPer100g] = useState(editingFood?.fat_per_100g?.toString() ?? '');
+  // Per-weight reference values
+  const [referenceAmount, setReferenceAmount] = useState(editingFood?.reference_amount?.toString() ?? '100');
+  const [referenceUnit, setReferenceUnit] = useState<'g' | 'oz'>(editingFood?.reference_unit ?? 'g');
+  const [caloriesPerRef, setCaloriesPerRef] = useState(editingFood?.calories_per_ref?.toString() ?? '');
+  const [proteinPerRef, setProteinPerRef] = useState(editingFood?.protein_per_ref?.toString() ?? '');
+  const [carbsPerRef, setCarbsPerRef] = useState(editingFood?.carbs_per_ref?.toString() ?? '');
+  const [fatPerRef, setFatPerRef] = useState(editingFood?.fat_per_ref?.toString() ?? '');
   
   const [barcode, setBarcode] = useState(editingFood?.barcode ?? '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Reset form when editingFood changes
+  useEffect(() => {
+    if (editingFood) {
+      setIsPerWeight(editingFood.is_per_weight ?? false);
+      setFoodName(editingFood.food_name ?? '');
+      setServingSize(editingFood.serving_size ?? '1 serving');
+      setCalories(editingFood.calories?.toString() ?? '');
+      setProtein(editingFood.protein?.toString() ?? '');
+      setCarbs(editingFood.carbs?.toString() ?? '');
+      setFat(editingFood.fat?.toString() ?? '');
+      setReferenceAmount(editingFood.reference_amount?.toString() ?? '100');
+      setReferenceUnit(editingFood.reference_unit ?? 'g');
+      setCaloriesPerRef(editingFood.calories_per_ref?.toString() ?? '');
+      setProteinPerRef(editingFood.protein_per_ref?.toString() ?? '');
+      setCarbsPerRef(editingFood.carbs_per_ref?.toString() ?? '');
+      setFatPerRef(editingFood.fat_per_ref?.toString() ?? '');
+      setBarcode(editingFood.barcode ?? '');
+    }
+  }, [editingFood]);
 
   const handleSubmit = async () => {
     if (!foodName.trim()) {
@@ -46,9 +68,9 @@ export function CreateCustomFoodModal({
       return;
     }
 
-    if (isPerGram) {
-      if (!caloriesPer100g) {
-        setError('Please enter calories per 100g');
+    if (isPerWeight) {
+      if (!caloriesPerRef || !referenceAmount) {
+        setError('Please enter the reference amount and calories');
         return;
       }
     } else {
@@ -64,16 +86,18 @@ export function CreateCustomFoodModal({
     try {
       await onSave({
         food_name: foodName.trim(),
-        serving_size: isPerGram ? 'per 100g' : servingSize,
-        calories: isPerGram ? 0 : parseFloat(calories) || 0,
-        protein: isPerGram ? null : parseFloat(protein) || null,
-        carbs: isPerGram ? null : parseFloat(carbs) || null,
-        fat: isPerGram ? null : parseFloat(fat) || null,
-        is_per_gram: isPerGram,
-        calories_per_100g: isPerGram ? parseFloat(caloriesPer100g) || null : null,
-        protein_per_100g: isPerGram ? parseFloat(proteinPer100g) || null : null,
-        carbs_per_100g: isPerGram ? parseFloat(carbsPer100g) || null : null,
-        fat_per_100g: isPerGram ? parseFloat(fatPer100g) || null : null,
+        serving_size: isPerWeight ? `per ${referenceAmount}${referenceUnit}` : servingSize,
+        calories: isPerWeight ? 0 : parseFloat(calories) || 0,
+        protein: isPerWeight ? null : parseFloat(protein) || null,
+        carbs: isPerWeight ? null : parseFloat(carbs) || null,
+        fat: isPerWeight ? null : parseFloat(fat) || null,
+        is_per_weight: isPerWeight,
+        reference_amount: isPerWeight ? parseFloat(referenceAmount) || null : null,
+        reference_unit: isPerWeight ? referenceUnit : null,
+        calories_per_ref: isPerWeight ? parseFloat(caloriesPerRef) || null : null,
+        protein_per_ref: isPerWeight ? parseFloat(proteinPerRef) || null : null,
+        carbs_per_ref: isPerWeight ? parseFloat(carbsPerRef) || null : null,
+        fat_per_ref: isPerWeight ? parseFloat(fatPerRef) || null : null,
         barcode: barcode.trim() || null,
       });
       handleClose();
@@ -91,12 +115,14 @@ export function CreateCustomFoodModal({
     setProtein('');
     setCarbs('');
     setFat('');
-    setCaloriesPer100g('');
-    setProteinPer100g('');
-    setCarbsPer100g('');
-    setFatPer100g('');
+    setReferenceAmount('100');
+    setReferenceUnit('g');
+    setCaloriesPerRef('');
+    setProteinPerRef('');
+    setCarbsPerRef('');
+    setFatPerRef('');
     setBarcode('');
-    setIsPerGram(false);
+    setIsPerWeight(false);
     setError('');
     onClose();
   };
@@ -127,25 +153,57 @@ export function CreateCustomFoodModal({
           />
         </div>
 
-        {/* Per-Gram Toggle */}
+        {/* Per-Weight Toggle */}
         <div className="flex items-center justify-between p-3 bg-surface-800 rounded-lg">
           <div>
-            <p className="font-medium text-surface-200">Track by grams</p>
+            <p className="font-medium text-surface-200">Track by weight</p>
             <p className="text-xs text-surface-400">
-              Enter nutrition per 100g, then log custom amounts
+              Enter nutrition per label amount, then weigh your portion
             </p>
           </div>
           <Toggle
-            checked={isPerGram}
-            onChange={(checked) => setIsPerGram(checked)}
+            checked={isPerWeight}
+            onChange={(checked) => setIsPerWeight(checked)}
             size="md"
           />
         </div>
 
-        {isPerGram ? (
-          /* Per 100g Entry */
+        {isPerWeight ? (
+          /* Per-Weight Entry */
           <div className="space-y-4 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
-            <p className="text-sm text-primary-400 font-medium">Nutrition per 100g</p>
+            {/* Reference Amount */}
+            <div>
+              <label className="block text-sm font-medium text-surface-300 mb-1">
+                Nutrition label is &quot;per...&quot;
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={referenceAmount}
+                  onChange={(e) => setReferenceAmount(e.target.value)}
+                  placeholder="28"
+                  className="flex-1"
+                />
+                <select
+                  value={referenceUnit}
+                  onChange={(e) => setReferenceUnit(e.target.value as 'g' | 'oz')}
+                  className="px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                  <option value="g">grams (g)</option>
+                  <option value="oz">ounces (oz)</option>
+                </select>
+              </div>
+              <p className="text-xs text-surface-500 mt-1">
+                Match the serving size on the food label (e.g., &quot;28g&quot;, &quot;100g&quot;, &quot;1 oz&quot;)
+              </p>
+            </div>
+
+            {/* Nutrition per reference amount */}
+            <p className="text-sm text-primary-400 font-medium">
+              Nutrition per {referenceAmount || '?'}{referenceUnit}
+            </p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-1">
@@ -155,8 +213,8 @@ export function CreateCustomFoodModal({
                   type="number"
                   step="1"
                   min="0"
-                  value={caloriesPer100g}
-                  onChange={(e) => setCaloriesPer100g(e.target.value)}
+                  value={caloriesPerRef}
+                  onChange={(e) => setCaloriesPerRef(e.target.value)}
                   placeholder="0"
                 />
               </div>
@@ -168,8 +226,8 @@ export function CreateCustomFoodModal({
                   type="number"
                   step="0.1"
                   min="0"
-                  value={proteinPer100g}
-                  onChange={(e) => setProteinPer100g(e.target.value)}
+                  value={proteinPerRef}
+                  onChange={(e) => setProteinPerRef(e.target.value)}
                   placeholder="0"
                 />
               </div>
@@ -181,8 +239,8 @@ export function CreateCustomFoodModal({
                   type="number"
                   step="0.1"
                   min="0"
-                  value={carbsPer100g}
-                  onChange={(e) => setCarbsPer100g(e.target.value)}
+                  value={carbsPerRef}
+                  onChange={(e) => setCarbsPerRef(e.target.value)}
                   placeholder="0"
                 />
               </div>
@@ -194,8 +252,8 @@ export function CreateCustomFoodModal({
                   type="number"
                   step="0.1"
                   min="0"
-                  value={fatPer100g}
-                  onChange={(e) => setFatPer100g(e.target.value)}
+                  value={fatPerRef}
+                  onChange={(e) => setFatPerRef(e.target.value)}
                   placeholder="0"
                 />
               </div>
@@ -305,4 +363,3 @@ export function CreateCustomFoodModal({
     </Modal>
   );
 }
-

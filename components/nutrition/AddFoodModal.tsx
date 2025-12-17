@@ -60,7 +60,8 @@ export function AddFoodModal({
   // Form state
   const [servings, setServings] = useState('1');
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
-  const [grams, setGrams] = useState('100');
+  const [weightAmount, setWeightAmount] = useState('100');
+  const [weightUnit, setWeightUnit] = useState<'g' | 'oz'>('g');
 
   // Manual entry
   const [manualFood, setManualFood] = useState({
@@ -184,7 +185,14 @@ export function AddFoodModal({
     setSelectedCustomFood(food);
     setSelectedFood(null);
     setServings('1');
-    setGrams('100');
+    // Set weight to match the food's reference amount if it's per-weight
+    if (food.is_per_weight && food.reference_amount) {
+      setWeightAmount(food.reference_amount.toString());
+      setWeightUnit(food.reference_unit || 'g');
+    } else {
+      setWeightAmount('100');
+      setWeightUnit('g');
+    }
   };
 
   const handleAddSelectedFood = async () => {
@@ -237,19 +245,33 @@ export function AddFoodModal({
     setError('');
 
     try {
-      if (selectedCustomFood.is_per_gram && selectedCustomFood.calories_per_100g) {
-        // Calculate from grams
-        const gramsNum = parseFloat(grams) || 0;
-        const multiplier = gramsNum / 100;
+      if (selectedCustomFood.is_per_weight && selectedCustomFood.reference_amount && selectedCustomFood.calories_per_ref) {
+        // Calculate from weight input
+        const inputAmount = parseFloat(weightAmount) || 0;
+        const refAmount = selectedCustomFood.reference_amount;
+        const refUnit = selectedCustomFood.reference_unit || 'g';
+        
+        // Convert input to same unit as reference if needed
+        let normalizedInput = inputAmount;
+        if (weightUnit !== refUnit) {
+          // Convert between grams and ounces
+          if (weightUnit === 'oz' && refUnit === 'g') {
+            normalizedInput = inputAmount * 28.3495; // oz to g
+          } else if (weightUnit === 'g' && refUnit === 'oz') {
+            normalizedInput = inputAmount / 28.3495; // g to oz
+          }
+        }
+        
+        const multiplier = normalizedInput / refAmount;
         
         await onAdd({
           food_name: selectedCustomFood.food_name,
-          serving_size: `${gramsNum}g`,
+          serving_size: `${inputAmount}${weightUnit}`,
           servings: 1,
-          calories: Math.round((selectedCustomFood.calories_per_100g || 0) * multiplier),
-          protein: Math.round((selectedCustomFood.protein_per_100g || 0) * multiplier * 10) / 10,
-          carbs: Math.round((selectedCustomFood.carbs_per_100g || 0) * multiplier * 10) / 10,
-          fat: Math.round((selectedCustomFood.fat_per_100g || 0) * multiplier * 10) / 10,
+          calories: Math.round((selectedCustomFood.calories_per_ref || 0) * multiplier),
+          protein: Math.round((selectedCustomFood.protein_per_ref || 0) * multiplier * 10) / 10,
+          carbs: Math.round((selectedCustomFood.carbs_per_ref || 0) * multiplier * 10) / 10,
+          fat: Math.round((selectedCustomFood.fat_per_ref || 0) * multiplier * 10) / 10,
           meal_type: mealType,
           source: 'custom',
         });
@@ -350,7 +372,8 @@ export function AddFoodModal({
     setSelectedFood(null);
     setSelectedCustomFood(null);
     setServings('1');
-    setGrams('100');
+    setWeightAmount('100');
+    setWeightUnit('g');
     setFilterQuery('');
     setManualFood({
       food_name: '',
@@ -366,18 +389,33 @@ export function AddFoodModal({
     onClose();
   };
 
-  // Calculate live nutrition for per-gram custom foods
+  // Calculate live nutrition for per-weight custom foods
   const customFoodNutrition = useMemo(() => {
-    if (!selectedCustomFood?.is_per_gram) return null;
-    const gramsNum = parseFloat(grams) || 0;
-    const multiplier = gramsNum / 100;
+    if (!selectedCustomFood?.is_per_weight || !selectedCustomFood.reference_amount) return null;
+    
+    const inputAmount = parseFloat(weightAmount) || 0;
+    const refAmount = selectedCustomFood.reference_amount;
+    const refUnit = selectedCustomFood.reference_unit || 'g';
+    
+    // Convert input to same unit as reference if needed
+    let normalizedInput = inputAmount;
+    if (weightUnit !== refUnit) {
+      if (weightUnit === 'oz' && refUnit === 'g') {
+        normalizedInput = inputAmount * 28.3495; // oz to g
+      } else if (weightUnit === 'g' && refUnit === 'oz') {
+        normalizedInput = inputAmount / 28.3495; // g to oz
+      }
+    }
+    
+    const multiplier = normalizedInput / refAmount;
+    
     return {
-      calories: Math.round((selectedCustomFood.calories_per_100g || 0) * multiplier),
-      protein: Math.round((selectedCustomFood.protein_per_100g || 0) * multiplier * 10) / 10,
-      carbs: Math.round((selectedCustomFood.carbs_per_100g || 0) * multiplier * 10) / 10,
-      fat: Math.round((selectedCustomFood.fat_per_100g || 0) * multiplier * 10) / 10,
+      calories: Math.round((selectedCustomFood.calories_per_ref || 0) * multiplier),
+      protein: Math.round((selectedCustomFood.protein_per_ref || 0) * multiplier * 10) / 10,
+      carbs: Math.round((selectedCustomFood.carbs_per_ref || 0) * multiplier * 10) / 10,
+      fat: Math.round((selectedCustomFood.fat_per_ref || 0) * multiplier * 10) / 10,
     };
-  }, [selectedCustomFood, grams]);
+  }, [selectedCustomFood, weightAmount, weightUnit]);
 
   return (
     <Modal
@@ -687,7 +725,9 @@ export function AddFoodModal({
                   <div>
                     <h3 className="font-medium text-surface-100">{selectedCustomFood.food_name}</h3>
                     <p className="text-xs text-primary-400">
-                      {selectedCustomFood.is_per_gram ? 'Per 100g' : selectedCustomFood.serving_size}
+                      {selectedCustomFood.is_per_weight 
+                        ? `Per ${selectedCustomFood.reference_amount}${selectedCustomFood.reference_unit || 'g'}` 
+                        : selectedCustomFood.serving_size}
                     </p>
                   </div>
                   <button
@@ -698,20 +738,31 @@ export function AddFoodModal({
                   </button>
                 </div>
 
-                {selectedCustomFood.is_per_gram ? (
+                {selectedCustomFood.is_per_weight ? (
                   <>
-                    {/* Gram Input with Live Calculation */}
+                    {/* Weight Input with Live Calculation */}
                     <div>
                       <label className="block text-sm font-medium text-surface-300 mb-1">
-                        Amount (grams)
+                        Your portion (weighed)
                       </label>
-                      <Input
-                        type="number"
-                        step="1"
-                        min="1"
-                        value={grams}
-                        onChange={(e) => setGrams(e.target.value)}
-                      />
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min="0.1"
+                          value={weightAmount}
+                          onChange={(e) => setWeightAmount(e.target.value)}
+                          className="flex-1"
+                        />
+                        <select
+                          value={weightUnit}
+                          onChange={(e) => setWeightUnit(e.target.value as 'g' | 'oz')}
+                          className="px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          <option value="g">grams</option>
+                          <option value="oz">oz</option>
+                        </select>
+                      </div>
                     </div>
 
                     {/* Live Calculated Nutrition */}
@@ -799,22 +850,22 @@ export function AddFoodModal({
                         <div>
                           <h4 className="font-medium text-surface-100">{food.food_name}</h4>
                           <p className="text-sm text-surface-400">
-                            {food.is_per_gram 
-                              ? `${food.calories_per_100g} cal per 100g`
+                            {food.is_per_weight 
+                              ? `${food.calories_per_ref} cal per ${food.reference_amount}${food.reference_unit || 'g'}`
                               : food.serving_size
                             }
                           </p>
                         </div>
                         <div className="text-right">
                           <p className="font-medium text-surface-100">
-                            {food.is_per_gram 
-                              ? `${food.protein_per_100g || 0}g`
+                            {food.is_per_weight 
+                              ? `${food.protein_per_ref || 0}g`
                               : `${food.calories} cal`
                             }
                           </p>
                           <p className="text-sm text-surface-400">
-                            {food.is_per_gram 
-                              ? 'protein/100g'
+                            {food.is_per_weight 
+                              ? `protein/${food.reference_amount}${food.reference_unit || 'g'}`
                               : `${food.protein || 0}g protein`
                             }
                           </p>
