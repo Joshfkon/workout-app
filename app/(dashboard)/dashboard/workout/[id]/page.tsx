@@ -728,7 +728,7 @@ export default function WorkoutPage() {
               .eq('workout_sessions.state', 'completed')
               .order('workout_sessions(completed_at)', { ascending: false })
               .limit(20)
-              .then(result => ({ exerciseId, data: result.data }))
+              .then((result: { data: any[] | null }) => ({ exerciseId, data: result.data }))
               .catch(() => ({ exerciseId, data: null }))
           );
 
