@@ -573,22 +573,30 @@ export default function DashboardPage() {
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Quick Actions Bar */}
       <div className="flex gap-3">
-        <Link href="/dashboard/workout/new" className="flex-1">
-          <button className="w-full p-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-3">
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <Link href="/dashboard/workout/quick" className="flex-1">
+          <button className="w-full p-3 bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 rounded-xl transition-all shadow-lg shadow-accent-500/20 hover:shadow-accent-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             <span className="font-semibold text-white">Quick Workout</span>
           </button>
         </Link>
+        <Link href="/dashboard/workout/new" className="flex-1">
+          <button className="w-full p-3 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span className="font-semibold text-white">Create Workout</span>
+          </button>
+        </Link>
         <Link href="/dashboard/nutrition">
-          <button className="p-4 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
-            <span className="text-2xl">🍎</span>
+          <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
+            <span className="text-xl">🍎</span>
           </button>
         </Link>
         <Link href="/dashboard/workout">
-          <button className="p-4 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
-            <span className="text-2xl">📋</span>
+          <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
+            <span className="text-xl">📋</span>
           </button>
         </Link>
       </div>
@@ -689,7 +697,7 @@ export default function DashboardPage() {
                 <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
                 <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
               </div>
-              <Link href="/dashboard/workout/new">
+              <Link href="/dashboard/workout/quick">
                 <Button variant="outline" size="sm">Quick Workout</Button>
               </Link>
             </div>
@@ -711,7 +719,7 @@ export default function DashboardPage() {
               <Link href="/dashboard/mesocycle/new">
                 <Button size="lg">Create Mesocycle</Button>
               </Link>
-              <Link href="/dashboard/workout/new">
+              <Link href="/dashboard/workout/quick">
                 <Button size="lg" variant="outline">Quick Workout</Button>
               </Link>
             </div>
