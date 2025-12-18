@@ -162,38 +162,96 @@ export default function DashboardPage() {
         const today = new Date();
         const todayStr = getLocalDateString(today);
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - today.getDay());
         
-        // Fetch user profile to get goal
-        const { data: userProfile } = await supabase
-          .from('users')
-          .select('goal')
-          .eq('id', user.id)
-          .single();
+        // OPTIMIZATION: Run ALL independent queries in parallel
+        const [
+          userProfileResult,
+          mesocyclesResult,
+          nutritionResult,
+          targetsResult,
+          prefsResult,
+          weightResult,
+          weightHistoryResult,
+          weeklyBlocksResult,
+          frequentDataResult,
+          systemFoodsResult,
+        ] = await Promise.all([
+          // User profile (goal)
+          supabase.from('users').select('goal').eq('id', user.id).single(),
+          
+          // Mesocycles with sessions
+          supabase.from('mesocycles')
+            .select(`id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
+              workout_sessions (id, planned_date, state, completed_at)`)
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false }),
+          
+          // Today's nutrition
+          supabase.from('food_log')
+            .select('calories, protein, carbs, fat')
+            .eq('user_id', user.id)
+            .eq('logged_at', todayStr),
+          
+          // Nutrition targets
+          supabase.from('nutrition_targets')
+            .select('calories, protein, carbs, fat')
+            .eq('user_id', user.id)
+            .single(),
+          
+          // User preferences
+          supabase.from('user_preferences')
+            .select('weight_unit')
+            .eq('user_id', user.id)
+            .single(),
+          
+          // Today's weight
+          supabase.from('weight_log')
+            .select('weight, unit')
+            .eq('user_id', user.id)
+            .eq('logged_at', todayStr)
+            .maybeSingle(),
+          
+          // Weight history (30 days)
+          supabase.from('weight_log')
+            .select('logged_at, weight, unit')
+            .eq('user_id', user.id)
+            .gte('logged_at', getLocalDateString(thirtyDaysAgo))
+            .order('logged_at', { ascending: true }),
+          
+          // Weekly volume data
+          supabase.from('exercise_blocks')
+            .select(`id, exercises (id, name, primary_muscle), set_logs (id, is_warmup),
+              workout_sessions!inner (user_id, completed_at, state)`)
+            .eq('workout_sessions.user_id', user.id)
+            .eq('workout_sessions.state', 'completed')
+            .gte('workout_sessions.completed_at', weekStart.toISOString()),
+          
+          // Frequent foods (reduced limit for speed)
+          supabase.from('food_log')
+            .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(200),
+          
+          // System foods
+          supabase.from('system_foods')
+            .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+            .eq('is_active', true)
+            .order('name'),
+        ]);
         
-        if (userProfile?.goal) {
-          setUserGoal(userProfile.goal);
+        // Process user profile
+        if (userProfileResult.data?.goal) {
+          setUserGoal(userProfileResult.data.goal);
         }
 
-        // Fetch active mesocycle with workout sessions
-        // Check both is_active flag and state='active' for backwards compatibility
-        const { data: mesocycles, error: mesoError } = await supabase
-          .from('mesocycles')
-          .select(`
-            id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
-            workout_sessions (id, planned_date, state, completed_at)
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        
-        if (mesoError) {
-          console.error('Error fetching mesocycle:', mesoError);
-        }
-        
-        // Find active mesocycle - check both is_active flag and state field
-        // Also accept any mesocycle (even planned state) if no active one exists
+        // Process mesocycles
+        const mesocycles = mesocyclesResult.data;
         let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
-        
-        // Fallback: if no explicitly active mesocycle, use the most recent one that isn't completed
         if (!mesocycle && mesocycles && mesocycles.length > 0) {
           mesocycle = mesocycles.find((m: any) => m.state !== 'completed') || null;
         }
@@ -216,34 +274,40 @@ export default function DashboardPage() {
             daysPerWeek: mesocycle.days_per_week,
           });
 
-          // Check for today's workout session
           const todaySession = sessions.find((s: any) => 
             s.planned_date === todayStr || s.state === 'in_progress'
           );
 
           if (todaySession) {
-            // Fetch exercise count for today's session
-            const { data: blocks } = await supabase
-              .from('exercise_blocks')
-              .select('id, target_sets')
-              .eq('workout_session_id', todaySession.id);
+            // This is the only sequential query we need - depends on mesocycle data
+            const [blocksResult, setLogsResult] = await Promise.all([
+              supabase.from('exercise_blocks')
+                .select('id, target_sets')
+                .eq('workout_session_id', todaySession.id),
+              supabase.from('exercise_blocks')
+                .select('id')
+                .eq('workout_session_id', todaySession.id)
+                .then(async (res: { data: { id: string }[] | null }) => {
+                  if (!res.data?.length) return { data: [] };
+                  return supabase.from('set_logs')
+                    .select('id')
+                    .in('exercise_block_id', res.data.map((b) => b.id))
+                    .eq('is_warmup', false);
+                }),
+            ]);
 
-            const { data: setLogs } = await supabase
-              .from('set_logs')
-              .select('id')
-              .in('exercise_block_id', (blocks || []).map((b: any) => b.id))
-              .eq('is_warmup', false);
+            const blocks = blocksResult.data || [];
+            const setLogs = (setLogsResult as any).data || [];
 
             setTodaysWorkout({
               id: todaySession.id,
               name: mesocycle.name,
               state: todaySession.state,
-              exercises: (blocks || []).length,
-              completedSets: (setLogs || []).length,
-              totalSets: (blocks || []).reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
+              exercises: blocks.length,
+              completedSets: setLogs.length,
+              totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
             });
           } else {
-            // Check if workout is scheduled for today based on split
             const scheduled = getWorkoutForDay(
               mesocycle.split_type || 'Upper/Lower',
               dayOfWeek,
@@ -253,43 +317,7 @@ export default function DashboardPage() {
           }
         }
 
-        // Fetch nutrition data, today's weight, and user preferences
-        const [nutritionResult, targetsResult, prefsResult] = await Promise.all([
-          supabase
-            .from('food_log')
-            .select('calories, protein, carbs, fat')
-            .eq('user_id', user.id)
-            .eq('logged_at', todayStr),
-          supabase
-            .from('nutrition_targets')
-            .select('calories, protein, carbs, fat')
-            .eq('user_id', user.id)
-            .single(),
-          supabase
-            .from('user_preferences')
-            .select('weight_unit')
-            .eq('user_id', user.id)
-            .single(),
-        ]);
-        
-        // Fetch today's weight separately to handle potential missing unit column
-        let weightResult = await supabase
-          .from('weight_log')
-          .select('weight, unit')
-          .eq('user_id', user.id)
-          .eq('logged_at', todayStr)
-          .maybeSingle();
-        
-        // If unit column doesn't exist, try without it
-        if (weightResult.error?.message?.includes('column "unit"')) {
-          weightResult = await supabase
-            .from('weight_log')
-            .select('weight')
-            .eq('user_id', user.id)
-            .eq('logged_at', todayStr)
-            .maybeSingle();
-        }
-
+        // Process nutrition
         if (nutritionResult.data) {
           const totals = nutritionResult.data.reduce(
             (acc: NutritionTotals, entry: any) => ({
@@ -307,62 +335,26 @@ export default function DashboardPage() {
           setNutritionTargets(targetsResult.data);
         }
 
-        // Set today's weight if logged
+        // Process weight
         if (weightResult.data) {
           setTodaysWeight({ weight: weightResult.data.weight, unit: weightResult.data.unit || 'lb' });
         }
 
-        // Set user's preferred weight unit
         if (prefsResult.data?.weight_unit) {
           setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
         }
 
-        // Fetch weight history (last 30 days)
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
-        const { data: weightHistoryData, error: historyError } = await supabase
-          .from('weight_log')
-          .select('logged_at, weight, unit')
-          .eq('user_id', user.id)
-          .gte('logged_at', getLocalDateString(thirtyDaysAgo))
-          .order('logged_at', { ascending: true });
-
-        // If unit column doesn't exist, try without it
-        let finalHistoryData = weightHistoryData;
-        if (historyError?.message?.includes('column "unit"')) {
-          const { data: fallbackData } = await supabase
-            .from('weight_log')
-            .select('logged_at, weight')
-            .eq('user_id', user.id)
-            .gte('logged_at', getLocalDateString(thirtyDaysAgo))
-            .order('logged_at', { ascending: true });
-          finalHistoryData = fallbackData;
-        }
-
-        if (finalHistoryData && finalHistoryData.length > 0) {
-          setWeightHistory(finalHistoryData.map((w: any) => ({
+        // Process weight history
+        if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
+          setWeightHistory(weightHistoryResult.data.map((w: any) => ({
             date: w.logged_at,
             weight: w.weight,
-            unit: w.unit || 'lb', // Default to lb if unit column doesn't exist
+            unit: w.unit || 'lb',
           })));
         }
 
-        // Fetch weekly volume by muscle - use actual completed sets from set_logs
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay());
-        
-        const { data: weeklyBlocks } = await supabase
-          .from('exercise_blocks')
-          .select(`
-            id,
-            exercises (id, name, primary_muscle),
-            set_logs (id, is_warmup),
-            workout_sessions!inner (user_id, completed_at, state)
-          `)
-          .eq('workout_sessions.user_id', user.id)
-          .eq('workout_sessions.state', 'completed')
-          .gte('workout_sessions.completed_at', weekStart.toISOString());
-
+        // Process weekly volume
+        const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
           const volumeByMuscle: Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }> = {};
           
@@ -372,7 +364,6 @@ export default function DashboardPage() {
             const exerciseName = block.exercises?.name;
             if (!muscle || !exerciseId) return;
             
-            // Count actual completed working sets (not warmups)
             const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
             if (workingSets === 0) return;
             
@@ -381,7 +372,6 @@ export default function DashboardPage() {
             }
             volumeByMuscle[muscle].sets += workingSets;
             
-            // Track by exercise
             const existing = volumeByMuscle[muscle].exercises.get(exerciseId);
             if (existing) {
               existing.sets += workingSets;
@@ -407,14 +397,8 @@ export default function DashboardPage() {
           setMuscleVolume(stats);
         }
 
-        // Load frequent foods (aggregated from food_log)
-        const { data: frequentData } = await supabase
-          .from('food_log')
-          .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(500);
-
+        // Process frequent foods
+        const frequentData = frequentDataResult.data;
         if (frequentData && frequentData.length > 0) {
           const frequencyMap = new Map<string, FrequentFood>();
           
@@ -450,15 +434,9 @@ export default function DashboardPage() {
           setFrequentFoods(Array.from(frequencyMap.values()));
         }
 
-        // Load system foods (pre-populated bodybuilding foods)
-        const { data: systemFoodsData } = await supabase
-          .from('system_foods')
-          .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-          .eq('is_active', true)
-          .order('name');
-
-        if (systemFoodsData) {
-          setSystemFoods(systemFoodsData as SystemFood[]);
+        // Process system foods
+        if (systemFoodsResult.data) {
+          setSystemFoods(systemFoodsResult.data as SystemFood[]);
         }
 
       } catch (error) {
