@@ -14,6 +14,7 @@ interface NutritionTargetsModalProps {
     protein: number;
     carbs: number;
     fat: number;
+    meals_per_day: number;
   }) => Promise<void>;
   existingTargets?: NutritionTargets;
 }
@@ -28,6 +29,7 @@ export function NutritionTargetsModal({
   const [protein, setProtein] = useState(existingTargets?.protein?.toString() || '');
   const [carbs, setCarbs] = useState(existingTargets?.carbs?.toString() || '');
   const [fat, setFat] = useState(existingTargets?.fat?.toString() || '');
+  const [mealsPerDay, setMealsPerDay] = useState(existingTargets?.meals_per_day?.toString() || '3');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,6 +41,7 @@ export function NutritionTargetsModal({
     const proteinNum = parseFloat(protein);
     const carbsNum = parseFloat(carbs);
     const fatNum = parseFloat(fat);
+    const mealsNum = parseInt(mealsPerDay) || 3;
 
     if (!caloriesNum || caloriesNum <= 0) {
       setError('Please enter a valid calorie target');
@@ -57,6 +60,11 @@ export function NutritionTargetsModal({
 
     if (!fatNum || fatNum < 0) {
       setError('Please enter a valid fat target');
+      return;
+    }
+
+    if (mealsNum < 1 || mealsNum > 10) {
+      setError('Please enter a valid number of meals (1-10)');
       return;
     }
 
@@ -80,6 +88,7 @@ export function NutritionTargetsModal({
         protein: Math.round(proteinNum * 10) / 10,
         carbs: Math.round(carbsNum * 10) / 10,
         fat: Math.round(fatNum * 10) / 10,
+        meals_per_day: mealsNum,
       });
       onClose();
     } catch (err) {
@@ -105,23 +114,43 @@ export function NutritionTargetsModal({
             </div>
           )}
 
-          <div>
-            <label htmlFor="calories" className="block text-sm font-medium text-surface-300 mb-1">
-              Calories
-            </label>
-            <Input
-              id="calories"
-              type="number"
-              step="1"
-              value={calories}
-              onChange={(e) => setCalories(e.target.value)}
-              placeholder="2000"
-              required
-              autoFocus
-            />
-            <p className="mt-1 text-xs text-surface-500">
-              Your total daily calorie target
-            </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="calories" className="block text-sm font-medium text-surface-300 mb-1">
+                Calories
+              </label>
+              <Input
+                id="calories"
+                type="number"
+                step="1"
+                value={calories}
+                onChange={(e) => setCalories(e.target.value)}
+                placeholder="2000"
+                required
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-surface-500">
+                Daily calorie target
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="meals" className="block text-sm font-medium text-surface-300 mb-1">
+                Meals per Day
+              </label>
+              <Input
+                id="meals"
+                type="number"
+                min="1"
+                max="10"
+                value={mealsPerDay}
+                onChange={(e) => setMealsPerDay(e.target.value)}
+                placeholder="3"
+              />
+              <p className="mt-1 text-xs text-surface-500">
+                For calorie suggestions
+              </p>
+            </div>
           </div>
 
           <div>

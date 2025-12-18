@@ -86,6 +86,7 @@ export interface NutritionTargets {
   protein: number | null;
   carbs: number | null;
   fat: number | null;
+  meals_per_day: number | null;
   created_at: string;
   updated_at: string;
 }

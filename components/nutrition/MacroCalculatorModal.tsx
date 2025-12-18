@@ -28,6 +28,7 @@ interface MacroCalculatorModalProps {
     protein: number;
     carbs: number;
     fat: number;
+    meals_per_day?: number;
   }) => Promise<void>;
   existingTargets?: {
     calories?: number;

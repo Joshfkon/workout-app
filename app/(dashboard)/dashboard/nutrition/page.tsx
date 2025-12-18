@@ -608,6 +608,7 @@ export default function NutritionPage() {
     protein: number;
     carbs: number;
     fat: number;
+    meals_per_day?: number;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -629,6 +630,7 @@ export default function NutritionPage() {
           protein: targets.protein,
           carbs: targets.carbs,
           fat: targets.fat,
+          meals_per_day: targets.meals_per_day || 3,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
@@ -641,6 +643,7 @@ export default function NutritionPage() {
         protein: targets.protein,
         carbs: targets.carbs,
         fat: targets.fat,
+        meals_per_day: targets.meals_per_day || 3,
       });
       error = result.error;
     }
@@ -923,6 +926,69 @@ export default function NutritionPage() {
               )}
             </div>
           </div>
+
+          {/* Remaining Calories & Meal Suggestions */}
+          {nutritionTargets?.calories && (
+            <div className="mt-4 p-4 bg-surface-800/50 rounded-lg">
+              {(() => {
+                const remaining = (nutritionTargets.calories || 0) - dailyTotals.calories;
+                const mealsPerDay = nutritionTargets.meals_per_day || 3;
+                
+                // Calculate which meals have been logged (have entries)
+                const mealsLogged = mealGroups.filter(m => m.entries.length > 0).length;
+                const mealsRemaining = Math.max(0, mealsPerDay - mealsLogged);
+                
+                // Calculate suggested calories per remaining meal
+                const suggestedPerMeal = mealsRemaining > 0 ? Math.round(remaining / mealsRemaining) : 0;
+                
+                // Find which meals are still empty (not snacks by default)
+                const emptyMeals = mealGroups
+                  .filter(m => m.entries.length === 0 && m.type !== 'snack')
+                  .map(m => m.label);
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-surface-400">Calories Remaining</div>
+                        <div className={`text-2xl font-bold ${remaining >= 0 ? 'text-primary-400' : 'text-danger-400'}`}>
+                          {Math.round(remaining)} cal
+                        </div>
+                      </div>
+                      {remaining > 0 && mealsRemaining > 0 && (
+                        <div className="text-right">
+                          <div className="text-sm text-surface-400">
+                            Suggested per meal ({mealsRemaining} left)
+                          </div>
+                          <div className="text-xl font-semibold text-accent-400">
+                            ~{suggestedPerMeal} cal
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {remaining > 0 && emptyMeals.length > 0 && (
+                      <p className="text-xs text-surface-500">
+                        Meals to log: {emptyMeals.join(', ')}
+                      </p>
+                    )}
+                    
+                    {remaining < 0 && (
+                      <p className="text-xs text-danger-400">
+                        You&apos;ve exceeded your daily target by {Math.abs(Math.round(remaining))} calories
+                      </p>
+                    )}
+                    
+                    {remaining > 0 && remaining < 100 && (
+                      <p className="text-xs text-success-400">
+                        Almost there! Just {Math.round(remaining)} calories to go 🎯
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {!nutritionTargets && (
             <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 border border-primary-500/20 rounded-lg">
