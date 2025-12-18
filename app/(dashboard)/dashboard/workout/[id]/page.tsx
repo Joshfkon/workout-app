@@ -377,6 +377,7 @@ export default function WorkoutPage() {
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string | null>(null);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
+  const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
@@ -1748,7 +1749,6 @@ export default function WorkoutPage() {
       };
 
       setBlocks(prevBlocks => [...prevBlocks, newBlockWithExercise]);
-      setShowAddExercise(false);
       setExerciseSearch('');
       setSelectedMuscle('');
       
@@ -1760,6 +1760,47 @@ export default function WorkoutPage() {
     } finally {
       setIsAddingExercise(false);
     }
+  };
+
+  // Toggle exercise selection for multi-add
+  const toggleExerciseSelection = (exercise: AvailableExercise) => {
+    setSelectedExercisesToAdd(prev => {
+      const isSelected = prev.some(e => e.id === exercise.id);
+      if (isSelected) {
+        return prev.filter(e => e.id !== exercise.id);
+      } else {
+        return [...prev, exercise];
+      }
+    });
+  };
+
+  // Add all selected exercises
+  const handleAddSelectedExercises = async () => {
+    if (selectedExercisesToAdd.length === 0) return;
+    
+    setIsAddingExercise(true);
+    
+    // Add exercises one by one
+    for (const exercise of selectedExercisesToAdd) {
+      await handleAddExercise(exercise);
+    }
+    
+    // Clear selections and close modal
+    setSelectedExercisesToAdd([]);
+    setShowAddExercise(false);
+    setShowMuscleDropdown(false);
+    setSelectedMuscleFilter(null);
+    setExerciseSearch('');
+    setIsAddingExercise(false);
+  };
+
+  // Close modal and clear selections
+  const handleCloseAddExerciseModal = () => {
+    setShowAddExercise(false);
+    setShowMuscleDropdown(false);
+    setSelectedExercisesToAdd([]);
+    setSelectedMuscleFilter(null);
+    setExerciseSearch('');
   };
 
   // Create custom exercise and add to workout
@@ -1985,18 +2026,29 @@ export default function WorkoutPage() {
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
             <div 
               className="absolute inset-0 bg-black/60"
-              onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
+              onClick={handleCloseAddExerciseModal}
             />
             <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
               <div className="p-4 border-b border-surface-800 flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
                 <button
-                  onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
-                  className="p-2 text-surface-400 hover:text-surface-200"
+                  onClick={handleCloseAddExerciseModal}
+                  className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
+                </button>
+                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+                <button
+                  onClick={handleAddSelectedExercises}
+                  disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
+                  className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                    selectedExercisesToAdd.length > 0
+                      ? 'bg-primary-500 text-white hover:bg-primary-600'
+                      : 'bg-surface-700 text-surface-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
                 </button>
               </div>
               
@@ -2092,28 +2144,40 @@ export default function WorkoutPage() {
                     return <p className="text-center text-surface-400 py-8">No exercises found</p>;
                   }
                   
-                  return filteredExercises.map((exercise) => (
-                    <button
-                      key={exercise.id}
-                      onClick={() => handleAddExercise(exercise)}
-                      disabled={isAddingExercise}
-                      className="w-full flex items-center justify-between p-4 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-surface-200">{exercise.name}</span>
-                        {frequentExerciseIds.has(exercise.id) && (
-                          <span className="text-amber-400 text-sm">★</span>
-                        )}
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        exercise.mechanic === 'compound' 
-                          ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                          : 'bg-surface-700 text-surface-400'
-                      }`}>
-                        {exercise.mechanic}
-                      </span>
-                    </button>
-                  ));
+                  return filteredExercises.map((exercise) => {
+                    const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+                    return (
+                      <button
+                        key={exercise.id}
+                        onClick={() => toggleExerciseSelection(exercise)}
+                        disabled={isAddingExercise}
+                        className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
+                          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-surface-200">{exercise.name}</span>
+                          {frequentExerciseIds.has(exercise.id) && (
+                            <span className="text-amber-400 text-sm">★</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            exercise.mechanic === 'compound' 
+                              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                              : 'bg-surface-700 text-surface-400'
+                          }`}>
+                            {exercise.mechanic}
+                          </span>
+                          {isSelected && (
+                            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  });
                 })()}
               </div>
             </div>
@@ -2703,21 +2767,32 @@ export default function WorkoutPage() {
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/60"
-            onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
+            onClick={handleCloseAddExerciseModal}
           />
           
           {/* Modal */}
           <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
             {/* Header */}
             <div className="p-4 border-b border-surface-800 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
               <button
-                onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
-                className="p-2 text-surface-400 hover:text-surface-200"
+                onClick={handleCloseAddExerciseModal}
+                className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
+              </button>
+              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+              <button
+                onClick={handleAddSelectedExercises}
+                disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
+                className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                  selectedExercisesToAdd.length > 0
+                    ? 'bg-primary-500 text-white hover:bg-primary-600'
+                    : 'bg-surface-700 text-surface-500 cursor-not-allowed'
+                }`}
+              >
+                {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
               </button>
             </div>
 
@@ -2829,28 +2904,40 @@ export default function WorkoutPage() {
                   return <p className="text-center text-surface-500 py-8">No exercises found</p>;
                 }
                 
-                return filteredExercises.map((exercise) => (
-                  <button
-                    key={exercise.id}
-                    onClick={() => handleAddExercise(exercise)}
-                    disabled={isAddingExercise}
-                    className="w-full flex items-center justify-between p-4 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-surface-200">{exercise.name}</span>
-                      {frequentExerciseIds.has(exercise.id) && (
-                        <span className="text-amber-400 text-sm">★</span>
-                      )}
-                    </div>
-                    <span className={`text-xs px-2 py-0.5 rounded ${
-                      exercise.mechanic === 'compound' 
-                        ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                        : 'bg-surface-700 text-surface-400'
-                    }`}>
-                      {exercise.mechanic}
-                    </span>
-                  </button>
-                ));
+                return filteredExercises.map((exercise) => {
+                  const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+                  return (
+                    <button
+                      key={exercise.id}
+                      onClick={() => toggleExerciseSelection(exercise)}
+                      disabled={isAddingExercise}
+                      className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
+                        isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-surface-200">{exercise.name}</span>
+                        {frequentExerciseIds.has(exercise.id) && (
+                          <span className="text-amber-400 text-sm">★</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          exercise.mechanic === 'compound' 
+                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                            : 'bg-surface-700 text-surface-400'
+                        }`}>
+                          {exercise.mechanic}
+                        </span>
+                        {isSelected && (
+                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  );
+                });
               })()}
             </div>
           </div>
