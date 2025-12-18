@@ -1945,48 +1945,40 @@ export default function WorkoutPage() {
     );
   }
 
-  // Empty workout - show add exercise interface
+  // Empty workout - show standard header with add button (no extra page)
   if (!currentBlock || !currentExercise) {
     return (
-      <div className="max-w-lg mx-auto py-8 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+      <div className="max-w-2xl mx-auto space-y-6 pb-8">
+        {/* Same header as normal workout */}
+        <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
           <div>
-            <h1 className="text-xl font-bold text-surface-100">Quick Workout</h1>
-            <p className="text-sm text-surface-400">Add exercises to get started</p>
+            <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+            <p className="text-surface-400">0 of 0 sets completed</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/workout')}>
-            Cancel
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={handleOpenAddExercise}>
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add
+            </Button>
+            <Button variant="outline" onClick={handleWorkoutComplete}>
+              Finish
+            </Button>
+          </div>
         </div>
 
-        {/* Empty state with add button */}
-        <Card className="text-center py-12">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
-            <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <h2 className="text-lg font-semibold text-surface-100 mb-2">No Exercises Yet</h2>
-          <p className="text-surface-400 mb-6 max-w-xs mx-auto">
-            Add exercises to build your workout. You can add as many as you like!
-          </p>
-          <Button onClick={handleOpenAddExercise}>
-            + Add Your First Exercise
-          </Button>
-        </Card>
+        {/* Progress bar (empty) */}
+        <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
+          <div className="bg-primary-500 h-full transition-all duration-300" style={{ width: '0%' }} />
+        </div>
 
-        {/* Quick tips */}
-        <Card className="p-4 bg-surface-800/50">
-          <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">💡 Tips</p>
-          <ul className="text-sm text-surface-400 space-y-1">
-            <li>• Start with compound movements (bench, squat, deadlift)</li>
-            <li>• Add isolation exercises after compounds</li>
-            <li>• 3-5 exercises is typical for most workouts</li>
-          </ul>
-        </Card>
+        {/* Empty state hint */}
+        <div className="text-center py-12 text-surface-500">
+          <p>Tap <span className="text-primary-400 font-medium">+ Add</span> to add exercises</p>
+        </div>
 
-        {/* Add Exercise Modal - reuse existing modal */}
+        {/* Add Exercise Modal */}
         {showAddExercise && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
             <div 
