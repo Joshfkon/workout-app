@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
+import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 
 interface PlannedWorkout {
   id: string;
@@ -24,6 +25,24 @@ interface ActiveMesocycle {
   split: string;
 }
 
+interface FolderWithTemplates extends WorkoutFolder {
+  templates: (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[];
+  isExpanded: boolean;
+}
+
+const FOLDER_COLORS = [
+  '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
+];
+
+const QUICK_TEMPLATES = [
+  { name: 'Push', muscles: 'Chest, Shoulders, Triceps', icon: '💪', muscleIds: 'chest,shoulders,triceps' },
+  { name: 'Pull', muscles: 'Back, Biceps, Rear Delts', icon: '🏋️', muscleIds: 'back,biceps,shoulders' },
+  { name: 'Legs', muscles: 'Quads, Hamstrings, Glutes', icon: '🦵', muscleIds: 'quads,hamstrings,glutes,calves' },
+  { name: 'Upper', muscles: 'Chest, Back, Shoulders, Arms', icon: '👆', muscleIds: 'chest,back,shoulders,biceps,triceps' },
+  { name: 'Lower', muscles: 'Quads, Hamstrings, Glutes', icon: '👇', muscleIds: 'quads,hamstrings,glutes,calves' },
+  { name: 'Full Body', muscles: 'All muscle groups', icon: '🔥', muscleIds: 'chest,back,shoulders,quads,biceps,triceps' },
+];
+
 export default function WorkoutPage() {
   const router = useRouter();
   const [isStarting, setIsStarting] = useState(false);
@@ -31,10 +50,57 @@ export default function WorkoutPage() {
   const [plannedWorkouts, setPlannedWorkouts] = useState<PlannedWorkout[]>([]);
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Template states
+  const [folders, setFolders] = useState<FolderWithTemplates[]>([]);
+  const [unfolderedTemplates, setUnfolderedTemplates] = useState<(WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[]>([]);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [showCreateTemplate, setShowCreateTemplate] = useState(false);
+  const [folderName, setFolderName] = useState('');
+  const [folderColor, setFolderColor] = useState(FOLDER_COLORS[0]);
+  const [templateName, setTemplateName] = useState('');
+  const [templateFolderId, setTemplateFolderId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  const supabase = createUntypedClient();
 
   useEffect(() => {
-    async function fetchWorkouts() {
-      const supabase = createUntypedClient();
+    fetchWorkouts();
+    fetchTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function fetchTemplates() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const [foldersResult, templatesResult, exercisesResult] = await Promise.all([
+      supabase.from('workout_folders').select('*').eq('user_id', user.id).order('sort_order'),
+      supabase.from('workout_templates').select('*').eq('user_id', user.id).order('sort_order'),
+      supabase.from('workout_template_exercises').select('*').order('sort_order'),
+    ]);
+
+    const foldersData = foldersResult.data || [];
+    const templatesData = templatesResult.data || [];
+    const exercisesData = exercisesResult.data || [];
+
+    const templatesWithExercises = templatesData.map((t: WorkoutTemplate) => ({
+      ...t,
+      exercises: exercisesData.filter((e: WorkoutTemplateExercise) => e.template_id === t.id),
+    }));
+
+    const foldersWithTemplates: FolderWithTemplates[] = foldersData.map((f: WorkoutFolder) => ({
+      ...f,
+      templates: templatesWithExercises.filter((t: WorkoutTemplate) => t.folder_id === f.id),
+      isExpanded: true,
+    }));
+
+    setFolders(foldersWithTemplates);
+    setUnfolderedTemplates(templatesWithExercises.filter((t: WorkoutTemplate) => !t.folder_id));
+  }
+
+  async function fetchWorkouts() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -180,6 +246,82 @@ export default function WorkoutPage() {
       });
     }
   };
+
+  // Template management functions
+  function toggleFolder(folderId: string) {
+    setFolders(prev => prev.map(f => 
+      f.id === folderId ? { ...f, isExpanded: !f.isExpanded } : f
+    ));
+  }
+
+  async function handleCreateFolder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!folderName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase.from('workout_folders').insert({
+        user_id: user.id,
+        name: folderName.trim(),
+        color: folderColor,
+        sort_order: folders.length,
+      });
+      setFolderName('');
+      setShowCreateFolder(false);
+      await fetchTemplates();
+    } catch (err) {
+      console.error('Error creating folder:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleCreateTemplate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!templateName.trim()) return;
+    setIsSubmitting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from('workout_templates').insert({
+        user_id: user.id,
+        name: templateName.trim(),
+        folder_id: templateFolderId,
+      }).select('id').single();
+      setTemplateName('');
+      setShowCreateTemplate(false);
+      if (data) {
+        router.push(`/dashboard/templates/${data.id}`);
+      }
+    } catch (err) {
+      console.error('Error creating template:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteTemplate(templateId: string) {
+    if (!confirm('Delete this template?')) return;
+    await supabase.from('workout_templates').delete().eq('id', templateId);
+    await fetchTemplates();
+    setOpenMenu(null);
+  }
+
+  async function handleDeleteFolder(folderId: string) {
+    if (!confirm('Delete this folder? Templates will be moved out.')) return;
+    await supabase.from('workout_templates').update({ folder_id: null }).eq('folder_id', folderId);
+    await supabase.from('workout_folders').delete().eq('id', folderId);
+    await fetchTemplates();
+    setOpenMenu(null);
+  }
+
+  function formatExerciseList(exercises: WorkoutTemplateExercise[]) {
+    if (!exercises?.length) return 'No exercises';
+    const names = exercises.map(e => e.exercise_name);
+    if (names.length <= 3) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} & ${names.length - 2} more`;
+  }
 
   return (
     <div className="space-y-6">
@@ -350,36 +492,245 @@ export default function WorkoutPage() {
       {/* Workout templates */}
       <Card>
         <CardHeader>
-          <CardTitle>Workout Templates</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Workout Templates</CardTitle>
+            <div className="flex gap-2">
+              <Button variant="primary" size="sm" onClick={() => setShowCreateTemplate(true)}>
+                + Template
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowCreateFolder(true)}>
+                📁
+              </Button>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-surface-400 mb-4">
-            Quick start with a common split:
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {[
-              { name: 'Push', muscles: 'Chest, Shoulders, Triceps', icon: '💪', muscleIds: 'chest,shoulders,triceps' },
-              { name: 'Pull', muscles: 'Back, Biceps, Rear Delts', icon: '🏋️', muscleIds: 'back,biceps,shoulders' },
-              { name: 'Legs', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '🦵', muscleIds: 'quads,hamstrings,glutes,calves' },
-              { name: 'Upper Body', muscles: 'Chest, Back, Shoulders, Arms', icon: '👆', muscleIds: 'chest,back,shoulders,biceps,triceps' },
-              { name: 'Lower Body', muscles: 'Quads, Hamstrings, Glutes, Calves', icon: '👇', muscleIds: 'quads,hamstrings,glutes,calves' },
-              { name: 'Full Body', muscles: 'All muscle groups', icon: '🔥', muscleIds: 'chest,back,shoulders,quads,biceps,triceps' },
-            ].map((template) => (
-              <Link
-                key={template.name}
-                href={`/dashboard/workout/new?template=${encodeURIComponent(template.name)}&muscles=${template.muscleIds}`}
-                className="p-4 bg-surface-800/50 rounded-lg text-left hover:bg-surface-800 transition-colors group"
-              >
-                <span className="text-2xl mb-2 block">{template.icon}</span>
-                <h4 className="font-medium text-surface-200 group-hover:text-surface-100">
-                  {template.name}
-                </h4>
-                <p className="text-xs text-surface-500 mt-1">{template.muscles}</p>
-              </Link>
-            ))}
+        <CardContent className="space-y-4">
+          {/* Custom Templates - Folders */}
+          {folders.map((folder) => (
+            <div key={folder.id} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => toggleFolder(folder.id)}
+                  className="flex items-center gap-2 text-sm font-medium text-surface-300 hover:text-surface-100"
+                >
+                  <span style={{ color: folder.color }}>📁</span>
+                  {folder.name} ({folder.templates.length})
+                  <span className="text-xs">{folder.isExpanded ? '▼' : '▶'}</span>
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setOpenMenu(openMenu === folder.id ? null : folder.id)}
+                    className="p-1 text-surface-500 hover:text-surface-300"
+                  >
+                    •••
+                  </button>
+                  {openMenu === folder.id && (
+                    <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 min-w-[120px]">
+                      <button
+                        onClick={() => { setTemplateFolderId(folder.id); setShowCreateTemplate(true); setOpenMenu(null); }}
+                        className="w-full px-3 py-2 text-left text-sm text-surface-200 hover:bg-surface-700"
+                      >
+                        Add Template
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFolder(folder.id)}
+                        className="w-full px-3 py-2 text-left text-sm text-danger-400 hover:bg-surface-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {folder.isExpanded && folder.templates.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2 pl-5">
+                  {folder.templates.map((template) => (
+                    <TemplateCard
+                      key={template.id}
+                      template={template}
+                      formatExerciseList={formatExerciseList}
+                      onDelete={() => handleDeleteTemplate(template.id)}
+                      menuOpen={openMenu === template.id}
+                      onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Unfoldered Custom Templates */}
+          {unfolderedTemplates.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {unfolderedTemplates.map((template) => (
+                <TemplateCard
+                  key={template.id}
+                  template={template}
+                  formatExerciseList={formatExerciseList}
+                  onDelete={() => handleDeleteTemplate(template.id)}
+                  menuOpen={openMenu === template.id}
+                  onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Quick Start Templates */}
+          <div>
+            <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">Quick Start</p>
+            <div className="grid gap-2 grid-cols-3 sm:grid-cols-6">
+              {QUICK_TEMPLATES.map((template) => (
+                <Link
+                  key={template.name}
+                  href={`/dashboard/workout/new?template=${encodeURIComponent(template.name)}&muscles=${template.muscleIds}`}
+                  className="p-3 bg-surface-800/50 rounded-lg text-center hover:bg-surface-800 transition-colors group"
+                >
+                  <span className="text-xl block">{template.icon}</span>
+                  <span className="text-xs font-medium text-surface-400 group-hover:text-surface-200">
+                    {template.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Create Folder Modal */}
+      {showCreateFolder && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-sm">
+            <div className="p-4 border-b border-surface-700">
+              <h2 className="text-lg font-semibold text-surface-100">Create Folder</h2>
+            </div>
+            <form onSubmit={handleCreateFolder}>
+              <div className="p-4 space-y-4">
+                <input
+                  type="text"
+                  value={folderName}
+                  onChange={(e) => setFolderName(e.target.value)}
+                  placeholder="Folder name..."
+                  className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  {FOLDER_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setFolderColor(color)}
+                      className={`w-6 h-6 rounded-full ${folderColor === color ? 'ring-2 ring-white' : ''}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="p-4 border-t border-surface-700 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setShowCreateFolder(false)}>Cancel</Button>
+                <Button type="submit" variant="primary" disabled={isSubmitting}>Create</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Template Modal */}
+      {showCreateTemplate && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-sm">
+            <div className="p-4 border-b border-surface-700">
+              <h2 className="text-lg font-semibold text-surface-100">Create Template</h2>
+            </div>
+            <form onSubmit={handleCreateTemplate}>
+              <div className="p-4 space-y-4">
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Template name..."
+                  className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                  autoFocus
+                />
+                {folders.length > 0 && (
+                  <select
+                    value={templateFolderId || ''}
+                    onChange={(e) => setTemplateFolderId(e.target.value || null)}
+                    className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100"
+                  >
+                    <option value="">No folder</option>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="p-4 border-t border-surface-700 flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => { setShowCreateTemplate(false); setTemplateFolderId(null); }}>Cancel</Button>
+                <Button type="submit" variant="primary" disabled={isSubmitting}>Create</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {openMenu && <div className="fixed inset-0 z-0" onClick={() => setOpenMenu(null)} />}
+    </div>
+  );
+}
+
+// Template Card Component
+function TemplateCard({
+  template,
+  formatExerciseList,
+  onDelete,
+  menuOpen,
+  onMenuToggle,
+}: {
+  template: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] };
+  formatExerciseList: (exercises: WorkoutTemplateExercise[]) => string;
+  onDelete: () => void;
+  menuOpen: boolean;
+  onMenuToggle: () => void;
+}) {
+  return (
+    <div className="relative p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors group">
+      <div className="flex justify-between items-start">
+        <Link href={`/dashboard/templates/${template.id}`} className="flex-1">
+          <h4 className="font-medium text-surface-200 group-hover:text-surface-100 text-sm">
+            {template.name}
+          </h4>
+          <p className="text-xs text-surface-500 mt-0.5 line-clamp-1">
+            {formatExerciseList(template.exercises)}
+          </p>
+        </Link>
+        <div className="relative">
+          <button onClick={onMenuToggle} className="p-1 text-surface-500 hover:text-surface-300 text-xs">
+            •••
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-20 min-w-[100px]">
+              <Link
+                href={`/dashboard/workout/new?template=${template.id}`}
+                className="block px-3 py-2 text-sm text-surface-200 hover:bg-surface-700"
+              >
+                Start
+              </Link>
+              <Link
+                href={`/dashboard/templates/${template.id}`}
+                className="block px-3 py-2 text-sm text-surface-200 hover:bg-surface-700"
+              >
+                Edit
+              </Link>
+              <button
+                onClick={onDelete}
+                className="w-full px-3 py-2 text-left text-sm text-danger-400 hover:bg-surface-700"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
