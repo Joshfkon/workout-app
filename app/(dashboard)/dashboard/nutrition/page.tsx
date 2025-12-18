@@ -982,9 +982,14 @@ export default function NutritionPage() {
                 <div className="space-y-1">
                   {meal.entries.map((entry) => (
                     <button
+                      type="button"
                       key={entry.id}
-                      onClick={() => openEditFood(entry)}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openEditFood(entry);
+                      }}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left active:bg-surface-700"
                     >
                       {/* Food Icon */}
                       <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
