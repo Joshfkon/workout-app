@@ -116,6 +116,7 @@ function NewWorkoutContent() {
   const searchParams = useSearchParams();
   const templateName = searchParams.get('template');
   const templateMuscles = searchParams.get('muscles');
+  const aiMode = searchParams.get('ai') === 'true';
   
   const [step, setStep] = useState(templateMuscles ? 2 : 1); // Skip to step 2 if template
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>(
@@ -287,6 +288,14 @@ function NewWorkoutContent() {
       }
     }
   }, [suggestions, exercises, selectedExercises.length]);
+
+  // Auto-trigger AI suggestions when ai=true in URL
+  useEffect(() => {
+    if (aiMode && !suggestions && !isSuggesting) {
+      suggestExercises();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiMode]);
 
   // Fetch frequently used exercises on mount
   useEffect(() => {
