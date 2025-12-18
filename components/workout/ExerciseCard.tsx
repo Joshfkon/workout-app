@@ -153,6 +153,9 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
+  const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
+  const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
+  const [warmupWeightInput, setWarmupWeightInput] = useState('');
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
@@ -883,10 +886,16 @@ export const ExerciseCard = memo(function ExerciseCard({
           <tbody className="divide-y divide-surface-800">
             {/* Warmup sets - displayed inline before working sets */}
             {isActive && warmupSets.length > 0 && workingWeight > 0 && warmupSets.map((warmup) => {
-              const warmupWeightKg = workingWeight * (warmup.percentOfWorking / 100);
+              // Use custom weight if set, otherwise calculate from percentage
+              const calculatedWeightKg = workingWeight * (warmup.percentOfWorking / 100);
+              const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
+              const warmupWeightKg = hasCustomWeight 
+                ? customWarmupWeights.get(warmup.setNumber)! 
+                : calculatedWeightKg;
               const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
               const displayWarmupWeight = roundedWeight === 0 ? 'Empty' : formatWeightValue(roundedWeight, unit);
               const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
+              const isEditingThis = editingWarmupId === warmup.setNumber;
               
               return (
                 <tr 
@@ -896,8 +905,48 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-3 py-2 text-amber-400 font-medium text-xs">
                     W{warmup.setNumber}
                   </td>
-                  <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">
-                    {displayWarmupWeight}
+                  <td className="px-2 py-2 text-center">
+                    {isEditingThis ? (
+                      <input
+                        type="number"
+                        value={warmupWeightInput}
+                        onChange={(e) => setWarmupWeightInput(e.target.value)}
+                        onBlur={() => {
+                          const newWeight = parseFloat(warmupWeightInput);
+                          if (!isNaN(newWeight) && newWeight >= 0) {
+                            // Convert to kg if needed
+                            const weightInKg = unit === 'lb' ? newWeight / 2.20462 : newWeight;
+                            setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
+                          }
+                          setEditingWarmupId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const newWeight = parseFloat(warmupWeightInput);
+                            if (!isNaN(newWeight) && newWeight >= 0) {
+                              const weightInKg = unit === 'lb' ? newWeight / 2.20462 : newWeight;
+                              setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
+                            }
+                            setEditingWarmupId(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingWarmupId(null);
+                          }
+                        }}
+                        autoFocus
+                        className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingWarmupId(warmup.setNumber);
+                          setWarmupWeightInput(roundedWeight.toString());
+                        }}
+                        className="font-mono text-surface-300 text-sm hover:text-amber-400 transition-colors"
+                      >
+                        {displayWarmupWeight}
+                        {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
+                      </button>
+                    )}
                   </td>
                   <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">
                     {warmup.targetReps}
