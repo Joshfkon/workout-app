@@ -218,10 +218,7 @@ export default function WorkoutPage() {
       } finally {
         setIsLoading(false);
       }
-    }
-
-    fetchWorkouts();
-  }, []);
+  }
 
   const handleQuickStart = () => {
     setIsStarting(true);
