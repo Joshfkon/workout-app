@@ -318,13 +318,39 @@ export default function AnalyticsPage() {
       setUserId(user.id);
 
       try {
-        // Fetch user profile
-        const { data: profile } = await supabase
-          .from('users')
-          .select('height_cm, goal, experience, target_body_fat_percent, sex')
-          .eq('id', user.id)
-          .single();
+        // Run all queries in parallel for faster loading
+        const [profileResult, scanResult, photoResult, sessionsResult] = await Promise.all([
+          // User profile
+          supabase
+            .from('users')
+            .select('height_cm, goal, experience, target_body_fat_percent, sex')
+            .eq('id', user.id)
+            .single(),
+          // DEXA scans
+          supabase
+            .from('dexa_scans')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('scan_date', { ascending: false }),
+          // Progress photos
+          supabase
+            .from('progress_photos')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('photo_date', { ascending: false })
+            .limit(8),
+          // Coaching sessions with calibrated lifts
+          supabase
+            .from('coaching_sessions')
+            .select('*, calibrated_lifts:calibrated_lifts(*)')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ]);
 
+        // Process user profile
+        const profile = profileResult.data;
         if (profile) {
           setUserProfile({
             heightCm: profile.height_cm,
@@ -335,13 +361,8 @@ export default function AnalyticsPage() {
           setSex(profile.sex || 'male');
         }
 
-        // Fetch DEXA scans
-        const { data: scanData } = await supabase
-          .from('dexa_scans')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('scan_date', { ascending: false });
-
+        // Process DEXA scans
+        const scanData = scanResult.data;
         if (scanData) {
           const transformedScans: DexaScan[] = scanData.map((scan: any) => ({
             id: scan.id,
@@ -359,14 +380,8 @@ export default function AnalyticsPage() {
           setScans(transformedScans);
         }
 
-        // Fetch progress photos
-        const { data: photoData } = await supabase
-          .from('progress_photos')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('photo_date', { ascending: false })
-          .limit(8);
-
+        // Process progress photos
+        const photoData = photoResult.data;
         if (photoData) {
           const transformedPhotos: ProgressPhoto[] = photoData.map((photo: any) => ({
             id: photo.id,
@@ -381,15 +396,8 @@ export default function AnalyticsPage() {
           setProgressPhotos(transformedPhotos);
         }
 
-        // Fetch strength profile from coaching sessions
-        const { data: sessionsData } = await supabase
-          .from('coaching_sessions')
-          .select('*, calibrated_lifts:calibrated_lifts(*)')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(1);
-
+        // Process strength profile from coaching sessions
+        const sessionsData = sessionsResult.data;
         if (sessionsData && sessionsData.length > 0) {
           const session = sessionsData[0];
           if (session.strength_profile) {
