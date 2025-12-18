@@ -653,7 +653,8 @@ export default function NutritionPage() {
   }
 
   function changeDate(delta: number) {
-    const date = new Date(selectedDate);
+    // Use T00:00:00 to force local timezone interpretation (not UTC)
+    const date = new Date(selectedDate + 'T00:00:00');
     date.setDate(date.getDate() + delta);
     setSelectedDate(getLocalDateString(date));
   }
@@ -720,8 +721,9 @@ export default function NutritionPage() {
   ).slice(0, 20);
 
   const isToday = selectedDate === getLocalDateString();
+  const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
   const dateDisplay = isToday
-    ? 'Today'
+    ? `Today (${todayDayOfWeek})`
     : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
