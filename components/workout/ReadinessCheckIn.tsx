@@ -365,19 +365,19 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
           {todayNutrition ? (
             <div className="grid grid-cols-4 gap-2 text-center">
               <div className="p-2 bg-surface-900/50 rounded">
-                <p className="text-lg font-bold text-surface-100">{todayNutrition.calories}</p>
+                <p className="text-lg font-bold text-surface-100">{Math.round(todayNutrition.calories)}</p>
                 <p className="text-xs text-surface-500">cal</p>
               </div>
               <div className="p-2 bg-surface-900/50 rounded">
-                <p className="text-lg font-bold text-primary-400">{todayNutrition.protein}g</p>
+                <p className="text-lg font-bold text-primary-400">{Math.round(todayNutrition.protein * 10) / 10}g</p>
                 <p className="text-xs text-surface-500">protein</p>
               </div>
               <div className="p-2 bg-surface-900/50 rounded">
-                <p className="text-lg font-bold text-surface-300">{todayNutrition.carbs}g</p>
+                <p className="text-lg font-bold text-surface-300">{Math.round(todayNutrition.carbs)}g</p>
                 <p className="text-xs text-surface-500">carbs</p>
               </div>
               <div className="p-2 bg-surface-900/50 rounded">
-                <p className="text-lg font-bold text-surface-300">{todayNutrition.fat}g</p>
+                <p className="text-lg font-bold text-surface-300">{Math.round(todayNutrition.fat)}g</p>
                 <p className="text-xs text-surface-500">fat</p>
               </div>
             </div>
