@@ -1945,15 +1945,110 @@ export default function WorkoutPage() {
     );
   }
 
+  // Empty workout - show add exercise interface
   if (!currentBlock || !currentExercise) {
     return (
-      <div className="max-w-lg mx-auto py-8">
-        <Card className="text-center py-8">
-          <p className="text-surface-400">No exercises in this workout</p>
-          <Button className="mt-4" onClick={() => router.push('/dashboard/workout')}>
-            Go Back
+      <div className="max-w-lg mx-auto py-8 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-surface-100">Quick Workout</h1>
+            <p className="text-sm text-surface-400">Add exercises to get started</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => router.push('/dashboard/workout')}>
+            Cancel
+          </Button>
+        </div>
+
+        {/* Empty state with add button */}
+        <Card className="text-center py-12">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
+            <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-surface-100 mb-2">No Exercises Yet</h2>
+          <p className="text-surface-400 mb-6 max-w-xs mx-auto">
+            Add exercises to build your workout. You can add as many as you like!
+          </p>
+          <Button onClick={handleOpenAddExercise}>
+            + Add Your First Exercise
           </Button>
         </Card>
+
+        {/* Quick tips */}
+        <Card className="p-4 bg-surface-800/50">
+          <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">💡 Tips</p>
+          <ul className="text-sm text-surface-400 space-y-1">
+            <li>• Start with compound movements (bench, squat, deadlift)</li>
+            <li>• Add isolation exercises after compounds</li>
+            <li>• 3-5 exercises is typical for most workouts</li>
+          </ul>
+        </Card>
+
+        {/* Add Exercise Modal - reuse existing modal */}
+        {showAddExercise && (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div 
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setShowAddExercise(false)}
+            />
+            <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+                <button
+                  onClick={() => setShowAddExercise(false)}
+                  className="p-2 text-surface-400 hover:text-surface-200"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="p-4 border-b border-surface-800">
+                <input
+                  type="text"
+                  value={exerciseSearch}
+                  onChange={(e) => setExerciseSearch(e.target.value)}
+                  placeholder="Search exercises..."
+                  className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+                  autoFocus
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {availableExercises
+                  .filter(ex => 
+                    ex.name.toLowerCase().includes(exerciseSearch.toLowerCase()) ||
+                    ex.primary_muscle?.toLowerCase().includes(exerciseSearch.toLowerCase())
+                  )
+                  .slice(0, 30)
+                  .map((exercise) => (
+                    <button
+                      key={exercise.id}
+                      onClick={() => handleAddExercise(exercise)}
+                      disabled={isAddingExercise}
+                      className="w-full flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors text-left disabled:opacity-50"
+                    >
+                      <div>
+                        <p className="font-medium text-surface-200">{exercise.name}</p>
+                        <p className="text-xs text-surface-500 capitalize">
+                          {exercise.primary_muscle} • {exercise.mechanic}
+                        </p>
+                      </div>
+                      {isAddingExercise ? (
+                        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <span className="text-primary-400 text-sm">+ Add</span>
+                      )}
+                    </button>
+                  ))}
+                {availableExercises.length === 0 && (
+                  <p className="text-center text-surface-400 py-8">Loading exercises...</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
