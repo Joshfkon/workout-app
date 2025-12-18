@@ -31,3 +31,4 @@ export {
   SkeletonExercise, 
   FullPageLoading 
 } from './LoadingAnimation';
+export { SwipeableRow } from './SwipeableRow';

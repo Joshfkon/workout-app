@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, SwipeableRow } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
 import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
@@ -990,49 +990,53 @@ export default function NutritionPage() {
               ) : (
                 <div className="space-y-1">
                   {meal.entries.map((entry) => (
-                    <button
-                      type="button"
+                    <SwipeableRow
                       key={entry.id}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditFood(entry);
-                      }}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left active:bg-surface-700"
+                      onDelete={() => handleDeleteFood(entry.id)}
                     >
-                      {/* Food Icon */}
-                      <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
-                        {getFoodIcon(entry.food_name)}
-                      </div>
-                      
-                      {/* Food Name & Serving */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-surface-100 truncate">
-                          {toTitleCase(entry.food_name)}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openEditFood(entry);
+                        }}
+                        className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left active:bg-surface-700"
+                      >
+                        {/* Food Icon */}
+                        <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
+                          {getFoodIcon(entry.food_name)}
                         </div>
-                        <div className="text-sm text-surface-500">
-                          {entry.servings !== 1 && `${entry.servings} × `}
-                          {entry.serving_size}
+                        
+                        {/* Food Name & Serving */}
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-surface-100 truncate">
+                            {toTitleCase(entry.food_name)}
+                          </div>
+                          <div className="text-sm text-surface-500">
+                            {entry.servings !== 1 && `${entry.servings} × `}
+                            {entry.serving_size}
+                          </div>
                         </div>
-                      </div>
-                      
-                      {/* Calories & Macros */}
-                      <div className="text-right flex-shrink-0">
-                        <div className="font-semibold text-surface-100">
-                          {Math.round(entry.calories)}
+                        
+                        {/* Calories & Macros */}
+                        <div className="text-right flex-shrink-0">
+                          <div className="font-semibold text-surface-100">
+                            {Math.round(entry.calories)}
+                          </div>
+                          <div className="text-xs text-surface-500">
+                            P:{Math.round(entry.protein || 0)} · C:{Math.round(entry.carbs || 0)} · F:{Math.round(entry.fat || 0)}
+                          </div>
                         </div>
-                        <div className="text-xs text-surface-500">
-                          P:{Math.round(entry.protein || 0)} · C:{Math.round(entry.carbs || 0)} · F:{Math.round(entry.fat || 0)}
+                        
+                        {/* Swipe hint */}
+                        <div className="text-surface-600 group-hover:text-primary-400 transition-colors flex-shrink-0">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
                         </div>
-                      </div>
-                      
-                      {/* Edit indicator */}
-                      <div className="text-surface-600 group-hover:text-primary-400 transition-colors flex-shrink-0">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </div>
-                    </button>
+                      </button>
+                    </SwipeableRow>
                   ))}
                 </div>
               )}
