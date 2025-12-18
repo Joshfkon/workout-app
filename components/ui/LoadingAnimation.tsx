@@ -1,8 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
-type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots';
+type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots' | 'pullup' | 'squat' | 'pushup' | 'jumprope' | 'deadlift' | 'random';
+
+// All fitness animations (excluding utility ones like spinner/dots)
+const FITNESS_ANIMATIONS: AnimationType[] = [
+  'barbell', 'dumbbell', 'reps', 'heartbeat', 'weights', 
+  'kettlebell', 'muscle', 'pullup', 'squat', 'pushup', 
+  'jumprope', 'deadlift'
+];
 
 interface LoadingAnimationProps {
   type?: AnimationType;
@@ -22,15 +29,28 @@ const LOADING_TIPS = [
   "Form over ego - always",
   "Consistency beats intensity",
   "Warmup sets prevent injury",
+  "Mind-muscle connection improves gains",
+  "Compound movements build the most muscle",
+  "Hydration affects performance significantly",
+  "Training to failure isn't always necessary",
+  "Recovery is just as important as training",
 ];
 
 export function LoadingAnimation({ 
-  type = 'barbell', 
+  type = 'random', 
   size = 'md',
   text,
   showTip = false 
 }: LoadingAnimationProps) {
   const [tip, setTip] = useState('');
+  
+  // Pick a random animation type on mount (stable for component lifetime)
+  const actualType = useMemo(() => {
+    if (type === 'random') {
+      return FITNESS_ANIMATIONS[Math.floor(Math.random() * FITNESS_ANIMATIONS.length)];
+    }
+    return type;
+  }, [type]);
   
   useEffect(() => {
     if (showTip) {
@@ -52,7 +72,7 @@ export function LoadingAnimation({
 
   return (
     <div className="flex flex-col items-center justify-center gap-4">
-      {type === 'barbell' && (
+      {actualType === 'barbell' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           {/* Entire barbell moves up and down like a bench press */}
           <div 
@@ -83,7 +103,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'dumbbell' && (
+      {actualType === 'dumbbell' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div className="flex items-center gap-1 animate-pulse">
             {/* Left weight */}
@@ -98,7 +118,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'reps' && (
+      {actualType === 'reps' && (
         <div className={`flex items-end gap-1 ${sizeClasses[size]}`}>
           {[0, 1, 2, 3, 4].map((i) => (
             <div
@@ -120,7 +140,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'heartbeat' && (
+      {actualType === 'heartbeat' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <svg 
             viewBox="0 0 24 24" 
@@ -144,7 +164,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'weights' && (
+      {actualType === 'weights' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div className="relative">
             {/* Stacked weight plates animation */}
@@ -173,7 +193,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'pulse' && (
+      {actualType === 'pulse' && (
         <div className={`relative ${sizeClasses[size]}`}>
           <div className="absolute inset-0 rounded-full bg-primary-500/30 animate-ping" />
           <div className="absolute inset-2 rounded-full bg-primary-500/50 animate-ping" style={{ animationDelay: '0.2s' }} />
@@ -181,7 +201,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'kettlebell' && (
+      {actualType === 'kettlebell' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <div style={{ animation: 'kettlebellSwing 1s ease-in-out infinite', transformOrigin: 'top center' }}>
             {/* Handle */}
@@ -200,7 +220,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'muscle' && (
+      {actualType === 'muscle' && (
         <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
           <svg 
             viewBox="0 0 64 64" 
@@ -235,7 +255,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'spinner' && (
+      {actualType === 'spinner' && (
         <div className={`relative ${sizeClasses[size]}`}>
           <svg className="w-full h-full animate-spin" viewBox="0 0 50 50">
             <circle
@@ -263,7 +283,7 @@ export function LoadingAnimation({
         </div>
       )}
 
-      {type === 'dots' && (
+      {actualType === 'dots' && (
         <div className={`flex items-center justify-center gap-2 ${sizeClasses[size]}`}>
           {[0, 1, 2].map((i) => (
             <div
@@ -279,6 +299,198 @@ export function LoadingAnimation({
             @keyframes dotBounce {
               0%, 100% { transform: translateY(0); opacity: 0.5; }
               50% { transform: translateY(-8px); opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Pull-up animation */}
+      {actualType === 'pullup' && (
+        <div className={`relative ${sizeClasses[size]} flex flex-col items-center justify-center`}>
+          {/* Pull-up bar */}
+          <div className="w-20 h-2 bg-gradient-to-r from-surface-500 via-surface-400 to-surface-500 rounded-full" />
+          {/* Person doing pull-up */}
+          <div 
+            className="flex flex-col items-center"
+            style={{ animation: 'pullupMove 1s ease-in-out infinite' }}
+          >
+            {/* Head */}
+            <div className="w-4 h-4 bg-primary-400 rounded-full mt-1" />
+            {/* Body */}
+            <div className="w-2 h-8 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm" />
+            {/* Arms holding bar - positioned at top */}
+            <div 
+              className="absolute top-2 flex gap-8"
+              style={{ animation: 'pullupArms 1s ease-in-out infinite' }}
+            >
+              <div className="w-1 h-6 bg-primary-400 rounded-full origin-top" style={{ transform: 'rotate(-30deg)' }} />
+              <div className="w-1 h-6 bg-primary-400 rounded-full origin-top" style={{ transform: 'rotate(30deg)' }} />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes pullupMove {
+              0%, 100% { transform: translateY(10px); }
+              50% { transform: translateY(-2px); }
+            }
+            @keyframes pullupArms {
+              0%, 100% { transform: scaleY(1); }
+              50% { transform: scaleY(0.5); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Squat animation */}
+      {actualType === 'squat' && (
+        <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
+          <div style={{ animation: 'squatMove 0.9s ease-in-out infinite' }}>
+            {/* Head */}
+            <div className="w-5 h-5 bg-primary-400 rounded-full mx-auto" />
+            {/* Barbell across shoulders */}
+            <div className="flex items-center -mt-1">
+              <div className="w-2 h-4 bg-accent-500 rounded-sm" />
+              <div className="w-14 h-1.5 bg-gradient-to-r from-surface-400 via-surface-300 to-surface-400 rounded-full" />
+              <div className="w-2 h-4 bg-accent-500 rounded-sm" />
+            </div>
+            {/* Torso */}
+            <div className="w-6 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto" />
+            {/* Legs */}
+            <div 
+              className="flex justify-center gap-2"
+              style={{ animation: 'squatLegs 0.9s ease-in-out infinite' }}
+            >
+              <div className="w-2 h-8 bg-primary-600 rounded-sm origin-top" />
+              <div className="w-2 h-8 bg-primary-600 rounded-sm origin-top" />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes squatMove {
+              0%, 100% { transform: translateY(0); }
+              50% { transform: translateY(12px); }
+            }
+            @keyframes squatLegs {
+              0%, 100% { transform: scaleY(1); }
+              50% { transform: scaleY(0.6); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Push-up animation */}
+      {actualType === 'pushup' && (
+        <div className={`relative ${sizeClasses[size]} flex items-end justify-center`}>
+          <div style={{ animation: 'pushupMove 0.8s ease-in-out infinite', transformOrigin: 'right bottom' }}>
+            {/* Person in push-up position */}
+            <div className="flex items-end">
+              {/* Arms */}
+              <div 
+                className="flex flex-col items-center mr-1"
+                style={{ animation: 'pushupArms 0.8s ease-in-out infinite' }}
+              >
+                <div className="w-1.5 h-6 bg-primary-400 rounded-full" />
+              </div>
+              {/* Body */}
+              <div className="w-16 h-3 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full -rotate-12 origin-right" style={{ animation: 'pushupBody 0.8s ease-in-out infinite' }} />
+              {/* Head at front */}
+              <div className="w-4 h-4 bg-primary-400 rounded-full -ml-2 mb-1" />
+            </div>
+            {/* Ground line */}
+            <div className="w-20 h-0.5 bg-surface-600 mt-1 rounded-full" />
+          </div>
+          <style jsx>{`
+            @keyframes pushupMove {
+              0%, 100% { transform: translateY(-6px); }
+              50% { transform: translateY(0); }
+            }
+            @keyframes pushupArms {
+              0%, 100% { transform: scaleY(1); }
+              50% { transform: scaleY(0.6); }
+            }
+            @keyframes pushupBody {
+              0%, 100% { transform: rotate(-12deg); }
+              50% { transform: rotate(-3deg); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Jump rope animation */}
+      {actualType === 'jumprope' && (
+        <div className={`relative ${sizeClasses[size]} flex items-center justify-center`}>
+          {/* Rope */}
+          <div 
+            className="absolute w-16 h-16 border-2 border-accent-400 rounded-full"
+            style={{ 
+              animation: 'ropeSpinFast 0.4s linear infinite',
+              borderStyle: 'dashed',
+              borderWidth: '3px',
+            }}
+          />
+          {/* Person jumping */}
+          <div style={{ animation: 'jumpMove 0.4s ease-in-out infinite' }}>
+            {/* Head */}
+            <div className="w-4 h-4 bg-primary-400 rounded-full mx-auto" />
+            {/* Body */}
+            <div className="w-2 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto" />
+            {/* Legs */}
+            <div className="flex justify-center gap-0.5">
+              <div className="w-1.5 h-4 bg-primary-600 rounded-sm" />
+              <div className="w-1.5 h-4 bg-primary-600 rounded-sm" />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes ropeSpinFast {
+              0% { transform: rotateX(0deg); }
+              100% { transform: rotateX(360deg); }
+            }
+            @keyframes jumpMove {
+              0%, 100% { transform: translateY(2px); }
+              50% { transform: translateY(-6px); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Deadlift animation */}
+      {actualType === 'deadlift' && (
+        <div className={`relative ${sizeClasses[size]} flex items-end justify-center pb-2`}>
+          <div style={{ animation: 'deadliftMove 1.2s ease-in-out infinite' }}>
+            {/* Head */}
+            <div className="w-4 h-4 bg-primary-400 rounded-full mx-auto mb-0.5" />
+            {/* Upper body - bends forward */}
+            <div 
+              className="w-3 h-6 bg-gradient-to-b from-primary-500 to-primary-600 rounded-sm mx-auto origin-bottom"
+              style={{ animation: 'deadliftBend 1.2s ease-in-out infinite' }}
+            />
+            {/* Legs - slight bend */}
+            <div className="flex justify-center gap-1">
+              <div className="w-2 h-6 bg-primary-700 rounded-sm" />
+              <div className="w-2 h-6 bg-primary-700 rounded-sm" />
+            </div>
+            {/* Barbell at ground level */}
+            <div 
+              className="flex items-center -mt-2"
+              style={{ animation: 'barbellUp 1.2s ease-in-out infinite' }}
+            >
+              <div className="w-3 h-4 bg-accent-500 rounded-sm" />
+              <div className="w-1 h-3 bg-accent-600 rounded-sm" />
+              <div className="w-10 h-1 bg-gradient-to-r from-surface-400 via-surface-300 to-surface-400 rounded-full" />
+              <div className="w-1 h-3 bg-accent-600 rounded-sm" />
+              <div className="w-3 h-4 bg-accent-500 rounded-sm" />
+            </div>
+          </div>
+          <style jsx>{`
+            @keyframes deadliftMove {
+              0%, 100% { transform: translateY(0); }
+              50% { transform: translateY(-14px); }
+            }
+            @keyframes deadliftBend {
+              0%, 100% { transform: rotate(30deg); }
+              50% { transform: rotate(0deg); }
+            }
+            @keyframes barbellUp {
+              0%, 100% { transform: translateY(8px); }
+              50% { transform: translateY(-6px); }
             }
           `}</style>
         </div>
@@ -336,7 +548,7 @@ export function SkeletonExercise() {
 }
 
 // Full page loading state
-export function FullPageLoading({ text = 'Loading...', type = 'barbell' as AnimationType }) {
+export function FullPageLoading({ text = 'Loading...', type = 'random' as AnimationType }) {
   return (
     <div className="min-h-[60vh] flex items-center justify-center">
       <LoadingAnimation type={type} size="lg" text={text} showTip />

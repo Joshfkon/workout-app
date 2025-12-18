@@ -361,7 +361,7 @@ export default function MesocyclePage() {
 
       {isLoading ? (
         <Card className="text-center py-12">
-          <LoadingAnimation type="reps" size="md" text="Loading your training plan..." />
+          <LoadingAnimation type="random" size="md" text="Loading your training plan..." />
         </Card>
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">

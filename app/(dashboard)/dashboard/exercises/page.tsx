@@ -420,7 +420,7 @@ export default function ExercisesPage() {
       {isLoading ? (
         <div className="space-y-4">
           <div className="flex justify-center py-8">
-            <LoadingAnimation type="dumbbell" size="lg" text="Loading exercises..." />
+            <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
           </div>
           <div className="grid gap-3">
             {[1, 2, 3, 4, 5].map((i) => (

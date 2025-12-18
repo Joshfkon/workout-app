@@ -581,7 +581,7 @@ function HistoryPageContent() {
           <p className="text-surface-400 mt-1">Your past training sessions</p>
         </div>
         <Card className="text-center py-12">
-          <LoadingAnimation type="dumbbell" size="md" />
+          <LoadingAnimation type="random" size="md" />
           <p className="text-surface-400 mt-4">Loading your workout history...</p>
         </Card>
       </div>

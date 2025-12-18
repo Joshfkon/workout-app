@@ -623,7 +623,7 @@ function NewWorkoutContent() {
           {isLoading ? (
             <Card>
               <CardContent className="py-8 flex flex-col items-center justify-center">
-                <LoadingAnimation type="muscle" size="md" />
+                <LoadingAnimation type="random" size="md" />
                 <p className="text-surface-400 mt-3">Loading exercises...</p>
               </CardContent>
             </Card>
@@ -832,7 +832,7 @@ export default function NewWorkoutPage() {
   return (
     <Suspense fallback={
       <div className="flex flex-col items-center justify-center min-h-[400px]">
-        <LoadingAnimation type="dumbbell" size="lg" />
+        <LoadingAnimation type="random" size="lg" />
         <p className="mt-4 text-surface-400">Setting up your workout...</p>
       </div>
     }>

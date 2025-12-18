@@ -1756,7 +1756,7 @@ export default function WorkoutPage() {
   if (phase === 'loading') {
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
-        <LoadingAnimation type="barbell" size="lg" />
+        <LoadingAnimation type="random" size="lg" />
         <p className="mt-4 text-surface-400">Loading workout...</p>
       </div>
     );

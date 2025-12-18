@@ -700,7 +700,7 @@ export default function NutritionPage() {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
-          <LoadingAnimation type="kettlebell" size="lg" />
+          <LoadingAnimation type="random" size="lg" />
           <p className="mt-4 text-surface-400">Loading nutrition data...</p>
         </div>
       </div>

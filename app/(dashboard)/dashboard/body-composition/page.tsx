@@ -14,7 +14,7 @@ export default function BodyCompositionPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[400px]">
-      <LoadingAnimation type="reps" size="md" />
+      <LoadingAnimation type="random" size="md" />
       <p className="mt-4 text-surface-400">Redirecting to Analytics...</p>
     </div>
   );

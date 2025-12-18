@@ -247,7 +247,7 @@ export default function SettingsPage() {
   if (isLoading) {
     return (
       <div className="max-w-2xl mx-auto flex flex-col items-center justify-center py-20">
-        <LoadingAnimation type="spinner" size="lg" />
+        <LoadingAnimation type="random" size="lg" />
         <p className="mt-4 text-surface-400">Loading settings...</p>
       </div>
     );

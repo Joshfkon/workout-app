@@ -585,7 +585,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-        <LoadingAnimation type="heartbeat" size="lg" />
+        <LoadingAnimation type="random" size="lg" />
         <p className="mt-4 text-surface-400">Loading dashboard...</p>
       </div>
     );
