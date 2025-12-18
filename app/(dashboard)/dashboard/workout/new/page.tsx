@@ -38,6 +38,79 @@ function getRestPeriod(isCompound: boolean, goal: Goal): number {
   return isCompound ? 150 : 75;    // 2.5min / 1.25min
 }
 
+/**
+ * Estimate time for an exercise including all sets and rest
+ * Returns time in minutes
+ */
+function estimateExerciseTime(
+  isCompound: boolean, 
+  goal: Goal, 
+  setsCount: number,
+  includeWarmup: boolean
+): number {
+  const restSeconds = getRestPeriod(isCompound, goal);
+  const setDuration = isCompound ? 50 : 35; // seconds per working set
+  
+  // Working sets time: (set duration + rest) * sets, minus rest after last set
+  const workingTime = (setDuration + restSeconds) * setsCount - restSeconds;
+  
+  // Warmup time: typically 3 sets taking about 3-4 minutes total
+  const warmupTime = includeWarmup && isCompound ? 4 * 60 : 0;
+  
+  // Transition time between exercises
+  const transitionTime = 60; // 1 minute
+  
+  return (workingTime + warmupTime + transitionTime) / 60;
+}
+
+/**
+ * Calculate how many exercises fit in a given time
+ */
+function getMaxExercisesForTime(
+  durationMinutes: number, 
+  goal: Goal
+): { compounds: number; isolations: number; total: number } {
+  // Average time per exercise type (with warmup for first compound per muscle)
+  const compoundWithWarmup = estimateExerciseTime(true, goal, 3, true);
+  const compoundNoWarmup = estimateExerciseTime(true, goal, 3, false);
+  const isolation = estimateExerciseTime(false, goal, 3, false);
+  
+  // Typically 1-2 muscles trained, so 1-2 warmups
+  // Estimate: 50% compounds, 50% isolations
+  // First compound per muscle gets warmup
+  
+  // Average exercise time (accounting for mix)
+  // Assume 1 warmup per 3 exercises on average
+  const avgCompoundTime = (compoundWithWarmup + compoundNoWarmup * 2) / 3;
+  const avgIsolationTime = isolation;
+  
+  // 60/40 compound/isolation split
+  const avgExerciseTime = avgCompoundTime * 0.5 + avgIsolationTime * 0.5;
+  
+  const maxExercises = Math.floor(durationMinutes / avgExerciseTime);
+  
+  // Split between compounds and isolations
+  const compounds = Math.ceil(maxExercises * 0.5);
+  const isolations = maxExercises - compounds;
+  
+  return { 
+    compounds: Math.max(1, compounds), 
+    isolations: Math.max(0, isolations), 
+    total: Math.max(1, maxExercises) 
+  };
+}
+
+/**
+ * Get time estimate range for display
+ */
+function getExerciseRangeForTime(durationMinutes: number): string {
+  // Use 'maintain' as middle ground for estimation
+  const estimate = getMaxExercisesForTime(durationMinutes, 'maintain');
+  const min = Math.max(1, estimate.total - 1);
+  const max = estimate.total + 1;
+  return `${min}-${max}`;
+}
+
 function NewWorkoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -72,13 +145,25 @@ function NewWorkoutContent() {
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [customExerciseError, setCustomExerciseError] = useState<string | null>(null);
 
-  // Suggest exercises based on recent history and goals
+  // Suggest exercises based on recent history, goals, AND time available
   const suggestExercises = async () => {
     setIsSuggesting(true);
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      
+      // Get user's goal
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+      
+      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      
+      // Calculate how many exercises fit in the time
+      const exerciseBudget = getMaxExercisesForTime(workoutDuration, userGoal);
       
       // Get recent workouts (last 7 days)
       const weekAgo = new Date();
@@ -113,15 +198,10 @@ function NewWorkoutContent() {
       const allMuscles = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'biceps', 'triceps', 'glutes', 'calves', 'abs'];
       const sortedMuscles = allMuscles.sort((a, b) => (trainedMuscles[a] || 0) - (trainedMuscles[b] || 0));
       
-      // Pick 2-3 muscles that haven't been trained recently
-      const suggestedMuscles = sortedMuscles.slice(0, 3);
-      
-      // Get user's goal
-      const { data: userData } = await supabase
-        .from('users')
-        .select('goal')
-        .eq('id', user.id)
-        .single();
+      // Pick muscles based on time available
+      // Short workouts: 1-2 muscles, long workouts: 2-3 muscles
+      const muscleCount = workoutDuration <= 30 ? 2 : workoutDuration <= 45 ? 2 : 3;
+      const suggestedMuscles = sortedMuscles.slice(0, muscleCount);
       
       // Fetch exercises for suggested muscles, including hypertrophy tier
       const { data: exercisesData } = await supabase
@@ -142,17 +222,40 @@ function NewWorkoutContent() {
         return mechA - mechB;
       });
       
-      // Pick 4-6 exercises (best tiers first, compounds before isolations)
+      // Pick exercises based on time budget
       const compounds = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'compound');
       const isolations = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'isolation');
+      
+      // Prioritize S and A tier for short workouts
+      const tieredCompounds = workoutDuration <= 30 
+        ? compounds.filter((e: any) => ['S', 'A'].includes(e.hypertrophy_tier))
+        : compounds;
+      const tieredIsolations = workoutDuration <= 30
+        ? isolations.filter((e: any) => ['S', 'A'].includes(e.hypertrophy_tier))
+        : isolations;
+      
+      // Use the fallback if not enough S/A tier exercises
+      const finalCompounds = tieredCompounds.length >= exerciseBudget.compounds ? tieredCompounds : compounds;
+      const finalIsolations = tieredIsolations.length >= exerciseBudget.isolations ? tieredIsolations : isolations;
+      
       const picked = [
-        ...compounds.slice(0, 3),
-        ...isolations.slice(0, 3),
+        ...finalCompounds.slice(0, exerciseBudget.compounds),
+        ...finalIsolations.slice(0, exerciseBudget.isolations),
       ];
       
+      // Calculate estimated time for the picked exercises
+      let estimatedMinutes = 0;
+      const warmupMuscles = new Set<string>();
+      picked.forEach((e: any) => {
+        const isCompound = e.mechanic === 'compound';
+        const needsWarmup = isCompound && !warmupMuscles.has(e.primary_muscle);
+        if (needsWarmup) warmupMuscles.add(e.primary_muscle);
+        estimatedMinutes += estimateExerciseTime(isCompound, userGoal, 3, needsWarmup);
+      });
+      
       const reason = Object.keys(trainedMuscles).length === 0 
-        ? 'Based on a balanced full-body approach for your first workout.'
-        : `Focusing on ${suggestedMuscles.join(', ')} — these haven't been trained recently.`;
+        ? `${picked.length} exercises for your ${workoutDuration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
+        : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${workoutDuration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
       
       setSuggestions({
         muscles: suggestedMuscles,
@@ -565,9 +668,27 @@ function NewWorkoutContent() {
               </span>
             </div>
             <span className="text-sm text-surface-500">
-              Recommended: {workoutDuration <= 25 ? '2-3' : workoutDuration <= 45 ? '3-5' : '5-8'} exercises
+              Recommended: <strong>{getExerciseRangeForTime(workoutDuration)}</strong> exercises
             </span>
           </div>
+          
+          {/* Warning if too many exercises selected */}
+          {selectedExercises.length > 0 && (() => {
+            const budget = getMaxExercisesForTime(workoutDuration, 'maintain');
+            if (selectedExercises.length > budget.total + 1) {
+              return (
+                <div className="p-3 bg-warning-500/10 border border-warning-500/20 rounded-lg flex items-center gap-2">
+                  <svg className="w-5 h-5 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-sm text-warning-300">
+                    {selectedExercises.length} exercises may exceed your {workoutDuration} min target. Consider removing {selectedExercises.length - budget.total} exercise{selectedExercises.length - budget.total > 1 ? 's' : ''}.
+                  </span>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           {/* Show AI suggestion reason */}
           {suggestions && (
@@ -707,6 +828,27 @@ function NewWorkoutContent() {
                   <p className="text-sm text-surface-400">
                     {selectedExercises.length} exercises selected
                   </p>
+                  {selectedExercises.length > 0 && (() => {
+                    // Calculate estimated time for selected exercises
+                    let estimatedMinutes = 0;
+                    const warmupMuscles = new Set<string>();
+                    selectedExercises.forEach(exId => {
+                      const ex = exercises.find(e => e.id === exId);
+                      if (ex) {
+                        const isCompound = ex.mechanic === 'compound';
+                        const needsWarmup = isCompound && !warmupMuscles.has(ex.primary_muscle);
+                        if (needsWarmup) warmupMuscles.add(ex.primary_muscle);
+                        estimatedMinutes += estimateExerciseTime(isCompound, 'maintain', 3, needsWarmup);
+                      }
+                    });
+                    const isOverTime = estimatedMinutes > workoutDuration + 5;
+                    return (
+                      <p className={`text-xs ${isOverTime ? 'text-warning-400' : 'text-surface-500'}`}>
+                        ~{Math.round(estimatedMinutes)} min estimated
+                        {isOverTime && ` (${Math.round(estimatedMinutes - workoutDuration)} min over)`}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="flex gap-3">
                   <Button variant="ghost" onClick={() => setStep(1)}>
