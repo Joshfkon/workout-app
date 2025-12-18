@@ -557,36 +557,41 @@ export default function WorkoutPage() {
           }
         }
         
-        // Fetch user profile for weight estimation
-        const { data: userData } = await supabase
-          .from('users')
-          .select('weight_kg, height_cm, experience, training_age, goal')
-          .eq('id', sessionData.user_id)
-          .single();
-        
-        // Fetch latest DEXA scan for body fat and regional data if available
-        const { data: dexaData } = await supabase
-          .from('dexa_scans')
-          .select('body_fat_percentage, regional_data, lean_mass_kg')
-          .eq('user_id', sessionData.user_id)
-          .order('scan_date', { ascending: false })
-          .limit(1)
-          .single();
-        
-        // Fetch calibrated lifts for weight estimation
-        const { data: calibratedLifts } = await supabase
-          .from('calibrated_lifts')
-          .select('lift_name, estimated_1rm, tested_at')
-          .eq('user_id', sessionData.user_id)
-          .order('tested_at', { ascending: false });
-        
-        // Fetch mesocycle info if this workout is part of one
-        const { data: mesocycleData } = await supabase
-          .from('mesocycles')
-          .select('name, start_date, total_weeks')
-          .eq('user_id', sessionData.user_id)
-          .eq('is_active', true)
-          .single();
+        // Fetch user profile, DEXA, calibrated lifts, and mesocycle in parallel
+        const [userResult, dexaResult, calibratedResult, mesocycleResult] = await Promise.all([
+          // User profile for weight estimation
+          supabase
+            .from('users')
+            .select('weight_kg, height_cm, experience, training_age, goal')
+            .eq('id', sessionData.user_id)
+            .single(),
+          // Latest DEXA scan for body fat and regional data
+          supabase
+            .from('dexa_scans')
+            .select('body_fat_percentage, regional_data, lean_mass_kg')
+            .eq('user_id', sessionData.user_id)
+            .order('scan_date', { ascending: false })
+            .limit(1)
+            .single(),
+          // Calibrated lifts for weight estimation
+          supabase
+            .from('calibrated_lifts')
+            .select('lift_name, estimated_1rm, tested_at')
+            .eq('user_id', sessionData.user_id)
+            .order('tested_at', { ascending: false }),
+          // Mesocycle info
+          supabase
+            .from('mesocycles')
+            .select('name, start_date, total_weeks')
+            .eq('user_id', sessionData.user_id)
+            .eq('is_active', true)
+            .single(),
+        ]);
+
+        const userData = userResult.data;
+        const dexaData = dexaResult.data;
+        const calibratedLifts = calibratedResult.data;
+        const mesocycleData = mesocycleResult.data;
         
         const profile: UserProfileForWeights | undefined = userData ? {
           weightKg: userData.weight_kg || 70,
@@ -695,88 +700,89 @@ export default function WorkoutPage() {
           }
         })();
         
-        // Fetch exercise history for all exercises in this workout
+        // Fetch exercise history for all exercises in parallel
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
         if (exerciseIds.length > 0) {
-          const histories: Record<string, ExerciseHistoryData> = {};
-          
-          for (const exerciseId of exerciseIds) {
-            try {
-              // Get all completed workout blocks for this exercise
-              const { data: historyBlocks } = await supabase
-                .from('exercise_blocks')
-                .select(`
+          // Fetch all exercise histories in parallel
+          const historyPromises = exerciseIds.map(exerciseId =>
+            supabase
+              .from('exercise_blocks')
+              .select(`
+                id,
+                workout_sessions!inner (
                   id,
-                  workout_sessions!inner (
-                    id,
-                    completed_at,
-                    state,
-                    user_id
-                  ),
-                  set_logs (
-                    weight_kg,
-                    reps,
-                    rpe,
-                    is_warmup,
-                    logged_at
-                  )
-                `)
-                .eq('exercise_id', exerciseId)
-                .eq('workout_sessions.user_id', sessionData.user_id)
-                .eq('workout_sessions.state', 'completed')
-                .order('workout_sessions(completed_at)', { ascending: false })
-                .limit(20);
+                  completed_at,
+                  state,
+                  user_id
+                ),
+                set_logs (
+                  weight_kg,
+                  reps,
+                  rpe,
+                  is_warmup,
+                  logged_at
+                )
+              `)
+              .eq('exercise_id', exerciseId)
+              .eq('workout_sessions.user_id', sessionData.user_id)
+              .eq('workout_sessions.state', 'completed')
+              .order('workout_sessions(completed_at)', { ascending: false })
+              .limit(20)
+              .then(result => ({ exerciseId, data: result.data }))
+              .catch(() => ({ exerciseId, data: null }))
+          );
+
+          const historyResults = await Promise.all(historyPromises);
+          const histories: Record<string, ExerciseHistoryData> = {};
+
+          for (const { exerciseId, data: historyBlocks } of historyResults) {
+            if (historyBlocks && historyBlocks.length > 0) {
+              let bestE1RM = 0;
+              let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+              let totalSessions = 0;
+              const seenSessions = new Set<string>();
               
-              if (historyBlocks && historyBlocks.length > 0) {
-                let bestE1RM = 0;
-                let personalRecord: ExerciseHistoryData['personalRecord'] = null;
-                let totalSessions = 0;
-                const seenSessions = new Set<string>();
+              // Get last workout data
+              const lastBlock = historyBlocks[0];
+              const lastSession = lastBlock.workout_sessions as any;
+              const lastSets = ((lastBlock.set_logs as any[]) || [])
+                .filter((s: any) => !s.is_warmup)
+                .map((s: any) => ({
+                  weightKg: s.weight_kg,
+                  reps: s.reps,
+                  rpe: s.rpe,
+                }));
+              
+              // Calculate best E1RM and PR
+              historyBlocks.forEach((block: any) => {
+                const session = block.workout_sessions;
+                if (session && !seenSessions.has(session.id)) {
+                  seenSessions.add(session.id);
+                  totalSessions++;
+                }
                 
-                // Get last workout data
-                const lastBlock = historyBlocks[0];
-                const lastSession = lastBlock.workout_sessions as any;
-                const lastSets = ((lastBlock.set_logs as any[]) || [])
-                  .filter((s: any) => !s.is_warmup)
-                  .map((s: any) => ({
-                    weightKg: s.weight_kg,
-                    reps: s.reps,
-                    rpe: s.rpe,
-                  }));
-                
-                // Calculate best E1RM and PR
-                historyBlocks.forEach((block: any) => {
-                  const session = block.workout_sessions;
-                  if (session && !seenSessions.has(session.id)) {
-                    seenSessions.add(session.id);
-                    totalSessions++;
+                const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+                sets.forEach((set: any) => {
+                  const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                  if (e1rm > bestE1RM) {
+                    bestE1RM = e1rm;
+                    personalRecord = {
+                      weightKg: set.weight_kg,
+                      reps: set.reps,
+                      e1rm,
+                      date: session?.completed_at || set.logged_at,
+                    };
                   }
-                  
-                  const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-                  sets.forEach((set: any) => {
-                    const e1rm = calculateE1RM(set.weight_kg, set.reps);
-                    if (e1rm > bestE1RM) {
-                      bestE1RM = e1rm;
-                      personalRecord = {
-                        weightKg: set.weight_kg,
-                        reps: set.reps,
-                        e1rm,
-                        date: session?.completed_at || set.logged_at,
-                      };
-                    }
-                  });
                 });
-                
-                histories[exerciseId] = {
-                  lastWorkoutDate: lastSession?.completed_at || '',
-                  lastWorkoutSets: lastSets,
-                  estimatedE1RM: bestE1RM,
-                  personalRecord,
-                  totalSessions,
-                };
-              }
-            } catch (histErr) {
-              console.error('Failed to fetch history for exercise:', exerciseId, histErr);
+              });
+              
+              histories[exerciseId] = {
+                lastWorkoutDate: lastSession?.completed_at || '',
+                lastWorkoutSets: lastSets,
+                estimatedE1RM: bestE1RM,
+                personalRecord,
+                totalSessions,
+              };
             }
           }
           
