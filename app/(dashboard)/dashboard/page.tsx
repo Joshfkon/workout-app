@@ -593,6 +593,28 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Quick Actions Bar */}
+      <div className="flex gap-3">
+        <Link href="/dashboard/workout/new" className="flex-1">
+          <button className="w-full p-4 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-3">
+            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="font-semibold text-white">Quick Workout</span>
+          </button>
+        </Link>
+        <Link href="/dashboard/nutrition">
+          <button className="p-4 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
+            <span className="text-2xl">🍎</span>
+          </button>
+        </Link>
+        <Link href="/dashboard/workout">
+          <button className="p-4 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
+            <span className="text-2xl">📋</span>
+          </button>
+        </Link>
+      </div>
+
       {/* Debug Error Display */}
       {debugError && (
         <div className="p-3 bg-red-900/50 border border-red-500 rounded-lg">
