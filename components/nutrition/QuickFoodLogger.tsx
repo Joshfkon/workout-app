@@ -6,6 +6,24 @@ import { BarcodeScanner } from './BarcodeScanner';
 import type { BarcodeSearchResult } from '@/services/openFoodFactsService';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
+// Parse weight from serving_size string like "1 portion (85.048 g)" or "100g"
+function parseServingWeight(servingSize: string | null | undefined): number | null {
+  if (!servingSize) return null;
+  
+  // Try to match patterns like "(85.048 g)", "(100g)", "100 g", "3 oz"
+  const gramMatch = servingSize.match(/\(?([\d.]+)\s*g(?:rams?)?\)?/i);
+  if (gramMatch) {
+    return parseFloat(gramMatch[1]);
+  }
+  
+  const ozMatch = servingSize.match(/\(?([\d.]+)\s*oz(?:ounces?)?\)?/i);
+  if (ozMatch) {
+    return parseFloat(ozMatch[1]) * 28.3495;
+  }
+  
+  return null;
+}
+
 interface QuickFoodLoggerProps {
   onAdd: (food: {
     food_name: string;
@@ -56,6 +74,9 @@ export function QuickFoodLogger({
   const [weightAmount, setWeightAmount] = useState('100');
   const [weightUnit, setWeightUnit] = useState<'g' | 'oz'>('g');
   const [frequentServings, setFrequentServings] = useState('1');
+  const [frequentInputMode, setFrequentInputMode] = useState<'servings' | 'weight'>('servings');
+  const [frequentWeightAmount, setFrequentWeightAmount] = useState('');
+  const [frequentWeightUnit, setFrequentWeightUnit] = useState<'g' | 'oz'>('g');
 
   // Manual entry state
   const [manualName, setManualName] = useState('');
@@ -96,32 +117,54 @@ export function QuickFoodLogger({
     };
   }, [selectedFood, weightAmount, weightUnit]);
 
+  // Get weight per serving for selected frequent food
+  const frequentFoodWeightPerServing = useMemo(() => {
+    return parseServingWeight(selectedFrequentFood?.serving_size);
+  }, [selectedFrequentFood?.serving_size]);
+
+  // Calculate effective servings based on input mode
+  const effectiveFrequentServings = useMemo(() => {
+    if (frequentInputMode === 'servings') {
+      return parseFloat(frequentServings) || 0;
+    } else if (frequentFoodWeightPerServing) {
+      const weightInGrams = frequentWeightUnit === 'oz' 
+        ? (parseFloat(frequentWeightAmount) || 0) * 28.3495 
+        : (parseFloat(frequentWeightAmount) || 0);
+      return weightInGrams / frequentFoodWeightPerServing;
+    }
+    return 0;
+  }, [frequentInputMode, frequentServings, frequentWeightAmount, frequentWeightUnit, frequentFoodWeightPerServing]);
+
   // Calculate nutrition for selected frequent food
   const frequentFoodNutrition = useMemo(() => {
     if (!selectedFrequentFood) return null;
-    const servingsNum = parseFloat(frequentServings) || 1;
     return {
-      calories: Math.round(selectedFrequentFood.avg_calories * servingsNum),
-      protein: Math.round(selectedFrequentFood.avg_protein * servingsNum * 10) / 10,
-      carbs: Math.round(selectedFrequentFood.avg_carbs * servingsNum * 10) / 10,
-      fat: Math.round(selectedFrequentFood.avg_fat * servingsNum * 10) / 10,
+      calories: Math.round(selectedFrequentFood.avg_calories * effectiveFrequentServings),
+      protein: Math.round(selectedFrequentFood.avg_protein * effectiveFrequentServings * 10) / 10,
+      carbs: Math.round(selectedFrequentFood.avg_carbs * effectiveFrequentServings * 10) / 10,
+      fat: Math.round(selectedFrequentFood.avg_fat * effectiveFrequentServings * 10) / 10,
     };
-  }, [selectedFrequentFood, frequentServings]);
+  }, [selectedFrequentFood, effectiveFrequentServings]);
 
   const handleSelectFrequentFood = (food: FrequentFood) => {
     setSelectedFrequentFood(food);
     setFrequentServings('1');
+    setFrequentInputMode('servings');
+    // Initialize weight based on serving size
+    const weightPerServing = parseServingWeight(food.serving_size);
+    if (weightPerServing) {
+      setFrequentWeightAmount(Math.round(weightPerServing).toString());
+    }
   };
 
   const handleAddSelectedFrequentFood = async () => {
-    if (!selectedFrequentFood || !frequentFoodNutrition) return;
+    if (!selectedFrequentFood || !frequentFoodNutrition || effectiveFrequentServings <= 0) return;
     setIsAdding(true);
     try {
-      const servingsNum = parseFloat(frequentServings) || 1;
       await onAdd({
         food_name: selectedFrequentFood.food_name,
         serving_size: selectedFrequentFood.serving_size || '1 serving',
-        servings: servingsNum,
+        servings: effectiveFrequentServings,
         calories: frequentFoodNutrition.calories,
         protein: frequentFoodNutrition.protein,
         carbs: frequentFoodNutrition.carbs,
@@ -285,7 +328,7 @@ export function QuickFoodLogger({
           />
 
           {selectedFrequentFood ? (
-            /* Selected Frequent Food - Servings Entry */
+            /* Selected Frequent Food - Servings/Weight Entry */
             <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
@@ -302,35 +345,149 @@ export function QuickFoodLogger({
                 </button>
               </div>
 
-              {/* Quick serving buttons */}
-              <div className="grid grid-cols-6 gap-1">
-                {[0.5, 0.75, 1, 1.5, 2, 3].map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setFrequentServings(s.toString())}
-                    className={`py-2 rounded text-xs font-medium transition-all ${
-                      parseFloat(frequentServings) === s
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                    }`}
-                  >
-                    {s === 0.5 ? '½' : s === 0.75 ? '¾' : `${s}×`}
-                  </button>
-                ))}
-              </div>
+              {frequentInputMode === 'servings' ? (
+                <>
+                  {/* Quick serving buttons */}
+                  <div className="grid grid-cols-6 gap-1">
+                    {[0.5, 0.75, 1, 1.5, 2, 3].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setFrequentServings(s.toString())}
+                        className={`py-2 rounded text-xs font-medium transition-all ${
+                          parseFloat(frequentServings) === s
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                        }`}
+                      >
+                        {s === 0.5 ? '½' : s === 0.75 ? '¾' : `${s}×`}
+                      </button>
+                    ))}
+                  </div>
 
-              {/* Custom servings input */}
-              <div className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0.1"
-                  value={frequentServings}
-                  onChange={(e) => setFrequentServings(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
-                />
-                <span className="text-sm text-surface-400">servings</span>
-              </div>
+                  {/* Custom servings input */}
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={frequentServings}
+                      onChange={(e) => setFrequentServings(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                    />
+                    {/* Tappable unit label */}
+                    <button
+                      onClick={() => {
+                        if (frequentFoodWeightPerServing) {
+                          setFrequentInputMode('weight');
+                          // Convert current servings to weight
+                          const currentServings = parseFloat(frequentServings) || 1;
+                          setFrequentWeightAmount(Math.round(currentServings * frequentFoodWeightPerServing).toString());
+                        }
+                      }}
+                      className={`text-sm px-2 py-1 rounded transition-colors ${
+                        frequentFoodWeightPerServing 
+                          ? 'text-primary-400 hover:bg-primary-500/20 cursor-pointer' 
+                          : 'text-surface-400 cursor-default'
+                      }`}
+                      disabled={!frequentFoodWeightPerServing}
+                      title={frequentFoodWeightPerServing ? 'Tap to switch to grams' : 'Weight info not available'}
+                    >
+                      servings {frequentFoodWeightPerServing && '↔'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Quick weight buttons */}
+                  <div className="flex flex-wrap gap-1">
+                    {(frequentWeightUnit === 'g' ? [50, 100, 150, 200, 250, 300] : [1, 2, 3, 4, 6, 8]).map((w) => (
+                      <button
+                        key={w}
+                        onClick={() => setFrequentWeightAmount(w.toString())}
+                        className={`py-2 px-3 rounded text-xs font-medium transition-all ${
+                          parseFloat(frequentWeightAmount) === w
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                        }`}
+                      >
+                        {w}{frequentWeightUnit}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Weight input with tappable unit */}
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      value={frequentWeightAmount}
+                      onChange={(e) => setFrequentWeightAmount(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                    />
+                    {/* Tappable unit toggle */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          if (frequentWeightUnit === 'oz') {
+                            // Convert oz to g
+                            const ozValue = parseFloat(frequentWeightAmount) || 0;
+                            setFrequentWeightAmount(Math.round(ozValue * 28.3495).toString());
+                          }
+                          setFrequentWeightUnit('g');
+                        }}
+                        className={`text-sm px-2 py-1 rounded transition-colors ${
+                          frequentWeightUnit === 'g'
+                            ? 'bg-primary-500 text-white'
+                            : 'text-surface-400 hover:bg-surface-700'
+                        }`}
+                      >
+                        g
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (frequentWeightUnit === 'g') {
+                            // Convert g to oz
+                            const gValue = parseFloat(frequentWeightAmount) || 0;
+                            setFrequentWeightAmount((gValue / 28.3495).toFixed(1));
+                          }
+                          setFrequentWeightUnit('oz');
+                        }}
+                        className={`text-sm px-2 py-1 rounded transition-colors ${
+                          frequentWeightUnit === 'oz'
+                            ? 'bg-primary-500 text-white'
+                            : 'text-surface-400 hover:bg-surface-700'
+                        }`}
+                      >
+                        oz
+                      </button>
+                      <button
+                        onClick={() => {
+                          setFrequentInputMode('servings');
+                          // Convert weight back to servings
+                          if (frequentFoodWeightPerServing) {
+                            const weightInGrams = frequentWeightUnit === 'oz' 
+                              ? (parseFloat(frequentWeightAmount) || 0) * 28.3495 
+                              : (parseFloat(frequentWeightAmount) || 0);
+                            setFrequentServings((weightInGrams / frequentFoodWeightPerServing).toFixed(2));
+                          }
+                        }}
+                        className="text-xs text-primary-400 hover:bg-primary-500/20 px-2 py-1 rounded ml-1"
+                        title="Switch to servings"
+                      >
+                        ↔ srv
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Show equivalent servings */}
+                  {effectiveFrequentServings > 0 && (
+                    <p className="text-xs text-surface-500 text-center">
+                      ≈ {effectiveFrequentServings.toFixed(2)} servings
+                    </p>
+                  )}
+                </>
+              )}
 
               {frequentFoodNutrition && (
                 <div className="grid grid-cols-4 gap-1 text-center text-xs">
