@@ -2254,7 +2254,51 @@ export default function WorkoutPage() {
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
-                    warmupSets={isCurrent && block.warmupProtocol && block.warmupProtocol.length > 0 ? block.warmupProtocol : undefined}
+                    warmupSets={(() => {
+                      if (!isCurrent) return undefined;
+                      
+                      // Check if this block has warmup protocol defined
+                      if (block.warmupProtocol && block.warmupProtocol.length > 0) {
+                        return block.warmupProtocol;
+                      }
+                      
+                      // Check if this muscle group has already been warmed up
+                      // (any completed sets for exercises in this muscle group)
+                      const muscleGroup = block.exercise.primaryMuscle;
+                      const muscleGroupExerciseIds = blocks
+                        .filter(b => b.exercise.primaryMuscle === muscleGroup)
+                        .map(b => b.id);
+                      
+                      const hasCompletedSetsForMuscle = completedSets.some(
+                        s => muscleGroupExerciseIds.includes(s.exerciseBlockId)
+                      );
+                      
+                      // If muscle already warmed up or has completed sets, no warmups needed
+                      if (hasCompletedSetsForMuscle) return undefined;
+                      
+                      // Check if another exercise in this muscle group has warmups defined
+                      const blockWithWarmups = blocks.find(
+                        b => b.exercise.primaryMuscle === muscleGroup && 
+                             b.warmupProtocol && 
+                             b.warmupProtocol.length > 0
+                      );
+                      
+                      // Use the warmups from the first exercise of this muscle group
+                      if (blockWithWarmups && blockWithWarmups.warmupProtocol) {
+                        return blockWithWarmups.warmupProtocol;
+                      }
+                      
+                      // Generate warmups dynamically for compound exercises
+                      if (block.exercise.mechanic === 'compound') {
+                        return generateWarmupProtocol({
+                          workingWeight: effectiveWorkingWeight,
+                          exercise: block.exercise,
+                          isFirstExercise: index === 0,
+                        });
+                      }
+                      
+                      return undefined;
+                    })()}
                     workingWeight={effectiveWorkingWeight}
                     showSwapOnMount={showSwapForInjury === block.id}
                     currentInjuries={temporaryInjuries}
