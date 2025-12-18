@@ -247,7 +247,7 @@ function PricingContent() {
                 <FeatureRow feature="Manual workout logging" free={true} pro={true} elite={true} />
                 <FeatureRow feature="Exercise history" free={true} pro={true} elite={true} />
                 <FeatureRow feature="Basic progress tracking" free={true} pro={true} elite={true} />
-                <FeatureRow feature="Workouts per week" free="3" pro="Unlimited" elite="Unlimited" />
+                <FeatureRow feature="Workouts per week" free="Unlimited" pro="Unlimited" elite="Unlimited" />
                 <FeatureRow feature="AI mesocycle builder" free={false} pro={true} elite={true} />
                 <FeatureRow feature="Smart weight suggestions" free={false} pro={true} elite={true} />
                 <FeatureRow feature="Advanced analytics" free={false} pro={true} elite={true} />
