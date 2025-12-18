@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select,
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { getLocalDateString } from '@/lib/utils';
 
 interface Exercise {
   id: string;
@@ -57,6 +58,9 @@ function NewWorkoutContent() {
   
   // Search filter for exercises
   const [exerciseSearch, setExerciseSearch] = useState('');
+  
+  // Workout duration
+  const [workoutDuration, setWorkoutDuration] = useState(45); // Default 45 minutes
   
   // Custom exercise modal state
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
@@ -313,7 +317,7 @@ function NewWorkoutContent() {
         .insert({
           user_id: user.id,
           state: 'planned',
-          planned_date: new Date().toISOString().split('T')[0],
+          planned_date: getLocalDateString(),
           completion_percent: 0,
         })
         .select()
@@ -359,11 +363,17 @@ function NewWorkoutContent() {
           isFirstExercise: index === 0, // First exercise overall gets general warmup
         }) : [];
 
+        // Scale sets based on workout duration
+        // 60 min = full sets, 30 min = ~50%, 20 min = ~33%
+        const timeModifier = Math.min(1.0, workoutDuration / 60);
+        const baseSets = isCompound ? 4 : 3;
+        const scaledSets = Math.max(2, Math.round(baseSets * timeModifier)); // Minimum 2 sets
+        
         return {
           workout_session_id: session.id,
           exercise_id: exerciseId,
           order: index + 1,
-          target_sets: isCompound ? 4 : 3, // More sets for compounds
+          target_sets: scaledSets,
           target_rep_range: isCompound ? [6, 10] : [10, 15], // Lower reps for compounds
           target_rir: 2,
           target_weight_kg: 0, // Will be set during workout
@@ -439,6 +449,43 @@ function NewWorkoutContent() {
 
       {step === 1 && (
         <div className="space-y-4">
+          {/* Time Selection */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                How much time do you have?
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-4 gap-2">
+                {[20, 30, 45, 60].map((mins) => (
+                  <button
+                    key={mins}
+                    onClick={() => setWorkoutDuration(mins)}
+                    className={`p-3 rounded-lg text-center transition-all ${
+                      workoutDuration === mins
+                        ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                        : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
+                    }`}
+                  >
+                    <div className="font-semibold">{mins}</div>
+                    <div className="text-xs text-surface-500">min</div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-surface-500 mt-2 text-center">
+                {workoutDuration <= 25 
+                  ? '⚡ Quick mode: Only S & A-tier exercises'
+                  : workoutDuration <= 45 
+                  ? '⏱️ Time-efficient: Focused on key compounds'
+                  : '💪 Full workout: Complete volume for optimal growth'}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* AI Suggestion Card */}
           <Card className="border-2 border-dashed border-accent-500/30 bg-gradient-to-r from-accent-500/5 to-primary-500/5">
             <CardContent className="p-5">
@@ -507,6 +554,21 @@ function NewWorkoutContent() {
 
       {step === 2 && (
         <div className="space-y-4">
+          {/* Time-based recommendation */}
+          <div className="p-3 bg-surface-800/50 border border-surface-700 rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm text-surface-300">
+                <strong>{workoutDuration} min</strong> workout
+              </span>
+            </div>
+            <span className="text-sm text-surface-500">
+              Recommended: {workoutDuration <= 25 ? '2-3' : workoutDuration <= 45 ? '3-5' : '5-8'} exercises
+            </span>
+          </div>
+
           {/* Show AI suggestion reason */}
           {suggestions && (
             <div className="p-4 bg-accent-500/10 border border-accent-500/20 rounded-lg">

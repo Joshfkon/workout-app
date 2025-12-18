@@ -784,20 +784,30 @@ export function generateFullMesocycleWithFatigue(
   const warnings: string[] = [];
   const programNotes: string[] = [];
 
-  // Determine if quick workout mode (under 25 minutes per session)
+  // Determine workout mode based on session duration
   const quickWorkoutMode = sessionMinutes <= 25;
+  const shortWorkoutMode = sessionMinutes > 25 && sessionMinutes <= 45;
+  
+  // Calculate time-based volume modifier
+  // Standard workout = 60 min, scale volume proportionally
+  const timeVolumeModifier = Math.min(1.0, sessionMinutes / 60);
+  
   if (quickWorkoutMode) {
-    programNotes.push(`⚡ Quick Workout Mode: Only S-tier and A-tier exercises will be selected for maximum efficiency`);
+    programNotes.push(`⚡ Quick Workout Mode (${sessionMinutes}min): Only S-tier and A-tier exercises, reduced volume`);
+  } else if (shortWorkoutMode) {
+    programNotes.push(`⏱️ Time-Efficient Mode (${sessionMinutes}min): Volume scaled to ${Math.round(timeVolumeModifier * 100)}%`);
   }
 
   // Step 1: Calculate recovery factors
   const recoveryFactors = calculateRecoveryFactors(profile);
   warnings.push(...recoveryFactors.warnings);
 
-  // Step 2: Create fatigue budget (reduced for quick workouts)
+  // Step 2: Create fatigue budget (reduced for shorter workouts)
   const baseFatigueBudget = createFatigueBudget(profile);
   const fatigueBudgetConfig = quickWorkoutMode 
-    ? { ...baseFatigueBudget, systemicLimit: baseFatigueBudget.systemicLimit * 0.6 }
+    ? { ...baseFatigueBudget, systemicLimit: baseFatigueBudget.systemicLimit * 0.5 }
+    : shortWorkoutMode
+    ? { ...baseFatigueBudget, systemicLimit: baseFatigueBudget.systemicLimit * timeVolumeModifier }
     : baseFatigueBudget;
   programNotes.push(`Systemic fatigue limit: ${fatigueBudgetConfig.systemicLimit}/session`);
   programNotes.push(`Minimum SFR threshold: ${fatigueBudgetConfig.minSFRThreshold}`);
@@ -816,11 +826,26 @@ export function generateFullMesocycleWithFatigue(
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
   // Step 5: Calculate volume distribution (with extra volume for lagging areas if provided)
-  const volumePerMuscle = calculateVolumeDistributionWithLagging(split, daysPerWeek, profile.experience, profile.goal, recoveryFactors, laggingAreas);
+  const baseVolumePerMuscle = calculateVolumeDistributionWithLagging(split, daysPerWeek, profile.experience, profile.goal, recoveryFactors, laggingAreas);
+  
+  // Scale volume based on available time (40min = ~67% volume of 60min)
+  const volumePerMuscle = Object.fromEntries(
+    Object.entries(baseVolumePerMuscle).map(([muscle, vol]) => [
+      muscle,
+      {
+        sets: Math.max(2, Math.round(vol.sets * timeVolumeModifier)), // Minimum 2 sets per muscle
+        frequency: vol.frequency,
+      },
+    ])
+  ) as Record<MuscleGroup, { sets: number; frequency: number }>;
   
   // Add note if lagging areas are being addressed
   if (laggingAreas && laggingAreas.length > 0) {
     programNotes.push(`🎯 Extra volume allocated for: ${laggingAreas.join(', ')}`);
+  }
+  
+  if (timeVolumeModifier < 1.0) {
+    programNotes.push(`📉 Volume reduced to ${Math.round(timeVolumeModifier * 100)}% to fit ${sessionMinutes}min sessions`);
   }
 
   // Step 6: Build session templates
