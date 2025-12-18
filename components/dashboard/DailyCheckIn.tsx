@@ -104,9 +104,9 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
     },
     {
       id: 'hunger',
-      title: 'Hunger',
+      title: 'Satiety',
       icon: '🍽️',
-      question: 'How hungry are you feeling?',
+      question: 'How satisfied/full do you feel?',
       type: 'rating' as const,
       value: hungerLevel,
       onChange: (v: Rating) => setHungerLevel(v),
@@ -118,13 +118,13 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
   const extraQuestions = [
     {
       id: 'soreness',
-      title: 'Soreness',
+      title: 'Recovery',
       icon: '💪',
-      question: 'How sore are your muscles?',
+      question: 'How recovered do your muscles feel?',
       type: 'rating' as const,
       value: sorenessLevel,
       onChange: (v: Rating) => setSorenessLevel(v),
-      labels: ['Very Sore', 'Sore', 'Moderate', 'Slight', 'None'],
+      labels: ['Very Sore', 'Sore', 'Moderate', 'Slight', 'Fresh'],
     },
   ];
   
