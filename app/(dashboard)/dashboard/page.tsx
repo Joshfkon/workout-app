@@ -24,11 +24,18 @@ interface NutritionTargets {
   fat: number;
 }
 
+interface ExerciseVolume {
+  id: string;
+  name: string;
+  sets: number;
+}
+
 interface MuscleVolumeStats {
   muscle: string;
   sets: number;
   target: number;
   status: 'low' | 'optimal' | 'high';
+  exercises: ExerciseVolume[];
 }
 
 interface ActiveMesocycle {
@@ -340,26 +347,46 @@ export default function DashboardPage() {
           })));
         }
 
-        // Fetch weekly volume by muscle
+        // Fetch weekly volume by muscle - use actual completed sets from set_logs
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - today.getDay());
         
         const { data: weeklyBlocks } = await supabase
           .from('exercise_blocks')
           .select(`
-            target_sets,
-            exercises (primary_muscle),
-            workout_sessions!inner (user_id, completed_at)
+            id,
+            exercises (id, name, primary_muscle),
+            set_logs (id, is_warmup),
+            workout_sessions!inner (user_id, completed_at, state)
           `)
           .eq('workout_sessions.user_id', user.id)
+          .eq('workout_sessions.state', 'completed')
           .gte('workout_sessions.completed_at', weekStart.toISOString());
 
         if (weeklyBlocks && weeklyBlocks.length > 0) {
-          const volumeByMuscle: Record<string, number> = {};
+          const volumeByMuscle: Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }> = {};
+          
           weeklyBlocks.forEach((block: any) => {
             const muscle = block.exercises?.primary_muscle;
-            if (muscle) {
-              volumeByMuscle[muscle] = (volumeByMuscle[muscle] || 0) + (block.target_sets || 3);
+            const exerciseId = block.exercises?.id;
+            const exerciseName = block.exercises?.name;
+            if (!muscle || !exerciseId) return;
+            
+            // Count actual completed working sets (not warmups)
+            const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
+            if (workingSets === 0) return;
+            
+            if (!volumeByMuscle[muscle]) {
+              volumeByMuscle[muscle] = { sets: 0, exercises: new Map() };
+            }
+            volumeByMuscle[muscle].sets += workingSets;
+            
+            // Track by exercise
+            const existing = volumeByMuscle[muscle].exercises.get(exerciseId);
+            if (existing) {
+              existing.sets += workingSets;
+            } else {
+              volumeByMuscle[muscle].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
             }
           });
 
@@ -369,10 +396,11 @@ export default function DashboardPage() {
           };
 
           const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
-            .map(([muscle, sets]) => {
+            .map(([muscle, data]) => {
               const target = volumeTargets[muscle] || 10;
-              const status: 'low' | 'optimal' | 'high' = sets < target * 0.7 ? 'low' : sets > target * 1.3 ? 'high' : 'optimal';
-              return { muscle, sets, target, status };
+              const status: 'low' | 'optimal' | 'high' = data.sets < target * 0.7 ? 'low' : data.sets > target * 1.3 ? 'high' : 'optimal';
+              const exercises = Array.from(data.exercises.values()).sort((a, b) => b.sets - a.sets);
+              return { muscle, sets: data.sets, target, status, exercises };
             })
             .sort((a, b) => b.sets - a.sets);
 
@@ -1071,31 +1099,56 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           {muscleVolume.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {muscleVolume.slice(0, 8).map((mv) => (
-                <div key={mv.muscle} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-surface-300 capitalize">{mv.muscle}</span>
-                    <span className={`font-medium ${
-                      mv.status === 'optimal' ? 'text-success-400' :
-                      mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
-                    }`}>
-                      {mv.sets}/{mv.target}
-                      <span className="text-xs text-surface-500 ml-1">
-                        {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-500 ${
-                        mv.status === 'optimal' ? 'bg-success-500' :
-                        mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
-                    />
-                  </div>
-                </div>
+                <details key={mv.muscle} className="group">
+                  <summary className="cursor-pointer list-none">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <svg 
+                            className="w-3 h-3 text-surface-500 transition-transform group-open:rotate-90" 
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span className="text-surface-300 capitalize">{mv.muscle}</span>
+                        </div>
+                        <span className={`font-medium ${
+                          mv.status === 'optimal' ? 'text-success-400' :
+                          mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
+                        }`}>
+                          {mv.sets}/{mv.target}
+                          <span className="text-xs text-surface-500 ml-1">
+                            {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
+                        <div 
+                          className={`h-full transition-all duration-500 ${
+                            mv.status === 'optimal' ? 'bg-success-500' :
+                            mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </summary>
+                  {/* Expanded exercises */}
+                  {mv.exercises && mv.exercises.length > 0 && (
+                    <div className="ml-5 mt-2 pl-3 border-l-2 border-surface-700 space-y-1.5">
+                      {mv.exercises.map((ex) => (
+                        <div key={ex.id} className="flex items-center justify-between text-xs">
+                          <span className="text-surface-400 truncate">{ex.name}</span>
+                          <span className="text-surface-500 flex-shrink-0 ml-2">{ex.sets} sets</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </details>
               ))}
             </div>
           ) : (
