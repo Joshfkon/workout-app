@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -40,6 +40,15 @@ export default function TemplateDetailPage() {
 
   // Edit exercise states
   const [editingExercise, setEditingExercise] = useState<WorkoutTemplateExercise | null>(null);
+  
+  // Collapse/expand state
+  const [collapsedExercises, setCollapsedExercises] = useState<Set<string>>(new Set());
+  
+  // Drag reorder state
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const supabase = createUntypedClient();
 
@@ -216,7 +225,73 @@ export default function TemplateDetailPage() {
     }
   }
 
-  // Reorder exercises
+  // Toggle collapse for an exercise
+  const toggleCollapse = (exerciseId: string) => {
+    setCollapsedExercises(prev => {
+      const next = new Set(prev);
+      if (next.has(exerciseId)) {
+        next.delete(exerciseId);
+      } else {
+        next.add(exerciseId);
+      }
+      return next;
+    });
+  };
+
+  // Long press handlers for drag reorder
+  const handleLongPressStart = useCallback((index: number) => {
+    longPressTimer.current = setTimeout(() => {
+      setDraggedIndex(index);
+      setIsDragging(true);
+      // Haptic feedback on mobile if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  }, []);
+
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => {
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  }, [draggedIndex]);
+
+  const handleDragEnd = useCallback(async () => {
+    if (draggedIndex !== null && dragOverIndex !== null && draggedIndex !== dragOverIndex) {
+      const newExercises = [...exercises];
+      const [removed] = newExercises.splice(draggedIndex, 1);
+      newExercises.splice(dragOverIndex, 0, removed);
+
+      // Update sort orders
+      setExercises(newExercises);
+
+      try {
+        for (let i = 0; i < newExercises.length; i++) {
+          await supabase
+            .from('workout_template_exercises')
+            .update({ sort_order: i })
+            .eq('id', newExercises[i].id);
+        }
+      } catch (err) {
+        console.error('Error saving reorder:', err);
+        // Reload to get correct order
+        await loadTemplate();
+      }
+    }
+
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    setIsDragging(false);
+  }, [draggedIndex, dragOverIndex, exercises, supabase]);
+
+  // Reorder exercises (fallback for non-drag)
   async function moveExercise(index: number, direction: 'up' | 'down') {
     if (direction === 'up' && index === 0) return;
     if (direction === 'down' && index === exercises.length - 1) return;
@@ -374,55 +449,126 @@ export default function TemplateDetailPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {exercises.map((exercise, index) => (
-                <div
-                  key={exercise.id}
-                  className="flex items-center gap-3 p-3 bg-surface-800/50 rounded-lg group"
-                >
-                  {/* Reorder buttons */}
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => moveExercise(index, 'up')}
-                      disabled={index === 0}
-                      className="text-surface-500 hover:text-surface-200 disabled:opacity-30 text-xs"
-                    >
-                      ▲
-                    </button>
-                    <button
-                      onClick={() => moveExercise(index, 'down')}
-                      disabled={index === exercises.length - 1}
-                      className="text-surface-500 hover:text-surface-200 disabled:opacity-30 text-xs"
-                    >
-                      ▼
-                    </button>
-                  </div>
+              <p className="text-xs text-surface-500 mb-3">💡 Long-press and drag to reorder • Tap to expand/collapse</p>
+              {exercises.map((exercise, index) => {
+                const isCollapsed = collapsedExercises.has(exercise.id);
+                const isBeingDragged = draggedIndex === index;
+                const isDragTarget = dragOverIndex === index;
 
-                  {/* Exercise info */}
-                  <div className="flex-1">
-                    <p className="font-medium text-surface-100">{exercise.exercise_name}</p>
-                    <p className="text-sm text-surface-400">
-                      {exercise.default_sets} sets × {exercise.default_reps} reps
-                      {exercise.default_weight && ` @ ${exercise.default_weight}lbs`}
-                    </p>
-                  </div>
+                return (
+                  <div
+                    key={exercise.id}
+                    className={`rounded-lg overflow-hidden transition-all ${
+                      isBeingDragged 
+                        ? 'opacity-50 scale-95 shadow-xl ring-2 ring-primary-500' 
+                        : isDragTarget 
+                          ? 'ring-2 ring-primary-400 ring-dashed'
+                          : ''
+                    }`}
+                    onTouchStart={() => handleLongPressStart(index)}
+                    onTouchEnd={() => { handleLongPressEnd(); handleDragEnd(); }}
+                    onTouchMove={(e) => {
+                      if (!isDragging) return;
+                      const touch = e.touches[0];
+                      const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+                      const exerciseEl = elements.find(el => el.getAttribute('data-exercise-index'));
+                      if (exerciseEl) {
+                        const targetIndex = parseInt(exerciseEl.getAttribute('data-exercise-index') || '-1');
+                        if (targetIndex >= 0) handleDragOver(targetIndex);
+                      }
+                    }}
+                    onMouseDown={() => handleLongPressStart(index)}
+                    onMouseUp={() => { handleLongPressEnd(); handleDragEnd(); }}
+                    onMouseLeave={handleLongPressEnd}
+                    data-exercise-index={index}
+                  >
+                    {/* Header - always visible */}
+                    <button
+                      onClick={() => !isDragging && toggleCollapse(exercise.id)}
+                      className={`w-full flex items-center gap-3 p-4 bg-surface-800/50 hover:bg-surface-800 transition-colors text-left ${
+                        isDragging ? 'cursor-grabbing' : 'cursor-pointer'
+                      }`}
+                    >
+                      {/* Drag handle */}
+                      <div className="flex flex-col gap-0.5 text-surface-500">
+                        <div className="w-4 h-0.5 bg-current rounded" />
+                        <div className="w-4 h-0.5 bg-current rounded" />
+                        <div className="w-4 h-0.5 bg-current rounded" />
+                      </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => setEditingExercise(exercise)}
-                      className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg"
-                    >
-                      ✏️
+                      {/* Exercise name */}
+                      <div className="flex-1">
+                        <p className="font-medium text-primary-400">{exercise.exercise_name}</p>
+                      </div>
+
+                      {/* Collapse indicator */}
+                      <svg 
+                        className={`w-5 h-5 text-surface-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+
+                      {/* Menu button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingExercise(exercise);
+                        }}
+                        className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg"
+                      >
+                        •••
+                      </button>
                     </button>
-                    <button
-                      onClick={() => handleRemoveExercise(exercise.id)}
-                      className="p-2 text-danger-400 hover:text-danger-300 hover:bg-surface-700 rounded-lg"
-                    >
-                      🗑️
-                    </button>
+
+                    {/* Expanded content */}
+                    {!isCollapsed && (
+                      <div className="p-4 bg-surface-800/30 border-t border-surface-700 space-y-3">
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <p className="text-2xl font-bold text-surface-100">{exercise.default_sets}</p>
+                            <p className="text-xs text-surface-500 uppercase">Sets</p>
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-surface-100">{exercise.default_reps}</p>
+                            <p className="text-xs text-surface-500 uppercase">Reps</p>
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-surface-100">
+                              {exercise.default_weight ? `${exercise.default_weight}` : '—'}
+                            </p>
+                            <p className="text-xs text-surface-500 uppercase">lbs</p>
+                          </div>
+                        </div>
+                        
+                        {exercise.notes && (
+                          <p className="text-sm text-surface-400 italic">{exercise.notes}</p>
+                        )}
+
+                        <div className="flex gap-2 pt-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => setEditingExercise(exercise)}
+                            className="flex-1"
+                          >
+                            Edit
+                          </Button>
+                          <Button 
+                            variant="danger" 
+                            size="sm" 
+                            onClick={() => handleRemoveExercise(exercise.id)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
