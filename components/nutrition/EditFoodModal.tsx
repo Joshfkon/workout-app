@@ -13,7 +13,7 @@ interface EditFoodModalProps {
 }
 
 // Parse weight from serving_size string like "1 portion (85.048 g)" or "100g"
-function parseServingWeight(servingSize: string | undefined): { grams: number | null; unit: string } {
+function parseServingWeight(servingSize: string | null | undefined): { grams: number | null; unit: string } {
   if (!servingSize) return { grams: null, unit: '' };
   
   // Try to match patterns like "(85.048 g)", "(100g)", "100 g", "3 oz"
