@@ -79,6 +79,13 @@ export interface WeightLogEntry {
   created_at: string;
 }
 
+export interface MealNames {
+  breakfast?: string;
+  lunch?: string;
+  dinner?: string;
+  snack?: string;
+}
+
 export interface NutritionTargets {
   id: string;
   user_id: string;
@@ -87,6 +94,7 @@ export interface NutritionTargets {
   carbs: number | null;
   fat: number | null;
   meals_per_day: number | null;
+  meal_names: MealNames | null;
   created_at: string;
   updated_at: string;
 }

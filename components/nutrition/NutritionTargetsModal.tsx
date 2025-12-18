@@ -4,7 +4,14 @@ import { useState } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import type { NutritionTargets } from '@/types/nutrition';
+import type { NutritionTargets, MealNames } from '@/types/nutrition';
+
+const DEFAULT_MEAL_NAMES: Record<string, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snacks',
+};
 
 interface NutritionTargetsModalProps {
   isOpen: boolean;
@@ -15,6 +22,7 @@ interface NutritionTargetsModalProps {
     carbs: number;
     fat: number;
     meals_per_day: number;
+    meal_names?: MealNames;
   }) => Promise<void>;
   existingTargets?: NutritionTargets;
 }
@@ -30,6 +38,13 @@ export function NutritionTargetsModal({
   const [carbs, setCarbs] = useState(existingTargets?.carbs?.toString() || '');
   const [fat, setFat] = useState(existingTargets?.fat?.toString() || '');
   const [mealsPerDay, setMealsPerDay] = useState(existingTargets?.meals_per_day?.toString() || '3');
+  const [mealNames, setMealNames] = useState<MealNames>({
+    breakfast: existingTargets?.meal_names?.breakfast || '',
+    lunch: existingTargets?.meal_names?.lunch || '',
+    dinner: existingTargets?.meal_names?.dinner || '',
+    snack: existingTargets?.meal_names?.snack || '',
+  });
+  const [showMealNames, setShowMealNames] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -83,12 +98,20 @@ export function NutritionTargetsModal({
 
     setIsSubmitting(true);
     try {
+      // Only include non-empty custom meal names
+      const customMealNames: MealNames = {};
+      if (mealNames.breakfast?.trim()) customMealNames.breakfast = mealNames.breakfast.trim();
+      if (mealNames.lunch?.trim()) customMealNames.lunch = mealNames.lunch.trim();
+      if (mealNames.dinner?.trim()) customMealNames.dinner = mealNames.dinner.trim();
+      if (mealNames.snack?.trim()) customMealNames.snack = mealNames.snack.trim();
+
       await onSave({
         calories: Math.round(caloriesNum),
         protein: Math.round(proteinNum * 10) / 10,
         carbs: Math.round(carbsNum * 10) / 10,
         fat: Math.round(fatNum * 10) / 10,
         meals_per_day: mealsNum,
+        meal_names: Object.keys(customMealNames).length > 0 ? customMealNames : undefined,
       });
       onClose();
     } catch (err) {
@@ -216,6 +239,44 @@ export function NutritionTargetsModal({
               </p>
             </div>
           )}
+
+          {/* Meal Names Customization */}
+          <div className="border-t border-surface-700 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowMealNames(!showMealNames)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <span className="text-sm font-medium text-surface-300">
+                Customize Meal Names
+              </span>
+              <span className="text-surface-500 text-sm">
+                {showMealNames ? '▲' : '▼'}
+              </span>
+            </button>
+            
+            {showMealNames && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as const).map((meal) => (
+                  <div key={meal}>
+                    <label className="block text-xs text-surface-500 mb-1">
+                      {DEFAULT_MEAL_NAMES[meal]}
+                    </label>
+                    <input
+                      type="text"
+                      value={mealNames[meal] || ''}
+                      onChange={(e) => setMealNames(prev => ({ ...prev, [meal]: e.target.value }))}
+                      placeholder={DEFAULT_MEAL_NAMES[meal]}
+                      className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
+                    />
+                  </div>
+                ))}
+                <p className="col-span-2 text-xs text-surface-500">
+                  Leave blank to use default names
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         <ModalFooter>

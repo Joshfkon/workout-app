@@ -17,6 +17,7 @@ import type {
   MealType,
   FrequentFood,
   SystemFood,
+  MealNames,
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
@@ -31,12 +32,19 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-const MEAL_TYPES: { type: MealType; label: string; emoji: string }[] = [
+const DEFAULT_MEAL_CONFIG: { type: MealType; label: string; emoji: string }[] = [
   { type: 'breakfast', label: 'Breakfast', emoji: '🌅' },
   { type: 'lunch', label: 'Lunch', emoji: '☀️' },
   { type: 'dinner', label: 'Dinner', emoji: '🌙' },
   { type: 'snack', label: 'Snacks', emoji: '🍎' },
 ];
+
+function getMealConfig(customNames?: MealNames | null) {
+  return DEFAULT_MEAL_CONFIG.map(meal => ({
+    ...meal,
+    label: customNames?.[meal.type] || meal.label,
+  }));
+}
 
 // Convert food names to proper title case (fix ALL CAPS from USDA/databases)
 function toTitleCase(str: string): string {
@@ -609,6 +617,7 @@ export default function NutritionPage() {
     carbs: number;
     fat: number;
     meals_per_day?: number;
+    meal_names?: MealNames;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -631,6 +640,7 @@ export default function NutritionPage() {
           carbs: targets.carbs,
           fat: targets.fat,
           meals_per_day: targets.meals_per_day || 3,
+          meal_names: targets.meal_names || null,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
@@ -644,6 +654,7 @@ export default function NutritionPage() {
         carbs: targets.carbs,
         fat: targets.fat,
         meals_per_day: targets.meals_per_day || 3,
+        meal_names: targets.meal_names || null,
       });
       error = result.error;
     }
@@ -684,8 +695,11 @@ export default function NutritionPage() {
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 
+  // Get meal config with custom names
+  const mealConfig = getMealConfig(nutritionTargets?.meal_names);
+
   // Group entries by meal type
-  const mealGroups = MEAL_TYPES.map((meal) => ({
+  const mealGroups = mealConfig.map((meal) => ({
     ...meal,
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
