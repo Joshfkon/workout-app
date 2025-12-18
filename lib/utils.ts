@@ -8,6 +8,17 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Get today's date in YYYY-MM-DD format using LOCAL timezone (not UTC)
+ * This fixes the issue where toISOString() returns tomorrow's date in the evening
+ */
+export function getLocalDateString(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Format a date to a readable string
  */
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {

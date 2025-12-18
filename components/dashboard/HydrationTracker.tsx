@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 
 interface HydrationTrackerProps {
   userId: string;
@@ -31,7 +32,7 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
   }, [userId]);
 
   async function loadTodayData() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     // Get today's total
     const { data: hydrationData } = await supabase
@@ -59,7 +60,7 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
 
   async function addWater(amountMl: number) {
     setIsAdding(true);
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     const { error } = await supabase.from('hydration_log').insert({
       user_id: userId,

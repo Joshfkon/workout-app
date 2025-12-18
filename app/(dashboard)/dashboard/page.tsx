@@ -7,6 +7,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
+import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
 interface NutritionTotals {
@@ -152,7 +153,7 @@ export default function DashboardPage() {
         setUserId(user.id);
 
         const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const todayStr = getLocalDateString(today);
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
         
         // Fetch user profile to get goal
@@ -316,7 +317,7 @@ export default function DashboardPage() {
           .from('weight_log')
           .select('logged_at, weight, unit')
           .eq('user_id', user.id)
-          .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+          .gte('logged_at', getLocalDateString(thirtyDaysAgo))
           .order('logged_at', { ascending: true });
 
         // If unit column doesn't exist, try without it
@@ -326,7 +327,7 @@ export default function DashboardPage() {
             .from('weight_log')
             .select('logged_at, weight')
             .eq('user_id', user.id)
-            .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+            .gte('logged_at', getLocalDateString(thirtyDaysAgo))
             .order('logged_at', { ascending: true });
           finalHistoryData = fallbackData;
         }
@@ -462,7 +463,7 @@ export default function DashboardPage() {
         fat: food.fat,
         meal_type: food.meal_type,
         source: food.source || 'manual',
-        logged_at: new Date().toISOString().split('T')[0],
+        logged_at: getLocalDateString(),
       });
 
       if (error) {
@@ -492,7 +493,7 @@ export default function DashboardPage() {
       if (!user) return;
 
       const weight = parseFloat(weightInput);
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       // First try to update existing entry for today
       const { data: existing, error: selectError } = await supabase

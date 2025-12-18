@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type { Rating, DailyCheckIn as DailyCheckInType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 
 interface DailyCheckInProps {
   userId: string;
@@ -134,7 +135,7 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
   useEffect(() => {
     async function checkTodaysCheckIn() {
       const supabase = createUntypedClient();
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateString();
       
       const { data } = await supabase
         .from('daily_check_ins')
@@ -203,7 +204,7 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
     
     try {
       const supabase = createUntypedClient();
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateString();
       
       const checkInData = {
         user_id: userId,

@@ -19,6 +19,7 @@ import type {
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
+import { getLocalDateString } from '@/lib/utils';
 import {
   LineChart,
   Line,
@@ -148,7 +149,7 @@ interface UserProfileData {
 }
 
 export default function NutritionPage() {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
@@ -209,7 +210,7 @@ export default function NutritionPage() {
         .from('weight_log')
         .select('*')
         .eq('user_id', user.id)
-        .gte('logged_at', thirtyDaysAgo.toISOString().split('T')[0])
+        .gte('logged_at', getLocalDateString(thirtyDaysAgo))
         .order('logged_at', { ascending: false });
 
       setWeightEntries(weightData || []);
@@ -622,11 +623,11 @@ export default function NutritionPage() {
   function changeDate(delta: number) {
     const date = new Date(selectedDate);
     date.setDate(date.getDate() + delta);
-    setSelectedDate(date.toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString(date));
   }
 
   function goToToday() {
-    setSelectedDate(new Date().toISOString().split('T')[0]);
+    setSelectedDate(getLocalDateString());
   }
 
   // Calculate daily totals
@@ -686,7 +687,7 @@ export default function NutritionPage() {
     ).values()
   ).slice(0, 20);
 
-  const isToday = selectedDate === new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === getLocalDateString();
   const dateDisplay = isToday
     ? 'Today'
     : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
