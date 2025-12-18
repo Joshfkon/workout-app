@@ -8,6 +8,7 @@ import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
 import { NutritionTargetsModal } from '@/components/nutrition/NutritionTargetsModal';
 import { MacroCalculatorModal } from '@/components/nutrition/MacroCalculatorModal';
 import { CreateCustomFoodModal } from '@/components/nutrition/CreateCustomFoodModal';
+import { EditFoodModal } from '@/components/nutrition/EditFoodModal';
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -167,6 +168,8 @@ export default function NutritionPage() {
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
   const [showCreateCustomFood, setShowCreateCustomFood] = useState(false);
   const [editingCustomFood, setEditingCustomFood] = useState<CustomFood | null>(null);
+  const [showEditFood, setShowEditFood] = useState(false);
+  const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
   
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
@@ -393,8 +396,6 @@ export default function NutritionPage() {
   }
 
   async function handleDeleteFood(id: string) {
-    if (!confirm('Delete this food entry?')) return;
-
     const { error } = await supabase.from('food_log').delete().eq('id', id);
 
     if (error) {
@@ -403,6 +404,37 @@ export default function NutritionPage() {
     }
 
     await loadData();
+  }
+
+  async function handleUpdateFood(id: string, updates: { 
+    servings: number; 
+    calories: number; 
+    protein: number; 
+    carbs: number; 
+    fat: number; 
+  }) {
+    const { error } = await supabase
+      .from('food_log')
+      .update({
+        servings: updates.servings,
+        calories: updates.calories,
+        protein: updates.protein,
+        carbs: updates.carbs,
+        fat: updates.fat,
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating food:', error);
+      throw error;
+    }
+
+    await loadData();
+  }
+
+  function openEditFood(entry: FoodLogEntry) {
+    setEditingFood(entry);
+    setShowEditFood(true);
   }
 
   async function handleSaveCustomFood(food: Omit<CustomFood, 'id' | 'user_id' | 'created_at' | 'updated_at'>) {
@@ -949,9 +981,10 @@ export default function NutritionPage() {
               ) : (
                 <div className="space-y-1">
                   {meal.entries.map((entry) => (
-                    <div
+                    <button
                       key={entry.id}
-                      className="flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group"
+                      onClick={() => openEditFood(entry)}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left"
                     >
                       {/* Food Icon */}
                       <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
@@ -964,7 +997,7 @@ export default function NutritionPage() {
                           {toTitleCase(entry.food_name)}
                         </div>
                         <div className="text-sm text-surface-500">
-                          {entry.servings > 1 && `${entry.servings} × `}
+                          {entry.servings !== 1 && `${entry.servings} × `}
                           {entry.serving_size}
                         </div>
                       </div>
@@ -979,16 +1012,13 @@ export default function NutritionPage() {
                         </div>
                       </div>
                       
-                      {/* Delete Button */}
-                      <button
-                        onClick={() => handleDeleteFood(entry.id)}
-                        className="text-surface-600 hover:text-danger-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
-                      >
+                      {/* Edit indicator */}
+                      <div className="text-surface-600 group-hover:text-primary-400 transition-colors flex-shrink-0">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
-                      </button>
-                    </div>
+                      </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -1110,6 +1140,17 @@ export default function NutritionPage() {
         } : undefined}
         userStats={userProfile}
         workoutsPerWeek={userProfile.workoutsPerWeek || 4}
+      />
+
+      <EditFoodModal
+        isOpen={showEditFood}
+        onClose={() => {
+          setShowEditFood(false);
+          setEditingFood(null);
+        }}
+        onSave={handleUpdateFood}
+        onDelete={handleDeleteFood}
+        entry={editingFood}
       />
     </div>
   );
