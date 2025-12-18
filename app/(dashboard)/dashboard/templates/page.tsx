@@ -90,12 +90,12 @@ export default function TemplatesPage() {
       // Group templates into folders
       const foldersWithTemplates: FolderWithTemplates[] = foldersData.map((folder: WorkoutFolder) => ({
         ...folder,
-        templates: templatesWithExercises.filter(t => t.folder_id === folder.id),
+        templates: templatesWithExercises.filter((t: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] }) => t.folder_id === folder.id),
         isExpanded: true,
       }));
 
       // Get unfoldered templates
-      const unfoldered = templatesWithExercises.filter(t => !t.folder_id);
+      const unfoldered = templatesWithExercises.filter((t: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] }) => !t.folder_id);
 
       setFolders(foldersWithTemplates);
       setUnfolderedTemplates(unfoldered);
