@@ -508,9 +508,7 @@ export function buildDetailedSessionWithFatigue(
       const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
-      // Track time and exercise count
-      const isCompound = selection.exercise.pattern !== 'isolation';
-      const needsWarmup = isCompound && !warmedUpMuscles.has(muscle);
+      // Track time and exercise count (reuse isCompound and needsWarmup from above)
       estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
       if (needsWarmup) {
         warmedUpMuscles.add(muscle);
