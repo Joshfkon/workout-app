@@ -123,6 +123,7 @@ function NewWorkoutContent() {
   );
   const [selectedExercises, setSelectedExercises] = useState<string[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [frequentExerciseIds, setFrequentExerciseIds] = useState<Map<string, number>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,6 +288,39 @@ function NewWorkoutContent() {
     }
   }, [suggestions, exercises, selectedExercises.length]);
 
+  // Fetch frequently used exercises on mount
+  useEffect(() => {
+    const fetchFrequentExercises = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get exercise usage counts from the last 90 days
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      
+      const { data } = await supabase
+        .from('exercise_blocks')
+        .select(`
+          exercise_id,
+          workout_sessions!inner(user_id, started_at)
+        `)
+        .eq('workout_sessions.user_id', user.id)
+        .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString());
+
+      if (data) {
+        // Count occurrences of each exercise
+        const counts = new Map<string, number>();
+        data.forEach((block: { exercise_id: string }) => {
+          const id = block.exercise_id;
+          counts.set(id, (counts.get(id) || 0) + 1);
+        });
+        setFrequentExerciseIds(counts);
+      }
+    };
+    fetchFrequentExercises();
+  }, []);
+
   // Fetch exercises when muscles are selected
   useEffect(() => {
     if (step === 2 && selectedMuscles.length > 0) {
@@ -300,12 +334,21 @@ function NewWorkoutContent() {
           .order('name');
 
         if (data && !error) {
-          // Sort by hypertrophy tier (S > A > B > C), then alphabetically
+          // Sort: frequently used first, then by hypertrophy tier, then alphabetically
           const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
           const sorted = [...data].sort((a: any, b: any) => {
+            const freqA = frequentExerciseIds.get(a.id) || 0;
+            const freqB = frequentExerciseIds.get(b.id) || 0;
+            
+            // Frequently used exercises first (higher count = earlier)
+            if (freqA !== freqB) return freqB - freqA;
+            
+            // Then by tier
             const tierA = tierRank[a.hypertrophy_tier || 'C'] ?? 3;
             const tierB = tierRank[b.hypertrophy_tier || 'C'] ?? 3;
             if (tierA !== tierB) return tierA - tierB;
+            
+            // Then alphabetically
             return (a.name || '').localeCompare(b.name || '');
           });
           setExercises(sorted);
@@ -314,7 +357,7 @@ function NewWorkoutContent() {
       };
       fetchExercises();
     }
-  }, [step, selectedMuscles]);
+  }, [step, selectedMuscles, frequentExerciseIds]);
 
   const toggleMuscle = (muscle: string) => {
     setSelectedMuscles((prev) =>
@@ -757,48 +800,60 @@ function NewWorkoutContent() {
                 <CardContent>
                   {exercisesByMuscle[muscle]?.length > 0 ? (
                     <div className="space-y-2">
-                      {exercisesByMuscle[muscle].map((exercise) => (
-                        <button
-                          key={exercise.id}
-                          onClick={() => toggleExercise(exercise.id)}
-                          className={`w-full flex items-center justify-between p-3 rounded-lg transition-all ${
-                            selectedExercises.includes(exercise.id)
-                              ? 'bg-primary-500/20 border border-primary-500/50'
-                              : 'bg-surface-800 border border-transparent hover:bg-surface-700'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                                selectedExercises.includes(exercise.id)
-                                  ? 'bg-primary-500 border-primary-500'
-                                  : 'border-surface-600'
-                              }`}
-                            >
-                              {selectedExercises.includes(exercise.id) && (
-                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                            <span className="text-surface-200">{exercise.name}</span>
-                          </div>
-                          <div className="flex gap-1.5">
-                            {exercise.hypertrophy_tier && ['S', 'A'].includes(exercise.hypertrophy_tier) && (
-                              <Badge 
-                                variant="success" 
-                                size="sm"
-                                className="font-semibold"
+                      {exercisesByMuscle[muscle].map((exercise) => {
+                        const usageCount = frequentExerciseIds.get(exercise.id) || 0;
+                        const isFrequent = usageCount >= 2; // Show badge if used 2+ times
+                        
+                        return (
+                          <button
+                            key={exercise.id}
+                            onClick={() => toggleExercise(exercise.id)}
+                            className={`w-full flex items-center justify-between p-3 rounded-lg transition-all ${
+                              selectedExercises.includes(exercise.id)
+                                ? 'bg-primary-500/20 border border-primary-500/50'
+                                : 'bg-surface-800 border border-transparent hover:bg-surface-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                                  selectedExercises.includes(exercise.id)
+                                    ? 'bg-primary-500 border-primary-500'
+                                    : 'border-surface-600'
+                                }`}
                               >
-                                {exercise.hypertrophy_tier}-tier
+                                {selectedExercises.includes(exercise.id) && (
+                                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-surface-200">{exercise.name}</span>
+                                {isFrequent && (
+                                  <span className="text-xs text-amber-400" title={`Used ${usageCount} times recently`}>
+                                    ★
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5">
+                              {exercise.hypertrophy_tier && ['S', 'A'].includes(exercise.hypertrophy_tier) && (
+                                <Badge 
+                                  variant="success" 
+                                  size="sm"
+                                  className="font-semibold"
+                                >
+                                  {exercise.hypertrophy_tier}-tier
+                                </Badge>
+                              )}
+                              <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
+                                {exercise.mechanic}
                               </Badge>
-                            )}
-                            <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
-                              {exercise.mechanic}
-                            </Badge>
-                          </div>
-                        </button>
-                      ))}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-surface-500 text-center py-4">

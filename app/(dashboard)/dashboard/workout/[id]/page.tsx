@@ -371,6 +371,7 @@ export default function WorkoutPage() {
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [availableExercises, setAvailableExercises] = useState<AvailableExercise[]>([]);
+  const [frequentExerciseIds, setFrequentExerciseIds] = useState<Map<string, number>>(new Map());
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
@@ -826,6 +827,39 @@ export default function WorkoutPage() {
 
     loadWorkout();
   }, [sessionId]);
+
+  // Fetch frequently used exercises for sorting
+  useEffect(() => {
+    async function loadFrequentExercises() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get exercise usage counts from the last 90 days
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      
+      const { data } = await supabase
+        .from('exercise_blocks')
+        .select(`
+          exercise_id,
+          workout_sessions!inner(user_id, started_at)
+        `)
+        .eq('workout_sessions.user_id', user.id)
+        .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString());
+
+      if (data) {
+        // Count occurrences of each exercise
+        const counts = new Map<string, number>();
+        data.forEach((block: { exercise_id: string }) => {
+          const id = block.exercise_id;
+          counts.set(id, (counts.get(id) || 0) + 1);
+        });
+        setFrequentExerciseIds(counts);
+      }
+    }
+    loadFrequentExercises();
+  }, []);
 
   // Fetch today's nutrition data for check-in
   useEffect(() => {
@@ -2302,6 +2336,7 @@ export default function WorkoutPage() {
                     workingWeight={effectiveWorkingWeight}
                     showSwapOnMount={showSwapForInjury === block.id}
                     currentInjuries={temporaryInjuries}
+                    frequentExerciseIds={frequentExerciseIds}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}

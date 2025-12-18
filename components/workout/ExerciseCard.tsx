@@ -114,6 +114,7 @@ interface ExerciseCardProps {
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
   onWarmupComplete?: (restSeconds: number) => void;  // Callback when a warmup set is completed
   availableExercises?: Exercise[];  // All exercises for swap suggestions
+  frequentExerciseIds?: Map<string, number>;  // Exercise usage counts for sorting
   isActive?: boolean;
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
@@ -139,6 +140,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onExerciseDelete,
   onWarmupComplete,
   availableExercises = [],
+  frequentExerciseIds = new Map(),
   isActive = false,
   unit = 'kg',
   recommendedWeight,
@@ -1512,8 +1514,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                       if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
                       return true;
                     })
+                    .sort((a, b) => {
+                      // Sort by frequency (most used first)
+                      const freqA = frequentExerciseIds.get(a.id) || 0;
+                      const freqB = frequentExerciseIds.get(b.id) || 0;
+                      if (freqA !== freqB) return freqB - freqA;
+                      // Then alphabetically
+                      return a.name.localeCompare(b.name);
+                    })
                     .map((alt) => {
                       const altInjuryRisk = getExerciseInjuryRiskFromService({ name: alt.name, primaryMuscle: alt.primaryMuscle }, currentInjuries);
+                      const usageCount = frequentExerciseIds.get(alt.id) || 0;
+                      const isFrequent = usageCount >= 2;
+                      
                       return (
                         <button
                           key={alt.id}
@@ -1534,6 +1547,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                               <p className={`font-medium truncate ${altInjuryRisk.isRisky ? 'text-surface-400' : 'text-surface-100'}`}>
                                 {alt.name}
                               </p>
+                              {isFrequent && (
+                                <span className="text-xs text-amber-400" title={`Used ${usageCount} times recently`}>
+                                  ★
+                                </span>
+                              )}
                               {altInjuryRisk.isRisky && (
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
                                   altInjuryRisk.severity === 3 
