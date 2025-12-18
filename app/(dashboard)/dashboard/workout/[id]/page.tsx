@@ -375,6 +375,7 @@ export default function WorkoutPage() {
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
+  const [collapsedMuscles, setCollapsedMuscles] = useState<Set<string>>(new Set());
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
@@ -2007,36 +2008,92 @@ export default function WorkoutPage() {
                   autoFocus
                 />
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {availableExercises
-                  .filter(ex => 
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {(() => {
+                  const filteredExercises = availableExercises.filter(ex => 
                     ex.name.toLowerCase().includes(exerciseSearch.toLowerCase()) ||
                     ex.primary_muscle?.toLowerCase().includes(exerciseSearch.toLowerCase())
-                  )
-                  .slice(0, 30)
-                  .map((exercise) => (
-                    <button
-                      key={exercise.id}
-                      onClick={() => handleAddExercise(exercise)}
-                      disabled={isAddingExercise}
-                      className="w-full flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors text-left disabled:opacity-50"
-                    >
-                      <div>
-                        <p className="font-medium text-surface-200">{exercise.name}</p>
-                        <p className="text-xs text-surface-500 capitalize">
-                          {exercise.primary_muscle} • {exercise.mechanic}
-                        </p>
+                  );
+                  
+                  // Group by muscle
+                  const muscleGroups = filteredExercises.reduce((groups, ex) => {
+                    const muscle = ex.primary_muscle || 'Other';
+                    if (!groups[muscle]) groups[muscle] = [];
+                    groups[muscle].push(ex);
+                    return groups;
+                  }, {} as Record<string, typeof filteredExercises>);
+                  
+                  // Sort muscle groups alphabetically
+                  const sortedMuscles = Object.keys(muscleGroups).sort();
+                  
+                  if (sortedMuscles.length === 0) {
+                    return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
+                  }
+                  
+                  return sortedMuscles.map(muscle => {
+                    const exercises = muscleGroups[muscle].sort((a, b) => a.name.localeCompare(b.name));
+                    const isCollapsed = collapsedMuscles.has(muscle);
+                    
+                    return (
+                      <div key={muscle} className="border border-surface-800 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setCollapsedMuscles(prev => {
+                              const next = new Set(prev);
+                              if (next.has(muscle)) {
+                                next.delete(muscle);
+                              } else {
+                                next.add(muscle);
+                              }
+                              return next;
+                            });
+                          }}
+                          className="w-full flex items-center justify-between p-3 bg-surface-800/50 hover:bg-surface-800 transition-colors"
+                        >
+                          <span className="font-medium text-surface-200 capitalize">{muscle}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-surface-500">{exercises.length}</span>
+                            <svg 
+                              className={`w-4 h-4 text-surface-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} 
+                              fill="none" 
+                              viewBox="0 0 24 24" 
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+                        </button>
+                        {!isCollapsed && (
+                          <div className="border-t border-surface-800">
+                            {exercises.map((exercise) => (
+                              <button
+                                key={exercise.id}
+                                onClick={() => handleAddExercise(exercise)}
+                                disabled={isAddingExercise}
+                                className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 last:border-b-0"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="w-5 h-5 rounded border border-surface-600" />
+                                  <span className="text-surface-200">{exercise.name}</span>
+                                  {frequentExerciseIds.has(exercise.id) && (
+                                    <span className="text-amber-400 text-sm">★</span>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-0.5 rounded ${
+                                  exercise.mechanic === 'compound' 
+                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                                    : 'bg-surface-700 text-surface-400'
+                                }`}>
+                                  {exercise.mechanic}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {isAddingExercise ? (
-                        <div className="w-5 h-5 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <span className="text-primary-400 text-sm">+ Add</span>
-                      )}
-                    </button>
-                  ))}
-                {availableExercises.length === 0 && (
-                  <p className="text-center text-surface-400 py-8">Loading exercises...</p>
-                )}
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
@@ -2643,38 +2700,13 @@ export default function WorkoutPage() {
               </button>
             </div>
 
-            {/* Search and filter */}
+            {/* Search */}
             <div className="p-4 space-y-3 border-b border-surface-800">
               <Input
                 placeholder="Search exercises..."
                 value={exerciseSearch}
                 onChange={(e) => setExerciseSearch(e.target.value)}
               />
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                <button
-                  onClick={() => handleMuscleFilter('')}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                    !selectedMuscle
-                      ? 'bg-primary-500 text-white'
-                      : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                  }`}
-                >
-                  All
-                </button>
-                {MUSCLE_GROUPS.map((muscle) => (
-                  <button
-                    key={muscle}
-                    onClick={() => handleMuscleFilter(muscle)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap capitalize transition-colors ${
-                      selectedMuscle === muscle
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                    }`}
-                  >
-                    {muscle}
-                  </button>
-                ))}
-              </div>
               
               {/* Create custom exercise button */}
               <button
@@ -2695,37 +2727,98 @@ export default function WorkoutPage() {
               )}
             </div>
 
-            {/* Exercise list */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {availableExercises.length === 0 ? (
-                <p className="text-center text-surface-500 py-8">Loading exercises...</p>
-              ) : (
-                <div className="space-y-2">
-                  {availableExercises
-                    .filter(ex => 
-                      exerciseSearch === '' || 
-                      ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
-                    )
-                    .map((exercise) => (
+            {/* Exercise list grouped by muscle */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {(() => {
+                const filteredExercises = availableExercises.filter(ex => 
+                  exerciseSearch === '' || 
+                  ex.name.toLowerCase().includes(exerciseSearch.toLowerCase()) ||
+                  ex.primary_muscle?.toLowerCase().includes(exerciseSearch.toLowerCase())
+                );
+                
+                // Group by muscle
+                const muscleGroups = filteredExercises.reduce((groups, ex) => {
+                  const muscle = ex.primary_muscle || 'Other';
+                  if (!groups[muscle]) groups[muscle] = [];
+                  groups[muscle].push(ex);
+                  return groups;
+                }, {} as Record<string, typeof filteredExercises>);
+                
+                // Sort muscle groups alphabetically
+                const sortedMuscles = Object.keys(muscleGroups).sort();
+                
+                if (availableExercises.length === 0) {
+                  return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
+                }
+                
+                if (sortedMuscles.length === 0) {
+                  return <p className="text-center text-surface-500 py-8">No exercises found</p>;
+                }
+                
+                return sortedMuscles.map(muscle => {
+                  const exercises = muscleGroups[muscle].sort((a, b) => a.name.localeCompare(b.name));
+                  const isCollapsed = collapsedMuscles.has(muscle);
+                  
+                  return (
+                    <div key={muscle} className="border border-surface-800 rounded-lg overflow-hidden">
                       <button
-                        key={exercise.id}
-                        onClick={() => handleAddExercise(exercise)}
-                        disabled={isAddingExercise}
-                        className="w-full flex items-center justify-between p-3 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors text-left disabled:opacity-50"
+                        onClick={() => {
+                          setCollapsedMuscles(prev => {
+                            const next = new Set(prev);
+                            if (next.has(muscle)) {
+                              next.delete(muscle);
+                            } else {
+                              next.add(muscle);
+                            }
+                            return next;
+                          });
+                        }}
+                        className="w-full flex items-center justify-between p-3 bg-surface-800/50 hover:bg-surface-800 transition-colors"
                       >
-                        <div>
-                          <p className="font-medium text-surface-200">{exercise.name}</p>
-                          <p className="text-xs text-surface-500 capitalize">
-                            {exercise.primary_muscle} • {exercise.mechanic}
-                          </p>
+                        <span className="font-medium text-surface-200 capitalize">{muscle}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-surface-500">{exercises.length}</span>
+                          <svg 
+                            className={`w-4 h-4 text-surface-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} 
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
                         </div>
-                        <Badge variant={exercise.mechanic === 'compound' ? 'info' : 'default'} size="sm">
-                          {exercise.mechanic}
-                        </Badge>
                       </button>
-                    ))}
-                </div>
-              )}
+                      {!isCollapsed && (
+                        <div className="border-t border-surface-800">
+                          {exercises.map((exercise) => (
+                            <button
+                              key={exercise.id}
+                              onClick={() => handleAddExercise(exercise)}
+                              disabled={isAddingExercise}
+                              className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 last:border-b-0"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-5 h-5 rounded border border-surface-600" />
+                                <span className="text-surface-200">{exercise.name}</span>
+                                {frequentExerciseIds.has(exercise.id) && (
+                                  <span className="text-amber-400 text-sm">★</span>
+                                )}
+                              </div>
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                exercise.mechanic === 'compound' 
+                                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                                  : 'bg-surface-700 text-surface-400'
+                              }`}>
+                                {exercise.mechanic}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>
