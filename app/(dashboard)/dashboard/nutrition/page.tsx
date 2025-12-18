@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimati
 import { createUntypedClient } from '@/lib/supabase/client';
 import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
 import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
+import { WeightHistoryModal } from '@/components/nutrition/WeightHistoryModal';
 import { NutritionTargetsModal } from '@/components/nutrition/NutritionTargetsModal';
 import { MacroCalculatorModal } from '@/components/nutrition/MacroCalculatorModal';
 import { CreateCustomFoodModal } from '@/components/nutrition/CreateCustomFoodModal';
@@ -172,6 +173,8 @@ export default function NutritionPage() {
   const [showAddFood, setShowAddFood] = useState(false);
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
   const [showWeightLog, setShowWeightLog] = useState(false);
+  const [showWeightHistory, setShowWeightHistory] = useState(false);
+  const [editingWeight, setEditingWeight] = useState<WeightLogEntry | null>(null);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
   const [showCreateCustomFood, setShowCreateCustomFood] = useState(false);
@@ -606,6 +609,47 @@ export default function NutritionPage() {
       }
     } catch (e) {
       console.error('Failed to auto-recalculate macros:', e);
+    }
+
+    await loadData();
+  }
+
+  async function handleUpdateWeight(weight: number, date: string, notes?: string) {
+    if (!editingWeight) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('weight_log')
+      .update({
+        weight: weight,
+        logged_at: date,
+        notes: notes || null,
+      })
+      .eq('id', editingWeight.id);
+
+    if (error) {
+      console.error('Error updating weight:', error);
+      throw error;
+    }
+
+    setEditingWeight(null);
+    await loadData();
+  }
+
+  async function handleDeleteWeight(id: string) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('weight_log')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting weight:', error);
+      throw error;
     }
 
     await loadData();
@@ -1129,7 +1173,16 @@ export default function NutritionPage() {
       {weightEntries.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Weight Trend</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle>Weight Trend</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowWeightHistory(true)}
+              >
+                View History
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-6">
@@ -1217,6 +1270,24 @@ export default function NutritionPage() {
         isOpen={showWeightLog}
         onClose={() => setShowWeightLog(false)}
         onSave={handleSaveWeight}
+      />
+
+      <WeightLogModal
+        isOpen={!!editingWeight}
+        onClose={() => setEditingWeight(null)}
+        onSave={handleUpdateWeight}
+        existingEntry={editingWeight || undefined}
+      />
+
+      <WeightHistoryModal
+        isOpen={showWeightHistory}
+        onClose={() => setShowWeightHistory(false)}
+        entries={weightEntries}
+        onEdit={(entry) => {
+          setShowWeightHistory(false);
+          setEditingWeight(entry);
+        }}
+        onDelete={handleDeleteWeight}
       />
 
       <NutritionTargetsModal
