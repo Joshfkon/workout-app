@@ -98,6 +98,8 @@ export function useActiveWorkout() {
       rpe: data.rpe,
       restSeconds: null,
       isWarmup: false,
+      setType: 'normal',
+      parentSetId: null,
       quality: quality.quality,
       qualityReason: quality.reason,
       note: data.note || null,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, memo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
@@ -102,11 +102,22 @@ function getExerciseInjuryRiskFromService(
   };
 }
 
+type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+
+interface SetCompleteData {
+  weightKg: number;
+  reps: number;
+  rpe: number;
+  note?: string;
+  setType?: SetType;
+  parentSetId?: string;  // For dropsets: the ID of the parent set
+}
+
 interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
   sets: SetLog[];
-  onSetComplete?: (setData: { weightKg: number; reps: number; rpe: number; note?: string }) => void;
+  onSetComplete?: (setData: SetCompleteData) => void;
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   onSetDelete?: (setId: string) => void;
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
@@ -163,6 +174,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
+  const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
   
   // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
@@ -473,7 +485,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   };
 
-  const completePendingSet = (index: number) => {
+  const completePendingSet = (index: number, asDropset = false) => {
     // Prevent double-clicks
     if (isCompletingSet || !onSetComplete) return;
     
@@ -498,10 +510,32 @@ export const ExerciseCard = memo(function ExerciseCard({
       weightKg,
       reps: repsNum,
       rpe: rpeNum,
+      setType: asDropset && dropsetMode ? 'dropset' : 'normal',
+      parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
     });
+    
+    // Clear dropset mode after completing
+    if (asDropset) {
+      setDropsetMode(null);
+    }
     
     // Unlock after a short delay (the parent will update completedSets)
     setTimeout(() => setIsCompletingSet(false), 500);
+  };
+  
+  // Start dropset mode with reduced weight
+  const startDropset = (parentSet: SetLog) => {
+    // Typical dropset reduces weight by 20-30%
+    const reducedWeight = parentSet.weightKg * 0.75;
+    setDropsetMode({
+      parentSetId: parentSet.id,
+      parentWeight: reducedWeight,
+    });
+  };
+  
+  // Cancel dropset mode
+  const cancelDropset = () => {
+    setDropsetMode(null);
   };
 
   const getQualityPreview = (input: { weight: string; reps: string; rpe: string }): { quality: SetQuality; reason: string } | null => {
@@ -1017,8 +1051,11 @@ export const ExerciseCard = memo(function ExerciseCard({
             )}
             
             {/* Completed working sets */}
-            {completedSets.map((set) => (
-              editingSetId === set.id ? (
+            {completedSets.map((set, setIndex) => {
+              const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
+              const isLastCompletedSet = setIndex === completedSets.length - 1;
+              
+              return editingSetId === set.id ? (
                 <tr key={set.id} className="bg-primary-500/10">
                   <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
                   <td className="px-1 py-1.5">
@@ -1079,27 +1116,32 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </td>
                 </tr>
               ) : (
-                <tr
-                  key={set.id}
-                  className="hover:bg-surface-800/30 group bg-success-500/5 relative overflow-hidden"
-                  onTouchStart={(e) => handleTouchStart(set.id, e)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={() => handleTouchEnd(set.id, true)}
-                  style={getSwipeTransform(set.id)}
-                >
-                  {/* Delete reveal background for swipe */}
-                  {swipeState.setId === set.id && swipeState.isSwiping && (
-                    <div 
-                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </div>
-                  )}
-                  <td className="px-3 py-2.5 text-surface-300 font-medium">
-                    {set.setNumber}
-                  </td>
+                <React.Fragment key={set.id}>
+                  <tr
+                    className={`hover:bg-surface-800/30 group relative overflow-hidden ${
+                      isDropset ? 'bg-purple-500/10' : 'bg-success-500/5'
+                    }`}
+                    onTouchStart={(e) => handleTouchStart(set.id, e)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={() => handleTouchEnd(set.id, true)}
+                    style={getSwipeTransform(set.id)}
+                  >
+                    {/* Delete reveal background for swipe */}
+                    {swipeState.setId === set.id && swipeState.isSwiping && (
+                      <div 
+                        className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                    )}
+                    <td className="px-3 py-2.5 text-surface-300 font-medium">
+                      <div className="flex items-center gap-1">
+                        {isDropset && <span className="text-purple-400 text-xs">↓</span>}
+                        {set.setNumber}
+                      </div>
+                    </td>
                   <td 
                     className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                     onClick={() => onSetEdit && startEditing(set)}
@@ -1147,8 +1189,109 @@ export const ExerciseCard = memo(function ExerciseCard({
                     )}
                   </td>
                 </tr>
-              )
-            ))}
+                
+                {/* Add Dropset button - only show for last completed set when active */}
+                {isActive && isLastCompletedSet && !dropsetMode && !isDropset && pendingInputs.length === 0 && (
+                  <tr className="bg-surface-800/20">
+                    <td colSpan={6} className="px-3 py-2">
+                      <button
+                        onClick={() => startDropset(set)}
+                        className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                        Add Dropset (reduce weight, continue to failure)
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+              );
+            })}
+            
+            {/* Dropset input row - appears when adding a dropset */}
+            {isActive && dropsetMode && (
+              <tr className="bg-purple-500/20 border-l-2 border-purple-500">
+                <td className="px-3 py-2 text-purple-400 font-medium">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs">↓</span>
+                    D
+                  </div>
+                </td>
+                <td className="px-1 py-1.5">
+                  <input
+                    type="number"
+                    defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
+                    id="dropset-weight-input"
+                    step="0.5"
+                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+                    autoFocus
+                  />
+                </td>
+                <td className="px-1 py-1.5">
+                  <input
+                    type="number"
+                    defaultValue=""
+                    id="dropset-reps-input"
+                    placeholder="?"
+                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm placeholder-surface-500"
+                  />
+                </td>
+                <td className="px-1 py-1.5">
+                  <input
+                    type="number"
+                    defaultValue="10"
+                    id="dropset-rpe-input"
+                    step="0.5"
+                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+                  />
+                </td>
+                <td className="px-3 py-1.5 text-center">
+                  <span className="text-xs text-purple-400 font-medium">DROPSET</span>
+                </td>
+                <td className="px-2 py-1.5">
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
+                        const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
+                        const rpeEl = document.getElementById('dropset-rpe-input') as HTMLInputElement;
+                        
+                        const weight = parseFloat(weightEl?.value || '0');
+                        const reps = parseInt(repsEl?.value || '0');
+                        const rpe = parseFloat(rpeEl?.value || '10');
+                        
+                        if (weight > 0 && reps > 0 && onSetComplete) {
+                          const weightKg = inputWeightToKg(weight, unit);
+                          onSetComplete({
+                            weightKg,
+                            reps,
+                            rpe,
+                            setType: 'dropset',
+                            parentSetId: dropsetMode.parentSetId,
+                          });
+                          setDropsetMode(null);
+                        }
+                      }}
+                      className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={cancelDropset}
+                      className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
             
             {/* Pending sets - editable with pre-filled values */}
             {isActive && pendingInputs.map((input, index) => {

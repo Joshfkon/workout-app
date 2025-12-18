@@ -1020,11 +1020,19 @@ export default function WorkoutPage() {
     await handleCheckInComplete();
   };
 
-  const handleSetComplete = async (data: { weightKg: number; reps: number; rpe: number; note?: string }) => {
+  const handleSetComplete = async (data: { 
+    weightKg: number; 
+    reps: number; 
+    rpe: number; 
+    note?: string;
+    setType?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+    parentSetId?: string;
+  }) => {
     if (!currentBlock) return;
 
     const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective';
     const loggedAt = new Date().toISOString();
+    const setType = data.setType || 'normal';
 
     // Save to database first - let DB generate the UUID
     try {
@@ -1036,6 +1044,8 @@ export default function WorkoutPage() {
           set_number: currentSetNumber,
           weight_kg: data.weightKg,
           reps: data.reps,
+          set_type: setType,
+          parent_set_id: data.parentSetId || null,
           rpe: data.rpe,
           is_warmup: false,
           quality: quality,
@@ -1062,6 +1072,8 @@ export default function WorkoutPage() {
         rpe: data.rpe,
         restSeconds: null,
         isWarmup: false,
+        setType: setType,
+        parentSetId: data.parentSetId || null,
         quality: quality,
         qualityReason: '',
         note: data.note || null,

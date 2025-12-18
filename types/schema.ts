@@ -459,6 +459,11 @@ export interface WarmupSet {
 // ============ SET LOG ============
 
 /**
+ * Type of set for advanced training techniques
+ */
+export type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+
+/**
  * Logged data for a single set (working or warmup)
  */
 export interface SetLog {
@@ -480,8 +485,14 @@ export interface SetLog {
   /** Rest taken after this set in seconds */
   restSeconds: number | null;
   
-  /** Whether this is a warmup set */
+  /** Whether this is a warmup set (deprecated: use setType instead) */
   isWarmup: boolean;
+  
+  /** Type of set for advanced training techniques */
+  setType: SetType;
+  
+  /** For dropsets: references the parent set this dropset follows */
+  parentSetId: string | null;
   
   /** Quality classification based on RPE analysis */
   quality: SetQuality;

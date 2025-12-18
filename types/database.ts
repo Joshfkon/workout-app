@@ -265,6 +265,8 @@ export interface Database {
           rpe: number;
           rest_seconds: number | null;
           is_warmup: boolean;
+          set_type: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+          parent_set_id: string | null;
           quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
           quality_reason: string;
           note: string | null;
@@ -279,6 +281,8 @@ export interface Database {
           rpe?: number;
           rest_seconds?: number | null;
           is_warmup?: boolean;
+          set_type?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+          parent_set_id?: string | null;
           quality?: 'junk' | 'effective' | 'stimulative' | 'excessive';
           quality_reason?: string;
           note?: string | null;
@@ -293,6 +297,8 @@ export interface Database {
           rpe?: number;
           rest_seconds?: number | null;
           is_warmup?: boolean;
+          set_type?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
+          parent_set_id?: string | null;
           quality?: 'junk' | 'effective' | 'stimulative' | 'excessive';
           quality_reason?: string;
           note?: string | null;
