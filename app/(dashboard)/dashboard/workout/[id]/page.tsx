@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
@@ -1485,6 +1485,59 @@ export default function WorkoutPage() {
     }
   };
 
+  // Toggle superset between two adjacent exercises
+  const toggleSuperset = async (blockIndex: number) => {
+    if (blockIndex >= blocks.length - 1) return;
+    
+    const block1 = blocks[blockIndex];
+    const block2 = blocks[blockIndex + 1];
+    
+    // Check if they're already in a superset together
+    const areSupersetted = block1.supersetGroupId && block1.supersetGroupId === block2.supersetGroupId;
+    
+    try {
+      const supabase = createUntypedClient();
+      
+      if (areSupersetted) {
+        // Remove superset - clear both blocks' superset fields
+        await supabase
+          .from('exercise_blocks')
+          .update({ superset_group_id: null, superset_order: null })
+          .in('id', [block1.id, block2.id]);
+        
+        // Update local state
+        setBlocks(prevBlocks => prevBlocks.map(b => 
+          b.id === block1.id || b.id === block2.id
+            ? { ...b, supersetGroupId: null, supersetOrder: null }
+            : b
+        ));
+      } else {
+        // Create superset - generate a new group ID
+        const newGroupId = crypto.randomUUID();
+        
+        await supabase
+          .from('exercise_blocks')
+          .update({ superset_group_id: newGroupId, superset_order: 1 })
+          .eq('id', block1.id);
+        
+        await supabase
+          .from('exercise_blocks')
+          .update({ superset_group_id: newGroupId, superset_order: 2 })
+          .eq('id', block2.id);
+        
+        // Update local state
+        setBlocks(prevBlocks => prevBlocks.map(b => {
+          if (b.id === block1.id) return { ...b, supersetGroupId: newGroupId, supersetOrder: 1 };
+          if (b.id === block2.id) return { ...b, supersetGroupId: newGroupId, supersetOrder: 2 };
+          return b;
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to toggle superset:', err);
+      setError('Failed to toggle superset');
+    }
+  };
+
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
@@ -2117,16 +2170,19 @@ export default function WorkoutPage() {
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
+          const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
+          const isInSuperset = block.supersetGroupId !== null;
+          const isSupersetWithNext = nextBlock && block.supersetGroupId && block.supersetGroupId === nextBlock.supersetGroupId;
           const isPast = index < currentBlockIndex;
           const isFuture = index > currentBlockIndex;
 
           return (
+            <React.Fragment key={block.id}>
             <div 
-              key={block.id} 
               id={`exercise-${index}`}
               className={`transition-all duration-300 ${
                 isCurrent ? '' : 'opacity-80 cursor-pointer'
-              }`}
+              } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''}`}
               onClick={(e) => {
                 // Only activate if not already current and click wasn't on an interactive element
                 if (!isCurrent) {
@@ -2184,6 +2240,12 @@ export default function WorkoutPage() {
                                     : 'bg-surface-600 text-surface-400'
                             }`}>
                               {block.exercise.hypertrophyScore.tier}
+                            </span>
+                          )}
+                          {/* Superset badge */}
+                          {block.supersetGroupId && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 bg-cyan-500/20 text-cyan-400">
+                              SS{block.supersetOrder}
                             </span>
                           )}
                           {/* Injury risk warning */}
@@ -2408,6 +2470,41 @@ export default function WorkoutPage() {
                 </div>
               )}
             </div>
+            
+            {/* Superset link button between exercises */}
+            {index < blocks.length - 1 && (
+              <div className="flex justify-center -my-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSuperset(index);
+                  }}
+                  className={`px-3 py-1 text-xs rounded-full transition-all flex items-center gap-1 ${
+                    isSupersetWithNext
+                      ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
+                      : 'bg-surface-800 text-surface-500 hover:bg-surface-700 hover:text-surface-400'
+                  }`}
+                  title={isSupersetWithNext ? 'Remove superset' : 'Link as superset'}
+                >
+                  {isSupersetWithNext ? (
+                    <>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      Superset
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Link Superset
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+          </React.Fragment>
           );
         })}
       </div>
