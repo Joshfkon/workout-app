@@ -375,7 +375,8 @@ export default function WorkoutPage() {
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
-  const [collapsedMuscles, setCollapsedMuscles] = useState<Set<string>>(new Set());
+  const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string | null>(null);
+  const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
@@ -1984,13 +1985,13 @@ export default function WorkoutPage() {
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
             <div 
               className="absolute inset-0 bg-black/60"
-              onClick={() => setShowAddExercise(false)}
+              onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
             />
             <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
               <div className="p-4 border-b border-surface-800 flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
                 <button
-                  onClick={() => setShowAddExercise(false)}
+                  onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
                   className="p-2 text-surface-400 hover:text-surface-200"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1998,101 +1999,121 @@ export default function WorkoutPage() {
                   </svg>
                 </button>
               </div>
-              <div className="p-4 border-b border-surface-800">
+              
+              {/* Search and Body Part Filter */}
+              <div className="p-4 border-b border-surface-800 space-y-3">
                 <input
                   type="text"
                   value={exerciseSearch}
                   onChange={(e) => setExerciseSearch(e.target.value)}
                   placeholder="Search exercises..."
                   className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
-                  autoFocus
                 />
+                
+                {/* Body Part Dropdown */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowMuscleDropdown(!showMuscleDropdown)}
+                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                  >
+                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                      {selectedMuscleFilter || 'Any Body Part'}
+                    </span>
+                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {/* Dropdown Menu */}
+                  {showMuscleDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Any Body Part</span>
+                        {!selectedMuscleFilter && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      {(() => {
+                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                        return muscles.map(muscle => (
+                          <button
+                            key={muscle}
+                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>{muscle}</span>
+                            {selectedMuscleFilter === muscle && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              
+              {/* Exercise List */}
+              <div className="flex-1 overflow-y-auto">
                 {(() => {
-                  const filteredExercises = availableExercises.filter(ex => 
-                    ex.name.toLowerCase().includes(exerciseSearch.toLowerCase()) ||
-                    ex.primary_muscle?.toLowerCase().includes(exerciseSearch.toLowerCase())
-                  );
+                  let filteredExercises = availableExercises;
                   
-                  // Group by muscle
-                  const muscleGroups = filteredExercises.reduce((groups, ex) => {
-                    const muscle = ex.primary_muscle || 'Other';
-                    if (!groups[muscle]) groups[muscle] = [];
-                    groups[muscle].push(ex);
-                    return groups;
-                  }, {} as Record<string, typeof filteredExercises>);
+                  // Filter by muscle
+                  if (selectedMuscleFilter) {
+                    filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
+                  }
                   
-                  // Sort muscle groups alphabetically
-                  const sortedMuscles = Object.keys(muscleGroups).sort();
+                  // Filter by search
+                  if (exerciseSearch) {
+                    filteredExercises = filteredExercises.filter(ex => 
+                      ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                    );
+                  }
                   
-                  if (sortedMuscles.length === 0) {
+                  // Sort alphabetically
+                  filteredExercises = [...filteredExercises].sort((a, b) => a.name.localeCompare(b.name));
+                  
+                  if (availableExercises.length === 0) {
                     return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
                   }
                   
-                  return sortedMuscles.map(muscle => {
-                    const exercises = muscleGroups[muscle].sort((a, b) => a.name.localeCompare(b.name));
-                    const isCollapsed = collapsedMuscles.has(muscle);
-                    
-                    return (
-                      <div key={muscle} className="border border-surface-800 rounded-lg overflow-hidden">
-                        <button
-                          onClick={() => {
-                            setCollapsedMuscles(prev => {
-                              const next = new Set(prev);
-                              if (next.has(muscle)) {
-                                next.delete(muscle);
-                              } else {
-                                next.add(muscle);
-                              }
-                              return next;
-                            });
-                          }}
-                          className="w-full flex items-center justify-between p-3 bg-surface-800/50 hover:bg-surface-800 transition-colors"
-                        >
-                          <span className="font-medium text-surface-200 capitalize">{muscle}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-surface-500">{exercises.length}</span>
-                            <svg 
-                              className={`w-4 h-4 text-surface-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} 
-                              fill="none" 
-                              viewBox="0 0 24 24" 
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                          </div>
-                        </button>
-                        {!isCollapsed && (
-                          <div className="border-t border-surface-800">
-                            {exercises.map((exercise) => (
-                              <button
-                                key={exercise.id}
-                                onClick={() => handleAddExercise(exercise)}
-                                disabled={isAddingExercise}
-                                className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 last:border-b-0"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="w-5 h-5 rounded border border-surface-600" />
-                                  <span className="text-surface-200">{exercise.name}</span>
-                                  {frequentExerciseIds.has(exercise.id) && (
-                                    <span className="text-amber-400 text-sm">★</span>
-                                  )}
-                                </div>
-                                <span className={`text-xs px-2 py-0.5 rounded ${
-                                  exercise.mechanic === 'compound' 
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                                    : 'bg-surface-700 text-surface-400'
-                                }`}>
-                                  {exercise.mechanic}
-                                </span>
-                              </button>
-                            ))}
-                          </div>
+                  if (filteredExercises.length === 0) {
+                    return <p className="text-center text-surface-400 py-8">No exercises found</p>;
+                  }
+                  
+                  return filteredExercises.map((exercise) => (
+                    <button
+                      key={exercise.id}
+                      onClick={() => handleAddExercise(exercise)}
+                      disabled={isAddingExercise}
+                      className="w-full flex items-center justify-between p-4 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-surface-200">{exercise.name}</span>
+                        {frequentExerciseIds.has(exercise.id) && (
+                          <span className="text-amber-400 text-sm">★</span>
                         )}
                       </div>
-                    );
-                  });
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        exercise.mechanic === 'compound' 
+                          ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                          : 'bg-surface-700 text-surface-400'
+                      }`}>
+                        {exercise.mechanic}
+                      </span>
+                    </button>
+                  ));
                 })()}
               </div>
             </div>
@@ -2682,7 +2703,7 @@ export default function WorkoutPage() {
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/60"
-            onClick={() => setShowAddExercise(false)}
+            onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
           />
           
           {/* Modal */}
@@ -2691,7 +2712,7 @@ export default function WorkoutPage() {
             <div className="p-4 border-b border-surface-800 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
               <button
-                onClick={() => setShowAddExercise(false)}
+                onClick={() => { setShowAddExercise(false); setShowMuscleDropdown(false); }}
                 className="p-2 text-surface-400 hover:text-surface-200"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2700,13 +2721,66 @@ export default function WorkoutPage() {
               </button>
             </div>
 
-            {/* Search */}
+            {/* Search and Body Part Filter */}
             <div className="p-4 space-y-3 border-b border-surface-800">
               <Input
                 placeholder="Search exercises..."
                 value={exerciseSearch}
                 onChange={(e) => setExerciseSearch(e.target.value)}
               />
+              
+              {/* Body Part Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowMuscleDropdown(!showMuscleDropdown)}
+                  className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                >
+                  <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                    {selectedMuscleFilter || 'Any Body Part'}
+                  </span>
+                  <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                
+                {/* Dropdown Menu */}
+                {showMuscleDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                    <button
+                      onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                      className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                        !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                      }`}
+                    >
+                      <span>Any Body Part</span>
+                      {!selectedMuscleFilter && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                    {(() => {
+                      const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                      return muscles.map(muscle => (
+                        <button
+                          key={muscle}
+                          onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                            selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>{muscle}</span>
+                          {selectedMuscleFilter === muscle && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
               
               {/* Create custom exercise button */}
               <button
@@ -2727,97 +2801,56 @@ export default function WorkoutPage() {
               )}
             </div>
 
-            {/* Exercise list grouped by muscle */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {/* Exercise list */}
+            <div className="flex-1 overflow-y-auto">
               {(() => {
-                const filteredExercises = availableExercises.filter(ex => 
-                  exerciseSearch === '' || 
-                  ex.name.toLowerCase().includes(exerciseSearch.toLowerCase()) ||
-                  ex.primary_muscle?.toLowerCase().includes(exerciseSearch.toLowerCase())
-                );
+                let filteredExercises = availableExercises;
                 
-                // Group by muscle
-                const muscleGroups = filteredExercises.reduce((groups, ex) => {
-                  const muscle = ex.primary_muscle || 'Other';
-                  if (!groups[muscle]) groups[muscle] = [];
-                  groups[muscle].push(ex);
-                  return groups;
-                }, {} as Record<string, typeof filteredExercises>);
+                // Filter by muscle
+                if (selectedMuscleFilter) {
+                  filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
+                }
                 
-                // Sort muscle groups alphabetically
-                const sortedMuscles = Object.keys(muscleGroups).sort();
+                // Filter by search
+                if (exerciseSearch) {
+                  filteredExercises = filteredExercises.filter(ex => 
+                    ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                  );
+                }
+                
+                // Sort alphabetically
+                filteredExercises = [...filteredExercises].sort((a, b) => a.name.localeCompare(b.name));
                 
                 if (availableExercises.length === 0) {
                   return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
                 }
                 
-                if (sortedMuscles.length === 0) {
+                if (filteredExercises.length === 0) {
                   return <p className="text-center text-surface-500 py-8">No exercises found</p>;
                 }
                 
-                return sortedMuscles.map(muscle => {
-                  const exercises = muscleGroups[muscle].sort((a, b) => a.name.localeCompare(b.name));
-                  const isCollapsed = collapsedMuscles.has(muscle);
-                  
-                  return (
-                    <div key={muscle} className="border border-surface-800 rounded-lg overflow-hidden">
-                      <button
-                        onClick={() => {
-                          setCollapsedMuscles(prev => {
-                            const next = new Set(prev);
-                            if (next.has(muscle)) {
-                              next.delete(muscle);
-                            } else {
-                              next.add(muscle);
-                            }
-                            return next;
-                          });
-                        }}
-                        className="w-full flex items-center justify-between p-3 bg-surface-800/50 hover:bg-surface-800 transition-colors"
-                      >
-                        <span className="font-medium text-surface-200 capitalize">{muscle}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-surface-500">{exercises.length}</span>
-                          <svg 
-                            className={`w-4 h-4 text-surface-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}`} 
-                            fill="none" 
-                            viewBox="0 0 24 24" 
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </button>
-                      {!isCollapsed && (
-                        <div className="border-t border-surface-800">
-                          {exercises.map((exercise) => (
-                            <button
-                              key={exercise.id}
-                              onClick={() => handleAddExercise(exercise)}
-                              disabled={isAddingExercise}
-                              className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 last:border-b-0"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-5 h-5 rounded border border-surface-600" />
-                                <span className="text-surface-200">{exercise.name}</span>
-                                {frequentExerciseIds.has(exercise.id) && (
-                                  <span className="text-amber-400 text-sm">★</span>
-                                )}
-                              </div>
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                exercise.mechanic === 'compound' 
-                                  ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                                  : 'bg-surface-700 text-surface-400'
-                              }`}>
-                                {exercise.mechanic}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                return filteredExercises.map((exercise) => (
+                  <button
+                    key={exercise.id}
+                    onClick={() => handleAddExercise(exercise)}
+                    disabled={isAddingExercise}
+                    className="w-full flex items-center justify-between p-4 hover:bg-surface-800/50 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-surface-200">{exercise.name}</span>
+                      {frequentExerciseIds.has(exercise.id) && (
+                        <span className="text-amber-400 text-sm">★</span>
                       )}
                     </div>
-                  );
-                });
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      exercise.mechanic === 'compound' 
+                        ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                        : 'bg-surface-700 text-surface-400'
+                    }`}>
+                      {exercise.mechanic}
+                    </span>
+                  </button>
+                ));
               })()}
             </div>
           </div>
