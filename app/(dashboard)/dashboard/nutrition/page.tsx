@@ -187,56 +187,96 @@ export default function NutritionPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Load food log entries for selected date
-      const { data: foodData } = await supabase
-        .from('food_log')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('logged_at', selectedDate)
-        .order('created_at', { ascending: true });
-
-      setFoodEntries(foodData || []);
-
-      // Load nutrition targets
-      const { data: targetsData } = await supabase
-        .from('nutrition_targets')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      setNutritionTargets(targetsData);
-
-      // Load recent weight entries (last 30 days)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const { data: weightData } = await supabase
-        .from('weight_log')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('logged_at', getLocalDateString(thirtyDaysAgo))
-        .order('logged_at', { ascending: false });
 
-      setWeightEntries(weightData || []);
+      // Run all queries in parallel for faster loading
+      const [
+        foodResult,
+        targetsResult,
+        weightResult,
+        customFoodsResult,
+        frequentResult,
+        systemFoodsResult,
+        userResult,
+        dexaResult,
+        mesocycleResult,
+      ] = await Promise.all([
+        // Food log entries for selected date
+        supabase
+          .from('food_log')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('logged_at', selectedDate)
+          .order('created_at', { ascending: true }),
+        // Nutrition targets
+        supabase
+          .from('nutrition_targets')
+          .select('*')
+          .eq('user_id', user.id)
+          .single(),
+        // Weight entries (last 30 days)
+        supabase
+          .from('weight_log')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('logged_at', getLocalDateString(thirtyDaysAgo))
+          .order('logged_at', { ascending: false }),
+        // Custom foods
+        supabase
+          .from('custom_foods')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }),
+        // Frequent foods (aggregated from food_log)
+        supabase
+          .from('food_log')
+          .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(500),
+        // System foods
+        supabase
+          .from('system_foods')
+          .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+          .eq('is_active', true)
+          .order('name'),
+        // User profile data
+        supabase
+          .from('users')
+          .select('height_cm, date_of_birth, sex')
+          .eq('id', user.id)
+          .single(),
+        // DEXA scan data
+        supabase
+          .from('dexa_scans')
+          .select('body_fat_percent, weight_kg')
+          .eq('user_id', user.id)
+          .order('scan_date', { ascending: false })
+          .limit(1)
+          .single(),
+        // Active mesocycle
+        supabase
+          .from('mesocycles')
+          .select('days_per_week')
+          .eq('user_id', user.id)
+          .eq('state', 'active')
+          .single(),
+      ]);
 
-      // Load custom foods
-      const { data: customFoodsData } = await supabase
-        .from('custom_foods')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Process results
+      setFoodEntries(foodResult.data || []);
+      setNutritionTargets(targetsResult.data);
+      setWeightEntries(weightResult.data || []);
+      setCustomFoods(customFoodsResult.data || []);
 
-      setCustomFoods(customFoodsData || []);
+      if (systemFoodsResult.data) {
+        setSystemFoods(systemFoodsResult.data as SystemFood[]);
+      }
 
-      // Load frequent foods (aggregated from food_log)
-      const { data: frequentData } = await supabase
-        .from('food_log')
-        .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(500);
-
+      // Process frequent foods
+      const frequentData = frequentResult.data;
       if (frequentData && frequentData.length > 0) {
-        // Aggregate frequent foods by meal_type and food_name
         const frequencyMap = new Map<string, FrequentFood>();
         
         for (const entry of frequentData) {
@@ -246,7 +286,6 @@ export default function NutritionPage() {
           const servingsNum = entry.servings || 1;
           
           if (existing) {
-            // Update running average
             const totalLogs = existing.times_logged + 1;
             existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
             existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
@@ -272,32 +311,15 @@ export default function NutritionPage() {
         setFrequentFoods(Array.from(frequencyMap.values()));
       }
 
-      // Load system foods (pre-populated bodybuilding foods)
-      const { data: systemFoodsData } = await supabase
-        .from('system_foods')
-        .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-        .eq('is_active', true)
-        .order('name');
-
-      if (systemFoodsData) {
-        setSystemFoods(systemFoodsData as SystemFood[]);
-      }
-
-      // Load user profile data for macro calculator
+      // Build user profile data
       const profileData: UserProfileData = {};
+      const weightData = weightResult.data;
 
-      // Get weight from most recent weight log or DEXA scan
       if (weightData && weightData.length > 0) {
         profileData.weightLbs = weightData[0].weight;
       }
 
-      // Get user's basic info
-      const { data: userData } = await supabase
-        .from('users')
-        .select('height_cm, date_of_birth, sex')
-        .eq('id', user.id)
-        .single();
-
+      const userData = userResult.data;
       if (userData) {
         if (userData.height_cm) {
           profileData.heightInches = Math.round(userData.height_cm / 2.54);
@@ -317,15 +339,7 @@ export default function NutritionPage() {
         }
       }
 
-      // Try to get body fat from DEXA scans
-      const { data: dexaData } = await supabase
-        .from('dexa_scans')
-        .select('body_fat_percent, weight_kg')
-        .eq('user_id', user.id)
-        .order('scan_date', { ascending: false })
-        .limit(1)
-        .single();
-
+      const dexaData = dexaResult.data;
       if (dexaData) {
         if (dexaData.body_fat_percent) {
           profileData.bodyFatPercent = dexaData.body_fat_percent;
@@ -335,14 +349,7 @@ export default function NutritionPage() {
         }
       }
 
-      // Get workouts per week from active mesocycle
-      const { data: mesocycleData } = await supabase
-        .from('mesocycles')
-        .select('days_per_week')
-        .eq('user_id', user.id)
-        .eq('state', 'active')
-        .single();
-
+      const mesocycleData = mesocycleResult.data;
       if (mesocycleData?.days_per_week) {
         profileData.workoutsPerWeek = mesocycleData.days_per_week;
       }
