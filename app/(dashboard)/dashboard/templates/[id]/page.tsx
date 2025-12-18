@@ -47,6 +47,7 @@ export default function TemplateDetailPage() {
     loadTemplate();
     loadFolders();
     loadAvailableExercises();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
   async function loadTemplate() {

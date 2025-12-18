@@ -50,6 +50,7 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadData() {
@@ -81,9 +82,9 @@ export default function TemplatesPage() {
       const exercisesData = exercisesResult.data || [];
 
       // Map exercises to templates
-      const templatesWithExercises = templatesData.map(template => ({
+      const templatesWithExercises = templatesData.map((template: WorkoutTemplate) => ({
         ...template,
-        exercises: exercisesData.filter(e => e.template_id === template.id),
+        exercises: exercisesData.filter((e: WorkoutTemplateExercise) => e.template_id === template.id),
       }));
 
       // Group templates into folders

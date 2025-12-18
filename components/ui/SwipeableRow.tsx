@@ -46,6 +46,7 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
     } else {
       setTranslateX(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translateX]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -78,6 +79,7 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [translateX]);
 
   const handleDelete = async () => {
