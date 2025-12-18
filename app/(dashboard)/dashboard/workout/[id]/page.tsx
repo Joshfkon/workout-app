@@ -562,10 +562,10 @@ export default function WorkoutPage() {
         
         // Fetch user profile, DEXA, calibrated lifts, and mesocycle in parallel
         const [userResult, dexaResult, calibratedResult, mesocycleResult] = await Promise.all([
-          // User profile for weight estimation
+          // User profile for weight estimation (including preferences for AI coach notes setting)
           supabase
             .from('users')
-            .select('weight_kg, height_cm, experience, training_age, goal')
+            .select('weight_kg, height_cm, experience, training_age, goal, preferences')
             .eq('id', sessionData.user_id)
             .single(),
           // Latest DEXA scan for body fat and regional data
@@ -653,19 +653,24 @@ export default function WorkoutPage() {
           console.log('[Workout] Loaded existing injuries from session:', existingInjuries);
         }
         
-        // Generate AI-powered coach notes in the background
-        (async () => {
-          setIsLoadingAiNotes(true);
-          try {
-            // Determine workout type from exercises
-            const muscles = Array.from(new Set(transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exercise.primaryMuscle)));
-            let inferredWorkoutType = '';
-            if (muscles.length >= 5) inferredWorkoutType = 'Full Body';
-            else if (muscles.includes('chest') && muscles.includes('back')) inferredWorkoutType = 'Upper Body';
-            else if (muscles.includes('quads') && muscles.includes('hamstrings')) inferredWorkoutType = 'Lower Body';
-            else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) inferredWorkoutType = 'Push';
-            else if (muscles.includes('back') && muscles.includes('biceps')) inferredWorkoutType = 'Pull';
-            else inferredWorkoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+        // Check if AI coach notes are enabled in user preferences
+        const userPrefs = (userData?.preferences as Record<string, unknown>) || {};
+        const aiCoachNotesEnabled = (userPrefs.showAiCoachNotes as boolean) ?? false;
+        
+        // Generate AI-powered coach notes in the background (only if enabled)
+        if (aiCoachNotesEnabled) {
+          (async () => {
+            setIsLoadingAiNotes(true);
+            try {
+              // Determine workout type from exercises
+              const muscles = Array.from(new Set(transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exercise.primaryMuscle)));
+              let inferredWorkoutType = '';
+              if (muscles.length >= 5) inferredWorkoutType = 'Full Body';
+              else if (muscles.includes('chest') && muscles.includes('back')) inferredWorkoutType = 'Upper Body';
+              else if (muscles.includes('quads') && muscles.includes('hamstrings')) inferredWorkoutType = 'Lower Body';
+              else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) inferredWorkoutType = 'Push';
+              else if (muscles.includes('back') && muscles.includes('biceps')) inferredWorkoutType = 'Pull';
+              else inferredWorkoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
             
             // Build exercises data for AI context
             const exercisesData = transformedBlocks.map((b: ExerciseBlockWithExercise) => ({
@@ -701,7 +706,8 @@ export default function WorkoutPage() {
           } finally {
             setIsLoadingAiNotes(false);
           }
-        })();
+          })();
+        }
         
         // Fetch exercise history for all exercises in parallel
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);

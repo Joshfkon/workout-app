@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const [showWarmupSuggestions, setShowWarmupSuggestions] = useState(true);
   const [prioritizeHypertrophy, setPrioritizeHypertrophy] = useState(true);
   const [skipPreWorkoutCheckIn, setSkipPreWorkoutCheckIn] = useState(false);
+  const [showAiCoachNotes, setShowAiCoachNotes] = useState(false);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -127,6 +128,7 @@ export default function SettingsPage() {
             setShowWarmupSuggestions((prefs.showWarmupSuggestions as boolean) ?? true);
             setPrioritizeHypertrophy((prefs.prioritizeHypertrophy as boolean) ?? true);
             setSkipPreWorkoutCheckIn((prefs.skipPreWorkoutCheckIn as boolean) ?? false);
+            setShowAiCoachNotes((prefs.showAiCoachNotes as boolean) ?? false);
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
             // Merge with defaults to ensure all muscle groups have values
@@ -194,6 +196,7 @@ export default function SettingsPage() {
             showWarmupSuggestions,
             prioritizeHypertrophy,
             skipPreWorkoutCheckIn,
+            showAiCoachNotes,
           },
           volume_landmarks: volumeLandmarks,
           // Extended profile fields
@@ -573,6 +576,17 @@ export default function SettingsPage() {
               <Toggle
                 checked={skipPreWorkoutCheckIn}
                 onChange={setSkipPreWorkoutCheckIn}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">AI Coach Notes</p>
+                <p className="text-xs text-surface-500">Show AI-generated coaching tips during workouts</p>
+              </div>
+              <Toggle
+                checked={showAiCoachNotes}
+                onChange={setShowAiCoachNotes}
               />
             </div>
           </div>
