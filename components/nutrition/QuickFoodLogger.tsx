@@ -52,8 +52,10 @@ export function QuickFoodLogger({
   const [isAdding, setIsAdding] = useState(false);
   const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [selectedFood, setSelectedFood] = useState<SystemFood | null>(null);
+  const [selectedFrequentFood, setSelectedFrequentFood] = useState<FrequentFood | null>(null);
   const [weightAmount, setWeightAmount] = useState('100');
   const [weightUnit, setWeightUnit] = useState<'g' | 'oz'>('g');
+  const [frequentServings, setFrequentServings] = useState('1');
 
   // Manual entry state
   const [manualName, setManualName] = useState('');
@@ -94,17 +96,36 @@ export function QuickFoodLogger({
     };
   }, [selectedFood, weightAmount, weightUnit]);
 
-  const handleAddFrequentFood = async (food: FrequentFood) => {
+  // Calculate nutrition for selected frequent food
+  const frequentFoodNutrition = useMemo(() => {
+    if (!selectedFrequentFood) return null;
+    const servingsNum = parseFloat(frequentServings) || 1;
+    return {
+      calories: Math.round(selectedFrequentFood.avg_calories * servingsNum),
+      protein: Math.round(selectedFrequentFood.avg_protein * servingsNum * 10) / 10,
+      carbs: Math.round(selectedFrequentFood.avg_carbs * servingsNum * 10) / 10,
+      fat: Math.round(selectedFrequentFood.avg_fat * servingsNum * 10) / 10,
+    };
+  }, [selectedFrequentFood, frequentServings]);
+
+  const handleSelectFrequentFood = (food: FrequentFood) => {
+    setSelectedFrequentFood(food);
+    setFrequentServings('1');
+  };
+
+  const handleAddSelectedFrequentFood = async () => {
+    if (!selectedFrequentFood || !frequentFoodNutrition) return;
     setIsAdding(true);
     try {
+      const servingsNum = parseFloat(frequentServings) || 1;
       await onAdd({
-        food_name: food.food_name,
-        serving_size: food.serving_size || '1 serving',
-        servings: 1,
-        calories: Math.round(food.avg_calories),
-        protein: Math.round(food.avg_protein * 10) / 10,
-        carbs: Math.round(food.avg_carbs * 10) / 10,
-        fat: Math.round(food.avg_fat * 10) / 10,
+        food_name: selectedFrequentFood.food_name,
+        serving_size: selectedFrequentFood.serving_size || '1 serving',
+        servings: servingsNum,
+        calories: frequentFoodNutrition.calories,
+        protein: frequentFoodNutrition.protein,
+        carbs: frequentFoodNutrition.carbs,
+        fat: frequentFoodNutrition.fat,
         meal_type: mealType,
         source: 'manual',
       });
@@ -205,6 +226,7 @@ export function QuickFoodLogger({
             onClick={() => {
               setMealType(type);
               setSelectedFood(null);
+              setSelectedFrequentFood(null);
             }}
             className={`flex-1 py-1.5 text-xs font-medium rounded transition-colors capitalize ${
               mealType === type
@@ -220,7 +242,7 @@ export function QuickFoodLogger({
       {/* Mode Toggle */}
       <div className="flex gap-1 bg-surface-900 p-1 rounded-lg">
         <button
-          onClick={() => { setMode('foods'); setBarcodeProduct(null); setSelectedFood(null); }}
+          onClick={() => { setMode('foods'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'foods'
               ? 'bg-surface-700 text-white'
@@ -230,7 +252,7 @@ export function QuickFoodLogger({
           ⚡ Quick Add
         </button>
         <button
-          onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); }}
+          onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'barcode'
               ? 'bg-surface-700 text-white'
@@ -240,7 +262,7 @@ export function QuickFoodLogger({
           📷 Scan
         </button>
         <button
-          onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); }}
+          onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'manual'
               ? 'bg-surface-700 text-white'
@@ -257,13 +279,90 @@ export function QuickFoodLogger({
           <input
             type="text"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); setSelectedFood(null); }}
+            onChange={(e) => { setQuery(e.target.value); setSelectedFood(null); setSelectedFrequentFood(null); }}
             placeholder="Search foods..."
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder-surface-500"
           />
 
-          {selectedFood ? (
-            /* Selected Food - Weight Entry */
+          {selectedFrequentFood ? (
+            /* Selected Frequent Food - Servings Entry */
+            <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-surface-100">{selectedFrequentFood.food_name}</p>
+                  <p className="text-xs text-surface-400">
+                    {selectedFrequentFood.serving_size || '1 serving'} · {Math.round(selectedFrequentFood.avg_calories)} cal
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedFrequentFood(null)}
+                  className="text-surface-400 hover:text-surface-200 text-lg"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Quick serving buttons */}
+              <div className="grid grid-cols-6 gap-1">
+                {[0.5, 0.75, 1, 1.5, 2, 3].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setFrequentServings(s.toString())}
+                    className={`py-2 rounded text-xs font-medium transition-all ${
+                      parseFloat(frequentServings) === s
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                    }`}
+                  >
+                    {s === 0.5 ? '½' : s === 0.75 ? '¾' : `${s}×`}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom servings input */}
+              <div className="flex gap-2 items-center">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={frequentServings}
+                  onChange={(e) => setFrequentServings(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                />
+                <span className="text-sm text-surface-400">servings</span>
+              </div>
+
+              {frequentFoodNutrition && (
+                <div className="grid grid-cols-4 gap-1 text-center text-xs">
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-surface-100">{frequentFoodNutrition.calories}</p>
+                    <p className="text-surface-500">cal</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-red-400">{frequentFoodNutrition.protein}g</p>
+                    <p className="text-surface-500">protein</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-yellow-400">{frequentFoodNutrition.carbs}g</p>
+                    <p className="text-surface-500">carbs</p>
+                  </div>
+                  <div className="p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-blue-400">{frequentFoodNutrition.fat}g</p>
+                    <p className="text-surface-500">fat</p>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleAddSelectedFrequentFood}
+                isLoading={isAdding}
+                className="w-full"
+              >
+                Add to {mealType}
+              </Button>
+            </div>
+          ) : selectedFood ? (
+            /* Selected System Food - Weight Entry */
             <div className="space-y-3 p-3 bg-surface-900 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
@@ -337,7 +436,7 @@ export function QuickFoodLogger({
                     {frequentFoodsForMeal.map((food, idx) => (
                       <button
                         key={idx}
-                        onClick={() => handleAddFrequentFood(food)}
+                        onClick={() => handleSelectFrequentFood(food)}
                         disabled={isAdding}
                         className="w-full p-2 bg-surface-900 hover:bg-surface-700 rounded-lg text-left transition-colors flex justify-between items-center disabled:opacity-50"
                       >
