@@ -60,19 +60,28 @@ export default function NewMesocyclePage() {
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
 
-  // Calculate estimated exercises based on time
+  // Calculate estimated exercises based on time (proper estimation with rest periods)
   const getExerciseEstimate = (minutes: number) => {
-    // Rough estimate: 6-8 min per exercise (including rest) for compounds, 4-6 for isolation
-    // Quick workouts: fewer exercises, longer rest between sets for quality
-    if (minutes <= 20) {
-      return { min: 2, max: 3 }; // Quick workout: focus on 2-3 key exercises
-    }
-    if (minutes <= 30) {
-      return { min: 3, max: 4 }; // Short workout: 3-4 focused exercises
-    }
-    const minExercises = Math.floor(minutes / 10);
-    const maxExercises = Math.floor(minutes / 7);
-    return { min: Math.max(4, minExercises), max: Math.min(12, maxExercises) };
+    // Time per exercise calculation:
+    // Compound: 3 sets × (50s work + 150s rest avg) + 4min warmup + 1min transition ≈ 15 min
+    // Isolation: 3 sets × (35s work + 75s rest avg) + 1min transition ≈ 6.5 min
+    // Average exercise (50/50 mix): ~10-11 min
+    
+    const compoundWithWarmup = 15; // minutes
+    const compoundNoWarmup = 11;
+    const isolation = 6.5;
+    
+    // Assume 50% compounds, 50% isolations, 1 warmup per 3 exercises
+    const avgCompoundTime = (compoundWithWarmup + compoundNoWarmup * 2) / 3;
+    const avgExerciseTime = avgCompoundTime * 0.5 + isolation * 0.5;
+    
+    const maxExercises = Math.floor(minutes / avgExerciseTime);
+    
+    // Provide a range (+/- 1)
+    return { 
+      min: Math.max(1, maxExercises - 1), 
+      max: Math.max(2, maxExercises + 1) 
+    };
   };
   
   const exerciseEstimate = getExerciseEstimate(sessionDurationMinutes);

@@ -73,6 +73,70 @@ function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
 }
 
 // ============================================================
+// TIME ESTIMATION
+// ============================================================
+
+/**
+ * Estimate time for an exercise including all sets and rest
+ * Returns time in minutes
+ */
+function estimateExerciseTime(
+  isCompound: boolean,
+  goal: Goal,
+  setsCount: number,
+  includeWarmup: boolean
+): number {
+  const restSeconds = isCompound
+    ? (goal === 'bulk' ? 180 : goal === 'cut' ? 120 : 150)
+    : (goal === 'bulk' ? 90 : goal === 'cut' ? 60 : 75);
+  
+  const setDuration = isCompound ? 50 : 35; // seconds per working set
+  
+  // Working sets time: (set duration + rest) * sets, minus rest after last set
+  const workingTime = (setDuration + restSeconds) * setsCount - restSeconds;
+  
+  // Warmup time: typically 3 sets taking about 3-4 minutes total
+  const warmupTime = includeWarmup && isCompound ? 4 * 60 : 0;
+  
+  // Transition time between exercises
+  const transitionTime = 60; // 1 minute
+  
+  return (workingTime + warmupTime + transitionTime) / 60;
+}
+
+/**
+ * Calculate how many exercises fit in a given time budget
+ */
+function getMaxExercisesForTime(
+  sessionMinutes: number,
+  goal: Goal
+): { compounds: number; isolations: number; total: number } {
+  // Average time per exercise type (with warmup for first compound per muscle)
+  const compoundWithWarmup = estimateExerciseTime(true, goal, 3, true);
+  const compoundNoWarmup = estimateExerciseTime(true, goal, 3, false);
+  const isolation = estimateExerciseTime(false, goal, 3, false);
+  
+  // Average exercise time (accounting for mix - assume 1 warmup per 3 exercises)
+  const avgCompoundTime = (compoundWithWarmup + compoundNoWarmup * 2) / 3;
+  const avgIsolationTime = isolation;
+  
+  // 50/50 compound/isolation split
+  const avgExerciseTime = avgCompoundTime * 0.5 + avgIsolationTime * 0.5;
+  
+  const maxExercises = Math.floor(sessionMinutes / avgExerciseTime);
+  
+  // Split between compounds and isolations
+  const compounds = Math.ceil(maxExercises * 0.5);
+  const isolations = maxExercises - compounds;
+  
+  return {
+    compounds: Math.max(1, compounds),
+    isolations: Math.max(0, isolations),
+    total: Math.max(1, maxExercises)
+  };
+}
+
+// ============================================================
 // EXERCISE SELECTION WITH FATIGUE AWARENESS
 // ============================================================
 
@@ -266,10 +330,17 @@ export function buildDetailedSessionWithFatigue(
   periodizationModel: PeriodizationModel,
   weeklyProgression: WeeklyProgression,
   quickWorkoutMode: boolean = false,
-  unavailableEquipmentIds: string[] = []
+  unavailableEquipmentIds: string[] = [],
+  sessionMinutes: number = 60
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
+
+  // Calculate exercise budget based on session time
+  const exerciseBudget = getMaxExercisesForTime(sessionMinutes, profile.goal);
+  let exercisesAdded = 0;
+  let estimatedTimeUsed = 0;
+  const warmedUpMuscles = new Set<string>();
 
   // Order muscles: compounds first (big muscles), then isolations
   const muscleOrder: MuscleGroup[] = [
@@ -292,6 +363,15 @@ export function buildDetailedSessionWithFatigue(
   let exercisePosition = 1;
 
   for (const muscle of orderedMuscles) {
+    // Check if we've hit the exercise limit for this session time
+    if (exercisesAdded >= exerciseBudget.total) {
+      break;
+    }
+    
+    // Check if we've exceeded time budget (with 5 min buffer)
+    if (estimatedTimeUsed >= sessionMinutes - 5) {
+      break;
+    }
     // Check if muscle is recovered enough to train
     const recoveryStatus = weeklyTracker.canTrainMuscle(
       muscle,
@@ -323,6 +403,27 @@ export function buildDetailedSessionWithFatigue(
     const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
 
     for (const selection of selectedExercises) {
+      // Check if we've hit limits
+      if (exercisesAdded >= exerciseBudget.total || estimatedTimeUsed >= sessionMinutes - 5) {
+        break;
+      }
+      
+      // Estimate time for this exercise
+      const isCompound = selection.exercise.pattern !== 'isolation';
+      const needsWarmup = isCompound && !warmedUpMuscles.has(muscle);
+      const exerciseTimeEstimate = estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
+      
+      // Check if adding this exercise would exceed time budget
+      if (estimatedTimeUsed + exerciseTimeEstimate > sessionMinutes + 5) {
+        // Try with fewer sets
+        const reducedSets = Math.max(2, selection.sets - 1);
+        const reducedTimeEstimate = estimateExerciseTime(isCompound, profile.goal, reducedSets, needsWarmup);
+        if (estimatedTimeUsed + reducedTimeEstimate > sessionMinutes + 5) {
+          continue; // Skip this exercise entirely
+        }
+        selection.sets = reducedSets;
+      }
+      
       // Determine position category
       const positionCategory = getPositionCategory(exercisePosition, orderedMuscles.length * 2);
 
@@ -407,6 +508,14 @@ export function buildDetailedSessionWithFatigue(
       const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
+      // Track time and exercise count
+      const isCompound = selection.exercise.pattern !== 'isolation';
+      const needsWarmup = isCompound && !warmedUpMuscles.has(muscle);
+      estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
+      if (needsWarmup) {
+        warmedUpMuscles.add(muscle);
+      }
+      exercisesAdded++;
       exercisePosition++;
     }
   }
@@ -453,10 +562,17 @@ export function buildDUPSession(
   weekInMesocycle: number,
   totalMesocycleWeeks: number,
   quickWorkoutMode: boolean = false,
-  unavailableEquipmentIds: string[] = []
+  unavailableEquipmentIds: string[] = [],
+  sessionMinutes: number = 60
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
+
+  // Calculate exercise budget based on session time
+  const exerciseBudget = getMaxExercisesForTime(sessionMinutes, profile.goal);
+  let exercisesAdded = 0;
+  let estimatedTimeUsed = 0;
+  const warmedUpMuscles = new Set<string>();
 
   const muscleOrder: MuscleGroup[] = [
     'quads',
@@ -485,6 +601,15 @@ export function buildDUPSession(
   let exercisePosition = 1;
 
   for (const muscle of orderedMuscles) {
+    // Check if we've hit the exercise limit for this session time
+    if (exercisesAdded >= exerciseBudget.total) {
+      break;
+    }
+    
+    // Check if we've exceeded time budget (with 5 min buffer)
+    if (estimatedTimeUsed >= sessionMinutes - 5) {
+      break;
+    }
     const recoveryStatus = weeklyTracker.canTrainMuscle(muscle, currentDay, 0);
     if (!recoveryStatus.ready && recoveryStatus.currentFatigue > 50) continue;
 
@@ -498,7 +623,21 @@ export function buildDUPSession(
     const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
 
     for (const selection of selectedExercises) {
+      // Check if we've hit limits
+      if (exercisesAdded >= exerciseBudget.total || estimatedTimeUsed >= sessionMinutes - 5) {
+        break;
+      }
+      
       const isCompound = selection.exercise.pattern !== 'isolation';
+      
+      // Estimate time for this exercise
+      const needsWarmup = isCompound && !warmedUpMuscles.has(muscle);
+      const exerciseTimeEstimate = estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmup);
+      
+      // Check if adding this exercise would exceed time budget
+      if (estimatedTimeUsed + exerciseTimeEstimate > sessionMinutes + 5) {
+        continue; // Skip this exercise
+      }
 
       // Get DUP-specific rep range
       const dupRepRange = getDUPRepRange(dupDayType, isCompound, muscle);
@@ -553,6 +692,13 @@ export function buildDUPSession(
       const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
+      // Track time and exercise count
+      const needsWarmupTrack = isCompound && !warmedUpMuscles.has(muscle);
+      estimatedTimeUsed += estimateExerciseTime(isCompound, profile.goal, selection.sets, needsWarmupTrack);
+      if (needsWarmupTrack) {
+        warmedUpMuscles.add(muscle);
+      }
+      exercisesAdded++;
       exercisePosition++;
     }
   }
@@ -897,7 +1043,8 @@ export function generateFullMesocycleWithFatigue(
           weekNum,
           periodization.mesocycleWeeks,
           quickWorkoutMode,
-          unavailableEquipmentIds
+          unavailableEquipmentIds,
+          sessionMinutes
         );
         dupIndex++;
       } else {
@@ -913,7 +1060,8 @@ export function generateFullMesocycleWithFatigue(
           periodization.model,
           weekProgression,
           quickWorkoutMode,
-          unavailableEquipmentIds
+          unavailableEquipmentIds,
+          sessionMinutes
         );
       }
 
