@@ -93,12 +93,49 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
   const percentage = Math.min(100, Math.round((todayTotal / target) * 100));
   const isComplete = todayTotal >= target;
 
+  // Calculate if on track based on time of day
+  // Assuming waking hours are 7am to 11pm (16 hours)
+  const now = new Date();
+  const currentHour = now.getHours() + now.getMinutes() / 60;
+  const wakeUpHour = 7;
+  const bedTimeHour = 23;
+  const totalWakingHours = bedTimeHour - wakeUpHour;
+  
+  // Calculate what percentage of the day has passed (within waking hours)
+  let dayProgress = 0;
+  if (currentHour >= bedTimeHour) {
+    dayProgress = 100;
+  } else if (currentHour <= wakeUpHour) {
+    dayProgress = 0;
+  } else {
+    dayProgress = ((currentHour - wakeUpHour) / totalWakingHours) * 100;
+  }
+  
+  // Expected progress vs actual
+  const expectedPercentage = Math.round(dayProgress);
+  const progressDiff = percentage - expectedPercentage;
+  
+  // Determine status
+  const getTrackingStatus = () => {
+    if (isComplete) return { status: 'complete', label: 'Goal reached!', color: 'text-success-400', emoji: '🎉' };
+    if (progressDiff >= 10) return { status: 'ahead', label: 'Ahead of schedule', color: 'text-success-400', emoji: '💪' };
+    if (progressDiff >= -10) return { status: 'ontrack', label: 'On track', color: 'text-primary-400', emoji: '✓' };
+    if (progressDiff >= -25) return { status: 'behind', label: 'Slightly behind', color: 'text-warning-400', emoji: '⚠️' };
+    return { status: 'way-behind', label: 'Catch up!', color: 'text-danger-400', emoji: '🚰' };
+  };
+  
+  const trackingStatus = getTrackingStatus();
+
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          💧 Hydration
-          {isComplete && <span className="text-xs text-success-400">✓ Goal reached!</span>}
+        <CardTitle className="text-base flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            💧 Hydration
+          </span>
+          <span className={`text-xs ${trackingStatus.color} flex items-center gap-1`}>
+            {trackingStatus.emoji} {trackingStatus.label}
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -113,18 +150,38 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
                 {percentage}%
               </span>
             </div>
-            <div className="h-3 bg-surface-800 rounded-full overflow-hidden">
+            <div className="h-3 bg-surface-800 rounded-full overflow-hidden relative">
+              {/* Expected progress marker */}
+              {!isComplete && expectedPercentage > 0 && expectedPercentage < 100 && (
+                <div 
+                  className="absolute top-0 bottom-0 w-0.5 bg-surface-500 z-10"
+                  style={{ left: `${expectedPercentage}%` }}
+                  title={`Expected: ${expectedPercentage}%`}
+                />
+              )}
+              {/* Actual progress bar */}
               <div
                 className={`h-full transition-all duration-500 rounded-full ${
                   percentage >= 100 
                     ? 'bg-success-500' 
-                    : percentage >= 50 
+                    : percentage >= expectedPercentage 
                     ? 'bg-primary-500' 
-                    : 'bg-blue-500'
+                    : percentage >= expectedPercentage - 15
+                    ? 'bg-warning-500'
+                    : 'bg-danger-500'
                 }`}
                 style={{ width: `${percentage}%` }}
               />
             </div>
+            {!isComplete && (
+              <div className="text-xs text-surface-500 mt-1">
+                {progressDiff >= 0 ? (
+                  <span>+{progressDiff}% vs expected</span>
+                ) : (
+                  <span>{progressDiff}% vs expected</span>
+                )}
+              </div>
+            )}
           </div>
           {/* Water drop visual */}
           <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
