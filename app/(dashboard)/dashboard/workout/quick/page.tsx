@@ -31,8 +31,8 @@ export default function QuickWorkoutPage() {
         .from('workout_sessions')
         .select('id')
         .eq('user_id', user.id)
-        .eq('date', today)
-        .is('completed_at', null)
+        .eq('planned_date', today)
+        .in('state', ['planned', 'in_progress'])
         .maybeSingle();
 
       if (existingSession) {
@@ -46,9 +46,10 @@ export default function QuickWorkoutPage() {
         .from('workout_sessions')
         .insert({
           user_id: user.id,
-          date: today,
-          name: 'Quick Workout',
+          planned_date: today,
+          state: 'in_progress',
           started_at: new Date().toISOString(),
+          completion_percent: 0,
         })
         .select('id')
         .single();
