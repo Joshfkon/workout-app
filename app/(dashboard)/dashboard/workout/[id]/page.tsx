@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
@@ -367,6 +367,13 @@ export default function WorkoutPage() {
   const [restTimerSeconds, setRestTimerSeconds] = useState<number | null>(null); // Custom rest time (for warmups)
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
+  const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
+  
+  // Drag reorder state for exercises
+  const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
+  const [isDraggingBlock, setIsDraggingBlock] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -1384,6 +1391,80 @@ export default function WorkoutPage() {
       setError(err instanceof Error ? err.message : 'Failed to update sets');
     }
   };
+
+  // Toggle individual exercise collapse
+  const toggleBlockCollapse = useCallback((blockId: string) => {
+    setCollapsedBlocks(prev => {
+      const next = new Set(prev);
+      if (next.has(blockId)) {
+        next.delete(blockId);
+      } else {
+        next.add(blockId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Long press handlers for drag reorder
+  const handleBlockLongPressStart = useCallback((index: number) => {
+    longPressTimerRef.current = setTimeout(() => {
+      setDraggedBlockIndex(index);
+      setIsDraggingBlock(true);
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }, 500);
+  }, []);
+
+  const handleBlockLongPressEnd = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleBlockDragOver = useCallback((index: number) => {
+    if (draggedBlockIndex !== null && draggedBlockIndex !== index) {
+      setDragOverBlockIndex(index);
+    }
+  }, [draggedBlockIndex]);
+
+  const handleBlockDragEnd = useCallback(async () => {
+    if (draggedBlockIndex !== null && dragOverBlockIndex !== null && draggedBlockIndex !== dragOverBlockIndex) {
+      const newBlocks = [...blocks];
+      const [removed] = newBlocks.splice(draggedBlockIndex, 1);
+      newBlocks.splice(dragOverBlockIndex, 0, removed);
+
+      // Update local state immediately
+      setBlocks(newBlocks);
+      
+      // Update current block index if needed
+      if (currentBlockIndex === draggedBlockIndex) {
+        setCurrentBlockIndex(dragOverBlockIndex);
+      } else if (draggedBlockIndex < currentBlockIndex && dragOverBlockIndex >= currentBlockIndex) {
+        setCurrentBlockIndex(currentBlockIndex - 1);
+      } else if (draggedBlockIndex > currentBlockIndex && dragOverBlockIndex <= currentBlockIndex) {
+        setCurrentBlockIndex(currentBlockIndex + 1);
+      }
+
+      // Update sort orders in database
+      try {
+        const supabase = createUntypedClient();
+        for (let i = 0; i < newBlocks.length; i++) {
+          await supabase
+            .from('exercise_blocks')
+            .update({ sort_order: i })
+            .eq('id', newBlocks[i].id);
+        }
+      } catch (err) {
+        console.error('Error saving reorder:', err);
+      }
+    }
+
+    setDraggedBlockIndex(null);
+    setDragOverBlockIndex(null);
+    setIsDraggingBlock(false);
+  }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
     try {
@@ -2407,6 +2488,7 @@ export default function WorkoutPage() {
 
       {/* All exercises list */}
       <div className="space-y-4">
+        <p className="text-xs text-surface-500">💡 Long-press to drag reorder</p>
         {blocks.map((block, index) => {
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
@@ -2416,19 +2498,40 @@ export default function WorkoutPage() {
           const isSupersetWithNext = nextBlock && block.supersetGroupId && block.supersetGroupId === nextBlock.supersetGroupId;
           const isPast = index < currentBlockIndex;
           const isFuture = index > currentBlockIndex;
+          const isBlockCollapsed = collapsedBlocks.has(block.id);
+          const isBeingDragged = draggedBlockIndex === index;
+          const isDragTarget = dragOverBlockIndex === index;
 
           return (
             <React.Fragment key={block.id}>
             <div 
               id={`exercise-${index}`}
+              data-block-index={index}
               className={`transition-all duration-300 ${
-                isCurrent ? '' : 'opacity-80 cursor-pointer'
-              } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''}`}
+                isCurrent ? '' : 'opacity-80'
+              } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
+                isBeingDragged ? 'opacity-50 scale-95 ring-2 ring-primary-500' : ''
+              } ${isDragTarget ? 'ring-2 ring-primary-400 ring-dashed' : ''}`}
+              onTouchStart={() => handleBlockLongPressStart(index)}
+              onTouchEnd={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
+              onTouchMove={(e) => {
+                if (!isDraggingBlock) return;
+                const touch = e.touches[0];
+                const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+                const blockEl = elements.find(el => el.getAttribute('data-block-index'));
+                if (blockEl) {
+                  const targetIndex = parseInt(blockEl.getAttribute('data-block-index') || '-1');
+                  if (targetIndex >= 0) handleBlockDragOver(targetIndex);
+                }
+              }}
+              onMouseDown={() => handleBlockLongPressStart(index)}
+              onMouseUp={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
+              onMouseLeave={handleBlockLongPressEnd}
               onClick={(e) => {
                 // Only activate if not already current and click wasn't on an interactive element
-                if (!isCurrent) {
+                if (!isCurrent && !isDraggingBlock) {
                   const target = e.target as HTMLElement;
-                  const isInteractive = target.closest('button, input, select, textarea, a');
+                  const isInteractive = target.closest('button, input, select, textarea, a, [data-drag-handle]');
                   if (!isInteractive) {
                     setCurrentBlockIndex(index);
                     setCurrentSetNumber(blockSets.length + 1);
@@ -2440,6 +2543,16 @@ export default function WorkoutPage() {
               <div 
                 className={`flex items-center gap-3 mb-2 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
+                {/* Drag handle */}
+                <div 
+                  data-drag-handle
+                  className="flex flex-col gap-0.5 text-surface-500 cursor-grab active:cursor-grabbing p-1"
+                >
+                  <div className="w-4 h-0.5 bg-current rounded" />
+                  <div className="w-4 h-0.5 bg-current rounded" />
+                  <div className="w-4 h-0.5 bg-current rounded" />
+                </div>
+                
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                   isComplete 
                     ? 'bg-success-500/20 text-success-400' 
@@ -2542,10 +2655,27 @@ export default function WorkoutPage() {
                 {isComplete && !isCurrent && (
                   <Badge variant="success" size="sm">Done</Badge>
                 )}
+                {/* Collapse/expand button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleBlockCollapse(block.id);
+                  }}
+                  className="p-2 text-surface-400 hover:text-surface-200 transition-colors"
+                >
+                  <svg 
+                    className={`w-5 h-5 transition-transform ${isBlockCollapsed ? '' : 'rotate-180'}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Expanded content - show all exercises when in expanded mode */}
-              {!allCollapsed && (() => {
+              {/* Expanded content - show when not globally collapsed and not individually collapsed */}
+              {!allCollapsed && !isBlockCollapsed && (() => {
                 // Calculate AI recommended weight first so it can be used for warmup
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
