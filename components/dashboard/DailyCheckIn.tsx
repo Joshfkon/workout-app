@@ -375,11 +375,11 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
           {currentQuestion.type === 'rating' && (
             <div className="space-y-2">
               <div className="flex gap-2">
-                {([1, 2, 3, 4, 5] as Rating[]).map((rating) => (
+                {([1, 2, 3, 4, 5] as Rating[]).map((rating, index) => (
                   <button
                     key={rating}
                     onClick={() => currentQuestion.onChange(rating as any)}
-                    className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex-1 flex flex-col items-center py-2 px-1 rounded-lg transition-colors ${
                       currentQuestion.value === rating
                         ? (currentQuestion as any).warning && rating <= 2
                           ? 'bg-amber-500 text-white'
@@ -387,13 +387,14 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
                         : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
                     }`}
                   >
-                    {rating}
+                    <span className="text-lg font-medium">{rating}</span>
+                    <span className={`text-[10px] leading-tight text-center ${
+                      currentQuestion.value === rating ? 'text-white/80' : 'text-surface-500'
+                    }`}>
+                      {currentQuestion.labels?.[index]}
+                    </span>
                   </button>
                 ))}
-              </div>
-              <div className="flex justify-between text-xs text-surface-500">
-                <span>{currentQuestion.labels?.[0]}</span>
-                <span>{currentQuestion.labels?.[4]}</span>
               </div>
             </div>
           )}
