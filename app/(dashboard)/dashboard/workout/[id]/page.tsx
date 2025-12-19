@@ -379,6 +379,12 @@ export default function WorkoutPage() {
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
+  // Floating drag preview state
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [dragStartY, setDragStartY] = useState<number>(0);
+  const [draggedBlockRect, setDraggedBlockRect] = useState<DOMRect | null>(null);
+  const draggedBlockRef = useRef<HTMLDivElement | null>(null);
+  const exerciseListRef = useRef<HTMLDivElement | null>(null);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -1460,13 +1466,22 @@ export default function WorkoutPage() {
   }, []);
 
   // Long press handlers for drag reorder
-  const handleBlockLongPressStart = useCallback((index: number) => {
+  const handleBlockLongPressStart = useCallback((index: number, clientY: number) => {
     longPressTimerRef.current = setTimeout(() => {
       // Save current collapse state before collapsing all for drag mode
       preCollapseStateRef.current = {
         allCollapsed,
         collapsedBlocks: new Set(collapsedBlocks),
       };
+
+      // Get the element being dragged and its dimensions
+      const element = document.querySelector(`[data-block-index="${index}"]`) as HTMLElement;
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        setDraggedBlockRect(rect);
+        setDragStartY(clientY);
+        setDragPosition({ x: rect.left, y: clientY - rect.height / 2 });
+      }
 
       setDraggedBlockIndex(index);
       setIsDraggingBlock(true);
@@ -1486,27 +1501,64 @@ export default function WorkoutPage() {
     }
   }, []);
 
-  const handleBlockDragOver = useCallback((index: number) => {
-    if (draggedBlockIndex !== null && draggedBlockIndex !== index) {
-      setDragOverBlockIndex(index);
+  // Calculate the target index based on current drag position
+  const calculateDragTargetIndex = useCallback((clientY: number): number => {
+    if (!exerciseListRef.current || draggedBlockIndex === null) return draggedBlockIndex ?? 0;
+
+    const listItems = exerciseListRef.current.querySelectorAll('[data-block-index]');
+    let targetIndex = draggedBlockIndex;
+
+    for (let i = 0; i < listItems.length; i++) {
+      const item = listItems[i] as HTMLElement;
+      const rect = item.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+
+      if (clientY < midY) {
+        targetIndex = i;
+        break;
+      }
+      targetIndex = i + 1;
     }
-  }, [draggedBlockIndex]);
+
+    // Clamp to valid range
+    return Math.max(0, Math.min(targetIndex, blocks.length - 1));
+  }, [draggedBlockIndex, blocks.length]);
+
+  const handleBlockDragMove = useCallback((clientY: number) => {
+    if (!isDraggingBlock || draggedBlockIndex === null) return;
+
+    // Update floating preview position
+    if (draggedBlockRect) {
+      setDragPosition({
+        x: draggedBlockRect.left,
+        y: clientY - (draggedBlockRect.height / 2)
+      });
+    }
+
+    // Calculate which position the item would drop at
+    const targetIndex = calculateDragTargetIndex(clientY);
+    if (targetIndex !== dragOverBlockIndex && targetIndex !== draggedBlockIndex) {
+      setDragOverBlockIndex(targetIndex);
+    }
+  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, calculateDragTargetIndex, dragOverBlockIndex]);
 
   const handleBlockDragEnd = useCallback(async () => {
-    if (draggedBlockIndex !== null && dragOverBlockIndex !== null && draggedBlockIndex !== dragOverBlockIndex) {
+    const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
+
+    if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
       const newBlocks = [...blocks];
       const [removed] = newBlocks.splice(draggedBlockIndex, 1);
-      newBlocks.splice(dragOverBlockIndex, 0, removed);
+      newBlocks.splice(finalTargetIndex, 0, removed);
 
       // Update local state immediately
       setBlocks(newBlocks);
-      
+
       // Update current block index if needed
       if (currentBlockIndex === draggedBlockIndex) {
-        setCurrentBlockIndex(dragOverBlockIndex);
-      } else if (draggedBlockIndex < currentBlockIndex && dragOverBlockIndex >= currentBlockIndex) {
+        setCurrentBlockIndex(finalTargetIndex);
+      } else if (draggedBlockIndex < currentBlockIndex && finalTargetIndex >= currentBlockIndex) {
         setCurrentBlockIndex(currentBlockIndex - 1);
-      } else if (draggedBlockIndex > currentBlockIndex && dragOverBlockIndex <= currentBlockIndex) {
+      } else if (draggedBlockIndex > currentBlockIndex && finalTargetIndex <= currentBlockIndex) {
         setCurrentBlockIndex(currentBlockIndex + 1);
       }
 
@@ -1527,6 +1579,8 @@ export default function WorkoutPage() {
     setDraggedBlockIndex(null);
     setDragOverBlockIndex(null);
     setIsDraggingBlock(false);
+    setDragPosition(null);
+    setDraggedBlockRect(null);
 
     // Restore pre-drag collapse state
     if (preCollapseStateRef.current) {
@@ -2655,7 +2709,7 @@ export default function WorkoutPage() {
       )}
 
       {/* All exercises list */}
-      <div className="space-y-4">
+      <div className="space-y-4" ref={exerciseListRef}>
         <p className="text-xs text-surface-500">💡 Long-press to drag reorder</p>
         {blocks.map((block, index) => {
           const blockSets = getSetsForBlock(block.id);
@@ -2668,32 +2722,36 @@ export default function WorkoutPage() {
           const isFuture = index > currentBlockIndex;
           const isBlockCollapsed = collapsedBlocks.has(block.id);
           const isBeingDragged = draggedBlockIndex === index;
-          const isDragTarget = dragOverBlockIndex === index;
+          const isDragTarget = dragOverBlockIndex === index && draggedBlockIndex !== index;
 
           return (
             <React.Fragment key={block.id}>
-            <div 
+            {/* Drop indicator line above this item */}
+            {isDraggingBlock && isDragTarget && draggedBlockIndex !== null && dragOverBlockIndex !== null && dragOverBlockIndex < draggedBlockIndex && (
+              <div className="h-1 bg-primary-500 rounded-full mx-2 -mb-2 animate-pulse" />
+            )}
+            <div
               id={`exercise-${index}`}
               data-block-index={index}
-              className={`transition-all duration-300 ${
+              className={`transition-all duration-200 ${
                 isCurrent ? '' : 'opacity-80'
               } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
-                isBeingDragged ? 'opacity-50 scale-95 ring-2 ring-primary-500' : ''
-              } ${isDragTarget ? 'ring-2 ring-primary-400 ring-dashed' : ''}`}
-              onTouchStart={() => handleBlockLongPressStart(index)}
+                isBeingDragged ? 'opacity-0' : ''
+              } ${isDragTarget ? 'scale-[0.98]' : ''}`}
+              onTouchStart={(e) => handleBlockLongPressStart(index, e.touches[0].clientY)}
               onTouchEnd={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
               onTouchMove={(e) => {
                 if (!isDraggingBlock) return;
+                e.preventDefault();
                 const touch = e.touches[0];
-                const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
-                const blockEl = elements.find(el => el.getAttribute('data-block-index'));
-                if (blockEl) {
-                  const targetIndex = parseInt(blockEl.getAttribute('data-block-index') || '-1');
-                  if (targetIndex >= 0) handleBlockDragOver(targetIndex);
-                }
+                handleBlockDragMove(touch.clientY);
               }}
-              onMouseDown={() => handleBlockLongPressStart(index)}
+              onMouseDown={(e) => handleBlockLongPressStart(index, e.clientY)}
               onMouseUp={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
+              onMouseMove={(e) => {
+                if (!isDraggingBlock) return;
+                handleBlockDragMove(e.clientY);
+              }}
               onMouseLeave={handleBlockLongPressEnd}
               onClick={(e) => {
                 // Only activate if not already current and click wasn't on an interactive element
@@ -3051,10 +3109,50 @@ export default function WorkoutPage() {
                 </button>
               </div>
             )}
+            {/* Drop indicator line below this item */}
+            {isDraggingBlock && isDragTarget && draggedBlockIndex !== null && dragOverBlockIndex !== null && dragOverBlockIndex > draggedBlockIndex && (
+              <div className="h-1 bg-primary-500 rounded-full mx-2 mt-2 animate-pulse" />
+            )}
           </React.Fragment>
           );
         })}
       </div>
+
+      {/* Floating drag preview */}
+      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
+        <div
+          className="fixed pointer-events-none z-50 transition-transform duration-75"
+          style={{
+            left: dragPosition.x,
+            top: dragPosition.y,
+            width: draggedBlockRect?.width ?? 'auto',
+          }}
+        >
+          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.02]">
+            <div className="flex items-center gap-3">
+              {/* Drag handle */}
+              <div className="flex flex-col gap-0.5 text-surface-400 p-1">
+                <div className="w-4 h-0.5 bg-current rounded" />
+                <div className="w-4 h-0.5 bg-current rounded" />
+                <div className="w-4 h-0.5 bg-current rounded" />
+              </div>
+              {/* Exercise number circle */}
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-primary-500 text-white">
+                {draggedBlockIndex + 1}
+              </div>
+              {/* Exercise name */}
+              <div className="flex-1">
+                <p className="font-medium text-surface-100">
+                  {blocks[draggedBlockIndex]?.exercise?.name}
+                </p>
+                <p className="text-xs text-surface-500">
+                  {getSetsForBlock(blocks[draggedBlockIndex]?.id).length}/{blocks[draggedBlockIndex]?.targetSets} sets
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
