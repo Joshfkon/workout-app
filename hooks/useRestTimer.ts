@@ -139,9 +139,10 @@ export function useRestTimer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Timer logic
+  // Timer logic - only create interval when isRunning changes
+  // Do NOT include seconds in dependencies as it causes interval to be recreated on every tick
   useEffect(() => {
-    if (isRunning && seconds > 0) {
+    if (isRunning) {
       intervalRef.current = setInterval(() => {
         try {
           const stored = localStorage.getItem(TIMER_STORAGE_KEY);
@@ -188,7 +189,8 @@ export function useRestTimer({
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, seconds, playAlarm]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning, playAlarm]);
 
   const toggle = useCallback(() => {
     if (isRunning) {
