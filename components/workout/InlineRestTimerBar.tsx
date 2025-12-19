@@ -15,6 +15,7 @@ export function InlineRestTimerBar({
   isRunning,
   isFinished,
 }: InlineRestTimerBarProps) {
+  console.log('[TIMER UI] InlineRestTimerBar render', { seconds, initialSeconds, isRunning, isFinished });
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
 
   return (

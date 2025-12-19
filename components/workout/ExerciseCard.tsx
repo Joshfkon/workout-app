@@ -175,6 +175,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   timerIsRunning = false,
   timerIsFinished = false,
 }: ExerciseCardProps) {
+  console.log('[TIMER UI] ExerciseCard render', { 
+    showRestTimer, 
+    timerSeconds, 
+    timerInitialSeconds, 
+    timerIsRunning, 
+    timerIsFinished,
+    exerciseName: exercise.name 
+  });
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
