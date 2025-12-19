@@ -4,10 +4,11 @@ import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
-import { formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
+import { formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
+import { InlineRestTimerBar } from './InlineRestTimerBar';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -136,6 +137,12 @@ interface ExerciseCardProps {
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
   currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
+  // Rest timer state for inline display
+  showRestTimer?: boolean;
+  timerSeconds?: number;
+  timerInitialSeconds?: number;
+  timerIsRunning?: boolean;
+  timerIsFinished?: boolean;
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -162,6 +169,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   workingWeight = 0,
   showSwapOnMount = false,
   currentInjuries = [],
+  showRestTimer = false,
+  timerSeconds = 0,
+  timerInitialSeconds = 0,
+  timerIsRunning = false,
+  timerIsFinished = false,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -1209,7 +1221,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </React.Fragment>
               );
             })}
-            
+
+            {/* Inline Rest Timer - appears after completing a set */}
+            {isActive && showRestTimer && completedSets.length > 0 && (
+              <InlineRestTimerBar
+                seconds={timerSeconds}
+                initialSeconds={timerInitialSeconds}
+                isRunning={timerIsRunning}
+                isFinished={timerIsFinished}
+              />
+            )}
+
             {/* Dropset input row - appears when adding a dropset */}
             {isActive && dropsetMode && (
               <tr className="bg-purple-500/20 border-l-2 border-purple-500">
