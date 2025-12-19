@@ -378,6 +378,7 @@ export default function WorkoutPage() {
   const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -1461,13 +1462,22 @@ export default function WorkoutPage() {
   // Long press handlers for drag reorder
   const handleBlockLongPressStart = useCallback((index: number) => {
     longPressTimerRef.current = setTimeout(() => {
+      // Save current collapse state before collapsing all for drag mode
+      preCollapseStateRef.current = {
+        allCollapsed,
+        collapsedBlocks: new Set(collapsedBlocks),
+      };
+
       setDraggedBlockIndex(index);
       setIsDraggingBlock(true);
+      // Collapse all exercises for iPhone-style drag mode
+      setAllCollapsed(true);
+
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
     }, 500);
-  }, []);
+  }, [allCollapsed, collapsedBlocks]);
 
   const handleBlockLongPressEnd = useCallback(() => {
     if (longPressTimerRef.current) {
@@ -1517,6 +1527,13 @@ export default function WorkoutPage() {
     setDraggedBlockIndex(null);
     setDragOverBlockIndex(null);
     setIsDraggingBlock(false);
+
+    // Restore pre-drag collapse state
+    if (preCollapseStateRef.current) {
+      setAllCollapsed(preCollapseStateRef.current.allCollapsed);
+      setCollapsedBlocks(preCollapseStateRef.current.collapsedBlocks);
+      preCollapseStateRef.current = null;
+    }
   }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {

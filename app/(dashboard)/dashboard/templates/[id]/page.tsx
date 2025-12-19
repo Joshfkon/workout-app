@@ -49,6 +49,7 @@ export default function TemplateDetailPage() {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const preCollapseStateRef = useRef<Set<string> | null>(null);
 
   const supabase = createUntypedClient();
 
@@ -241,14 +242,20 @@ export default function TemplateDetailPage() {
   // Long press handlers for drag reorder
   const handleLongPressStart = useCallback((index: number) => {
     longPressTimer.current = setTimeout(() => {
+      // Save current collapse state before collapsing all for drag mode
+      preCollapseStateRef.current = new Set(collapsedExercises);
+
       setDraggedIndex(index);
       setIsDragging(true);
+      // Collapse all exercises for iPhone-style drag mode
+      setCollapsedExercises(new Set(exercises.map(ex => ex.id)));
+
       // Haptic feedback on mobile if available
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
     }, 500);
-  }, []);
+  }, [collapsedExercises, exercises]);
 
   const handleLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
@@ -289,6 +296,12 @@ export default function TemplateDetailPage() {
     setDraggedIndex(null);
     setDragOverIndex(null);
     setIsDragging(false);
+
+    // Restore pre-drag collapse state
+    if (preCollapseStateRef.current) {
+      setCollapsedExercises(preCollapseStateRef.current);
+      preCollapseStateRef.current = null;
+    }
   }, [draggedIndex, dragOverIndex, exercises, supabase]);
 
   // Reorder exercises (fallback for non-drag)
