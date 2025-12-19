@@ -589,16 +589,6 @@ export default function DashboardPage() {
             <span className="font-semibold text-white">Create Workout</span>
           </button>
         </Link>
-        <Link href="/dashboard/nutrition">
-          <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
-            <span className="text-xl">🍎</span>
-          </button>
-        </Link>
-        <Link href="/dashboard/workout">
-          <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-xl transition-all border border-surface-700 flex items-center justify-center">
-            <span className="text-xl">📋</span>
-          </button>
-        </Link>
       </div>
 
       {/* Debug Error Display */}
