@@ -29,13 +29,19 @@ export function RestTimer({
   const [isRunning, setIsRunning] = useState(false);
   const [initialSeconds, setInitialSeconds] = useState(defaultSeconds);
   const [isFinished, setIsFinished] = useState(false);
-  const [finishedAt, setFinishedAt] = useState<number | null>(null); // Track when timer finished
-  const [timeSinceFinished, setTimeSinceFinished] = useState(0); // Seconds since finished
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [finishedAt, setFinishedAt] = useState<number | null>(null);
+  const [timeSinceFinished, setTimeSinceFinished] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const endTimeRef = useRef<number | null>(null);
+  const secondsRef = useRef(seconds);
 
-  // Keep onComplete ref up to date
+  // Keep refs in sync
+  useEffect(() => {
+    secondsRef.current = seconds;
+  }, [seconds]);
+
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
@@ -55,7 +61,6 @@ export function RestTimer({
   }, [isFinished, finishedAt]);
 
   const playAlarm = useCallback(() => {
-    // Play 3 beeps with increasing frequency
     const playBeep = (frequency: number, delay: number) => {
       setTimeout(() => {
         try {
@@ -68,7 +73,7 @@ export function RestTimer({
 
           oscillator.frequency.value = frequency;
           oscillator.type = 'sine';
-          gainNode.gain.value = 0.5; // Louder
+          gainNode.gain.value = 0.5;
 
           oscillator.start();
           setTimeout(() => {
@@ -81,59 +86,15 @@ export function RestTimer({
       }, delay);
     };
 
-    // Play 3 ascending beeps
     playBeep(600, 0);
     playBeep(800, 350);
     playBeep(1000, 700);
 
-    // Vibrate on mobile (if supported)
     if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200, 100, 400]); // Pattern: vibrate, pause, vibrate, pause, long vibrate
+      navigator.vibrate([200, 100, 200, 100, 400]);
     }
   }, []);
 
-  // Load timer state from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(TIMER_STORAGE_KEY);
-      if (stored) {
-        const state: TimerState = JSON.parse(stored);
-        const now = Date.now();
-        const remaining = Math.ceil((state.endTime - now) / 1000);
-        
-        if (state.isRunning && remaining > 0) {
-          // Timer was running and still has time left
-          setSeconds(remaining);
-          setInitialSeconds(state.duration);
-          setIsRunning(true);
-          hasPlayedAlarm.current = false;
-        } else if (state.isRunning && remaining <= 0) {
-          // Timer finished while page was away - show finished state
-          setSeconds(0);
-          setInitialSeconds(state.duration);
-          setIsRunning(false);
-          setIsFinished(true);
-          setFinishedAt(state.endTime); // Use the actual end time
-          // Clear stored state
-          localStorage.removeItem(TIMER_STORAGE_KEY);
-          // Play alarm since user just returned
-          if (!hasPlayedAlarm.current) {
-            hasPlayedAlarm.current = true;
-            playAlarm();
-            onCompleteRef.current?.();
-          }
-        }
-      } else if (autoStart) {
-        // No stored state, but autoStart requested
-        startTimer(defaultSeconds);
-      }
-    } catch (e) {
-      console.log('Could not restore timer state');
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Save timer state to localStorage when running
   const saveTimerState = useCallback((running: boolean, endTime: number, duration: number) => {
     if (running) {
       const state: TimerState = { endTime, duration, isRunning: true };
@@ -143,100 +104,156 @@ export function RestTimer({
     }
   }, []);
 
-  // Start timer with duration
+  const clearTimerInterval = useCallback(() => {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const handleTimerComplete = useCallback(() => {
+    const now = Date.now();
+    setSeconds(0);
+    setIsRunning(false);
+    setIsFinished(true);
+    setFinishedAt(now);
+    endTimeRef.current = null;
+    localStorage.removeItem(TIMER_STORAGE_KEY);
+    clearTimerInterval();
+
+    if (!hasPlayedAlarm.current) {
+      hasPlayedAlarm.current = true;
+      playAlarm();
+      onCompleteRef.current?.();
+    }
+  }, [clearTimerInterval, playAlarm]);
+
+  const tick = useCallback(() => {
+    const currentEndTime = endTimeRef.current;
+    if (currentEndTime === null) {
+      return;
+    }
+
+    const now = Date.now();
+    const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
+
+    if (remaining <= 0) {
+      handleTimerComplete();
+    } else {
+      setSeconds(remaining);
+    }
+  }, [handleTimerComplete]);
+
   const startTimer = useCallback((duration: number) => {
+    clearTimerInterval();
+
     const endTime = Date.now() + duration * 1000;
+    endTimeRef.current = endTime;
     setSeconds(duration);
-    setIsRunning(true);
+    setInitialSeconds(duration);
     setIsFinished(false);
+    setIsRunning(true);
     hasPlayedAlarm.current = false;
     saveTimerState(true, endTime, duration);
-  }, [saveTimerState]);
 
-  // Timer logic - uses timestamp-based calculation for accuracy
+    intervalRef.current = setInterval(tick, 1000);
+  }, [clearTimerInterval, saveTimerState, tick]);
+
+  // Load timer state from localStorage on mount
   useEffect(() => {
-    if (isRunning && seconds > 0) {
-      intervalRef.current = setInterval(() => {
-        // Read end time from storage and calculate remaining
-        try {
-          const stored = localStorage.getItem(TIMER_STORAGE_KEY);
-          if (stored) {
-            const state: TimerState = JSON.parse(stored);
-            const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
-            
-            if (remaining <= 0) {
-              setSeconds(0);
-              setIsRunning(false);
-              setIsFinished(true);
-              setFinishedAt(Date.now());
-              localStorage.removeItem(TIMER_STORAGE_KEY);
-              if (!hasPlayedAlarm.current) {
-                hasPlayedAlarm.current = true;
-                playAlarm();
-                onCompleteRef.current?.();
-              }
-            } else {
-              setSeconds(remaining);
-            }
+    try {
+      const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (stored) {
+        const state: TimerState = JSON.parse(stored);
+        const now = Date.now();
+        const remaining = Math.ceil((state.endTime - now) / 1000);
+
+        if (state.isRunning && remaining > 0) {
+          endTimeRef.current = state.endTime;
+          setSeconds(remaining);
+          setInitialSeconds(state.duration);
+          setIsRunning(true);
+          hasPlayedAlarm.current = false;
+          intervalRef.current = setInterval(tick, 1000);
+        } else if (state.isRunning && remaining <= 0) {
+          setSeconds(0);
+          setInitialSeconds(state.duration);
+          setIsRunning(false);
+          setIsFinished(true);
+          setFinishedAt(state.endTime);
+          endTimeRef.current = null;
+          localStorage.removeItem(TIMER_STORAGE_KEY);
+          if (!hasPlayedAlarm.current) {
+            hasPlayedAlarm.current = true;
+            playAlarm();
+            onCompleteRef.current?.();
           }
-        } catch (e) {
-          // Fallback to simple decrement
-          setSeconds((prev) => {
-            if (prev <= 1) {
-              // Schedule state updates for next tick to avoid batching issues
-              setTimeout(() => {
-                setIsRunning(false);
-                setIsFinished(true);
-                setFinishedAt(Date.now());
-                if (!hasPlayedAlarm.current) {
-                  hasPlayedAlarm.current = true;
-                  playAlarm();
-                  onCompleteRef.current?.();
-                }
-              }, 0);
-              return 0;
-            }
-            return prev - 1;
-          });
         }
-      }, 250); // Check more frequently for better accuracy when returning from background
+      } else if (autoStart) {
+        startTimer(defaultSeconds);
+      }
+    } catch (e) {
+      console.log('Could not restore timer state');
     }
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearTimerInterval();
     };
-  }, [isRunning, seconds, playAlarm]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cleanup interval when isRunning becomes false
+  useEffect(() => {
+    if (!isRunning) {
+      clearTimerInterval();
+    }
+  }, [isRunning, clearTimerInterval]);
 
   const toggleTimer = () => {
     if (isRunning) {
-      // Pause
       setIsRunning(false);
+      clearTimerInterval();
+      endTimeRef.current = null;
       localStorage.removeItem(TIMER_STORAGE_KEY);
     } else {
-      // Start/Resume
-      startTimer(seconds);
+      startTimer(secondsRef.current);
     }
     setIsFinished(false);
   };
 
   const resetTimer = () => {
+    clearTimerInterval();
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
     setSeconds(initialSeconds);
     hasPlayedAlarm.current = false;
+    endTimeRef.current = null;
     localStorage.removeItem(TIMER_STORAGE_KEY);
   };
 
   const addTime = (amount: number) => {
-    const newSeconds = Math.max(0, seconds + amount);
-    setSeconds(newSeconds);
     setIsFinished(false);
-    
-    // Update stored end time if running
-    if (isRunning) {
-      const endTime = Date.now() + newSeconds * 1000;
-      saveTimerState(true, endTime, initialSeconds);
+
+    if (endTimeRef.current !== null) {
+      const newEndTime = endTimeRef.current + (amount * 1000);
+      const now = Date.now();
+      const newRemaining = Math.max(0, Math.ceil((newEndTime - now) / 1000));
+
+      if (newRemaining <= 0) {
+        endTimeRef.current = now + 1000;
+        setSeconds(1);
+        saveTimerState(true, now + 1000, initialSeconds);
+      } else {
+        endTimeRef.current = newEndTime;
+        setSeconds(newRemaining);
+        saveTimerState(true, newEndTime, initialSeconds);
+      }
+    } else {
+      const currentSeconds = secondsRef.current;
+      const newSeconds = Math.max(1, currentSeconds + amount);
+      setSeconds(newSeconds);
+      setInitialSeconds(newSeconds);
     }
   };
 
