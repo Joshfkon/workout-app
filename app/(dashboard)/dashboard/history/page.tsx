@@ -79,8 +79,81 @@ function HistoryPageContent() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
   const [autoFetchedExercise, setAutoFetchedExercise] = useState(false);
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedWorkouts, setSelectedWorkouts] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const { preferences } = useUserPreferences();
   const unit = preferences.units;
+
+  const toggleSelectMode = () => {
+    setIsSelectMode(!isSelectMode);
+    if (isSelectMode) {
+      setSelectedWorkouts(new Set());
+    }
+  };
+
+  const toggleWorkoutSelection = (workoutId: string) => {
+    setSelectedWorkouts(prev => {
+      const next = new Set(prev);
+      if (next.has(workoutId)) {
+        next.delete(workoutId);
+      } else {
+        next.add(workoutId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllWorkouts = () => {
+    if (selectedWorkouts.size === workouts.length) {
+      setSelectedWorkouts(new Set());
+    } else {
+      setSelectedWorkouts(new Set(workouts.map(w => w.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedWorkouts.size === 0) return;
+
+    const count = selectedWorkouts.size;
+    if (!confirm(`Are you sure you want to delete ${count} workout${count > 1 ? 's' : ''}? This cannot be undone.`)) {
+      return;
+    }
+
+    setIsBulkDeleting(true);
+    try {
+      const supabase = createUntypedClient();
+      const workoutIds = Array.from(selectedWorkouts);
+
+      // Get all exercise blocks for these workouts
+      const { data: blocks } = await supabase
+        .from('exercise_blocks')
+        .select('id')
+        .in('workout_session_id', workoutIds);
+
+      if (blocks && blocks.length > 0) {
+        const blockIds = blocks.map((b: { id: string }) => b.id);
+        // Delete set_logs for all blocks
+        await supabase.from('set_logs').delete().in('exercise_block_id', blockIds);
+      }
+
+      // Delete all exercise_blocks
+      await supabase.from('exercise_blocks').delete().in('workout_session_id', workoutIds);
+
+      // Delete all workout_sessions
+      await supabase.from('workout_sessions').delete().in('id', workoutIds);
+
+      // Update local state
+      setWorkouts(workouts.filter(w => !selectedWorkouts.has(w.id)));
+      setSelectedWorkouts(new Set());
+      setIsSelectMode(false);
+    } catch (err) {
+      console.error('Failed to delete workouts:', err);
+      alert('Failed to delete workouts. Please try again.');
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
 
   const handleDeleteWorkout = async (workoutId: string, state: string) => {
     const action = state === 'in_progress' ? 'cancel' : 'delete';
@@ -590,9 +663,49 @@ function HistoryPageContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
-        <p className="text-surface-400 mt-1">Your past training sessions</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-surface-100">Workout History</h1>
+          <p className="text-surface-400 mt-1">Your past training sessions</p>
+        </div>
+        {workouts.length > 0 && (
+          <div className="flex items-center gap-2">
+            {isSelectMode && (
+              <>
+                <button
+                  onClick={selectAllWorkouts}
+                  className="px-3 py-1.5 text-sm text-surface-300 hover:text-surface-100 hover:bg-surface-800 rounded-lg transition-colors"
+                >
+                  {selectedWorkouts.size === workouts.length ? 'Deselect All' : 'Select All'}
+                </button>
+                {selectedWorkouts.size > 0 && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleBulkDelete}
+                    disabled={isBulkDeleting}
+                  >
+                    {isBulkDeleting ? (
+                      <span className="flex items-center gap-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Deleting...
+                      </span>
+                    ) : (
+                      `Delete ${selectedWorkouts.size} Selected`
+                    )}
+                  </Button>
+                )}
+              </>
+            )}
+            <Button
+              variant={isSelectMode ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={toggleSelectMode}
+            >
+              {isSelectMode ? 'Cancel' : 'Select'}
+            </Button>
+          </div>
+        )}
       </div>
 
       {workouts.length === 0 ? (
@@ -615,29 +728,92 @@ function HistoryPageContent() {
           {workouts.map((workout) => {
             const isExpanded = expandedWorkout === workout.id;
             
+            const isSelected = selectedWorkouts.has(workout.id);
+
             return (
-              <Card key={workout.id} className="overflow-hidden group relative">
-                {/* Delete button - small icon in top right */}
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleDeleteWorkout(workout.id, workout.state);
-                  }}
-                  disabled={deletingId === workout.id}
-                  className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
-                  title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
-                >
-                  {deletingId === workout.id ? (
-                    <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  )}
-                </button>
+              <Card key={workout.id} className={`overflow-hidden group relative ${isSelectMode && isSelected ? 'ring-2 ring-primary-500' : ''}`}>
+                {/* Checkbox for select mode */}
+                {isSelectMode && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleWorkoutSelection(workout.id);
+                    }}
+                    className="absolute top-4 left-4 z-10"
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                      isSelected
+                        ? 'bg-primary-500 border-primary-500'
+                        : 'border-surface-500 hover:border-surface-400'
+                    }`}>
+                      {isSelected && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                )}
+
+                {/* Delete button - small icon in top right (hidden in select mode) */}
+                {!isSelectMode && (
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteWorkout(workout.id, workout.state);
+                    }}
+                    disabled={deletingId === workout.id}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
+                    title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
+                  >
+                    {deletingId === workout.id ? (
+                      <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    )}
+                  </button>
+                )}
 
                 {/* Main clickable area */}
+                {isSelectMode ? (
+                  <button
+                    onClick={() => toggleWorkoutSelection(workout.id)}
+                    className="block w-full text-left"
+                  >
+                    <div className={`p-4 sm:p-6 hover:bg-surface-800/30 transition-colors cursor-pointer ${isSelectMode ? 'pl-12' : ''}`}>
+                      {/* Header row */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div className="flex-1 pr-8">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-lg font-semibold text-surface-100">
+                              {workout.completed_at
+                                ? formatDate(workout.completed_at)
+                                : formatDate(workout.planned_date)}
+                            </h3>
+                            <Badge
+                              variant={workout.state === 'completed' ? 'success' : 'warning'}
+                              size="sm"
+                            >
+                              {workout.state === 'completed' ? 'Completed' : 'In Progress'}
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-4 text-sm text-surface-400">
+                            {workout.completed_at && (
+                              <span>Finished at {formatTime(workout.completed_at)}</span>
+                            )}
+                            <span>{workout.exercises.length} exercises</span>
+                            <span>{workout.totalSets} sets</span>
+                            <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ) : (
                 <Link href={`/dashboard/workout/${workout.id}`} className="block">
                   <div className="p-4 sm:p-6 hover:bg-surface-800/30 transition-colors cursor-pointer">
                     {/* Header row */}
@@ -692,9 +868,10 @@ function HistoryPageContent() {
                     </div>
                   </div>
                 </Link>
+                )}
 
                 {/* Exercise summary - outside the link */}
-                {workout.exercises.length > 0 && (
+                {workout.exercises.length > 0 && !isSelectMode && (
                   <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-0 border-t border-surface-800">
                     <button
                       onClick={(e) => {
