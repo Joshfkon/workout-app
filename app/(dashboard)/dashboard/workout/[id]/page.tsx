@@ -2534,8 +2534,8 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Coach Message */}
-      {coachMessage && (
+      {/* Coach Message - only show if AI coach notes are enabled */}
+      {coachMessage && aiCoachNotesEnabled && (
         <Card className="overflow-hidden border-primary-500/20 bg-gradient-to-br from-primary-500/5 to-surface-900">
           <button
             onClick={() => setShowCoachMessage(!showCoachMessage)}
