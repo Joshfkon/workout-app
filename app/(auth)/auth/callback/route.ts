@@ -6,12 +6,34 @@ export async function GET(request: Request) {
   const code = searchParams.get('code');
   const next = searchParams.get('next');
   const type = searchParams.get('type');
+  const error = searchParams.get('error');
+  const errorCode = searchParams.get('error_code');
+  const errorDescription = searchParams.get('error_description');
+
+  // Handle error parameters (e.g., expired OTP)
+  if (error) {
+    // If this was a password recovery attempt, redirect to reset-password with error
+    if (type === 'recovery' || next === '/reset-password') {
+      const errorParams = new URLSearchParams({
+        error: error,
+        ...(errorCode && { error_code: errorCode }),
+        ...(errorDescription && { error_description: errorDescription }),
+      });
+      return NextResponse.redirect(`${origin}/reset-password?${errorParams.toString()}`);
+    }
+    // Otherwise redirect to login with error
+    const errorParams = new URLSearchParams({
+      error: error,
+      ...(errorCode && { error_code: errorCode }),
+    });
+    return NextResponse.redirect(`${origin}/login?${errorParams.toString()}`);
+  }
 
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     
-    if (!error) {
+    if (!exchangeError) {
       // If this is a password recovery flow, redirect to reset-password page
       if (type === 'recovery' || next === '/reset-password') {
         return NextResponse.redirect(`${origin}/reset-password`);

@@ -20,12 +20,38 @@ export default function ResetPasswordPage() {
     const handleRecovery = async () => {
       const supabase = createClient();
       
+      // Check for error query parameters (expired link, etc.)
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const errorCode = urlParams.get('error_code');
+        
+        if (error) {
+          // Link expired or invalid
+          setIsValidSession(false);
+          setIsProcessingToken(false);
+          // Clear error params from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+      }
+      
       // Check if there's a hash fragment with tokens (Supabase recovery link format)
       if (typeof window !== 'undefined' && window.location.hash) {
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         const accessToken = hashParams.get('access_token');
         const refreshToken = hashParams.get('refresh_token');
         const type = hashParams.get('type');
+        const error = hashParams.get('error');
+        
+        // Check for errors in hash fragment
+        if (error) {
+          setIsValidSession(false);
+          setIsProcessingToken(false);
+          // Clear the hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
         
         if (type === 'recovery' && accessToken) {
           // Set the session from the recovery tokens
