@@ -1556,6 +1556,20 @@ export default function WorkoutPage() {
     }
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, calculateDragTargetIndex, dragOverBlockIndex]);
 
+  // Use refs to access latest values in document event listeners
+  const isDraggingBlockRef = useRef(isDraggingBlock);
+  const draggedBlockIndexRef = useRef(draggedBlockIndex);
+  const draggedBlockRectRef = useRef(draggedBlockRect);
+  const dragOverBlockIndexRef = useRef(dragOverBlockIndex);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    isDraggingBlockRef.current = isDraggingBlock;
+    draggedBlockIndexRef.current = draggedBlockIndex;
+    draggedBlockRectRef.current = draggedBlockRect;
+    dragOverBlockIndexRef.current = dragOverBlockIndex;
+  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
+
   const handleBlockDragEnd = useCallback(async () => {
     console.log('[DRAG] Drag END called - draggedBlockIndex:', draggedBlockIndex, 'dragOverBlockIndex:', dragOverBlockIndex);
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
@@ -1606,6 +1620,80 @@ export default function WorkoutPage() {
       preCollapseStateRef.current = null;
     }
   }, [draggedBlockIndex, dragOverBlockIndex, blocks, currentBlockIndex]);
+
+  // Document-level touch/mouse event listeners for drag
+  useEffect(() => {
+    if (!isDraggingBlock) return;
+
+    const handleDocumentMove = (clientY: number) => {
+      console.log('[DRAG] Document move - clientY:', clientY);
+      if (!isDraggingBlockRef.current || draggedBlockIndexRef.current === null) return;
+
+      // Update floating preview position
+      if (draggedBlockRectRef.current) {
+        const newPosition = {
+          x: draggedBlockRectRef.current.left,
+          y: clientY - (draggedBlockRectRef.current.height / 2)
+        };
+        setDragPosition(newPosition);
+      }
+
+      // Calculate which position the item would drop at
+      if (!exerciseListRef.current) return;
+      const listItems = exerciseListRef.current.querySelectorAll('[data-block-index]');
+      let targetIndex = draggedBlockIndexRef.current;
+
+      for (let i = 0; i < listItems.length; i++) {
+        const item = listItems[i] as HTMLElement;
+        const rect = item.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+
+        if (clientY < midY) {
+          targetIndex = i;
+          break;
+        }
+        targetIndex = i + 1;
+      }
+
+      // Clamp to valid range
+      targetIndex = Math.max(0, Math.min(targetIndex, blocks.length - 1));
+
+      if (targetIndex !== draggedBlockIndexRef.current) {
+        setDragOverBlockIndex(targetIndex);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      handleDocumentMove(e.touches[0].clientY);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      handleDocumentMove(e.clientY);
+    };
+
+    const handleTouchEnd = () => {
+      console.log('[DRAG] Document touch end');
+      handleBlockDragEnd();
+    };
+
+    const handleMouseUp = () => {
+      console.log('[DRAG] Document mouse up');
+      handleBlockDragEnd();
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingBlock, blocks.length, handleBlockDragEnd]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
     try {
