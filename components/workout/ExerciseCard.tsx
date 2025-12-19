@@ -1170,13 +1170,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                           e.stopPropagation();
                           onSetDelete(set.id);
                         }}
-                        className="p-2 rounded-lg bg-success-500 hover:bg-surface-600 transition-colors group/check"
+                        className="p-2 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
                         title="Uncheck set"
                       >
-                        <svg className="w-4 h-4 text-white group-hover/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
-                        <svg className="w-4 h-4 text-surface-400 hidden group-hover/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-4 h-4 text-surface-400 hidden group-active/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
