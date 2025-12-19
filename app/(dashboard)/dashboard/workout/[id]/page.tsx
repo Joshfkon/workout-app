@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
@@ -442,14 +442,17 @@ export default function WorkoutPage() {
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
 
-  // Rest timer hook
-  const restTimer = useRestTimer({
+  // Memoize rest timer options to prevent hook reinitialization
+  const restTimerOptions = useMemo(() => ({
     defaultSeconds: restTimerDuration ?? currentBlock?.targetRestSeconds ?? 180,
     autoStart: false,
     onComplete: () => {
       // Timer completed - could optionally auto-dismiss
     },
-  });
+  }), [restTimerDuration, currentBlock?.targetRestSeconds]);
+
+  // Rest timer hook
+  const restTimer = useRestTimer(restTimerOptions);
 
   // Load workout data
   useEffect(() => {

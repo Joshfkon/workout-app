@@ -23,9 +23,12 @@ export function useRestTimer({
 }: UseRestTimerOptions = {}) {
   console.log('[TIMER] useRestTimer hook initialized', { defaultSeconds, autoStart });
   
-  const [seconds, setSeconds] = useState(defaultSeconds);
+  // Use a ref to store the initial defaultSeconds so it doesn't change on re-renders
+  const initialDefaultSecondsRef = useRef(defaultSeconds);
+  
+  const [seconds, setSeconds] = useState(initialDefaultSecondsRef.current);
   const [isRunning, setIsRunning] = useState(false);
-  const [initialSeconds, setInitialSeconds] = useState(defaultSeconds);
+  const [initialSeconds, setInitialSeconds] = useState(initialDefaultSecondsRef.current);
   const [isFinished, setIsFinished] = useState(false);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [timeSinceFinished, setTimeSinceFinished] = useState(0);
