@@ -2,7 +2,21 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: { error?: string; error_code?: string; error_description?: string };
+}) {
+  // Handle auth errors (e.g., expired password reset links)
+  if (searchParams.error) {
+    // If it's a password recovery error, redirect to reset-password page
+    if (searchParams.error_code === 'otp_expired' || searchParams.error_description?.includes('expired')) {
+      redirect(`/reset-password?error=${encodeURIComponent(searchParams.error)}&error_code=${encodeURIComponent(searchParams.error_code || '')}&error_description=${encodeURIComponent(searchParams.error_description || '')}`);
+    }
+    // Otherwise redirect to login with error
+    redirect(`/login?error=${encodeURIComponent(searchParams.error)}&error_code=${encodeURIComponent(searchParams.error_code || '')}`);
+  }
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
