@@ -1136,7 +1136,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               ) : (
                 <React.Fragment key={set.id}>
                   <tr
-                    className={`hover:bg-surface-800/30 group relative overflow-hidden ${
+                    className={`hover:bg-surface-800/30 group ${
                       isDropset ? 'bg-purple-500/10' : 'bg-success-500/5'
                     }`}
                     onTouchStart={(e) => handleTouchStart(set.id, e)}
@@ -1144,16 +1144,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onTouchEnd={() => handleTouchEnd(set.id, true)}
                     style={getSwipeTransform(set.id)}
                   >
-                    {/* Delete reveal background for swipe */}
-                    {swipeState.setId === set.id && swipeState.isSwiping && (
-                      <div 
-                        className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </div>
-                    )}
                     <td className="px-3 py-2.5 text-surface-300 font-medium">
                       <div className="flex items-center gap-1">
                         {isDropset && <span className="text-purple-400 text-xs">↓</span>}
@@ -1181,7 +1171,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-3 py-2.5 text-center">
                     <SetQualityBadge quality={set.quality} />
                   </td>
-                  <td className="px-2 py-2.5">
+                  <td className="px-2 py-2.5 relative">
+                    {/* Delete reveal background for swipe - positioned relative to this cell */}
+                    {swipeState.setId === set.id && swipeState.isSwiping && (
+                      <div
+                        className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                    )}
                     {onSetDelete ? (
                       <button
                         onClick={(e) => {
@@ -1333,22 +1333,12 @@ export const ExerciseCard = memo(function ExerciseCard({
               return (
                 <tr
                   key={pendingId}
-                  className="bg-surface-800/30 relative overflow-hidden"
+                  className="bg-surface-800/30"
                   onTouchStart={(e) => handleTouchStart(pendingId, e)}
                   onTouchMove={handleTouchMove}
                   onTouchEnd={() => handleTouchEnd(pendingId, false)}
                   style={getSwipeTransform(pendingId)}
                 >
-                  {/* Delete reveal background */}
-                  {swipeState.setId === pendingId && swipeState.isSwiping && (
-                    <div 
-                      className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </div>
-                  )}
                   <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
                   <td className="px-1 py-1.5">
                     <input
@@ -1394,7 +1384,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <span className="text-surface-600">—</span>
                     )}
                   </td>
-                  <td className="px-2 py-1.5">
+                  <td className="px-2 py-1.5 relative">
+                    {/* Delete reveal background for swipe - positioned relative to this cell */}
+                    {swipeState.setId === pendingId && swipeState.isSwiping && (
+                      <div
+                        className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </div>
+                    )}
                     <button
                       onClick={() => completePendingSet(index)}
                       disabled={!input.weight || !input.reps || !input.rpe || isCompletingSet}
