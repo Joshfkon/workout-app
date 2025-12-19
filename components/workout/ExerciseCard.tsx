@@ -1224,8 +1224,8 @@ export const ExerciseCard = memo(function ExerciseCard({
               );
             })}
 
-            {/* Inline Rest Timer - appears after completing a set */}
-            {isActive && showRestTimer && completedSets.length > 0 && (
+            {/* Inline Rest Timer - appears after completing a set or warmup */}
+            {isActive && showRestTimer && (
               <InlineRestTimerBar
                 seconds={timerSeconds}
                 initialSeconds={timerInitialSeconds}
