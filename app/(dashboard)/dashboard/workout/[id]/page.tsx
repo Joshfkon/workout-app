@@ -1467,9 +1467,7 @@ export default function WorkoutPage() {
 
   // Long press handlers for drag reorder
   const handleBlockLongPressStart = useCallback((index: number, clientY: number) => {
-    console.log('[DRAG] Long press START on index:', index, 'clientY:', clientY);
     longPressTimerRef.current = setTimeout(() => {
-      console.log('[DRAG] Long press TIMER FIRED - activating drag mode for index:', index);
       // Save current collapse state before collapsing all for drag mode
       preCollapseStateRef.current = {
         allCollapsed,
@@ -1478,10 +1476,8 @@ export default function WorkoutPage() {
 
       // Get the element being dragged and its dimensions
       const element = document.querySelector(`[data-block-index="${index}"]`) as HTMLElement;
-      console.log('[DRAG] Found element:', element);
       if (element) {
         const rect = element.getBoundingClientRect();
-        console.log('[DRAG] Element rect:', rect);
         setDraggedBlockRect(rect);
         setDragStartY(clientY);
         setDragPosition({ x: rect.left, y: clientY - rect.height / 2 });
@@ -1499,9 +1495,7 @@ export default function WorkoutPage() {
   }, [allCollapsed, collapsedBlocks]);
 
   const handleBlockLongPressEnd = useCallback(() => {
-    console.log('[DRAG] Long press END called');
     if (longPressTimerRef.current) {
-      console.log('[DRAG] Clearing long press timer (drag not activated)');
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
@@ -1531,26 +1525,18 @@ export default function WorkoutPage() {
   }, [draggedBlockIndex, blocks.length]);
 
   const handleBlockDragMove = useCallback((clientY: number) => {
-    if (!isDraggingBlock || draggedBlockIndex === null) {
-      return;
-    }
-    console.log('[DRAG] Move - clientY:', clientY, 'isDraggingBlock:', isDraggingBlock, 'draggedBlockIndex:', draggedBlockIndex);
+    if (!isDraggingBlock || draggedBlockIndex === null) return;
 
     // Update floating preview position
     if (draggedBlockRect) {
-      const newPosition = {
+      setDragPosition({
         x: draggedBlockRect.left,
         y: clientY - (draggedBlockRect.height / 2)
-      };
-      console.log('[DRAG] Setting drag position:', newPosition);
-      setDragPosition(newPosition);
-    } else {
-      console.log('[DRAG] No draggedBlockRect available');
+      });
     }
 
     // Calculate which position the item would drop at
     const targetIndex = calculateDragTargetIndex(clientY);
-    console.log('[DRAG] Target index:', targetIndex, 'current dragOverBlockIndex:', dragOverBlockIndex);
     if (targetIndex !== dragOverBlockIndex && targetIndex !== draggedBlockIndex) {
       setDragOverBlockIndex(targetIndex);
     }
@@ -1571,12 +1557,9 @@ export default function WorkoutPage() {
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragOverBlockIndex]);
 
   const handleBlockDragEnd = useCallback(async () => {
-    console.log('[DRAG] Drag END called - draggedBlockIndex:', draggedBlockIndex, 'dragOverBlockIndex:', dragOverBlockIndex);
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
-    console.log('[DRAG] Final target index:', finalTargetIndex);
 
     if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
-      console.log('[DRAG] Reordering from', draggedBlockIndex, 'to', finalTargetIndex);
       const newBlocks = [...blocks];
       const [removed] = newBlocks.splice(draggedBlockIndex, 1);
       newBlocks.splice(finalTargetIndex, 0, removed);
@@ -1626,7 +1609,6 @@ export default function WorkoutPage() {
     if (!isDraggingBlock) return;
 
     const handleDocumentMove = (clientY: number) => {
-      console.log('[DRAG] Document move - clientY:', clientY);
       if (!isDraggingBlockRef.current || draggedBlockIndexRef.current === null) return;
 
       // Update floating preview position
@@ -1673,12 +1655,10 @@ export default function WorkoutPage() {
     };
 
     const handleTouchEnd = () => {
-      console.log('[DRAG] Document touch end');
       handleBlockDragEnd();
     };
 
     const handleMouseUp = () => {
-      console.log('[DRAG] Document mouse up');
       handleBlockDragEnd();
     };
 
@@ -2829,20 +2809,34 @@ export default function WorkoutPage() {
           const isBeingDragged = draggedBlockIndex === index;
           const isDragTarget = dragOverBlockIndex === index && draggedBlockIndex !== index;
 
+          // Calculate if this item should be visually shifted during drag
+          let translateY = 0;
+          if (isDraggingBlock && draggedBlockIndex !== null && dragOverBlockIndex !== null && !isBeingDragged) {
+            const itemHeight = 60; // Approximate height of collapsed item
+            if (draggedBlockIndex < dragOverBlockIndex) {
+              // Dragging down: items between original and target shift up
+              if (index > draggedBlockIndex && index <= dragOverBlockIndex) {
+                translateY = -itemHeight;
+              }
+            } else if (draggedBlockIndex > dragOverBlockIndex) {
+              // Dragging up: items between target and original shift down
+              if (index >= dragOverBlockIndex && index < draggedBlockIndex) {
+                translateY = itemHeight;
+              }
+            }
+          }
+
           return (
             <React.Fragment key={block.id}>
-            {/* Drop indicator line above this item */}
-            {isDraggingBlock && isDragTarget && draggedBlockIndex !== null && dragOverBlockIndex !== null && dragOverBlockIndex < draggedBlockIndex && (
-              <div className="h-1 bg-primary-500 rounded-full mx-2 -mb-2 animate-pulse" />
-            )}
             <div
               id={`exercise-${index}`}
               data-block-index={index}
-              className={`transition-all duration-200 ${
+              style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
+              className={`transition-transform duration-200 ease-out ${
                 isCurrent ? '' : 'opacity-80'
               } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
-                isBeingDragged ? 'opacity-0' : ''
-              } ${isDragTarget ? 'scale-[0.98]' : ''}`}
+                isBeingDragged ? 'opacity-0 pointer-events-none' : ''
+              }`}
               onTouchStart={(e) => handleBlockLongPressStart(index, e.touches[0].clientY)}
               onTouchEnd={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
               onTouchMove={(e) => {
@@ -3214,24 +3208,10 @@ export default function WorkoutPage() {
                 </button>
               </div>
             )}
-            {/* Drop indicator line below this item */}
-            {isDraggingBlock && isDragTarget && draggedBlockIndex !== null && dragOverBlockIndex !== null && dragOverBlockIndex > draggedBlockIndex && (
-              <div className="h-1 bg-primary-500 rounded-full mx-2 mt-2 animate-pulse" />
-            )}
           </React.Fragment>
           );
         })}
       </div>
-
-      {/* Debug overlay - remove after testing */}
-      {isDraggingBlock && (
-        <div className="fixed top-4 left-4 bg-black/80 text-white text-xs p-2 rounded z-[100] font-mono">
-          <div>isDraggingBlock: {String(isDraggingBlock)}</div>
-          <div>draggedBlockIndex: {draggedBlockIndex}</div>
-          <div>dragOverBlockIndex: {dragOverBlockIndex}</div>
-          <div>dragPosition: {JSON.stringify(dragPosition)}</div>
-        </div>
-      )}
 
       {/* Floating drag preview */}
       {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
