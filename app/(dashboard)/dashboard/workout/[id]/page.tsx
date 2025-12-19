@@ -406,6 +406,7 @@ export default function WorkoutPage() {
   const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
   const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
   const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
+  const [aiCoachNotesEnabled, setAiCoachNotesEnabled] = useState(false);
   
   // Store AI context for regenerating notes when injuries change
   const [aiNotesContext, setAiNotesContext] = useState<{
@@ -695,10 +696,11 @@ export default function WorkoutPage() {
         
         // Check if AI coach notes are enabled in user preferences
         const userPrefs = (userData?.preferences as Record<string, unknown>) || {};
-        const aiCoachNotesEnabled = (userPrefs.showAiCoachNotes as boolean) ?? false;
+        const aiCoachNotesEnabledValue = (userPrefs.showAiCoachNotes as boolean) ?? false;
+        setAiCoachNotesEnabled(aiCoachNotesEnabledValue);
         
         // Generate AI-powered coach notes in the background (only if enabled)
-        if (aiCoachNotesEnabled) {
+        if (aiCoachNotesEnabledValue) {
           (async () => {
             setIsLoadingAiNotes(true);
             try {
@@ -2566,29 +2568,33 @@ export default function WorkoutPage() {
                 <p className="text-sm text-surface-400">{coachMessage.overview}</p>
               </div>
 
-              {/* AI-Powered Coach Notes */}
-              {isLoadingAiNotes ? (
-                <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
-                  <div className="flex items-center gap-3">
-                    <LoadingAnimation type="dots" size="sm" />
-                    <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
-                  </div>
-                </div>
-              ) : aiCoachNotes ? (
-                <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
-                  <div className="flex items-start gap-2">
-                    <span className="text-primary-400 text-lg mt-0.5">💬</span>
-                    <p className="text-sm text-primary-300 leading-relaxed">
-                      {aiCoachNotes}
-                    </p>
-                  </div>
-                </div>
-              ) : coachMessage.personalizedInsight && (
-                <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
-                  <p className="text-sm text-primary-300">
-                    {coachMessage.personalizedInsight}
-                  </p>
-                </div>
+              {/* AI-Powered Coach Notes - only show if enabled */}
+              {aiCoachNotesEnabled && (
+                <>
+                  {isLoadingAiNotes ? (
+                    <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
+                      <div className="flex items-center gap-3">
+                        <LoadingAnimation type="dots" size="sm" />
+                        <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
+                      </div>
+                    </div>
+                  ) : aiCoachNotes ? (
+                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary-400 text-lg mt-0.5">💬</span>
+                        <p className="text-sm text-primary-300 leading-relaxed">
+                          {aiCoachNotes}
+                        </p>
+                      </div>
+                    </div>
+                  ) : coachMessage.personalizedInsight && (
+                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                      <p className="text-sm text-primary-300">
+                        {coachMessage.personalizedInsight}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Tips */}
