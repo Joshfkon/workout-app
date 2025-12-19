@@ -181,6 +181,40 @@ export function useActiveWorkout() {
       .eq('id', activeSession.id);
   }, [activeSession, setCheckIn]);
 
+  // Cancel workout - reset session and delete logged sets
+  const cancelWorkout = useCallback(async () => {
+    if (!activeSession) return false;
+
+    const supabase = createUntypedClient();
+
+    // Delete all set logs for this session's exercise blocks
+    const blockIds = exerciseBlocks.map(b => b.id);
+    if (blockIds.length > 0) {
+      await supabase
+        .from('set_logs')
+        .delete()
+        .in('exercise_block_id', blockIds);
+    }
+
+    // Reset session state back to planned
+    const { error } = await supabase
+      .from('workout_sessions')
+      .update({
+        state: 'planned',
+        started_at: null,
+        pre_workout_check_in: null,
+      })
+      .eq('id', activeSession.id);
+
+    if (error) {
+      console.error('Failed to cancel workout:', error);
+      return false;
+    }
+
+    endSession();
+    return true;
+  }, [activeSession, exerciseBlocks, endSession]);
+
   return {
     // State
     activeSession,
@@ -190,11 +224,12 @@ export function useActiveWorkout() {
     currentBlockSets,
     isActive: !!activeSession,
     stats: getSessionStats(),
-    
+
     // Actions
     loadWorkout,
     saveSet,
     completeWorkout,
+    cancelWorkout,
     submitCheckIn,
     setCurrentBlock,
     nextBlock,

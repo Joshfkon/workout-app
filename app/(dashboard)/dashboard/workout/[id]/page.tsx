@@ -448,6 +448,10 @@ export default function WorkoutPage() {
   const [swapTargetBlockId, setSwapTargetBlockId] = useState<string | null>(null);
   const [swapSearchQuery, setSwapSearchQuery] = useState('');
 
+  // Cancel workout modal state
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
@@ -2180,6 +2184,43 @@ export default function WorkoutPage() {
     setPhase('summary');
   };
 
+  const handleCancelWorkout = async () => {
+    if (!session) return;
+
+    setIsCancelling(true);
+    try {
+      const supabase = createUntypedClient();
+
+      // Delete all set logs for this session's exercise blocks
+      const blockIds = blocks.map(b => b.id);
+      if (blockIds.length > 0) {
+        await supabase
+          .from('set_logs')
+          .delete()
+          .in('exercise_block_id', blockIds);
+      }
+
+      // Reset session state back to planned
+      await supabase
+        .from('workout_sessions')
+        .update({
+          state: 'planned',
+          started_at: null,
+          pre_workout_check_in: null,
+        })
+        .eq('id', session.id);
+
+      // Navigate back to dashboard
+      router.push('/dashboard');
+    } catch (err) {
+      console.error('Failed to cancel workout:', err);
+      setError('Failed to cancel workout. Please try again.');
+    } finally {
+      setIsCancelling(false);
+      setShowCancelModal(false);
+    }
+  };
+
   const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
     try {
       const supabase = createUntypedClient();
@@ -2304,6 +2345,9 @@ export default function WorkoutPage() {
             <p className="text-surface-400">0 of 0 sets completed</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setShowCancelModal(true)} className="text-surface-400 hover:text-danger-400">
+              Cancel
+            </Button>
             <Button variant="ghost" onClick={handleOpenAddExercise}>
               <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -2656,6 +2700,9 @@ export default function WorkoutPage() {
             <span>🤕</span>
             <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
           </button>
+          <Button variant="ghost" onClick={() => setShowCancelModal(true)} className="text-surface-400 hover:text-danger-400">
+            Cancel
+          </Button>
           <Button variant="ghost" onClick={handleOpenAddExercise}>
             <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -4015,6 +4062,49 @@ export default function WorkoutPage() {
           </div>
         );
       })()}
+
+      {/* Cancel Workout Confirmation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !isCancelling && setShowCancelModal(false)}
+          />
+          <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
+                <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
+              <p className="text-sm text-surface-400 mb-6">
+                {totalCompletedSets > 0
+                  ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
+                  : 'This will reset the workout so you can start fresh later.'}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={isCancelling}
+                  className="flex-1"
+                >
+                  Keep Going
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCancelWorkout}
+                  disabled={isCancelling}
+                  className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
