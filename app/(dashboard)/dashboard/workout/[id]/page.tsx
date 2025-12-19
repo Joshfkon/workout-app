@@ -2786,11 +2786,8 @@ export default function WorkoutPage() {
           onReset={restTimer.reset}
           onSkip={() => {
             restTimer.skip();
-            // Keep timer visible briefly to show "Rested for X" message
-            setTimeout(() => {
-              setShowRestTimer(false);
-              setRestTimerDuration(null);
-            }, 2000); // Show for 2 seconds
+            // Keep "Rested for X" message visible until next set is checked
+            // The message will be cleared when restTimer.start() is called on next set completion
           }}
           isVisible={restTimerPanelVisible}
           onVisibilityChange={setRestTimerPanelVisible}
