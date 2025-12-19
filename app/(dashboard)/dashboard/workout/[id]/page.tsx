@@ -454,6 +454,20 @@ export default function WorkoutPage() {
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
 
+  // Clear timer when session changes or component unmounts
+  useEffect(() => {
+    // Clear timer when sessionId changes (new workout started)
+    console.log('[WORKOUT] Session changed or component mounted, clearing timer');
+    restTimer.dismiss();
+    
+    return () => {
+      // Cleanup: dismiss timer when leaving the workout page
+      console.log('[WORKOUT] Cleaning up rest timer on unmount');
+      restTimer.dismiss();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
+
   // Load workout data
   useEffect(() => {
     async function loadWorkout() {
