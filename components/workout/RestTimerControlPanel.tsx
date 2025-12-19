@@ -82,28 +82,34 @@ export function RestTimerControlPanel({
     }
   };
 
-  const handleSwipeAreaTouchStart = (e: React.TouchEvent) => {
-    e.stopPropagation();
+  const handlePanelTouchStart = (e: React.TouchEvent) => {
+    // Don't start drag if touching a button or interactive element
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    
     startDrag(e.touches[0].clientY);
   };
 
-  const handleSwipeAreaTouchMove = (e: React.TouchEvent) => {
+  const handlePanelTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
     e.preventDefault();
     updateDrag(e.touches[0].clientY);
   };
 
-  const handleSwipeAreaTouchEnd = () => {
+  const handlePanelTouchEnd = () => {
     endDrag();
   };
 
   // Mouse handler for desktop
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePanelMouseDown = (e: React.MouseEvent) => {
+    // Don't start drag if clicking a button or interactive element
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    
     startDrag(e.clientY);
   };
 
-  // Add global mouse listeners when dragging
+  // Add global mouse and touch listeners when dragging
   useEffect(() => {
     if (!isDragging) return;
 
@@ -115,12 +121,27 @@ export function RestTimerControlPanel({
       endDrag();
     };
 
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        e.preventDefault();
+        updateDrag(e.touches[0].clientY);
+      }
+    };
+
+    const handleGlobalTouchEnd = () => {
+      endDrag();
+    };
+
     document.addEventListener('mousemove', handleGlobalMouseMove);
     document.addEventListener('mouseup', handleGlobalMouseUp);
+    document.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    document.addEventListener('touchend', handleGlobalTouchEnd);
     
     return () => {
       document.removeEventListener('mousemove', handleGlobalMouseMove);
       document.removeEventListener('mouseup', handleGlobalMouseUp);
+      document.removeEventListener('touchmove', handleGlobalTouchMove);
+      document.removeEventListener('touchend', handleGlobalTouchEnd);
     };
   }, [isDragging, dragStartY, currentY]);
 
@@ -162,15 +183,13 @@ export function RestTimerControlPanel({
     <div 
       ref={panelRef}
       className="fixed bottom-0 left-0 right-0 z-50 bg-surface-900 border-t border-surface-700 safe-area-inset-bottom transition-transform duration-300 ease-out"
+      onTouchStart={handlePanelTouchStart}
+      onTouchMove={handlePanelTouchMove}
+      onTouchEnd={handlePanelTouchEnd}
+      onMouseDown={handlePanelMouseDown}
     >
-      {/* Swipe indicator - draggable area */}
-      <div 
-        className="w-full flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
-        onTouchStart={handleSwipeAreaTouchStart}
-        onTouchMove={handleSwipeAreaTouchMove}
-        onTouchEnd={handleSwipeAreaTouchEnd}
-        onMouseDown={handleMouseDown}
-      >
+      {/* Swipe indicator - visual indicator */}
+      <div className="w-full flex justify-center pt-2 pb-1 cursor-grab active:cursor-grabbing">
         <div className="w-12 h-1 bg-surface-600 rounded-full" />
       </div>
       
