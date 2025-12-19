@@ -139,32 +139,37 @@ export function useRestTimer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Timer logic
+  // Timer logic - interval runs while isRunning is true
+  // Note: seconds is intentionally NOT in the dependency array to prevent
+  // the interval from being cleared/recreated on every countdown update
   useEffect(() => {
-    if (isRunning && seconds > 0) {
-      intervalRef.current = setInterval(() => {
-        try {
-          const stored = localStorage.getItem(TIMER_STORAGE_KEY);
-          if (stored) {
-            const state: TimerState = JSON.parse(stored);
-            const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
+    if (!isRunning) {
+      return;
+    }
 
-            if (remaining <= 0) {
-              setSeconds(0);
-              setIsRunning(false);
-              setIsFinished(true);
-              setFinishedAt(Date.now());
-              localStorage.removeItem(TIMER_STORAGE_KEY);
-              if (!hasPlayedAlarm.current) {
-                hasPlayedAlarm.current = true;
-                playAlarm();
-                onCompleteRef.current?.();
-              }
-            } else {
-              setSeconds(remaining);
+    intervalRef.current = setInterval(() => {
+      try {
+        const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+        if (stored) {
+          const state: TimerState = JSON.parse(stored);
+          const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
+
+          if (remaining <= 0) {
+            setSeconds(0);
+            setIsRunning(false);
+            setIsFinished(true);
+            setFinishedAt(Date.now());
+            localStorage.removeItem(TIMER_STORAGE_KEY);
+            if (!hasPlayedAlarm.current) {
+              hasPlayedAlarm.current = true;
+              playAlarm();
+              onCompleteRef.current?.();
             }
+          } else {
+            setSeconds(remaining);
           }
-        } catch (e) {
+        } else {
+          // Fallback: decrement using state if localStorage is unavailable
           setSeconds((prev) => {
             if (prev <= 1) {
               setTimeout(() => {
@@ -182,13 +187,32 @@ export function useRestTimer({
             return prev - 1;
           });
         }
-      }, 250);
-    }
+      } catch (e) {
+        // Error fallback: decrement using state
+        setSeconds((prev) => {
+          if (prev <= 1) {
+            setTimeout(() => {
+              setIsRunning(false);
+              setIsFinished(true);
+              setFinishedAt(Date.now());
+              if (!hasPlayedAlarm.current) {
+                hasPlayedAlarm.current = true;
+                playAlarm();
+                onCompleteRef.current?.();
+              }
+            }, 0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }
+    }, 250);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, seconds, playAlarm]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning, playAlarm]);
 
   const toggle = useCallback(() => {
     if (isRunning) {
