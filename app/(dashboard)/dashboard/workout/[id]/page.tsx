@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
-import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { useRestTimer } from '@/hooks/useRestTimer';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -366,7 +367,7 @@ export default function WorkoutPage() {
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
-  const [restTimerSeconds, setRestTimerSeconds] = useState<number | null>(null); // Custom rest time (for warmups)
+  const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
@@ -437,6 +438,15 @@ export default function WorkoutPage() {
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
+
+  // Rest timer hook
+  const restTimer = useRestTimer({
+    defaultSeconds: restTimerDuration ?? currentBlock?.targetRestSeconds ?? 180,
+    autoStart: false,
+    onComplete: () => {
+      // Timer completed - could optionally auto-dismiss
+    },
+  });
 
   // Load workout data
   useEffect(() => {
@@ -1108,6 +1118,8 @@ export default function WorkoutPage() {
       setCompletedSets(prevSets => [...prevSets, newSet]);
       setCurrentSetNumber(prev => prev + 1);
       setShowRestTimer(true);
+      setRestTimerDuration(null); // Use default rest time for working sets
+      restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       setError(null);
     } catch (err) {
       console.error('Failed to save set:', err);
@@ -1648,6 +1660,7 @@ export default function WorkoutPage() {
       setCurrentBlockIndex(currentBlockIndex + 1);
       setCurrentSetNumber(1);
       setShowRestTimer(false);
+      restTimer.dismiss();
     }
   };
 
@@ -2483,18 +2496,18 @@ export default function WorkoutPage() {
         </Card>
       )}
 
-      {/* Rest timer - fixed position overlay, no layout shift */}
+      {/* Rest timer control panel - fixed at bottom */}
       {showRestTimer && (
-        <RestTimer
-          defaultSeconds={restTimerSeconds ?? currentBlock.targetRestSeconds}
-          autoStart
-          onComplete={() => {
+        <RestTimerControlPanel
+          isRunning={restTimer.isRunning}
+          isFinished={restTimer.isFinished}
+          onToggle={restTimer.toggle}
+          onAddTime={restTimer.addTime}
+          onReset={restTimer.reset}
+          onSkip={() => {
+            restTimer.skip();
             setShowRestTimer(false);
-            setRestTimerSeconds(null); // Reset to default for next time
-          }}
-          onDismiss={() => {
-            setShowRestTimer(false);
-            setRestTimerSeconds(null);
+            setRestTimerDuration(null);
           }}
         />
       )}
@@ -2710,12 +2723,17 @@ export default function WorkoutPage() {
                     onSetComplete={(data) => {
                       handleSetComplete(data);
                       setAddingExtraSet(null);
-                      setRestTimerSeconds(null); // Use default working set rest time
                     }}
                     onWarmupComplete={(restSeconds) => {
-                      setRestTimerSeconds(restSeconds);
+                      setRestTimerDuration(restSeconds);
                       setShowRestTimer(true);
+                      restTimer.start(restSeconds);
                     }}
+                    showRestTimer={showRestTimer && isCurrent}
+                    timerSeconds={restTimer.seconds}
+                    timerInitialSeconds={restTimer.initialSeconds}
+                    timerIsRunning={restTimer.isRunning}
+                    timerIsFinished={restTimer.isFinished}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
