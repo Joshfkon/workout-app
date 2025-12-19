@@ -1156,18 +1156,25 @@ export default function WorkoutPage() {
   };
 
   const handleDeleteSet = async (setId: string) => {
-    // Remove from local state
-    const setToDelete = completedSets.find(s => s.id === setId);
-    if (!setToDelete) return;
-    
-    setCompletedSets(completedSets.filter(set => set.id !== setId));
-    
-    // Renumber remaining sets for the same block
-    const blockSets = completedSets.filter(s => s.exerciseBlockId === setToDelete.exerciseBlockId && s.id !== setId);
-    blockSets.forEach((set, idx) => {
-      set.setNumber = idx + 1;
+    // Remove from local state using functional update to avoid stale closure
+    setCompletedSets(prevSets => {
+      const setToDelete = prevSets.find(s => s.id === setId);
+      if (!setToDelete) return prevSets;
+
+      // Filter out the deleted set and renumber remaining sets in the same block
+      const filteredSets = prevSets.filter(set => set.id !== setId);
+      const blockId = setToDelete.exerciseBlockId;
+
+      // Renumber sets in the same block (immutably)
+      let blockSetNumber = 1;
+      return filteredSets.map(set => {
+        if (set.exerciseBlockId === blockId && !set.isWarmup) {
+          return { ...set, setNumber: blockSetNumber++ };
+        }
+        return set;
+      });
     });
-    
+
     // Delete from database
     try {
       const supabase = createUntypedClient();
@@ -2704,7 +2711,6 @@ export default function WorkoutPage() {
                       handleSetComplete(data);
                       setAddingExtraSet(null);
                       setRestTimerSeconds(null); // Use default working set rest time
-                      setShowRestTimer(true);
                     }}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerSeconds(restSeconds);
