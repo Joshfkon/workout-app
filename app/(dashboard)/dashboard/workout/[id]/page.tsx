@@ -1496,7 +1496,7 @@ export default function WorkoutPage() {
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-    }, 500);
+    }, 700); // 700ms long press to activate drag
   }, [allCollapsed, collapsedBlocks]);
 
   const handleBlockLongPressEnd = useCallback(() => {
@@ -2799,7 +2799,7 @@ export default function WorkoutPage() {
 
       {/* All exercises list */}
       <div className="space-y-4" ref={exerciseListRef}>
-        <p className="text-xs text-surface-500">💡 Long-press to drag reorder</p>
+        <p className="text-xs text-surface-500">💡 Hold the ≡ handle to drag reorder</p>
         {blocks.map((block, index) => {
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
@@ -2841,21 +2841,6 @@ export default function WorkoutPage() {
               } ${isInSuperset ? 'border-l-2 border-cyan-500/50 pl-2' : ''} ${
                 isBeingDragged ? 'opacity-0 pointer-events-none' : ''
               }`}
-              onTouchStart={(e) => handleBlockLongPressStart(index, e.touches[0].clientY)}
-              onTouchEnd={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
-              onTouchMove={(e) => {
-                if (!isDraggingBlock) return;
-                e.preventDefault();
-                const touch = e.touches[0];
-                handleBlockDragMove(touch.clientY);
-              }}
-              onMouseDown={(e) => handleBlockLongPressStart(index, e.clientY)}
-              onMouseUp={() => { handleBlockLongPressEnd(); handleBlockDragEnd(); }}
-              onMouseMove={(e) => {
-                if (!isDraggingBlock) return;
-                handleBlockDragMove(e.clientY);
-              }}
-              onMouseLeave={handleBlockLongPressEnd}
               onClick={(e) => {
                 // Only activate if not already current and click wasn't on an interactive element
                 if (!isCurrent && !isDraggingBlock) {
@@ -2872,14 +2857,33 @@ export default function WorkoutPage() {
               <div 
                 className={`flex items-center gap-3 mb-2 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
-                {/* Drag handle */}
-                <div 
+                {/* Drag handle - long press here to reorder */}
+                <div
                   data-drag-handle
-                  className="flex flex-col gap-0.5 text-surface-500 cursor-grab active:cursor-grabbing p-1"
+                  className="flex flex-col gap-0.5 text-surface-500 cursor-grab active:cursor-grabbing p-2 -m-1 touch-none"
+                  onTouchStart={(e) => {
+                    e.stopPropagation();
+                    handleBlockLongPressStart(index, e.touches[0].clientY);
+                  }}
+                  onTouchEnd={(e) => {
+                    e.stopPropagation();
+                    handleBlockLongPressEnd();
+                    handleBlockDragEnd();
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleBlockLongPressStart(index, e.clientY);
+                  }}
+                  onMouseUp={(e) => {
+                    e.stopPropagation();
+                    handleBlockLongPressEnd();
+                    handleBlockDragEnd();
+                  }}
+                  onMouseLeave={handleBlockLongPressEnd}
                 >
-                  <div className="w-4 h-0.5 bg-current rounded" />
-                  <div className="w-4 h-0.5 bg-current rounded" />
-                  <div className="w-4 h-0.5 bg-current rounded" />
+                  <div className="w-5 h-0.5 bg-current rounded" />
+                  <div className="w-5 h-0.5 bg-current rounded" />
+                  <div className="w-5 h-0.5 bg-current rounded" />
                 </div>
                 
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
