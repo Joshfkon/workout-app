@@ -368,6 +368,7 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
+  const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(true);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
@@ -1146,6 +1147,7 @@ export default function WorkoutPage() {
       setCompletedSets(prevSets => [...prevSets, newSet]);
       setCurrentSetNumber(prev => prev + 1);
       setShowRestTimer(true);
+      setRestTimerPanelVisible(true); // Show panel when timer starts
       setRestTimerDuration(null); // Use default rest time for working sets
       restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       setError(null);
@@ -2621,6 +2623,8 @@ export default function WorkoutPage() {
             setShowRestTimer(false);
             setRestTimerDuration(null);
           }}
+          isVisible={restTimerPanelVisible}
+          onVisibilityChange={setRestTimerPanelVisible}
         />
       )}
 
@@ -2839,6 +2843,7 @@ export default function WorkoutPage() {
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
                       setShowRestTimer(true);
+                      setRestTimerPanelVisible(true); // Show panel when timer starts
                       restTimer.start(restSeconds);
                     }}
                     showRestTimer={showRestTimer && isCurrent}
@@ -2846,6 +2851,7 @@ export default function WorkoutPage() {
                     timerInitialSeconds={restTimer.initialSeconds}
                     timerIsRunning={restTimer.isRunning}
                     timerIsFinished={restTimer.isFinished}
+                    onShowTimerControls={() => setRestTimerPanelVisible(true)}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}

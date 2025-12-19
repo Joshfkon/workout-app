@@ -7,6 +7,7 @@ interface InlineRestTimerBarProps {
   initialSeconds: number;
   isRunning: boolean;
   isFinished: boolean;
+  onShowControls?: () => void;
 }
 
 export function InlineRestTimerBar({
@@ -14,15 +15,16 @@ export function InlineRestTimerBar({
   initialSeconds,
   isRunning,
   isFinished,
+  onShowControls,
 }: InlineRestTimerBarProps) {
-  console.log('[TIMER UI] InlineRestTimerBar render', { seconds, initialSeconds, isRunning, isFinished });
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
 
   return (
     <tr>
       <td colSpan={6} className="px-3 py-2">
         <div
-          className={`relative h-10 rounded-lg overflow-hidden border-2 ${
+          onClick={onShowControls}
+          className={`relative h-10 rounded-lg overflow-hidden border-2 cursor-pointer transition-opacity hover:opacity-80 ${
             isFinished
               ? 'border-success-500 bg-success-500/20'
               : 'border-primary-400 bg-primary-500/10'

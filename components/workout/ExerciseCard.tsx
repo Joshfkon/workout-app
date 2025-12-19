@@ -143,6 +143,7 @@ interface ExerciseCardProps {
   timerInitialSeconds?: number;
   timerIsRunning?: boolean;
   timerIsFinished?: boolean;
+  onShowTimerControls?: () => void;
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -174,15 +175,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   timerInitialSeconds = 0,
   timerIsRunning = false,
   timerIsFinished = false,
+  onShowTimerControls,
 }: ExerciseCardProps) {
-  console.log('[TIMER UI] ExerciseCard render', { 
-    showRestTimer, 
-    timerSeconds, 
-    timerInitialSeconds, 
-    timerIsRunning, 
-    timerIsFinished,
-    exerciseName: exercise.name 
-  });
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
@@ -1237,6 +1231,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 initialSeconds={timerInitialSeconds}
                 isRunning={timerIsRunning}
                 isFinished={timerIsFinished}
+                onShowControls={onShowTimerControls}
               />
             )}
 
@@ -1854,6 +1849,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.timerSeconds === nextProps.timerSeconds &&
     prevProps.timerInitialSeconds === nextProps.timerInitialSeconds &&
     prevProps.timerIsRunning === nextProps.timerIsRunning &&
-    prevProps.timerIsFinished === nextProps.timerIsFinished
+    prevProps.timerIsFinished === nextProps.timerIsFinished &&
+    prevProps.onShowTimerControls === nextProps.onShowTimerControls
   );
 });

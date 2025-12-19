@@ -9,6 +9,8 @@ interface RestTimerControlPanelProps {
   onAddTime: (seconds: number) => void;
   onReset: () => void;
   onSkip: () => void;
+  isVisible?: boolean;
+  onVisibilityChange?: (visible: boolean) => void;
 }
 
 export function RestTimerControlPanel({
@@ -18,8 +20,20 @@ export function RestTimerControlPanel({
   onAddTime,
   onReset,
   onSkip,
+  isVisible: externalIsVisible,
+  onVisibilityChange,
 }: RestTimerControlPanelProps) {
-  const [isVisible, setIsVisible] = useState(true);
+  // Use external visibility state if provided, otherwise use internal state
+  const [internalIsVisible, setInternalIsVisible] = useState(true);
+  const isVisible = externalIsVisible !== undefined ? externalIsVisible : internalIsVisible;
+  
+  const setIsVisible = (visible: boolean) => {
+    if (onVisibilityChange) {
+      onVisibilityChange(visible);
+    } else {
+      setInternalIsVisible(visible);
+    }
+  };
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartY, setDragStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
