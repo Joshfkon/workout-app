@@ -136,7 +136,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="min-h-screen bg-surface-950">
+    <div className="min-h-screen bg-surface-950 overflow-x-hidden">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -270,7 +270,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-6">{children}</main>
+        <main className="p-4 lg:p-6 overflow-x-hidden">{children}</main>
       </div>
     </div>
   );

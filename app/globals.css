@@ -30,11 +30,14 @@
     border-color: var(--border);
   }
 
-  /* Prevent zoom on mobile - makes it feel more like a native app */
+  /* Native app-like behavior - prevent zoom, horizontal scroll, and rubber-band effect */
   html {
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
 
   body {
@@ -42,6 +45,22 @@
     font-feature-settings: "rlig" 1, "calt" 1;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Root container for Next.js app - enables proper scrolling while preventing horizontal overflow */
+  #__next,
+  body > div:first-child {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: 100%;
+    width: 100%;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Prevent zoom on input focus (iOS) */
