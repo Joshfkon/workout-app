@@ -359,6 +359,7 @@ export default function WorkoutPage() {
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<WorkoutSession | null>(null);
+  const [justFinished, setJustFinished] = useState(false);
   const [blocks, setBlocks] = useState<ExerciseBlockWithExercise[]>([]);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
@@ -1969,11 +1970,13 @@ export default function WorkoutPage() {
   const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
     try {
       const supabase = createUntypedClient();
+      const completedAt = new Date().toISOString();
+
       await supabase
         .from('workout_sessions')
         .update({
           state: 'completed',
-          completed_at: new Date().toISOString(),
+          completed_at: completedAt,
           session_rpe: data.sessionRpe,
           pump_rating: data.pumpRating,
           session_notes: data.notes,
@@ -1981,7 +1984,19 @@ export default function WorkoutPage() {
         })
         .eq('id', sessionId);
 
-      router.push('/dashboard/history');
+      // Update local session state to show completed summary
+      if (session) {
+        setSession({
+          ...session,
+          state: 'completed',
+          completedAt,
+          sessionRpe: data.sessionRpe,
+          pumpRating: data.pumpRating,
+          sessionNotes: data.notes,
+          completionPercent: 100,
+        });
+        setJustFinished(true);
+      }
     } catch (err) {
       console.error('Failed to complete workout:', err);
       router.push('/dashboard/history');
@@ -2065,10 +2080,25 @@ export default function WorkoutPage() {
           readOnly={isViewingCompleted}
         />
         {isViewingCompleted && (
-          <div className="mt-6 text-center">
-            <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
-              ← Back to History
-            </Button>
+          <div className="mt-8 max-w-lg mx-auto">
+            {justFinished && (
+              <div className="text-center mb-6 p-4 bg-success-500/10 border border-success-500/20 rounded-xl">
+                <div className="flex items-center justify-center gap-2 text-success-400 font-medium">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Workout Saved!
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={() => router.push('/dashboard/history')}>
+                View Workout History
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/dashboard/workout')}>
+                Start New Workout
+              </Button>
+            </div>
           </div>
         )}
       </div>
