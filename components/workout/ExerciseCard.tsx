@@ -1848,6 +1848,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.unit === nextProps.unit &&
     prevProps.recommendedWeight === nextProps.recommendedWeight &&
     prevProps.warmupSets?.length === nextProps.warmupSets?.length &&
-    prevProps.workingWeight === nextProps.workingWeight
+    prevProps.workingWeight === nextProps.workingWeight &&
+    // Timer props - must check these so timer updates trigger re-render
+    prevProps.showRestTimer === nextProps.showRestTimer &&
+    prevProps.timerSeconds === nextProps.timerSeconds &&
+    prevProps.timerInitialSeconds === nextProps.timerInitialSeconds &&
+    prevProps.timerIsRunning === nextProps.timerIsRunning &&
+    prevProps.timerIsFinished === nextProps.timerIsFinished
   );
 });
