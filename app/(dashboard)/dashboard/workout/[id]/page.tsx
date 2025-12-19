@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
@@ -353,7 +353,9 @@ function generateCoachMessage(
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const sessionId = params.id as string;
+  const fromCreate = searchParams.get('fromCreate') === 'true';
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
@@ -1154,18 +1156,25 @@ export default function WorkoutPage() {
   };
 
   const handleDeleteSet = async (setId: string) => {
-    // Remove from local state
-    const setToDelete = completedSets.find(s => s.id === setId);
-    if (!setToDelete) return;
-    
-    setCompletedSets(completedSets.filter(set => set.id !== setId));
-    
-    // Renumber remaining sets for the same block
-    const blockSets = completedSets.filter(s => s.exerciseBlockId === setToDelete.exerciseBlockId && s.id !== setId);
-    blockSets.forEach((set, idx) => {
-      set.setNumber = idx + 1;
+    // Remove from local state using functional update to avoid stale closure
+    setCompletedSets(prevSets => {
+      const setToDelete = prevSets.find(s => s.id === setId);
+      if (!setToDelete) return prevSets;
+
+      // Filter out the deleted set and renumber remaining sets in the same block
+      const filteredSets = prevSets.filter(set => set.id !== setId);
+      const blockId = setToDelete.exerciseBlockId;
+
+      // Renumber sets in the same block (immutably)
+      let blockSetNumber = 1;
+      return filteredSets.map(set => {
+        if (set.exerciseBlockId === blockId && !set.isWarmup) {
+          return { ...set, setNumber: blockSetNumber++ };
+        }
+        return set;
+      });
     });
-    
+
     // Delete from database
     try {
       const supabase = createUntypedClient();
@@ -1989,6 +1998,10 @@ export default function WorkoutPage() {
   };
 
   if (phase === 'loading') {
+    // Skip showing loading screen if coming from quick workout page (already saw one)
+    if (fromCreate) {
+      return null;
+    }
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
         <LoadingAnimation type="random" size="lg" />
@@ -2698,7 +2711,6 @@ export default function WorkoutPage() {
                       handleSetComplete(data);
                       setAddingExtraSet(null);
                       setRestTimerSeconds(null); // Use default working set rest time
-                      setShowRestTimer(true);
                     }}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerSeconds(restSeconds);

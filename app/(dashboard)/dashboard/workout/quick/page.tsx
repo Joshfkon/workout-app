@@ -36,8 +36,8 @@ export default function QuickWorkoutPage() {
         .maybeSingle();
 
       if (existingSession) {
-        // Resume existing workout
-        router.push(`/dashboard/workout/${existingSession.id}`);
+        // Resume existing workout - skip loading screen on destination
+        router.replace(`/dashboard/workout/${existingSession.id}?fromCreate=true`);
         return;
       }
 
@@ -60,8 +60,8 @@ export default function QuickWorkoutPage() {
         return;
       }
 
-      // Go directly to the workout page
-      router.push(`/dashboard/workout/${newSession.id}`);
+      // Go directly to the workout page - skip loading screen on destination
+      router.replace(`/dashboard/workout/${newSession.id}?fromCreate=true`);
     } catch (err) {
       console.error('Error:', err);
       setError('Something went wrong. Please try again.');

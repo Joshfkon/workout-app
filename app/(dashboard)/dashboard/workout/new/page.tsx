@@ -544,8 +544,8 @@ function NewWorkoutContent() {
 
       if (blocksError) throw blocksError;
 
-      // Navigate to the workout
-      router.push(`/dashboard/workout/${session.id}`);
+      // Navigate to the workout - skip loading screen on destination (already saw one)
+      router.replace(`/dashboard/workout/${session.id}?fromCreate=true`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create workout');
       setIsCreating(false);
