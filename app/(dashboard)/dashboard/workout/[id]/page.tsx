@@ -381,10 +381,11 @@ export default function WorkoutPage() {
   const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
   // Floating drag preview state
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-  const [dragStartY, setDragStartY] = useState<number>(0);
+  const [dragTouchOffset, setDragTouchOffset] = useState<number>(0); // Offset from touch point to top of element
   const [draggedBlockRect, setDraggedBlockRect] = useState<DOMRect | null>(null);
   const draggedBlockRef = useRef<HTMLDivElement | null>(null);
   const exerciseListRef = useRef<HTMLDivElement | null>(null);
+  const dragTouchOffsetRef = useRef<number>(0);
   
   // Add exercise modal state
   const [showAddExercise, setShowAddExercise] = useState(false);
@@ -1479,8 +1480,12 @@ export default function WorkoutPage() {
       if (element) {
         const rect = element.getBoundingClientRect();
         setDraggedBlockRect(rect);
-        setDragStartY(clientY);
-        setDragPosition({ x: rect.left, y: clientY - rect.height / 2 });
+        // Calculate offset from touch point to top of element - keeps preview under finger
+        const touchOffset = clientY - rect.top;
+        setDragTouchOffset(touchOffset);
+        dragTouchOffsetRef.current = touchOffset;
+        // Position preview so it stays under the finger
+        setDragPosition({ x: rect.left, y: clientY - touchOffset });
       }
 
       setDraggedBlockIndex(index);
@@ -1527,11 +1532,11 @@ export default function WorkoutPage() {
   const handleBlockDragMove = useCallback((clientY: number) => {
     if (!isDraggingBlock || draggedBlockIndex === null) return;
 
-    // Update floating preview position
+    // Update floating preview position - use touch offset to keep preview under finger
     if (draggedBlockRect) {
       setDragPosition({
         x: draggedBlockRect.left,
-        y: clientY - (draggedBlockRect.height / 2)
+        y: clientY - dragTouchOffset
       });
     }
 
@@ -1540,7 +1545,7 @@ export default function WorkoutPage() {
     if (targetIndex !== dragOverBlockIndex && targetIndex !== draggedBlockIndex) {
       setDragOverBlockIndex(targetIndex);
     }
-  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, calculateDragTargetIndex, dragOverBlockIndex]);
+  }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, dragTouchOffset, calculateDragTargetIndex, dragOverBlockIndex]);
 
   // Use refs to access latest values in document event listeners
   const isDraggingBlockRef = useRef(isDraggingBlock);
@@ -1611,13 +1616,12 @@ export default function WorkoutPage() {
     const handleDocumentMove = (clientY: number) => {
       if (!isDraggingBlockRef.current || draggedBlockIndexRef.current === null) return;
 
-      // Update floating preview position
+      // Update floating preview position - use touch offset to keep preview under finger
       if (draggedBlockRectRef.current) {
-        const newPosition = {
+        setDragPosition({
           x: draggedBlockRectRef.current.left,
-          y: clientY - (draggedBlockRectRef.current.height / 2)
-        };
-        setDragPosition(newPosition);
+          y: clientY - dragTouchOffsetRef.current
+        });
       }
 
       // Calculate which position the item would drop at
