@@ -21,6 +21,8 @@ export function useRestTimer({
   autoStart = false,
   onComplete,
 }: UseRestTimerOptions = {}) {
+  console.log('[TIMER] useRestTimer hook initialized', { defaultSeconds, autoStart });
+  
   const [seconds, setSeconds] = useState(defaultSeconds);
   const [isRunning, setIsRunning] = useState(false);
   const [initialSeconds, setInitialSeconds] = useState(defaultSeconds);
@@ -37,6 +39,11 @@ export function useRestTimer({
   useEffect(() => {
     secondsRef.current = seconds;
   }, [seconds]);
+  
+  // Log state changes
+  useEffect(() => {
+    console.log('[TIMER] state changed', { seconds, isRunning, isFinished, endTimeRef: endTimeRef.current, intervalExists: intervalRef.current !== null });
+  }, [seconds, isRunning, isFinished]);
 
   // Keep onComplete ref updated
   useEffect(() => {
@@ -104,9 +111,12 @@ export function useRestTimer({
   // Main countdown effect - only creates interval when restoring from localStorage
   // The start() function creates the interval directly
   useEffect(() => {
+    console.log('[TIMER] useEffect (isRunning)', { isRunning, intervalExists: intervalRef.current !== null, endTimeRef: endTimeRef.current });
+    
     if (!isRunning) {
       // Clear interval when not running
       if (intervalRef.current) {
+        console.log('[TIMER] useEffect - clearing interval (not running)');
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
@@ -115,6 +125,7 @@ export function useRestTimer({
 
     // If interval already exists (created by start()), don't create another
     if (intervalRef.current) {
+      console.log('[TIMER] useEffect - interval already exists, skipping');
       return;
     }
 
@@ -221,11 +232,15 @@ export function useRestTimer({
   }, []);
 
   const start = useCallback((duration?: number) => {
+    console.log('[TIMER] start() called', { duration, defaultSeconds });
     const durationToUse = duration ?? defaultSeconds;
     const endTime = Date.now() + durationToUse * 1000;
     
+    console.log('[TIMER] start() - setting up timer', { durationToUse, endTime, currentTime: Date.now() });
+    
     // Clear any existing interval
     if (intervalRef.current) {
+      console.log('[TIMER] start() - clearing existing interval');
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
@@ -237,18 +252,30 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     saveTimerState(endTime, durationToUse);
     
+    console.log('[TIMER] start() - creating interval, endTimeRef:', endTimeRef.current);
+    
     // Create the countdown interval immediately
     intervalRef.current = setInterval(() => {
       const currentEndTime = endTimeRef.current;
+      const now = Date.now();
+      
+      console.log('[TIMER] interval tick', { 
+        currentEndTime, 
+        now, 
+        intervalExists: intervalRef.current !== null
+      });
+      
       if (currentEndTime === null) {
+        console.log('[TIMER] interval tick - endTime is null, stopping');
         setIsRunning(false);
         return;
       }
 
-      const now = Date.now();
       const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
+      console.log('[TIMER] interval tick - calculated remaining', { remaining });
 
       if (remaining <= 0) {
+        console.log('[TIMER] interval tick - timer finished');
         // Timer finished
         setSeconds(0);
         setIsRunning(false);
@@ -269,22 +296,29 @@ export function useRestTimer({
         }
       } else {
         // Update seconds display
+        console.log('[TIMER] interval tick - updating seconds to', remaining);
         setSeconds(remaining);
       }
     }, 1000);
     
+    console.log('[TIMER] start() - interval created', { intervalRef: intervalRef.current });
+    
     // Set isRunning after creating the interval
     setIsRunning(true);
+    console.log('[TIMER] start() - set isRunning to true');
   }, [defaultSeconds, saveTimerState, clearTimerState, playAlarm]);
 
   const toggle = useCallback(() => {
+    console.log('[TIMER] toggle() called', { isRunning, seconds, endTimeRef: endTimeRef.current });
     if (isRunning) {
       // Pause
+      console.log('[TIMER] toggle() - pausing');
       setIsRunning(false);
       endTimeRef.current = null;
       clearTimerState();
     } else {
       // Resume/Start
+      console.log('[TIMER] toggle() - starting/resuming');
       const restartSeconds = secondsRef.current > 0
         ? secondsRef.current
         : (initialSeconds > 0 ? initialSeconds : defaultSeconds);
@@ -305,16 +339,21 @@ export function useRestTimer({
   }, [initialSeconds, clearTimerState, defaultSeconds]);
 
   const addTime = useCallback((amount: number) => {
+    console.log('[TIMER] addTime() called', { amount, isRunning, endTimeRef: endTimeRef.current, seconds });
     setIsFinished(false);
 
     if (isRunning && endTimeRef.current !== null) {
       // When running, adjust the endTime
-      const newEndTime = endTimeRef.current + (amount * 1000);
+      const oldEndTime = endTimeRef.current;
+      const newEndTime = oldEndTime + (amount * 1000);
       endTimeRef.current = newEndTime;
+      
+      console.log('[TIMER] addTime() - adjusting endTime', { oldEndTime, newEndTime, amount });
       
       // Immediately update the display
       const now = Date.now();
       const newRemaining = Math.max(0, Math.ceil((newEndTime - now) / 1000));
+      console.log('[TIMER] addTime() - updating display', { newRemaining, now });
       setSeconds(newRemaining);
       
       // Update localStorage
@@ -322,6 +361,7 @@ export function useRestTimer({
     } else {
       // When not running, just update the seconds state
       const newSeconds = Math.max(0, seconds + amount);
+      console.log('[TIMER] addTime() - timer not running, updating seconds', { oldSeconds: seconds, newSeconds });
       setSeconds(newSeconds);
       setInitialSeconds(newSeconds || defaultSeconds);
     }
