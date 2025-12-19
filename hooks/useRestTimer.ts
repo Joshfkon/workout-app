@@ -27,11 +27,16 @@ export function useRestTimer({
   const [isFinished, setIsFinished] = useState(false);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [timeSinceFinished, setTimeSinceFinished] = useState(0);
-  
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const endTimeRef = useRef<number | null>(null);
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const secondsRef = useRef(defaultSeconds);
+
+  useEffect(() => {
+    secondsRef.current = seconds;
+  }, [seconds]);
 
   // Keep onComplete ref updated
   useEffect(() => {
@@ -280,20 +285,24 @@ export function useRestTimer({
       clearTimerState();
     } else {
       // Resume/Start
-      start(seconds);
+      const restartSeconds = secondsRef.current > 0
+        ? secondsRef.current
+        : (initialSeconds > 0 ? initialSeconds : defaultSeconds);
+      start(restartSeconds);
     }
     setIsFinished(false);
-  }, [isRunning, seconds, start, clearTimerState]);
+  }, [isRunning, start, clearTimerState, initialSeconds, defaultSeconds]);
 
   const reset = useCallback(() => {
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
-    setSeconds(initialSeconds);
+    const resetSeconds = initialSeconds > 0 ? initialSeconds : defaultSeconds;
+    setSeconds(resetSeconds);
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     clearTimerState();
-  }, [initialSeconds, clearTimerState]);
+  }, [initialSeconds, clearTimerState, defaultSeconds]);
 
   const addTime = useCallback((amount: number) => {
     setIsFinished(false);
@@ -314,8 +323,9 @@ export function useRestTimer({
       // When not running, just update the seconds state
       const newSeconds = Math.max(0, seconds + amount);
       setSeconds(newSeconds);
+      setInitialSeconds(newSeconds || defaultSeconds);
     }
-  }, [seconds, isRunning, initialSeconds, saveTimerState]);
+  }, [seconds, isRunning, initialSeconds, saveTimerState, defaultSeconds]);
 
   const skip = useCallback(() => {
     setIsRunning(false);
@@ -338,7 +348,9 @@ export function useRestTimer({
     clearTimerState();
   }, [defaultSeconds, clearTimerState]);
 
-  const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
+  const progressPercent = initialSeconds > 0
+    ? ((initialSeconds - seconds) / initialSeconds) * 100
+    : 0;
   const isUrgent = seconds <= 10 && seconds > 0 && isRunning;
 
   return {
