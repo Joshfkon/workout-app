@@ -27,18 +27,13 @@ export function useRestTimer({
   const [isFinished, setIsFinished] = useState(false);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [timeSinceFinished, setTimeSinceFinished] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const endTimeRef = useRef<number | null>(null);
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
-  const endTimeRef = useRef<number | null>(null);
-  // Use ref to track seconds for the interval callback to avoid stale closures
-  const secondsRef = useRef(seconds);
 
-  // Keep secondsRef in sync
-  useEffect(() => {
-    secondsRef.current = seconds;
-  }, [seconds]);
-
+  // Keep onComplete ref updated
   useEffect(() => {
     onCompleteRef.current = onComplete;
   }, [onComplete]);
@@ -92,77 +87,97 @@ export function useRestTimer({
     }
   }, []);
 
-  const saveTimerState = useCallback((running: boolean, endTime: number, duration: number) => {
-    if (running) {
-      const state: TimerState = { endTime, duration, isRunning: true };
-      localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(state));
-    } else {
-      localStorage.removeItem(TIMER_STORAGE_KEY);
-    }
+  const saveTimerState = useCallback((endTime: number, duration: number) => {
+    const state: TimerState = { endTime, duration, isRunning: true };
+    localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(state));
   }, []);
 
-  // Clear interval helper
-  const clearTimerInterval = useCallback(() => {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  // Handle timer completion
-  const handleTimerComplete = useCallback(() => {
-    const now = Date.now();
-    setSeconds(0);
-    setIsRunning(false);
-    setIsFinished(true);
-    setFinishedAt(now);
-    endTimeRef.current = null;
+  const clearTimerState = useCallback(() => {
     localStorage.removeItem(TIMER_STORAGE_KEY);
-    clearTimerInterval();
+  }, []);
 
-    if (!hasPlayedAlarm.current) {
-      hasPlayedAlarm.current = true;
-      playAlarm();
-      onCompleteRef.current?.();
-    }
-  }, [clearTimerInterval, playAlarm]);
-
-  // Core timer tick function - reads from ref to avoid stale closures
-  const tick = useCallback(() => {
-    const currentEndTime = endTimeRef.current;
-    if (currentEndTime === null) {
+  // Main countdown effect - only creates interval when restoring from localStorage
+  // The start() function creates the interval directly
+  useEffect(() => {
+    if (!isRunning) {
+      // Clear interval when not running
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
-    const now = Date.now();
-    const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
-
-    if (remaining <= 0) {
-      handleTimerComplete();
-    } else {
-      setSeconds(remaining);
+    // If interval already exists (created by start()), don't create another
+    if (intervalRef.current) {
+      return;
     }
-  }, [handleTimerComplete]);
 
-  // Start timer with a specific duration
-  const startTimer = useCallback((duration: number) => {
-    // Clear any existing interval first
-    clearTimerInterval();
+    // Only create interval here if we're restoring from localStorage
+    // Ensure we have an endTime
+    if (endTimeRef.current === null) {
+      // Try to restore from localStorage
+      try {
+        const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+        if (stored) {
+          const state: TimerState = JSON.parse(stored);
+          endTimeRef.current = state.endTime;
+        } else {
+          // No endTime available, stop
+          setIsRunning(false);
+          return;
+        }
+      } catch (e) {
+        setIsRunning(false);
+        return;
+      }
+    }
 
-    const endTime = Date.now() + duration * 1000;
-    endTimeRef.current = endTime;
-    setSeconds(duration);
-    setInitialSeconds(duration);
-    setIsFinished(false);
-    setIsRunning(true);
-    hasPlayedAlarm.current = false;
-    saveTimerState(true, endTime, duration);
+    // Create the countdown interval (only for restored timers)
+    intervalRef.current = setInterval(() => {
+      const currentEndTime = endTimeRef.current;
+      if (currentEndTime === null) {
+        setIsRunning(false);
+        return;
+      }
 
-    // Create the interval
-    intervalRef.current = setInterval(tick, 1000);
-  }, [clearTimerInterval, saveTimerState, tick]);
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
 
-  // Load timer state from localStorage on mount
+      if (remaining <= 0) {
+        // Timer finished
+        setSeconds(0);
+        setIsRunning(false);
+        setIsFinished(true);
+        setFinishedAt(now);
+        endTimeRef.current = null;
+        clearTimerState();
+        
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        
+        if (!hasPlayedAlarm.current) {
+          hasPlayedAlarm.current = true;
+          playAlarm();
+          onCompleteRef.current?.();
+        }
+      } else {
+        // Update seconds display
+        setSeconds(remaining);
+      }
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isRunning, playAlarm, clearTimerState]);
+
+  // Restore timer state on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(TIMER_STORAGE_KEY);
@@ -172,23 +187,19 @@ export function useRestTimer({
         const remaining = Math.ceil((state.endTime - now) / 1000);
 
         if (state.isRunning && remaining > 0) {
-          // Restore running timer
           endTimeRef.current = state.endTime;
           setSeconds(remaining);
           setInitialSeconds(state.duration);
           setIsRunning(true);
           hasPlayedAlarm.current = false;
-          // Start the interval for restored timer
-          intervalRef.current = setInterval(tick, 1000);
         } else if (state.isRunning && remaining <= 0) {
-          // Timer finished while away
           setSeconds(0);
           setInitialSeconds(state.duration);
           setIsRunning(false);
           setIsFinished(true);
           setFinishedAt(state.endTime);
           endTimeRef.current = null;
-          localStorage.removeItem(TIMER_STORAGE_KEY);
+          clearTimerState();
           if (!hasPlayedAlarm.current) {
             hasPlayedAlarm.current = true;
             playAlarm();
@@ -196,96 +207,127 @@ export function useRestTimer({
           }
         }
       } else if (autoStart) {
-        startTimer(defaultSeconds);
+        start(defaultSeconds);
       }
     } catch (e) {
       console.log('Could not restore timer state');
     }
-
-    // Cleanup on unmount
-    return () => {
-      clearTimerInterval();
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cleanup interval when isRunning becomes false
-  useEffect(() => {
-    if (!isRunning) {
-      clearTimerInterval();
+  const start = useCallback((duration?: number) => {
+    const durationToUse = duration ?? defaultSeconds;
+    const endTime = Date.now() + durationToUse * 1000;
+    
+    // Clear any existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
-  }, [isRunning, clearTimerInterval]);
+    
+    endTimeRef.current = endTime;
+    setSeconds(durationToUse);
+    setInitialSeconds(durationToUse);
+    setIsFinished(false);
+    hasPlayedAlarm.current = false;
+    saveTimerState(endTime, durationToUse);
+    
+    // Create the countdown interval immediately
+    intervalRef.current = setInterval(() => {
+      const currentEndTime = endTimeRef.current;
+      if (currentEndTime === null) {
+        setIsRunning(false);
+        return;
+      }
+
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
+
+      if (remaining <= 0) {
+        // Timer finished
+        setSeconds(0);
+        setIsRunning(false);
+        setIsFinished(true);
+        setFinishedAt(now);
+        endTimeRef.current = null;
+        clearTimerState();
+        
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        
+        if (!hasPlayedAlarm.current) {
+          hasPlayedAlarm.current = true;
+          playAlarm();
+          onCompleteRef.current?.();
+        }
+      } else {
+        // Update seconds display
+        setSeconds(remaining);
+      }
+    }, 1000);
+    
+    // Set isRunning after creating the interval
+    setIsRunning(true);
+  }, [defaultSeconds, saveTimerState, clearTimerState, playAlarm]);
 
   const toggle = useCallback(() => {
     if (isRunning) {
       // Pause
       setIsRunning(false);
-      clearTimerInterval();
       endTimeRef.current = null;
-      localStorage.removeItem(TIMER_STORAGE_KEY);
+      clearTimerState();
     } else {
-      // Start/Resume - use current seconds value from ref
-      startTimer(secondsRef.current);
+      // Resume/Start
+      start(seconds);
     }
     setIsFinished(false);
-  }, [isRunning, startTimer, clearTimerInterval]);
+  }, [isRunning, seconds, start, clearTimerState]);
 
   const reset = useCallback(() => {
-    clearTimerInterval();
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
     setSeconds(initialSeconds);
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
-    localStorage.removeItem(TIMER_STORAGE_KEY);
-  }, [initialSeconds, clearTimerInterval]);
+    clearTimerState();
+  }, [initialSeconds, clearTimerState]);
 
   const addTime = useCallback((amount: number) => {
     setIsFinished(false);
 
-    if (endTimeRef.current !== null) {
-      // Timer is running or was running - update the end time
+    if (isRunning && endTimeRef.current !== null) {
+      // When running, adjust the endTime
       const newEndTime = endTimeRef.current + (amount * 1000);
+      endTimeRef.current = newEndTime;
+      
+      // Immediately update the display
       const now = Date.now();
       const newRemaining = Math.max(0, Math.ceil((newEndTime - now) / 1000));
-
-      if (newRemaining <= 0) {
-        // Would go negative, just set to minimum
-        endTimeRef.current = now + 1000; // 1 second minimum
-        setSeconds(1);
-        saveTimerState(true, now + 1000, initialSeconds);
-      } else {
-        endTimeRef.current = newEndTime;
-        setSeconds(newRemaining);
-        saveTimerState(true, newEndTime, initialSeconds);
-      }
+      setSeconds(newRemaining);
+      
+      // Update localStorage
+      saveTimerState(newEndTime, initialSeconds);
     } else {
-      // Timer not started yet - just update the display seconds
-      const currentSeconds = secondsRef.current;
-      const newSeconds = Math.max(1, currentSeconds + amount);
+      // When not running, just update the seconds state
+      const newSeconds = Math.max(0, seconds + amount);
       setSeconds(newSeconds);
-      setInitialSeconds(newSeconds);
     }
-  }, [initialSeconds, saveTimerState]);
+  }, [seconds, isRunning, initialSeconds, saveTimerState]);
 
   const skip = useCallback(() => {
-    clearTimerInterval();
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
     setSeconds(0);
     endTimeRef.current = null;
-    localStorage.removeItem(TIMER_STORAGE_KEY);
+    clearTimerState();
     onCompleteRef.current?.();
-  }, [clearTimerInterval]);
-
-  const start = useCallback((duration?: number) => {
-    startTimer(duration ?? defaultSeconds);
-  }, [defaultSeconds, startTimer]);
+  }, [clearTimerState]);
 
   const dismiss = useCallback(() => {
-    clearTimerInterval();
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
@@ -293,8 +335,8 @@ export function useRestTimer({
     setInitialSeconds(defaultSeconds);
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
-    localStorage.removeItem(TIMER_STORAGE_KEY);
-  }, [defaultSeconds, clearTimerInterval]);
+    clearTimerState();
+  }, [defaultSeconds, clearTimerState]);
 
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
   const isUrgent = seconds <= 10 && seconds > 0 && isRunning;
