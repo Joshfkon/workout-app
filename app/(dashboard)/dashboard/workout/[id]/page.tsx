@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimer, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
@@ -353,7 +353,9 @@ function generateCoachMessage(
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const sessionId = params.id as string;
+  const fromCreate = searchParams.get('fromCreate') === 'true';
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
@@ -1989,6 +1991,10 @@ export default function WorkoutPage() {
   };
 
   if (phase === 'loading') {
+    // Skip showing loading screen if coming from quick workout page (already saw one)
+    if (fromCreate) {
+      return null;
+    }
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
         <LoadingAnimation type="random" size="lg" />
