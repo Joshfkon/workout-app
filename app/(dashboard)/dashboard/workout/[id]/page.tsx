@@ -2163,7 +2163,7 @@ export default function WorkoutPage() {
 
         {/* Empty state hint */}
         <div className="text-center py-12 text-surface-500">
-          <p>Tap <span className="text-primary-400 font-medium">+ Add</span> to add exercises</p>
+          <p>Tap <button onClick={handleOpenAddExercise} className="text-primary-400 font-medium hover:text-primary-300 underline cursor-pointer">+ Add</button> to add exercises</p>
         </div>
 
         {/* Add Exercise Modal */}
