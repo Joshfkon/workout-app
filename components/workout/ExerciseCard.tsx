@@ -1297,18 +1297,19 @@ export const ExerciseCard = memo(function ExerciseCard({
             {isActive && pendingInputs.map((input, index) => {
               const setNumber = completedSets.length + index + 1;
               const qualityPreview = getQualityPreview(input);
-              
+              const pendingId = `pending-set-${setNumber}`;
+
               return (
-                <tr 
-                  key={`pending-${index}`} 
+                <tr
+                  key={pendingId}
                   className="bg-surface-800/30 relative overflow-hidden"
-                  onTouchStart={(e) => handleTouchStart(`pending-${index}`, e)}
+                  onTouchStart={(e) => handleTouchStart(pendingId, e)}
                   onTouchMove={handleTouchMove}
-                  onTouchEnd={() => handleTouchEnd(`pending-${index}`, false)}
-                  style={getSwipeTransform(`pending-${index}`)}
+                  onTouchEnd={() => handleTouchEnd(pendingId, false)}
+                  style={getSwipeTransform(pendingId)}
                 >
                   {/* Delete reveal background */}
-                  {swipeState.setId === `pending-${index}` && swipeState.isSwiping && (
+                  {swipeState.setId === pendingId && swipeState.isSwiping && (
                     <div 
                       className="absolute right-0 top-0 bottom-0 w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
                     >
@@ -1386,16 +1387,19 @@ export const ExerciseCard = memo(function ExerciseCard({
             })}
             
             {/* Show placeholder rows when not active */}
-            {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => (
-              <tr key={`inactive-${i}`} className="bg-surface-800/20">
-                <td className="px-3 py-2.5 text-surface-500">{completedSets.length + i + 1}</td>
+            {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
+              const inactiveSetNumber = completedSets.length + i + 1;
+              return (
+              <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
+                <td className="px-3 py-2.5 text-surface-500">{inactiveSetNumber}</td>
                 <td className="px-2 py-2.5 text-center text-surface-600">—</td>
                 <td className="px-2 py-2.5 text-center text-surface-600">—</td>
                 <td className="px-2 py-2.5 text-center text-surface-600">—</td>
                 <td className="px-3 py-2.5 text-center text-surface-600">—</td>
                 <td className="px-2 py-2.5"></td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
