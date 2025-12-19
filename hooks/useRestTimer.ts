@@ -109,14 +109,15 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     saveTimerState(true, endTime, duration);
     
-    // Start the interval immediately
-    intervalRef.current = setInterval(() => {
-      if (endTimeRef.current === null) {
+    // Start the interval immediately - use a function that always reads current ref
+    const updateTimer = () => {
+      const currentEndTime = endTimeRef.current;
+      if (currentEndTime === null) {
         return;
       }
 
       const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
+      const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
 
       if (remaining <= 0) {
         setSeconds(0);
@@ -137,7 +138,12 @@ export function useRestTimer({
       } else {
         setSeconds(remaining);
       }
-    }, 1000);
+    };
+    
+    intervalRef.current = setInterval(updateTimer, 1000);
+    
+    // Run updateTimer immediately to set initial state
+    updateTimer();
     
     // Set isRunning to trigger any dependent effects
     setIsRunning(true);
@@ -219,13 +225,14 @@ export function useRestTimer({
     }
 
     // Start the interval if it doesn't exist (e.g., restored from localStorage)
-    intervalRef.current = setInterval(() => {
-      if (endTimeRef.current === null) {
+    const updateTimer = () => {
+      const currentEndTime = endTimeRef.current;
+      if (currentEndTime === null) {
         return;
       }
 
       const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((endTimeRef.current - now) / 1000));
+      const remaining = Math.max(0, Math.ceil((currentEndTime - now) / 1000));
 
       if (remaining <= 0) {
         setSeconds(0);
@@ -246,7 +253,9 @@ export function useRestTimer({
       } else {
         setSeconds(remaining);
       }
-    }, 1000);
+    };
+    
+    intervalRef.current = setInterval(updateTimer, 1000);
 
     return () => {
       if (intervalRef.current) {
@@ -279,14 +288,20 @@ export function useRestTimer({
   }, [initialSeconds]);
 
   const addTime = useCallback((amount: number) => {
-    const newSeconds = Math.max(0, seconds + amount);
-    setSeconds(newSeconds);
     setIsFinished(false);
 
-    if (isRunning) {
-      const endTime = Date.now() + newSeconds * 1000;
-      endTimeRef.current = endTime;
-      saveTimerState(true, endTime, initialSeconds);
+    if (isRunning && endTimeRef.current !== null) {
+      // When running, add time to the current endTime
+      const newEndTime = endTimeRef.current + (amount * 1000);
+      endTimeRef.current = newEndTime;
+      const now = Date.now();
+      const newRemaining = Math.max(0, Math.ceil((newEndTime - now) / 1000));
+      setSeconds(newRemaining);
+      saveTimerState(true, newEndTime, initialSeconds);
+    } else {
+      // When not running, just update the seconds state
+      const newSeconds = Math.max(0, seconds + amount);
+      setSeconds(newSeconds);
     }
   }, [seconds, isRunning, initialSeconds, saveTimerState]);
 
