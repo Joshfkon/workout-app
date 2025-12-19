@@ -1467,7 +1467,9 @@ export default function WorkoutPage() {
 
   // Long press handlers for drag reorder
   const handleBlockLongPressStart = useCallback((index: number, clientY: number) => {
+    console.log('[DRAG] Long press START on index:', index, 'clientY:', clientY);
     longPressTimerRef.current = setTimeout(() => {
+      console.log('[DRAG] Long press TIMER FIRED - activating drag mode for index:', index);
       // Save current collapse state before collapsing all for drag mode
       preCollapseStateRef.current = {
         allCollapsed,
@@ -1476,8 +1478,10 @@ export default function WorkoutPage() {
 
       // Get the element being dragged and its dimensions
       const element = document.querySelector(`[data-block-index="${index}"]`) as HTMLElement;
+      console.log('[DRAG] Found element:', element);
       if (element) {
         const rect = element.getBoundingClientRect();
+        console.log('[DRAG] Element rect:', rect);
         setDraggedBlockRect(rect);
         setDragStartY(clientY);
         setDragPosition({ x: rect.left, y: clientY - rect.height / 2 });
@@ -1495,7 +1499,9 @@ export default function WorkoutPage() {
   }, [allCollapsed, collapsedBlocks]);
 
   const handleBlockLongPressEnd = useCallback(() => {
+    console.log('[DRAG] Long press END called');
     if (longPressTimerRef.current) {
+      console.log('[DRAG] Clearing long press timer (drag not activated)');
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
@@ -1525,27 +1531,38 @@ export default function WorkoutPage() {
   }, [draggedBlockIndex, blocks.length]);
 
   const handleBlockDragMove = useCallback((clientY: number) => {
-    if (!isDraggingBlock || draggedBlockIndex === null) return;
+    if (!isDraggingBlock || draggedBlockIndex === null) {
+      return;
+    }
+    console.log('[DRAG] Move - clientY:', clientY, 'isDraggingBlock:', isDraggingBlock, 'draggedBlockIndex:', draggedBlockIndex);
 
     // Update floating preview position
     if (draggedBlockRect) {
-      setDragPosition({
+      const newPosition = {
         x: draggedBlockRect.left,
         y: clientY - (draggedBlockRect.height / 2)
-      });
+      };
+      console.log('[DRAG] Setting drag position:', newPosition);
+      setDragPosition(newPosition);
+    } else {
+      console.log('[DRAG] No draggedBlockRect available');
     }
 
     // Calculate which position the item would drop at
     const targetIndex = calculateDragTargetIndex(clientY);
+    console.log('[DRAG] Target index:', targetIndex, 'current dragOverBlockIndex:', dragOverBlockIndex);
     if (targetIndex !== dragOverBlockIndex && targetIndex !== draggedBlockIndex) {
       setDragOverBlockIndex(targetIndex);
     }
   }, [isDraggingBlock, draggedBlockIndex, draggedBlockRect, calculateDragTargetIndex, dragOverBlockIndex]);
 
   const handleBlockDragEnd = useCallback(async () => {
+    console.log('[DRAG] Drag END called - draggedBlockIndex:', draggedBlockIndex, 'dragOverBlockIndex:', dragOverBlockIndex);
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
+    console.log('[DRAG] Final target index:', finalTargetIndex);
 
     if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
+      console.log('[DRAG] Reordering from', draggedBlockIndex, 'to', finalTargetIndex);
       const newBlocks = [...blocks];
       const [removed] = newBlocks.splice(draggedBlockIndex, 1);
       newBlocks.splice(finalTargetIndex, 0, removed);
@@ -3117,6 +3134,16 @@ export default function WorkoutPage() {
           );
         })}
       </div>
+
+      {/* Debug overlay - remove after testing */}
+      {isDraggingBlock && (
+        <div className="fixed top-4 left-4 bg-black/80 text-white text-xs p-2 rounded z-[100] font-mono">
+          <div>isDraggingBlock: {String(isDraggingBlock)}</div>
+          <div>draggedBlockIndex: {draggedBlockIndex}</div>
+          <div>dragOverBlockIndex: {dragOverBlockIndex}</div>
+          <div>dragPosition: {JSON.stringify(dragPosition)}</div>
+        </div>
+      )}
 
       {/* Floating drag preview */}
       {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
