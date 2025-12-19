@@ -2626,8 +2626,11 @@ export default function WorkoutPage() {
           onReset={restTimer.reset}
           onSkip={() => {
             restTimer.skip();
-            setShowRestTimer(false);
-            setRestTimerDuration(null);
+            // Keep timer visible briefly to show "Rested for X" message
+            setTimeout(() => {
+              setShowRestTimer(false);
+              setRestTimerDuration(null);
+            }, 2000); // Show for 2 seconds
           }}
           isVisible={restTimerPanelVisible}
           onVisibilityChange={setRestTimerPanelVisible}
@@ -2857,6 +2860,8 @@ export default function WorkoutPage() {
                     timerInitialSeconds={restTimer.initialSeconds}
                     timerIsRunning={restTimer.isRunning}
                     timerIsFinished={restTimer.isFinished}
+                    timerIsSkipped={restTimer.isSkipped}
+                    timerRestedSeconds={restTimer.restedSeconds}
                     onShowTimerControls={() => setRestTimerPanelVisible(true)}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}

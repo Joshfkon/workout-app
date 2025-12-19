@@ -32,6 +32,8 @@ export function useRestTimer({
   const [isFinished, setIsFinished] = useState(false);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [timeSinceFinished, setTimeSinceFinished] = useState(0);
+  const [isSkipped, setIsSkipped] = useState(false);
+  const [restedSeconds, setRestedSeconds] = useState(0);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const endTimeRef = useRef<number | null>(null);
@@ -235,6 +237,9 @@ export function useRestTimer({
   }, []);
 
   const start = useCallback((duration?: number) => {
+    // Reset skipped state when starting a new timer
+    setIsSkipped(false);
+    setRestedSeconds(0);
     console.log('[TIMER] start() called', { duration, defaultSeconds });
     const durationToUse = duration ?? defaultSeconds;
     const endTime = Date.now() + durationToUse * 1000;
@@ -334,6 +339,8 @@ export function useRestTimer({
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
+    setIsSkipped(false);
+    setRestedSeconds(0);
     const resetSeconds = initialSeconds > 0 ? initialSeconds : defaultSeconds;
     setSeconds(resetSeconds);
     hasPlayedAlarm.current = false;
@@ -371,14 +378,18 @@ export function useRestTimer({
   }, [seconds, isRunning, initialSeconds, saveTimerState, defaultSeconds]);
 
   const skip = useCallback(() => {
+    // Calculate how long they rested before skipping
+    const rested = initialSeconds - seconds;
     setIsRunning(false);
     setIsFinished(false);
     setFinishedAt(null);
     setSeconds(0);
+    setIsSkipped(true);
+    setRestedSeconds(rested > 0 ? rested : 0);
     endTimeRef.current = null;
     clearTimerState();
     onCompleteRef.current?.();
-  }, [clearTimerState]);
+  }, [seconds, initialSeconds, clearTimerState]);
 
   const dismiss = useCallback(() => {
     setIsRunning(false);
@@ -405,6 +416,8 @@ export function useRestTimer({
     isUrgent,
     progressPercent,
     timeSinceFinished,
+    isSkipped,
+    restedSeconds,
     // Actions
     start,
     toggle,

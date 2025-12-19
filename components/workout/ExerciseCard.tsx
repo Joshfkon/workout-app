@@ -143,6 +143,8 @@ interface ExerciseCardProps {
   timerInitialSeconds?: number;
   timerIsRunning?: boolean;
   timerIsFinished?: boolean;
+  timerIsSkipped?: boolean;
+  timerRestedSeconds?: number;
   onShowTimerControls?: () => void;
 }
 
@@ -175,6 +177,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   timerInitialSeconds = 0,
   timerIsRunning = false,
   timerIsFinished = false,
+  timerIsSkipped = false,
+  timerRestedSeconds = 0,
   onShowTimerControls,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -1231,6 +1235,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 initialSeconds={timerInitialSeconds}
                 isRunning={timerIsRunning}
                 isFinished={timerIsFinished}
+                isSkipped={timerIsSkipped}
+                restedSeconds={timerRestedSeconds}
                 onShowControls={onShowTimerControls}
               />
             )}
@@ -1850,6 +1856,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.timerInitialSeconds === nextProps.timerInitialSeconds &&
     prevProps.timerIsRunning === nextProps.timerIsRunning &&
     prevProps.timerIsFinished === nextProps.timerIsFinished &&
+    prevProps.timerIsSkipped === nextProps.timerIsSkipped &&
+    prevProps.timerRestedSeconds === nextProps.timerRestedSeconds &&
     prevProps.onShowTimerControls === nextProps.onShowTimerControls
   );
 });
