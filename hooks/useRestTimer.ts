@@ -30,6 +30,7 @@ export function useRestTimer({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasPlayedAlarm = useRef(false);
   const onCompleteRef = useRef(onComplete);
+  const endTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     onCompleteRef.current = onComplete;
@@ -95,6 +96,7 @@ export function useRestTimer({
 
   const startTimer = useCallback((duration: number) => {
     const endTime = Date.now() + duration * 1000;
+    endTimeRef.current = endTime;
     setSeconds(duration);
     setInitialSeconds(duration);
     setIsRunning(true);
@@ -113,6 +115,7 @@ export function useRestTimer({
         const remaining = Math.ceil((state.endTime - now) / 1000);
 
         if (state.isRunning && remaining > 0) {
+          endTimeRef.current = state.endTime;
           setSeconds(remaining);
           setInitialSeconds(state.duration);
           setIsRunning(true);
@@ -140,48 +143,58 @@ export function useRestTimer({
   }, []);
 
   // Timer logic - only create interval when isRunning changes
-  // Do NOT include seconds in dependencies as it causes interval to be recreated on every tick
+  // Uses endTimeRef for accurate countdown, with localStorage as backup for page refreshes
   useEffect(() => {
     if (isRunning) {
       intervalRef.current = setInterval(() => {
-        try {
-          const stored = localStorage.getItem(TIMER_STORAGE_KEY);
-          if (stored) {
-            const state: TimerState = JSON.parse(stored);
-            const remaining = Math.ceil((state.endTime - Date.now()) / 1000);
+        // Use endTimeRef directly - it's set when timer starts
+        const endTime = endTimeRef.current;
 
-            if (remaining <= 0) {
-              setSeconds(0);
-              setIsRunning(false);
-              setIsFinished(true);
-              setFinishedAt(Date.now());
-              localStorage.removeItem(TIMER_STORAGE_KEY);
-              if (!hasPlayedAlarm.current) {
-                hasPlayedAlarm.current = true;
-                playAlarm();
-                onCompleteRef.current?.();
-              }
-            } else {
-              setSeconds(remaining);
+        if (endTime) {
+          const remaining = Math.ceil((endTime - Date.now()) / 1000);
+
+          if (remaining <= 0) {
+            setSeconds(0);
+            setIsRunning(false);
+            setIsFinished(true);
+            setFinishedAt(Date.now());
+            endTimeRef.current = null;
+            localStorage.removeItem(TIMER_STORAGE_KEY);
+            if (!hasPlayedAlarm.current) {
+              hasPlayedAlarm.current = true;
+              playAlarm();
+              onCompleteRef.current?.();
             }
+          } else {
+            setSeconds(remaining);
           }
-        } catch (e) {
-          setSeconds((prev) => {
-            if (prev <= 1) {
-              setTimeout(() => {
-                setIsRunning(false);
-                setIsFinished(true);
-                setFinishedAt(Date.now());
-                if (!hasPlayedAlarm.current) {
-                  hasPlayedAlarm.current = true;
-                  playAlarm();
-                  onCompleteRef.current?.();
-                }
-              }, 0);
-              return 0;
+        } else {
+          // Fallback: try localStorage (for page refresh recovery)
+          try {
+            const stored = localStorage.getItem(TIMER_STORAGE_KEY);
+            if (stored) {
+              const state: TimerState = JSON.parse(stored);
+              endTimeRef.current = state.endTime;
             }
-            return prev - 1;
-          });
+          } catch {
+            // Last resort: simple decrement
+            setSeconds((prev) => {
+              if (prev <= 1) {
+                setTimeout(() => {
+                  setIsRunning(false);
+                  setIsFinished(true);
+                  setFinishedAt(Date.now());
+                  if (!hasPlayedAlarm.current) {
+                    hasPlayedAlarm.current = true;
+                    playAlarm();
+                    onCompleteRef.current?.();
+                  }
+                }, 0);
+                return 0;
+              }
+              return prev - 1;
+            });
+          }
         }
       }, 250);
     }
@@ -195,6 +208,7 @@ export function useRestTimer({
   const toggle = useCallback(() => {
     if (isRunning) {
       setIsRunning(false);
+      endTimeRef.current = null;
       localStorage.removeItem(TIMER_STORAGE_KEY);
     } else {
       startTimer(seconds);
@@ -208,6 +222,7 @@ export function useRestTimer({
     setFinishedAt(null);
     setSeconds(initialSeconds);
     hasPlayedAlarm.current = false;
+    endTimeRef.current = null;
     localStorage.removeItem(TIMER_STORAGE_KEY);
   }, [initialSeconds]);
 
@@ -218,6 +233,7 @@ export function useRestTimer({
 
     if (isRunning) {
       const endTime = Date.now() + newSeconds * 1000;
+      endTimeRef.current = endTime;
       saveTimerState(true, endTime, initialSeconds);
     }
   }, [seconds, isRunning, initialSeconds, saveTimerState]);
@@ -227,6 +243,7 @@ export function useRestTimer({
     setIsFinished(false);
     setFinishedAt(null);
     setSeconds(0);
+    endTimeRef.current = null;
     localStorage.removeItem(TIMER_STORAGE_KEY);
     onCompleteRef.current?.();
   }, []);
@@ -242,6 +259,7 @@ export function useRestTimer({
     setSeconds(defaultSeconds);
     setInitialSeconds(defaultSeconds);
     hasPlayedAlarm.current = false;
+    endTimeRef.current = null;
     localStorage.removeItem(TIMER_STORAGE_KEY);
   }, [defaultSeconds]);
 
