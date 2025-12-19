@@ -382,12 +382,15 @@ export default function WorkoutPage() {
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [availableExercises, setAvailableExercises] = useState<AvailableExercise[]>([]);
   const [frequentExerciseIds, setFrequentExerciseIds] = useState<Map<string, number>>(new Map());
+  const [lastDoneExercises, setLastDoneExercises] = useState<Map<string, Date>>(new Map());
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string | null>(null);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
+  const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
@@ -872,7 +875,7 @@ export default function WorkoutPage() {
       // Get exercise usage counts from the last 90 days
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-      
+
       const { data } = await supabase
         .from('exercise_blocks')
         .select(`
@@ -883,13 +886,21 @@ export default function WorkoutPage() {
         .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString());
 
       if (data) {
-        // Count occurrences of each exercise
+        // Count occurrences of each exercise and track most recent date
         const counts = new Map<string, number>();
-        data.forEach((block: { exercise_id: string }) => {
+        const lastDone = new Map<string, Date>();
+        data.forEach((block: { exercise_id: string; workout_sessions: { started_at: string } }) => {
           const id = block.exercise_id;
           counts.set(id, (counts.get(id) || 0) + 1);
+
+          const sessionDate = new Date(block.workout_sessions.started_at);
+          const currentLastDone = lastDone.get(id);
+          if (!currentLastDone || sessionDate > currentLastDone) {
+            lastDone.set(id, sessionDate);
+          }
         });
         setFrequentExerciseIds(counts);
+        setLastDoneExercises(lastDone);
       }
     }
     loadFrequentExercises();
@@ -2165,7 +2176,7 @@ export default function WorkoutPage() {
                 </button>
               </div>
               
-              {/* Search and Body Part Filter */}
+              {/* Search and Filters */}
               <div className="p-4 border-b border-surface-800 space-y-3">
                 <input
                   type="text"
@@ -2174,58 +2185,119 @@ export default function WorkoutPage() {
                   placeholder="Search exercises..."
                   className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
                 />
-                
-                {/* Body Part Dropdown */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowMuscleDropdown(!showMuscleDropdown)}
-                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                  >
-                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                      {selectedMuscleFilter || 'Any Body Part'}
-                    </span>
-                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  
-                  {/* Dropdown Menu */}
-                  {showMuscleDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                      <button
-                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Any Body Part</span>
-                        {!selectedMuscleFilter && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      {(() => {
-                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                        return muscles.map(muscle => (
-                          <button
-                            key={muscle}
-                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                            }`}
-                          >
-                            <span>{muscle}</span>
-                            {selectedMuscleFilter === muscle && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                        ));
-                      })()}
-                    </div>
-                  )}
+
+                {/* Body Part Dropdown and Sort Button */}
+                <div className="flex gap-2">
+                  {/* Body Part Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                    >
+                      <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                        {selectedMuscleFilter || 'Any Body Part'}
+                      </span>
+                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showMuscleDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Any Body Part</span>
+                          {!selectedMuscleFilter && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {(() => {
+                          const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                          return muscles.map(muscle => (
+                            <button
+                              key={muscle}
+                              onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                                selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                              }`}
+                            >
+                              <span>{muscle}</span>
+                              {selectedMuscleFilter === muscle && (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sort Button */}
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
+                      className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                      title="Sort exercises"
+                    >
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                      </svg>
+                    </button>
+
+                    {/* Sort Dropdown */}
+                    {showSortDropdown && (
+                      <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
+                        <button
+                          onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Most Frequent</span>
+                          {exerciseSortOption === 'frequency' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Recently Done</span>
+                          {exerciseSortOption === 'recent' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Name (A-Z)</span>
+                          {exerciseSortOption === 'name' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -2246,8 +2318,31 @@ export default function WorkoutPage() {
                     );
                   }
                   
-                  // Sort alphabetically
-                  filteredExercises = [...filteredExercises].sort((a, b) => a.name.localeCompare(b.name));
+                  // Sort based on selected option
+                  filteredExercises = [...filteredExercises].sort((a, b) => {
+                    switch (exerciseSortOption) {
+                      case 'frequency': {
+                        // Sort by frequency (highest first), then by name for ties
+                        const freqA = frequentExerciseIds.get(a.id) || 0;
+                        const freqB = frequentExerciseIds.get(b.id) || 0;
+                        if (freqB !== freqA) return freqB - freqA;
+                        return a.name.localeCompare(b.name);
+                      }
+                      case 'recent': {
+                        // Sort by most recently done first, then by name for ties
+                        const dateA = lastDoneExercises.get(a.id);
+                        const dateB = lastDoneExercises.get(b.id);
+                        // Exercises without a date go to the bottom
+                        if (!dateA && !dateB) return a.name.localeCompare(b.name);
+                        if (!dateA) return 1;
+                        if (!dateB) return -1;
+                        return dateB.getTime() - dateA.getTime();
+                      }
+                      case 'name':
+                      default:
+                        return a.name.localeCompare(b.name);
+                    }
+                  });
                   
                   if (availableExercises.length === 0) {
                     return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
@@ -2962,67 +3057,128 @@ export default function WorkoutPage() {
               </button>
             </div>
 
-            {/* Search and Body Part Filter */}
+            {/* Search and Filters */}
             <div className="p-4 space-y-3 border-b border-surface-800">
               <Input
                 placeholder="Search exercises..."
                 value={exerciseSearch}
                 onChange={(e) => setExerciseSearch(e.target.value)}
               />
-              
-              {/* Body Part Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowMuscleDropdown(!showMuscleDropdown)}
-                  className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                >
-                  <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                    {selectedMuscleFilter || 'Any Body Part'}
-                  </span>
-                  <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                
-                {/* Dropdown Menu */}
-                {showMuscleDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                    <button
-                      onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                      className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                        !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                      }`}
-                    >
-                      <span>Any Body Part</span>
-                      {!selectedMuscleFilter && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-                    {(() => {
-                      const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                      return muscles.map(muscle => (
-                        <button
-                          key={muscle}
-                          onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                            selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>{muscle}</span>
-                          {selectedMuscleFilter === muscle && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      ));
-                    })()}
-                  </div>
-                )}
+
+              {/* Body Part Dropdown and Sort Button */}
+              <div className="flex gap-2">
+                {/* Body Part Dropdown */}
+                <div className="relative flex-1">
+                  <button
+                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
+                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                  >
+                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                      {selectedMuscleFilter || 'Any Body Part'}
+                    </span>
+                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showMuscleDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Any Body Part</span>
+                        {!selectedMuscleFilter && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      {(() => {
+                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                        return muscles.map(muscle => (
+                          <button
+                            key={muscle}
+                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>{muscle}</span>
+                            {selectedMuscleFilter === muscle && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sort Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
+                    className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                    title="Sort exercises"
+                  >
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                  </button>
+
+                  {/* Sort Dropdown */}
+                  {showSortDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
+                      <button
+                        onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Most Frequent</span>
+                        {exerciseSortOption === 'frequency' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Recently Done</span>
+                        {exerciseSortOption === 'recent' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Name (A-Z)</span>
+                        {exerciseSortOption === 'name' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-              
+
               {/* Create custom exercise button */}
               <button
                 onClick={() => setShowCustomExercise(true)}
@@ -3059,9 +3215,32 @@ export default function WorkoutPage() {
                   );
                 }
                 
-                // Sort alphabetically
-                filteredExercises = [...filteredExercises].sort((a, b) => a.name.localeCompare(b.name));
-                
+                // Sort based on selected option
+                filteredExercises = [...filteredExercises].sort((a, b) => {
+                  switch (exerciseSortOption) {
+                    case 'frequency': {
+                      // Sort by frequency (highest first), then by name for ties
+                      const freqA = frequentExerciseIds.get(a.id) || 0;
+                      const freqB = frequentExerciseIds.get(b.id) || 0;
+                      if (freqB !== freqA) return freqB - freqA;
+                      return a.name.localeCompare(b.name);
+                    }
+                    case 'recent': {
+                      // Sort by most recently done first, then by name for ties
+                      const dateA = lastDoneExercises.get(a.id);
+                      const dateB = lastDoneExercises.get(b.id);
+                      // Exercises without a date go to the bottom
+                      if (!dateA && !dateB) return a.name.localeCompare(b.name);
+                      if (!dateA) return 1;
+                      if (!dateB) return -1;
+                      return dateB.getTime() - dateA.getTime();
+                    }
+                    case 'name':
+                    default:
+                      return a.name.localeCompare(b.name);
+                  }
+                });
+
                 if (availableExercises.length === 0) {
                   return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
                 }
