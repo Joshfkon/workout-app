@@ -959,7 +959,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 ? customWarmupWeights.get(warmup.setNumber)! 
                 : calculatedWeightKg;
               const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
-              const displayWarmupWeight = roundedWeight === 0 ? 'Empty' : formatWeightValue(roundedWeight, unit);
+              const warmupWeightForDisplay = formatWeightValue(roundedWeight, unit);
+              const displayWarmupWeight = roundedWeight === 0 ? 'Empty' : warmupWeightForDisplay;
               const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
               const isEditingThis = editingWarmupId === warmup.setNumber;
               
@@ -981,7 +982,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           const newWeight = parseFloat(warmupWeightInput);
                           if (!isNaN(newWeight) && newWeight >= 0) {
                             // Convert to kg if needed
-                            const weightInKg = unit === 'lb' ? newWeight / 2.20462 : newWeight;
+                            const weightInKg = inputWeightToKg(newWeight, unit);
                             setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
                           }
                           setEditingWarmupId(null);
@@ -990,7 +991,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           if (e.key === 'Enter') {
                             const newWeight = parseFloat(warmupWeightInput);
                             if (!isNaN(newWeight) && newWeight >= 0) {
-                              const weightInKg = unit === 'lb' ? newWeight / 2.20462 : newWeight;
+                              const weightInKg = inputWeightToKg(newWeight, unit);
                               setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
                             }
                             setEditingWarmupId(null);
@@ -1005,7 +1006,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <button
                         onClick={() => {
                           setEditingWarmupId(warmup.setNumber);
-                          setWarmupWeightInput(roundedWeight.toString());
+                          setWarmupWeightInput(warmupWeightForDisplay.toString());
                         }}
                         className="font-mono text-surface-300 text-sm hover:text-amber-400 transition-colors"
                       >
