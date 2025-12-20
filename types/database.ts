@@ -219,6 +219,8 @@ export interface Database {
           suggestion_reason: string;
           warmup_protocol: Json;
           note: string | null;
+          dropsets_per_set: number;
+          drop_percentage: number;
         };
         Insert: {
           id?: string;
@@ -236,6 +238,8 @@ export interface Database {
           suggestion_reason?: string;
           warmup_protocol?: Json;
           note?: string | null;
+          dropsets_per_set?: number;
+          drop_percentage?: number;
         };
         Update: {
           id?: string;
@@ -253,6 +257,8 @@ export interface Database {
           suggestion_reason?: string;
           warmup_protocol?: Json;
           note?: string | null;
+          dropsets_per_set?: number;
+          drop_percentage?: number;
         };
       };
       set_logs: {

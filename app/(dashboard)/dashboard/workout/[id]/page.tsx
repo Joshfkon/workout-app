@@ -565,6 +565,8 @@ export default function WorkoutPage() {
             suggestionReason: block.suggestion_reason,
             warmupProtocol: block.warmup_protocol?.sets || [],
             note: block.note,
+            dropsetsPerSet: block.dropsets_per_set ?? 0,
+            dropPercentage: block.drop_percentage ?? 0.25,
             exercise: {
               id: block.exercises.id,
               name: block.exercises.name,
@@ -1189,10 +1191,52 @@ export default function WorkoutPage() {
       // Update local state using functional updates to avoid stale closures
       setCompletedSets(prevSets => [...prevSets, newSet]);
       setCurrentSetNumber(prev => prev + 1);
-      setShowRestTimer(true);
-      setRestTimerPanelVisible(true); // Show panel when timer starts
-      setRestTimerDuration(null); // Use default rest time for working sets
-      restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+
+      // Dropset logic: check if we need to show dropset prompt instead of rest timer
+      const dropsetsConfigured = (currentBlock.dropsetsPerSet ?? 0) > 0;
+      const isNormalSet = setType === 'normal';
+      const isDropsetSet = setType === 'dropset';
+
+      if (isNormalSet && dropsetsConfigured) {
+        // Normal set completed with dropsets configured - show dropset prompt immediately
+        // NO rest timer - dropsets should be immediate
+        setPendingDropset({
+          parentSetId: newSet.id,
+          parentWeight: data.weightKg,
+          blockId: currentBlock.id,
+          dropNumber: 1,
+          totalDrops: currentBlock.dropsetsPerSet ?? 1,
+        });
+        setShowRestTimer(false);
+        setRestTimerPanelVisible(false);
+      } else if (isDropsetSet && pendingDropset) {
+        // Just completed a dropset - check if more drops remaining
+        if (pendingDropset.dropNumber < pendingDropset.totalDrops) {
+          // More drops to go - update to next drop
+          setPendingDropset({
+            ...pendingDropset,
+            parentSetId: newSet.id,
+            parentWeight: data.weightKg,
+            dropNumber: pendingDropset.dropNumber + 1,
+          });
+          setShowRestTimer(false);
+          setRestTimerPanelVisible(false);
+        } else {
+          // Final drop complete - NOW start rest timer
+          setPendingDropset(null);
+          setShowRestTimer(true);
+          setRestTimerPanelVisible(true);
+          setRestTimerDuration(null);
+          restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+        }
+      } else {
+        // Normal flow - start rest timer
+        setPendingDropset(null);
+        setShowRestTimer(true);
+        setRestTimerPanelVisible(true);
+        setRestTimerDuration(null);
+        restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+      }
       setError(null);
       // Update last set completed timestamp for elapsed time tracking
       setLastSetCompletedAt(loggedAt);
@@ -2102,6 +2146,8 @@ export default function WorkoutPage() {
         suggestionReason: newBlock.suggestion_reason,
         warmupProtocol: warmupSets,
         note: null,
+        dropsetsPerSet: newBlock.dropsets_per_set ?? 0,
+        dropPercentage: newBlock.drop_percentage ?? 0.25,
         exercise: {
           id: exerciseData.id,
           name: exerciseData.name,
@@ -3289,6 +3335,9 @@ export default function WorkoutPage() {
                     showSwapOnMount={showSwapForInjury === block.id}
                     currentInjuries={temporaryInjuries}
                     frequentExerciseIds={frequentExerciseIds}
+                    // Dropset props
+                    pendingDropset={pendingDropset?.blockId === block.id ? pendingDropset : null}
+                    onDropsetCancel={() => setPendingDropset(null)}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}
