@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { usePWA } from '@/hooks/usePWA';
 import { 
   CoachingSessionManager,
   type StrengthProfile,
@@ -44,7 +45,8 @@ function CompleteContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
-  
+  const { shouldShowInOnboarding } = usePWA();
+
   const [isLoading, setIsLoading] = useState(true);
   const [profile, setProfile] = useState<StrengthProfile | null>(null);
   const [sex, setSex] = useState<'male' | 'female'>('male');
@@ -172,7 +174,7 @@ function CompleteContent() {
   const handleFinish = async () => {
     const supabase = createUntypedClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (user) {
       // Mark onboarding as complete
       await supabase
@@ -180,8 +182,13 @@ function CompleteContent() {
         .update({ onboarding_completed: true })
         .eq('id', user.id);
     }
-    
-    router.push('/dashboard');
+
+    // Check if we should show the install prompt
+    if (shouldShowInOnboarding()) {
+      router.push(`/onboarding/install?session=${sessionId}`);
+    } else {
+      router.push('/dashboard');
+    }
   };
   
   if (isLoading) {
