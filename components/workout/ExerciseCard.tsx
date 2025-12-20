@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
-import { formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
+import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
@@ -958,9 +958,16 @@ export const ExerciseCard = memo(function ExerciseCard({
               const warmupWeightKg = hasCustomWeight 
                 ? customWarmupWeights.get(warmup.setNumber)! 
                 : calculatedWeightKg;
-              const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
-              const warmupWeightForDisplay = formatWeightValue(roundedWeight, unit);
-              const displayWarmupWeight = roundedWeight === 0 ? 'Empty' : warmupWeightForDisplay;
+              // Use exact custom weights (including .5 increments) instead of rounding them away
+              const warmupWeightForDisplayKg = hasCustomWeight
+                ? warmupWeightKg
+                : roundToPlateIncrement(warmupWeightKg, unit);
+
+              const warmupWeightForDisplay = parseFloat(
+                convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
+              );
+
+              const displayWarmupWeight = warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay;
               const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
               const isEditingThis = editingWarmupId === warmup.setNumber;
               
