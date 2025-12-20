@@ -69,7 +69,7 @@ export function Modal({
       <div
         ref={contentRef}
         className={cn(
-          'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in',
+          'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]',
           sizes[size]
         )}
         role="dialog"
@@ -116,7 +116,7 @@ export function Modal({
         )}
 
         {/* Content */}
-        <div className="p-4">{children}</div>
+        <div className="p-4 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
