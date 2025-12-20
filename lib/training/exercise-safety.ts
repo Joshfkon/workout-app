@@ -412,7 +412,7 @@ function generateCautionRecommendations(
   }
 
   // Deduplicate
-  return [...new Set(recommendations)];
+  return Array.from(new Set(recommendations));
 }
 
 /**
