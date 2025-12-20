@@ -73,9 +73,9 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
     }
   }, [sessionId, startedAt, storageKey]);
 
-  // Countdown/up interval
+  // Countdown/up interval - depends on isPaused and startedAt so it starts when session loads
   useEffect(() => {
-    if (isPaused) {
+    if (isPaused || !startedAt) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -100,7 +100,7 @@ export function useWorkoutTimer({ sessionId, startedAt }: UseWorkoutTimerOptions
         intervalRef.current = null;
       }
     };
-  }, [isPaused]);
+  }, [isPaused, startedAt]);
 
   const pause = useCallback(() => {
     if (!stateRef.current || isPaused) return;
