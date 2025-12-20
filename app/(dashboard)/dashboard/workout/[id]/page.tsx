@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
-import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary, ElapsedRestTimer, ExerciseTransition } from '@/components/workout';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
@@ -452,6 +453,18 @@ export default function WorkoutPage() {
   // Cancel workout modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Exercise transition state
+  const [showTransition, setShowTransition] = useState(false);
+  const [transitionFromIndex, setTransitionFromIndex] = useState<number | null>(null);
+
+  // Get workout store values for elapsed time tracking
+  const {
+    lastSetCompletedAt,
+    setLastSetCompletedAt,
+    exerciseStartedAt,
+    setExerciseStartedAt,
+  } = useWorkoutStore();
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -1104,10 +1117,10 @@ export default function WorkoutPage() {
     await handleCheckInComplete();
   };
 
-  const handleSetComplete = async (data: { 
-    weightKg: number; 
-    reps: number; 
-    rpe: number; 
+  const handleSetComplete = async (data: {
+    weightKg: number;
+    reps: number;
+    rpe: number;
     note?: string;
     setType?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
     parentSetId?: string;
@@ -1117,6 +1130,14 @@ export default function WorkoutPage() {
     const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective';
     const loggedAt = new Date().toISOString();
     const setType = data.setType || 'normal';
+
+    // Calculate rest seconds since last set (for inter-exercise analytics)
+    let calculatedRestSeconds: number | null = null;
+    if (lastSetCompletedAt) {
+      const lastSetTime = new Date(lastSetCompletedAt).getTime();
+      const now = Date.now();
+      calculatedRestSeconds = Math.floor((now - lastSetTime) / 1000);
+    }
 
     // Save to database first - let DB generate the UUID
     try {
@@ -1136,6 +1157,7 @@ export default function WorkoutPage() {
           quality_reason: '',
           note: data.note || null,
           logged_at: loggedAt,
+          rest_seconds: calculatedRestSeconds,
         })
         .select('id')
         .single();
@@ -1154,7 +1176,7 @@ export default function WorkoutPage() {
         weightKg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
-        restSeconds: null,
+        restSeconds: calculatedRestSeconds,
         isWarmup: false,
         setType: setType,
         parentSetId: data.parentSetId || null,
@@ -1172,6 +1194,8 @@ export default function WorkoutPage() {
       setRestTimerDuration(null); // Use default rest time for working sets
       restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       setError(null);
+      // Update last set completed timestamp for elapsed time tracking
+      setLastSetCompletedAt(loggedAt);
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
@@ -1860,10 +1884,45 @@ export default function WorkoutPage() {
 
   const handleNextExercise = () => {
     if (currentBlockIndex < blocks.length - 1) {
-      setCurrentBlockIndex(currentBlockIndex + 1);
+      // Show transition screen if preference enabled
+      if (preferences.showExerciseTransition) {
+        setTransitionFromIndex(currentBlockIndex);
+        setShowTransition(true);
+        setShowRestTimer(false);
+        restTimer.dismiss();
+      } else {
+        // Skip transition, go directly to next exercise
+        setCurrentBlockIndex(currentBlockIndex + 1);
+        setCurrentSetNumber(1);
+        setShowRestTimer(false);
+        restTimer.dismiss();
+        // Reset exercise started time
+        setExerciseStartedAt(new Date().toISOString());
+      }
+    }
+  };
+
+  // Handle starting the next exercise from transition screen
+  const handleStartNextExercise = () => {
+    if (transitionFromIndex !== null && transitionFromIndex < blocks.length - 1) {
+      setCurrentBlockIndex(transitionFromIndex + 1);
       setCurrentSetNumber(1);
-      setShowRestTimer(false);
-      restTimer.dismiss();
+      setShowTransition(false);
+      setTransitionFromIndex(null);
+      // Mark when exercise was started
+      setExerciseStartedAt(new Date().toISOString());
+    }
+  };
+
+  // Handle skipping an exercise from transition screen
+  const handleSkipExercise = () => {
+    if (transitionFromIndex !== null && transitionFromIndex < blocks.length - 2) {
+      // Skip to the exercise after next
+      setTransitionFromIndex(transitionFromIndex + 1);
+    } else {
+      // No more exercises to skip to, just close transition
+      setShowTransition(false);
+      setTransitionFromIndex(null);
     }
   };
 
@@ -2692,6 +2751,19 @@ export default function WorkoutPage() {
                 <span>{workoutTimer.formattedTime}</span>
               </button>
             )}
+            {/* Elapsed time since last set - shown in header until first set of current exercise */}
+            {lastSetCompletedAt && currentBlockSets.length === 0 && currentBlockIndex > 0 && (
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm bg-surface-800/50 text-surface-400">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <ElapsedRestTimer
+                  sinceTimestamp={lastSetCompletedAt}
+                  showLabel={false}
+                  size="sm"
+                />
+              </div>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -2873,7 +2945,25 @@ export default function WorkoutPage() {
         />
       )}
 
-      {/* All exercises list */}
+      {/* Exercise Transition Screen */}
+      {showTransition && transitionFromIndex !== null && transitionFromIndex < blocks.length - 1 && (
+        <ExerciseTransition
+          completedExercise={blocks[transitionFromIndex].exercise}
+          completedSets={getSetsForBlock(blocks[transitionFromIndex].id).length}
+          nextExercise={blocks[transitionFromIndex + 1].exercise}
+          nextExercisePrescription={{
+            sets: blocks[transitionFromIndex + 1].targetSets,
+            repRange: blocks[transitionFromIndex + 1].targetRepRange,
+            notes: blocks[transitionFromIndex + 1].note || undefined,
+          }}
+          lastSetTimestamp={lastSetCompletedAt}
+          onStartExercise={handleStartNextExercise}
+          onSkip={transitionFromIndex < blocks.length - 2 ? handleSkipExercise : undefined}
+        />
+      )}
+
+      {/* All exercises list - hide when showing transition */}
+      {!showTransition && (
       <div className="space-y-4" ref={exerciseListRef}>
         <p className="text-xs text-surface-500">💡 Hold the ≡ handle to drag reorder</p>
         {blocks.map((block, index) => {
@@ -3296,6 +3386,7 @@ export default function WorkoutPage() {
           );
         })}
       </div>
+      )}
 
       {/* Floating drag preview */}
       {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (

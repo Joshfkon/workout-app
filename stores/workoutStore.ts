@@ -14,12 +14,16 @@ interface WorkoutState {
   exerciseBlocks: ExerciseBlock[];
   setLogs: Map<string, SetLog[]>; // blockId -> sets
   currentBlockIndex: number;
-  
+
   // Cached exercise data
   exercises: Map<string, Exercise>;
-  
+
   // Timer state
   restTimerEnd: number | null;
+
+  // Elapsed time tracking
+  lastSetCompletedAt: string | null; // ISO timestamp of last logged set
+  exerciseStartedAt: string | null; // ISO timestamp when current exercise was started
   
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
@@ -40,7 +44,11 @@ interface WorkoutState {
   // Timer
   startRestTimer: (seconds: number) => void;
   clearRestTimer: () => void;
-  
+
+  // Elapsed time tracking
+  setLastSetCompletedAt: (timestamp: string | null) => void;
+  setExerciseStartedAt: (timestamp: string | null) => void;
+
   // Session summary
   getSessionStats: () => {
     totalSets: number;
@@ -59,11 +67,13 @@ export const useWorkoutStore = create<WorkoutState>()(
       currentBlockIndex: 0,
       exercises: new Map(),
       restTimerEnd: null,
+      lastSetCompletedAt: null,
+      exerciseStartedAt: null,
 
       startSession: (session, blocks, exercises) => {
         const exerciseMap = new Map<string, Exercise>();
         exercises.forEach((ex) => exerciseMap.set(ex.id, ex));
-        
+
         set({
           activeSession: session,
           exerciseBlocks: blocks,
@@ -71,6 +81,8 @@ export const useWorkoutStore = create<WorkoutState>()(
           currentBlockIndex: 0,
           exercises: exerciseMap,
           restTimerEnd: null,
+          lastSetCompletedAt: null,
+          exerciseStartedAt: null,
         });
       },
 
@@ -81,6 +93,8 @@ export const useWorkoutStore = create<WorkoutState>()(
           setLogs: new Map(),
           currentBlockIndex: 0,
           restTimerEnd: null,
+          lastSetCompletedAt: null,
+          exerciseStartedAt: null,
         });
       },
 
@@ -122,7 +136,11 @@ export const useWorkoutStore = create<WorkoutState>()(
         const newMap = new Map(setLogs);
         const blockSets = newMap.get(blockId) || [];
         newMap.set(blockId, [...blockSets, setData]);
-        set({ setLogs: newMap });
+        // Update lastSetCompletedAt with the set's logged timestamp
+        set({
+          setLogs: newMap,
+          lastSetCompletedAt: setData.loggedAt || new Date().toISOString(),
+        });
       },
 
       updateSet: (blockId, setId, data) => {
@@ -157,6 +175,14 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ restTimerEnd: null });
       },
 
+      setLastSetCompletedAt: (timestamp) => {
+        set({ lastSetCompletedAt: timestamp });
+      },
+
+      setExerciseStartedAt: (timestamp) => {
+        set({ exerciseStartedAt: timestamp });
+      },
+
       getSessionStats: () => {
         const { setLogs } = get();
         let totalSets = 0;
@@ -189,6 +215,8 @@ export const useWorkoutStore = create<WorkoutState>()(
         exerciseBlocks: state.exerciseBlocks,
         setLogs: Array.from(state.setLogs.entries()),
         currentBlockIndex: state.currentBlockIndex,
+        lastSetCompletedAt: state.lastSetCompletedAt,
+        exerciseStartedAt: state.exerciseStartedAt,
       }),
       onRehydrateStorage: () => (state) => {
         // Convert setLogs back to Map after rehydration
