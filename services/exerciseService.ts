@@ -94,9 +94,6 @@ export type { HypertrophyScore, HypertrophyTier, HypertrophyRating };
 // Re-export for convenience
 export type { MuscleGroup, Equipment, MovementPattern };
 
-// Export injury-related types
-export type { SpinalLoading, PositionStress };
-
 // ============================================
 // CACHE
 // ============================================
