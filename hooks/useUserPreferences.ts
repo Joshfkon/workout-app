@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { Goal, Experience, WeightUnit } from '@/types/schema';
 
+interface WarmupPreferences {
+  skipWarmupPrompt: boolean;
+  warmupDismissCount: number;
+  preferredWarmupMethod: 'compound' | 'light_sets' | 'general' | 'none' | null;
+}
+
 interface UserPreferences {
   goal: Goal;
   experience: Experience;
@@ -14,6 +20,7 @@ interface UserPreferences {
   showFormCues: boolean;
   showWarmupSuggestions: boolean;
   skipPreWorkoutCheckIn: boolean;
+  warmupPreferences: WarmupPreferences;
 }
 
 const defaultPreferences: UserPreferences = {
@@ -26,6 +33,11 @@ const defaultPreferences: UserPreferences = {
   showFormCues: true,
   showWarmupSuggestions: true,
   skipPreWorkoutCheckIn: false,
+  warmupPreferences: {
+    skipWarmupPrompt: false,
+    warmupDismissCount: 0,
+    preferredWarmupMethod: null,
+  },
 };
 
 // Global state to share preferences across components
@@ -66,6 +78,7 @@ export function useUserPreferences() {
 
           if (data) {
             const prefs = data.preferences as Record<string, unknown> || {};
+            const warmupPrefs = prefs.warmupPreferences as WarmupPreferences | undefined;
             const newPrefs: UserPreferences = {
               goal: (data.goal as Goal) || 'maintenance',
               experience: (data.experience as Experience) || 'intermediate',
@@ -76,6 +89,11 @@ export function useUserPreferences() {
               showFormCues: (prefs.showFormCues as boolean) ?? true,
               showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
               skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
+              warmupPreferences: {
+                skipWarmupPrompt: warmupPrefs?.skipWarmupPrompt ?? false,
+                warmupDismissCount: warmupPrefs?.warmupDismissCount ?? 0,
+                preferredWarmupMethod: warmupPrefs?.preferredWarmupMethod ?? null,
+              },
             };
             notifyListeners(newPrefs);
           }
@@ -106,7 +124,7 @@ export function useUserPreferences() {
 
     // Persist to database
     try {
-      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn') {
+      if (key === 'units' || key === 'restTimerDefault' || key === 'showFormCues' || key === 'showWarmupSuggestions' || key === 'skipPreWorkoutCheckIn' || key === 'warmupPreferences') {
         // These go in the preferences JSONB column
         const { data: currentUser } = await supabase
           .from('users')
@@ -116,7 +134,7 @@ export function useUserPreferences() {
 
         const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
         const dbKey = key === 'restTimerDefault' ? 'restTimer' : key;
-        
+
         await supabase
           .from('users')
           .update({
@@ -133,7 +151,7 @@ export function useUserPreferences() {
           weightKg: 'weight_kg',
         };
         const column = columnMap[key] || key;
-        
+
         await supabase
           .from('users')
           .update({ [column]: value })

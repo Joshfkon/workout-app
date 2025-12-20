@@ -117,29 +117,41 @@ export interface User {
 export interface UserPreferences {
   /** Weight unit preference */
   units: WeightUnit;
-  
+
   /** Default rest timer duration in seconds */
   restTimerDefault: number;
-  
+
   /** Show form cues during workout */
   showFormCues: boolean;
-  
+
   /** Show warmup set suggestions */
   showWarmupSuggestions: boolean;
-  
-  /** 
+
+  /**
    * Prioritize hypertrophy-optimal exercises in program generation
    * When true, S-tier exercises are preferred over lower tiers
    * Default: true
    */
   prioritizeHypertrophy?: boolean;
-  
+
   /**
    * Skip the pre-workout readiness check-in
    * When true, workouts start immediately without the check-in screen
    * Default: false
    */
   skipPreWorkoutCheckIn?: boolean;
+
+  /**
+   * Warmup preferences for smart detection when starting with isolation exercises
+   */
+  warmupPreferences?: {
+    /** User can toggle in settings to disable warmup prompts entirely */
+    skipWarmupPrompt: boolean;
+    /** Auto-increments when user dismisses, resets if user re-enables */
+    warmupDismissCount: number;
+    /** Remember user's last choice for auto-selection */
+    preferredWarmupMethod: 'compound' | 'light_sets' | 'general' | 'none' | null;
+  };
 }
 
 /**
@@ -692,6 +704,11 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
   showWarmupSuggestions: true,
   prioritizeHypertrophy: true,
   skipPreWorkoutCheckIn: false,
+  warmupPreferences: {
+    skipWarmupPrompt: false,
+    warmupDismissCount: 0,
+    preferredWarmupMethod: null,
+  },
 };
 
 // ============ EXTENDED USER PROFILE (for AI mesocycle builder) ============

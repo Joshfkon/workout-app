@@ -38,6 +38,8 @@ export default function SettingsPage() {
   const [prioritizeHypertrophy, setPrioritizeHypertrophy] = useState(true);
   const [skipPreWorkoutCheckIn, setSkipPreWorkoutCheckIn] = useState(false);
   const [showAiCoachNotes, setShowAiCoachNotes] = useState(false);
+  const [skipWarmupPrompt, setSkipWarmupPrompt] = useState(false);
+  const [warmupDismissCount, setWarmupDismissCount] = useState(0);
   const [volumeLandmarks, setVolumeLandmarks] = useState(DEFAULT_VOLUME_LANDMARKS.intermediate);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -129,6 +131,12 @@ export default function SettingsPage() {
             setPrioritizeHypertrophy((prefs.prioritizeHypertrophy as boolean) ?? true);
             setSkipPreWorkoutCheckIn((prefs.skipPreWorkoutCheckIn as boolean) ?? false);
             setShowAiCoachNotes((prefs.showAiCoachNotes as boolean) ?? false);
+            // Load warmup preferences
+            const warmupPrefs = prefs.warmupPreferences as { skipWarmupPrompt?: boolean; warmupDismissCount?: number } | undefined;
+            if (warmupPrefs) {
+              setSkipWarmupPrompt(warmupPrefs.skipWarmupPrompt ?? false);
+              setWarmupDismissCount(warmupPrefs.warmupDismissCount ?? 0);
+            }
           }
           if (data.volume_landmarks && Object.keys(data.volume_landmarks).length > 0) {
             // Merge with defaults to ensure all muscle groups have values
@@ -197,6 +205,11 @@ export default function SettingsPage() {
             prioritizeHypertrophy,
             skipPreWorkoutCheckIn,
             showAiCoachNotes,
+            warmupPreferences: {
+              skipWarmupPrompt,
+              warmupDismissCount,
+              preferredWarmupMethod: null, // Preserve user's method choice
+            },
           },
           volume_landmarks: volumeLandmarks,
           // Extended profile fields
@@ -589,6 +602,37 @@ export default function SettingsPage() {
                 onChange={setShowAiCoachNotes}
               />
             </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Warmup Prompt for Isolation Exercises</p>
+                <p className="text-xs text-surface-500">Suggest warmup options when starting with isolation exercises</p>
+              </div>
+              <Toggle
+                checked={!skipWarmupPrompt}
+                onChange={(checked) => setSkipWarmupPrompt(!checked)}
+              />
+            </div>
+
+            {warmupDismissCount > 0 && (
+              <div className="flex items-center justify-between pl-4 border-l-2 border-surface-700">
+                <div>
+                  <p className="text-sm text-surface-300">Warmup prompts dismissed: {warmupDismissCount}/5</p>
+                  <p className="text-xs text-surface-500">
+                    {warmupDismissCount >= 5
+                      ? 'Prompts are auto-disabled after 5 dismissals'
+                      : 'Prompts will auto-disable after 5 dismissals'}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setWarmupDismissCount(0)}
+                >
+                  Reset
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

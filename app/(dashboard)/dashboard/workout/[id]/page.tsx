@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
-import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary, WarmupPromptModal } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -13,9 +13,9 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { formatWeight } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
-import { 
-  getInjuryRisk, 
-  getSafeAlternatives, 
+import {
+  getInjuryRisk,
+  getSafeAlternatives,
   autoSwapForInjuries,
   getInjuryDescription,
   INJURY_LABELS,
@@ -23,6 +23,14 @@ import {
   type InjuryContext,
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
+import {
+  checkNeedsWarmupPrompt,
+  warmupCompoundSuggestions,
+  generateIsolationWarmupSets,
+  convertToStandardWarmupSets,
+  type WarmupPromptResult,
+  type WarmupPreferences,
+} from '@/lib/training/warmup-suggestions';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -452,6 +460,17 @@ export default function WorkoutPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
+  // Warmup prompt modal state (for isolation exercises as first exercise)
+  const [showWarmupPromptModal, setShowWarmupPromptModal] = useState(false);
+  const [warmupPromptResult, setWarmupPromptResult] = useState<WarmupPromptResult | null>(null);
+  const [suggestedCompoundExercises, setSuggestedCompoundExercises] = useState<{
+    id: string;
+    name: string;
+    primaryMuscle: string;
+    mechanic: 'compound' | 'isolation';
+  }[]>([]);
+  const [pendingPhaseTransition, setPendingPhaseTransition] = useState<'workout' | null>(null);
+
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
@@ -481,6 +500,16 @@ export default function WorkoutPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
+
+  // Handle pending phase transition (for warmup prompt check after skip check-in)
+  useEffect(() => {
+    if (pendingPhaseTransition === 'workout' && blocks.length > 0 && phase === 'loading') {
+      // Reset the pending transition and trigger warmup check
+      setPendingPhaseTransition(null);
+      transitionToWorkoutPhase();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPhaseTransition, blocks.length, phase]);
 
   // Load workout data
   useEffect(() => {
@@ -883,7 +912,8 @@ export default function WorkoutPage() {
                 started_at: new Date().toISOString(),
               })
               .eq('id', sessionId);
-            setPhase('workout');
+            // Set flag to trigger warmup check after component updates
+            setPendingPhaseTransition('workout');
           } else {
             setPhase('checkin');
           }
@@ -1082,11 +1112,12 @@ export default function WorkoutPage() {
         .from('workout_sessions')
         .update(updateData)
         .eq('id', sessionId);
-      
-      setPhase('workout');
+
+      // Check for warmup prompt before transitioning
+      await transitionToWorkoutPhase();
     } catch (err) {
       console.error('Failed to update session:', err);
-      setPhase('workout'); // Continue anyway
+      await transitionToWorkoutPhase(); // Continue anyway
     }
   };
 
@@ -1095,6 +1126,293 @@ export default function WorkoutPage() {
     await updatePreference('skipPreWorkoutCheckIn', true);
     // Then complete the check-in for this workout (without check-in data)
     await handleCheckInComplete();
+  };
+
+  // Check if we need to show warmup prompt before transitioning to workout phase
+  const transitionToWorkoutPhase = async () => {
+    // Only check for warmup prompt if we have exercises
+    if (blocks.length === 0) {
+      setPhase('workout');
+      return;
+    }
+
+    const firstExercise = blocks[0].exercise;
+    const warmupPrefs = preferences.warmupPreferences || {
+      skipWarmupPrompt: false,
+      warmupDismissCount: 0,
+      preferredWarmupMethod: null,
+    };
+
+    const result = checkNeedsWarmupPrompt(firstExercise, {
+      skipWarmupPrompt: warmupPrefs.skipWarmupPrompt,
+      warmupDismissCount: warmupPrefs.warmupDismissCount,
+    });
+
+    if (result.shouldPrompt) {
+      // Fetch suggested compound exercises from the database
+      try {
+        const supabase = createUntypedClient();
+        const suggestedIds = result.suggestedCompounds;
+
+        if (suggestedIds.length > 0) {
+          // Try to find exercises matching the suggested IDs or names
+          const { data: exercises } = await supabase
+            .from('exercises')
+            .select('id, name, primary_muscle, mechanic')
+            .in('id', suggestedIds);
+
+          if (exercises && exercises.length > 0) {
+            setSuggestedCompoundExercises(
+              exercises.map((ex) => ({
+                id: ex.id,
+                name: ex.name,
+                primaryMuscle: ex.primary_muscle,
+                mechanic: ex.mechanic as 'compound' | 'isolation',
+              }))
+            );
+          } else {
+            // Fallback: search by muscle group for compound exercises
+            const { data: fallbackExercises } = await supabase
+              .from('exercises')
+              .select('id, name, primary_muscle, mechanic')
+              .eq('primary_muscle', result.primaryMuscle)
+              .eq('mechanic', 'compound')
+              .limit(5);
+
+            if (fallbackExercises) {
+              setSuggestedCompoundExercises(
+                fallbackExercises.map((ex) => ({
+                  id: ex.id,
+                  name: ex.name,
+                  primaryMuscle: ex.primary_muscle,
+                  mechanic: ex.mechanic as 'compound' | 'isolation',
+                }))
+              );
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch suggested compounds:', err);
+      }
+
+      setWarmupPromptResult(result);
+      setPendingPhaseTransition('workout');
+      setShowWarmupPromptModal(true);
+    } else {
+      // No prompt needed, proceed directly to workout
+      setPhase('workout');
+    }
+  };
+
+  // Handle adding a compound exercise from warmup prompt
+  const handleAddWarmupCompound = async (exercise: {
+    id: string;
+    name: string;
+    primaryMuscle: string;
+    mechanic: 'compound' | 'isolation';
+  }) => {
+    try {
+      const supabase = createUntypedClient();
+
+      // Get the full exercise data
+      const { data: fullExercise } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('id', exercise.id)
+        .single();
+
+      if (!fullExercise) {
+        console.error('Exercise not found');
+        setShowWarmupPromptModal(false);
+        setPhase('workout');
+        return;
+      }
+
+      // Generate warmup protocol for the compound exercise
+      const warmupProtocol = generateWarmupProtocol({
+        workingWeight: blocks[0]?.targetWeightKg || 20,
+        exercise: {
+          name: fullExercise.name,
+          mechanic: 'compound',
+        },
+        isFirstExercise: true,
+        userExperience: preferences.experience || 'intermediate',
+      });
+
+      // Create a new exercise block for the compound exercise
+      const { data: newBlock, error: blockError } = await supabase
+        .from('exercise_blocks')
+        .insert({
+          workout_session_id: sessionId,
+          exercise_id: exercise.id,
+          order: 0, // Insert at the beginning
+          target_sets: 3,
+          target_rep_range: fullExercise.default_rep_range || [8, 12],
+          target_rir: fullExercise.default_rir || 2,
+          target_weight_kg: blocks[0]?.targetWeightKg || 20,
+          target_rest_seconds: 120,
+          suggestion_reason: 'Added as warmup compound before isolation exercise',
+          warmup_protocol: { sets: warmupProtocol },
+        })
+        .select('*')
+        .single();
+
+      if (blockError) {
+        console.error('Failed to create warmup compound block:', blockError);
+        setShowWarmupPromptModal(false);
+        setPhase('workout');
+        return;
+      }
+
+      // Update the order of all other blocks
+      const updatePromises = blocks.map((block, idx) =>
+        supabase
+          .from('exercise_blocks')
+          .update({ order: idx + 1 })
+          .eq('id', block.id)
+      );
+      await Promise.all(updatePromises);
+
+      // Add the new block to state at the beginning
+      const newBlockWithExercise: ExerciseBlockWithExercise = {
+        id: newBlock.id,
+        workoutSessionId: newBlock.workout_session_id,
+        exerciseId: newBlock.exercise_id,
+        order: 0,
+        supersetGroupId: null,
+        supersetOrder: null,
+        targetSets: newBlock.target_sets,
+        targetRepRange: newBlock.target_rep_range,
+        targetRir: newBlock.target_rir,
+        targetWeightKg: newBlock.target_weight_kg,
+        targetRestSeconds: newBlock.target_rest_seconds,
+        progressionType: null,
+        suggestionReason: newBlock.suggestion_reason,
+        warmupProtocol: warmupProtocol,
+        note: null,
+        exercise: {
+          id: fullExercise.id,
+          name: fullExercise.name,
+          primaryMuscle: fullExercise.primary_muscle,
+          secondaryMuscles: fullExercise.secondary_muscles || [],
+          mechanic: fullExercise.mechanic,
+          defaultRepRange: fullExercise.default_rep_range || [8, 12],
+          defaultRir: fullExercise.default_rir || 2,
+          minWeightIncrementKg: fullExercise.min_weight_increment_kg || 2.5,
+          formCues: fullExercise.form_cues || [],
+          commonMistakes: fullExercise.common_mistakes || [],
+          setupNote: fullExercise.setup_note || '',
+          movementPattern: fullExercise.movement_pattern || '',
+          equipmentRequired: fullExercise.equipment_required || [],
+        },
+      };
+
+      // Update blocks with new order
+      const updatedBlocks = blocks.map((b, idx) => ({ ...b, order: idx + 1 }));
+      setBlocks([newBlockWithExercise, ...updatedBlocks]);
+
+      // Save preferred method
+      const newWarmupPrefs: WarmupPreferences = {
+        ...(preferences.warmupPreferences || {
+          skipWarmupPrompt: false,
+          warmupDismissCount: 0,
+          preferredWarmupMethod: null,
+        }),
+        preferredWarmupMethod: 'compound',
+      };
+      await updatePreference('warmupPreferences', newWarmupPrefs);
+
+      setShowWarmupPromptModal(false);
+      setPhase('workout');
+    } catch (err) {
+      console.error('Failed to add warmup compound:', err);
+      setShowWarmupPromptModal(false);
+      setPhase('workout');
+    }
+  };
+
+  // Handle adding light warmup sets to the first exercise
+  const handleAddLightWarmupSets = async (warmupSets: typeof blocks[0]['warmupProtocol']) => {
+    try {
+      const supabase = createUntypedClient();
+      const firstBlock = blocks[0];
+
+      if (!firstBlock) {
+        setShowWarmupPromptModal(false);
+        setPhase('workout');
+        return;
+      }
+
+      // Update the first block with the new warmup protocol
+      await supabase
+        .from('exercise_blocks')
+        .update({
+          warmup_protocol: { sets: warmupSets },
+        })
+        .eq('id', firstBlock.id);
+
+      // Update local state
+      const updatedBlocks = [...blocks];
+      updatedBlocks[0] = {
+        ...firstBlock,
+        warmupProtocol: warmupSets,
+      };
+      setBlocks(updatedBlocks);
+
+      // Save preferred method
+      const newWarmupPrefs: WarmupPreferences = {
+        ...(preferences.warmupPreferences || {
+          skipWarmupPrompt: false,
+          warmupDismissCount: 0,
+          preferredWarmupMethod: null,
+        }),
+        preferredWarmupMethod: 'light_sets',
+      };
+      await updatePreference('warmupPreferences', newWarmupPrefs);
+
+      setShowWarmupPromptModal(false);
+      setPhase('workout');
+    } catch (err) {
+      console.error('Failed to add light warmup sets:', err);
+      setShowWarmupPromptModal(false);
+      setPhase('workout');
+    }
+  };
+
+  // Handle general warmup option
+  const handleGeneralWarmup = async () => {
+    // Save preferred method
+    const newWarmupPrefs: WarmupPreferences = {
+      ...(preferences.warmupPreferences || {
+        skipWarmupPrompt: false,
+        warmupDismissCount: 0,
+        preferredWarmupMethod: null,
+      }),
+      preferredWarmupMethod: 'general',
+    };
+    await updatePreference('warmupPreferences', newWarmupPrefs);
+
+    setShowWarmupPromptModal(false);
+    setPhase('workout');
+  };
+
+  // Handle "already warm" option - increment dismiss count
+  const handleAlreadyWarm = async () => {
+    const currentPrefs = preferences.warmupPreferences || {
+      skipWarmupPrompt: false,
+      warmupDismissCount: 0,
+      preferredWarmupMethod: null,
+    };
+
+    const newWarmupPrefs: WarmupPreferences = {
+      ...currentPrefs,
+      warmupDismissCount: currentPrefs.warmupDismissCount + 1,
+      preferredWarmupMethod: 'none',
+    };
+    await updatePreference('warmupPreferences', newWarmupPrefs);
+
+    setShowWarmupPromptModal(false);
+    setPhase('workout');
   };
 
   const handleSetComplete = async (data: { 
@@ -4104,6 +4422,25 @@ export default function WorkoutPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Warmup Prompt Modal - Shows when starting with isolation exercise */}
+      {warmupPromptResult && (
+        <WarmupPromptModal
+          isOpen={showWarmupPromptModal}
+          onClose={() => {
+            setShowWarmupPromptModal(false);
+            setPhase('workout');
+          }}
+          promptResult={warmupPromptResult}
+          suggestedExercises={suggestedCompoundExercises}
+          workingWeight={blocks[0]?.targetWeightKg || 20}
+          preferredMethod={preferences.warmupPreferences?.preferredWarmupMethod || null}
+          onAddCompound={handleAddWarmupCompound}
+          onAddLightSets={handleAddLightWarmupSets}
+          onGeneralWarmup={handleGeneralWarmup}
+          onAlreadyWarm={handleAlreadyWarm}
+        />
       )}
     </div>
   );
