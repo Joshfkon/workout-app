@@ -2346,7 +2346,7 @@ export default function WorkoutPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => setShowCancelModal(true)} className="text-surface-400 hover:text-danger-400">
-              Cancel
+              Cancel Workout
             </Button>
             <Button variant="ghost" onClick={handleOpenAddExercise}>
               <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
