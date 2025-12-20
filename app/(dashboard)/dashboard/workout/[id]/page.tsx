@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
+import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -467,6 +468,12 @@ export default function WorkoutPage() {
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
+
+  // Workout timer hook - tracks total workout duration with pause/resume
+  const workoutTimer = useWorkoutTimer({
+    sessionId,
+    startedAt: session?.startedAt ?? null,
+  });
 
   // Clear timer when session changes or component unmounts
   useEffect(() => {
@@ -2658,9 +2665,34 @@ export default function WorkoutPage() {
       <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
         <div>
           <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-          <p className="text-surface-400">
-            {totalCompletedSets} of {totalPlannedSets} sets completed
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-surface-400">
+              {totalCompletedSets} of {totalPlannedSets} sets completed
+            </p>
+            {/* Workout timer display with pause/play */}
+            {session?.startedAt && (
+              <button
+                onClick={workoutTimer.toggle}
+                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm font-mono transition-colors ${
+                  workoutTimer.isPaused
+                    ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
+                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                }`}
+                title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
+              >
+                {workoutTimer.isPaused ? (
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                  </svg>
+                )}
+                <span>{workoutTimer.formattedTime}</span>
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button
