@@ -2401,24 +2401,30 @@ export default function WorkoutPage() {
     return (
       <div className="max-w-2xl mx-auto space-y-6 pb-8">
         {/* Same header as normal workout */}
-        <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
-          <div>
-            <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-            <p className="text-surface-400">0 of 0 sets completed</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setShowCancelModal(true)} className="text-surface-400 hover:text-danger-400">
-              Cancel Workout
-            </Button>
-            <Button variant="ghost" onClick={handleOpenAddExercise}>
-              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add
-            </Button>
-            <Button variant="outline" onClick={handleWorkoutComplete}>
-              Finish
-            </Button>
+        <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+              <p className="text-surface-400">0 of 0 sets completed</p>
+            </div>
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
+              <Button
+                variant="ghost"
+                onClick={() => setShowCancelModal(true)}
+                className="text-surface-400 hover:text-danger-400 flex-1 sm:flex-none"
+              >
+                Cancel Workout
+              </Button>
+              <Button variant="ghost" onClick={handleOpenAddExercise} className="flex-1 sm:flex-none">
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add
+              </Button>
+              <Button variant="outline" onClick={handleWorkoutComplete} className="flex-1 sm:flex-none">
+                Finish
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -2717,88 +2723,94 @@ export default function WorkoutPage() {
       )}
       
       {/* Workout header */}
-      <div className="flex items-center justify-between sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-          <div className="flex items-center gap-3">
-            <p className="text-surface-400">
-              {totalCompletedSets} of {totalPlannedSets} sets completed
-            </p>
-            {/* Workout timer display with pause/play */}
-            {session?.startedAt && (
-              <button
-                onClick={workoutTimer.toggle}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm font-mono transition-colors ${
-                  workoutTimer.isPaused
-                    ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
-                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                }`}
-                title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
-              >
-                {workoutTimer.isPaused ? (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                  </svg>
-                )}
-                <span>{workoutTimer.formattedTime}</span>
-              </button>
-            )}
+      <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <p className="text-surface-400">
+                {totalCompletedSets} of {totalPlannedSets} sets completed
+              </p>
+              {/* Workout timer display with pause/play */}
+              {session?.startedAt && (
+                <button
+                  onClick={workoutTimer.toggle}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm font-mono transition-colors ${
+                    workoutTimer.isPaused
+                      ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
+                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                  }`}
+                  title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
+                >
+                  {workoutTimer.isPaused ? (
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                    </svg>
+                  )}
+                  <span>{workoutTimer.formattedTime}</span>
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setAllCollapsed(!allCollapsed)}
-            className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-              allCollapsed 
-                ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400' 
-                : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-            }`}
-            title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
-          >
-            {allCollapsed ? (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-                <span className="hidden sm:inline">Expand</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-                <span className="hidden sm:inline">Collapse</span>
-              </>
-            )}
-          </button>
-          <button
-            onClick={() => setShowInjuryModal(true)}
-            className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-              temporaryInjuries.length > 0
-                ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
-                : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-            }`}
-            title="Report pain or injury"
-          >
-            <span>🤕</span>
-            <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
-          </button>
-          <Button variant="ghost" onClick={() => setShowCancelModal(true)} className="text-surface-400 hover:text-danger-400">
-            Cancel
-          </Button>
-          <Button variant="ghost" onClick={handleOpenAddExercise}>
-            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add
-          </Button>
-          <Button variant="outline" onClick={handleWorkoutComplete}>
-            Finish
-          </Button>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
+            <button
+              onClick={() => setAllCollapsed(!allCollapsed)}
+              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+                allCollapsed
+                  ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
+                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+              }`}
+              title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
+            >
+              {allCollapsed ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="hidden sm:inline">Expand</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                  <span className="hidden sm:inline">Collapse</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowInjuryModal(true)}
+              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+                temporaryInjuries.length > 0
+                  ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
+                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+              }`}
+              title="Report pain or injury"
+            >
+              <span>🤕</span>
+              <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
+            </button>
+            <Button
+              variant="ghost"
+              onClick={() => setShowCancelModal(true)}
+              className="text-surface-400 hover:text-danger-400 flex-1 sm:flex-none"
+            >
+              Cancel
+            </Button>
+            <Button variant="ghost" onClick={handleOpenAddExercise} className="flex-1 sm:flex-none">
+              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add
+            </Button>
+            <Button variant="outline" onClick={handleWorkoutComplete} className="flex-1 sm:flex-none">
+              Finish
+            </Button>
+          </div>
         </div>
       </div>
 
