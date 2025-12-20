@@ -36,8 +36,7 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
     overflow-x: hidden;
-    overscroll-behavior: none;
-    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: none;
   }
 
   body {
@@ -46,21 +45,7 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
-    overscroll-behavior: none;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Root container for Next.js app - enables proper scrolling while preventing horizontal overflow */
-  #__next,
-  body > div:first-child {
-    overflow-y: auto;
-    overflow-x: hidden;
-    height: 100%;
-    width: 100%;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: none;
   }
 
   /* Prevent zoom on input focus (iOS) */
