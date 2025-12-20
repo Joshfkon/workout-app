@@ -431,9 +431,15 @@ export interface ExerciseBlock {
   
   /** Generated warmup protocol */
   warmupProtocol: WarmupSet[];
-  
+
   /** User notes for this exercise block */
   note: string | null;
+
+  /** Number of drops per main set (0 = no dropsets) */
+  dropsetsPerSet: number;
+
+  /** Weight reduction percentage for each drop (0.25 = 25% reduction) */
+  dropPercentage: number;
 }
 
 /**

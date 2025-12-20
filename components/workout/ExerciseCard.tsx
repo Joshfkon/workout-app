@@ -9,6 +9,7 @@ import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
+import { DropsetPrompt } from './DropsetPrompt';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -146,6 +147,15 @@ interface ExerciseCardProps {
   timerIsSkipped?: boolean;
   timerRestedSeconds?: number;
   onShowTimerControls?: () => void;
+  // Dropset state from parent (auto-triggered after main set completion)
+  pendingDropset?: {
+    parentSetId: string;
+    parentWeight: number;
+    blockId: string;
+    dropNumber: number;
+    totalDrops: number;
+  } | null;
+  onDropsetCancel?: () => void;
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -180,6 +190,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   timerIsSkipped = false,
   timerRestedSeconds = 0,
   onShowTimerControls,
+  pendingDropset = null,
+  onDropsetCancel,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -1208,8 +1220,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </td>
                 </tr>
                 
-                {/* Add Dropset button - only show for last completed set when active */}
-                {isActive && isLastCompletedSet && !dropsetMode && !isDropset && pendingInputs.length === 0 && (
+                {/* Add Dropset button - only show for last completed set when active
+                    AND when block does NOT have auto-dropsets configured (manual mode only) */}
+                {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
+                 pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                   <tr className="bg-surface-800/20">
                     <td colSpan={6} className="px-3 py-2">
                       <button
@@ -1228,8 +1242,32 @@ export const ExerciseCard = memo(function ExerciseCard({
               );
             })}
 
-            {/* Inline Rest Timer - appears after completing a set or warmup */}
-            {isActive && showRestTimer && (
+            {/* Auto-triggered Dropset Prompt - appears immediately after main set when block has dropsets configured */}
+            {isActive && pendingDropset && (
+              <DropsetPrompt
+                parentWeight={pendingDropset.parentWeight}
+                dropNumber={pendingDropset.dropNumber}
+                totalDrops={pendingDropset.totalDrops}
+                dropPercentage={block.dropPercentage ?? 0.25}
+                unit={unit}
+                exerciseEquipment={exercise.equipmentRequired}
+                onComplete={(data) => {
+                  if (onSetComplete) {
+                    onSetComplete({
+                      weightKg: data.weightKg,
+                      reps: data.reps,
+                      rpe: data.rpe,
+                      setType: 'dropset',
+                      parentSetId: pendingDropset.parentSetId,
+                    });
+                  }
+                }}
+                onCancel={() => onDropsetCancel?.()}
+              />
+            )}
+
+            {/* Inline Rest Timer - appears after completing a set or warmup (NOT during dropset) */}
+            {isActive && showRestTimer && !pendingDropset && (
               <InlineRestTimerBar
                 seconds={timerSeconds}
                 initialSeconds={timerInitialSeconds}
@@ -1241,8 +1279,8 @@ export const ExerciseCard = memo(function ExerciseCard({
               />
             )}
 
-            {/* Dropset input row - appears when adding a dropset */}
-            {isActive && dropsetMode && (
+            {/* Manual Dropset input row - for blocks WITHOUT configured dropsets (legacy/manual mode) */}
+            {isActive && dropsetMode && !pendingDropset && (
               <tr className="bg-purple-500/20 border-l-2 border-purple-500">
                 <td className="px-3 py-2 text-purple-400 font-medium">
                   <div className="flex items-center gap-1">
@@ -1288,11 +1326,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                         const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
                         const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
                         const rpeEl = document.getElementById('dropset-rpe-input') as HTMLInputElement;
-                        
+
                         const weight = parseFloat(weightEl?.value || '0');
                         const reps = parseInt(repsEl?.value || '0');
                         const rpe = parseFloat(rpeEl?.value || '10');
-                        
+
                         if (weight > 0 && reps > 0 && onSetComplete) {
                           const weightKg = inputWeightToKg(weight, unit);
                           onSetComplete({
