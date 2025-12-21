@@ -96,10 +96,10 @@ export async function getAdaptiveTDEE(
   }
 
   // Create data points for days where we have both weight and calories
-  const allDates = new Set([
+  const allDates = Array.from(new Set([
     ...Object.keys(dailyCalories),
     ...Object.keys(weightByDate),
-  ]);
+  ]));
 
   for (const date of allDates) {
     const weight = weightByDate[date];
