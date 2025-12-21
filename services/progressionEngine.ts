@@ -1098,7 +1098,7 @@ export function calculateSuggestedWeight(
   const avgForm =
     lastSession.form.reduce((sum, f) => sum + formScoreHelper(f), 0) / lastSession.form.length;
   const avgRIR =
-    lastSession.repsInTank.reduce((sum, r) => sum + r, 0) / lastSession.repsInTank.length;
+    lastSession.repsInTank.reduce((sum: number, r: number) => sum + r, 0) / lastSession.repsInTank.length;
   const avgReps = lastSession.reps.reduce((sum, r) => sum + r, 0) / lastSession.reps.length;
 
   // FORM REGRESSION: Suggest lower weight (avg form < 0.5 means mostly ugly/some breakdown)
