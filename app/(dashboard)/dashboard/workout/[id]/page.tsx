@@ -6,7 +6,7 @@ import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -1115,17 +1115,41 @@ export default function WorkoutPage() {
     await handleCheckInComplete();
   };
 
-  const handleSetComplete = async (data: { 
-    weightKg: number; 
-    reps: number; 
-    rpe: number; 
+  const handleSetComplete = async (data: {
+    weightKg: number;
+    reps: number;
+    rpe: number;
     note?: string;
     setType?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
     parentSetId?: string;
+    feedback?: SetFeedback;
   }) => {
     if (!currentBlock) return;
 
-    const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective';
+    // Determine quality - factor in form if available
+    let quality: 'stimulative' | 'effective' | 'junk';
+    if (data.feedback?.form === 'ugly') {
+      quality = 'junk'; // Ugly form sets are junk
+    } else if (data.rpe >= 7.5 && data.rpe <= 9.5) {
+      quality = 'stimulative';
+    } else if (data.rpe <= 5) {
+      quality = 'junk';
+    } else {
+      quality = 'effective';
+    }
+
+    // Build quality reason
+    let qualityReason = '';
+    if (data.feedback) {
+      const formLabel =
+        data.feedback.form === 'clean'
+          ? 'Clean form'
+          : data.feedback.form === 'some_breakdown'
+            ? 'Some form breakdown'
+            : 'Form breakdown';
+      qualityReason = formLabel;
+    }
+
     const loggedAt = new Date().toISOString();
     const setType = data.setType || 'normal';
 
@@ -1144,9 +1168,10 @@ export default function WorkoutPage() {
           rpe: data.rpe,
           is_warmup: false,
           quality: quality,
-          quality_reason: '',
+          quality_reason: qualityReason,
           note: data.note || null,
           logged_at: loggedAt,
+          feedback: data.feedback ? JSON.stringify(data.feedback) : null,
         })
         .select('id')
         .single();
@@ -1170,9 +1195,10 @@ export default function WorkoutPage() {
         setType: setType,
         parentSetId: data.parentSetId || null,
         quality: quality,
-        qualityReason: '',
+        qualityReason: qualityReason,
         note: data.note || null,
         loggedAt: loggedAt,
+        feedback: data.feedback,
       };
       
       // Update local state using functional updates to avoid stale closures
