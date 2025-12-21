@@ -165,7 +165,7 @@ export default function DashboardPage() {
         const thirtyDaysAgo = new Date(today);
         thirtyDaysAgo.setDate(today.getDate() - 30);
         const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - today.getDay());
+        weekStart.setDate(today.getDate() - 6); // Rolling 7 days (including today)
         
         // OPTIMIZATION: Run ALL independent queries in parallel
         const [
