@@ -3248,9 +3248,10 @@ export default function WorkoutPage() {
                       : block
                     }
                     sets={blockSets}
-                    onSetComplete={(data) => {
-                      handleSetComplete(data);
+                    onSetComplete={async (data) => {
+                      const setId = await handleSetComplete(data);
                       setAddingExtraSet(null);
+                      return setId;
                     }}
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
