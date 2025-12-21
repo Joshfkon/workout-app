@@ -36,13 +36,13 @@ async function getAIUsage(userId: string): Promise<UsageRecord> {
   const monthStartStr = monthStart.toISOString().split('T')[0];
 
   // Check for existing usage record
-  const { data } = await supabase
-    .from('ai_exercise_completions')
+  const { data } = await (supabase
+    .from('ai_exercise_completions') as any)
     .select('created_at')
     .eq('user_id', userId)
     .gte('created_at', monthStartStr);
 
-  const records = data || [];
+  const records = (data || []) as { created_at: string }[];
   const todayCount = records.filter(
     (r) => r.created_at.split('T')[0] === today
   ).length;
@@ -56,7 +56,7 @@ async function getAIUsage(userId: string): Promise<UsageRecord> {
 async function recordAIUsage(userId: string, exerciseName: string): Promise<void> {
   const supabase = await createClient();
 
-  await supabase.from('ai_exercise_completions').insert({
+  await (supabase.from('ai_exercise_completions') as any).insert({
     user_id: userId,
     exercise_name: exerciseName,
     created_at: new Date().toISOString(),
@@ -248,16 +248,16 @@ export async function getIncompleteExercises(): Promise<
       return [];
     }
 
-    const { data: exercises } = await supabase
-      .from('exercises')
+    const { data: exercises } = await (supabase
+      .from('exercises') as any)
       .select('*')
       .eq('created_by', user.id)
       .eq('is_custom', true);
 
     if (!exercises) return [];
 
-    return exercises
-      .map((exercise) => {
+    return (exercises as any[])
+      .map((exercise: any) => {
         const missingFields: string[] = [];
 
         if (!exercise.stabilizers || exercise.stabilizers.length === 0) {
@@ -279,12 +279,12 @@ export async function getIncompleteExercises(): Promise<
         if (missingFields.length === 0) return null;
 
         return {
-          id: exercise.id,
-          name: exercise.name,
+          id: exercise.id as string,
+          name: exercise.name as string,
           missingFields,
         };
       })
-      .filter((e): e is { id: string; name: string; missingFields: string[] } => e !== null);
+      .filter((e: any): e is { id: string; name: string; missingFields: string[] } => e !== null);
   } catch {
     return [];
   }
