@@ -1312,6 +1312,7 @@ export default function NutritionPage() {
       />
 
       <WeightLogModal
+        key={editingWeight?.id || 'new'}
         isOpen={!!editingWeight}
         onClose={() => setEditingWeight(null)}
         onSave={handleUpdateWeight}
