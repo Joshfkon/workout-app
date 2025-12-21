@@ -58,6 +58,12 @@ export default function AddExercisePage() {
         .map(eq => eq.trim().toLowerCase())
         .filter(eq => eq.length > 0);
 
+      // Get the authenticated user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('You must be logged in to create custom exercises');
+      }
+
       const { error: insertError } = await supabase.from('exercises').insert({
         name: name.trim(),
         primary_muscle: primaryMuscle,
@@ -72,6 +78,8 @@ export default function AddExercisePage() {
         common_mistakes: [],
         setup_note: setupNote || null,
         hypertrophy_tier: hypertrophyTier,
+        is_custom: true,
+        created_by: user.id,
       });
 
       if (insertError) {

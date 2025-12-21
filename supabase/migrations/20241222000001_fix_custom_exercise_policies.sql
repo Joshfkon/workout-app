@@ -10,10 +10,12 @@ DROP POLICY IF EXISTS "Users can create custom exercises" ON exercises;
 -- Create the INSERT policy
 -- Note: WITH CHECK validates the row being inserted
 -- The policy allows inserts where is_custom is true and created_by matches the authenticated user
+-- IMPORTANT: auth.uid() must not be NULL for this to work
 CREATE POLICY "Users can create custom exercises" ON exercises
   FOR INSERT 
   WITH CHECK (
-    is_custom = TRUE 
+    auth.uid() IS NOT NULL
+    AND is_custom = TRUE 
     AND created_by = auth.uid()
   );
 
