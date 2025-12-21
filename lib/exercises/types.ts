@@ -31,6 +31,59 @@ export interface BasicExerciseInput {
   variationOf?: string;
   /** Name of the base exercise if this is a variation */
   variationOfName?: string;
+  
+  // === Optional Detailed Fields ===
+  
+  /** Secondary muscles worked */
+  secondaryMuscles?: MuscleGroup[];
+  /** Movement pattern */
+  pattern?: MovementPattern | 'isolation' | 'carry';
+  /** Exercise mechanic type */
+  mechanic?: 'compound' | 'isolation';
+  /** Difficulty level */
+  difficulty?: ExerciseDifficulty;
+  /** Fatigue rating (1-3) */
+  fatigueRating?: FatigueRating;
+  
+  /** Default rep range [min, max] */
+  defaultRepRange?: [number, number];
+  /** Default RIR target */
+  defaultRir?: number;
+  /** Minimum weight increment in kg */
+  minWeightIncrementKg?: number;
+  
+  /** Form cues for proper execution */
+  formCues?: string[];
+  /** Common mistakes to avoid */
+  commonMistakes?: string[];
+  /** Setup instructions or notes */
+  setupNote?: string;
+  
+  /** Spinal loading level */
+  spinalLoading?: SpinalLoading;
+  /** Muscles used for stability */
+  stabilizers?: MuscleGroup[];
+  /** Requires back arch */
+  requiresBackArch?: boolean;
+  /** Requires spinal flexion */
+  requiresSpinalFlexion?: boolean;
+  /** Requires spinal extension */
+  requiresSpinalExtension?: boolean;
+  /** Requires spinal rotation */
+  requiresSpinalRotation?: boolean;
+  /** Position stress areas */
+  positionStress?: PositionStress;
+  /** Injury contraindications */
+  contraindications?: string[];
+  
+  /** Hypertrophy tier */
+  hypertrophyTier?: HypertrophyTier;
+  /** Stretch under load rating (1-5) */
+  stretchUnderLoad?: HypertrophyRating;
+  /** Resistance profile rating (1-5) */
+  resistanceProfile?: HypertrophyRating;
+  /** Progression ease rating (1-5) */
+  progressionEase?: HypertrophyRating;
 }
 
 // ============================================
@@ -77,6 +130,8 @@ export interface CompletedExerciseData {
 
   // Form guidance
   formCues: string[];
+  commonMistakes?: string[];
+  setupNote?: string;
 
   // === Metadata ===
   aiConfidence: AIConfidence;

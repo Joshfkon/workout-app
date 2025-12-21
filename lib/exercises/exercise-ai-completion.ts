@@ -231,44 +231,58 @@ function parseAIResponse(
     description: input.description,
     variationOf: input.variationOf,
 
-    // AI completed
-    secondaryMuscles,
-    stabilizers,
-    pattern,
-    mechanic,
-    difficulty,
-    fatigueRating,
-    defaultRepRange: Array.isArray(response.defaultRepRange) && response.defaultRepRange.length === 2
-      ? [response.defaultRepRange[0], response.defaultRepRange[1]]
-      : EQUIPMENT_DEFAULTS[input.equipment].defaultRepRange,
-    defaultRir: typeof response.defaultRir === 'number' ? response.defaultRir : 2,
-    minWeightIncrementKg: typeof response.minWeightIncrementKg === 'number'
-      ? response.minWeightIncrementKg
-      : EQUIPMENT_DEFAULTS[input.equipment].minWeightIncrementKg,
+    // AI completed (use user-provided values if available, otherwise use AI response)
+    secondaryMuscles: input.secondaryMuscles && input.secondaryMuscles.length > 0
+      ? input.secondaryMuscles
+      : secondaryMuscles,
+    stabilizers: input.stabilizers && input.stabilizers.length > 0
+      ? input.stabilizers
+      : stabilizers,
+    pattern: input.pattern || pattern,
+    mechanic: input.mechanic || mechanic,
+    difficulty: input.difficulty || difficulty,
+    fatigueRating: input.fatigueRating || fatigueRating,
+    defaultRepRange: input.defaultRepRange || (
+      Array.isArray(response.defaultRepRange) && response.defaultRepRange.length === 2
+        ? [response.defaultRepRange[0], response.defaultRepRange[1]]
+        : EQUIPMENT_DEFAULTS[input.equipment].defaultRepRange
+    ),
+    defaultRir: input.defaultRir || (typeof response.defaultRir === 'number' ? response.defaultRir : 2),
+    minWeightIncrementKg: input.minWeightIncrementKg || (
+      typeof response.minWeightIncrementKg === 'number'
+        ? response.minWeightIncrementKg
+        : EQUIPMENT_DEFAULTS[input.equipment].minWeightIncrementKg
+    ),
 
-    // Spinal/safety metadata
-    spinalLoading,
-    requiresBackArch: !!response.requiresBackArch,
-    requiresSpinalFlexion: !!response.requiresSpinalFlexion,
-    requiresSpinalExtension: !!response.requiresSpinalExtension,
-    requiresSpinalRotation: !!response.requiresSpinalRotation,
-    positionStress: response.positionStress || {},
-    contraindications: Array.isArray(response.contraindications)
-      ? response.contraindications
-      : [],
+    // Spinal/safety metadata (use user-provided values if available)
+    spinalLoading: input.spinalLoading || spinalLoading,
+    requiresBackArch: input.requiresBackArch !== undefined ? input.requiresBackArch : !!response.requiresBackArch,
+    requiresSpinalFlexion: input.requiresSpinalFlexion !== undefined ? input.requiresSpinalFlexion : !!response.requiresSpinalFlexion,
+    requiresSpinalExtension: input.requiresSpinalExtension !== undefined ? input.requiresSpinalExtension : !!response.requiresSpinalExtension,
+    requiresSpinalRotation: input.requiresSpinalRotation !== undefined ? input.requiresSpinalRotation : !!response.requiresSpinalRotation,
+    positionStress: input.positionStress && Object.keys(input.positionStress).length > 0
+      ? input.positionStress
+      : (response.positionStress || {}),
+    contraindications: input.contraindications && input.contraindications.length > 0
+      ? input.contraindications
+      : (Array.isArray(response.contraindications) ? response.contraindications : []),
 
-    // Hypertrophy scoring
+    // Hypertrophy scoring (use user-provided values if available)
     hypertrophyScore: {
-      tier,
-      stretchUnderLoad: clampRating(response.hypertrophyScore?.stretchUnderLoad),
-      resistanceProfile: clampRating(response.hypertrophyScore?.resistanceProfile),
-      progressionEase: clampRating(response.hypertrophyScore?.progressionEase),
+      tier: input.hypertrophyTier || tier,
+      stretchUnderLoad: input.stretchUnderLoad || clampRating(response.hypertrophyScore?.stretchUnderLoad),
+      resistanceProfile: input.resistanceProfile || clampRating(response.hypertrophyScore?.resistanceProfile),
+      progressionEase: input.progressionEase || clampRating(response.hypertrophyScore?.progressionEase),
     },
 
-    // Form guidance
-    formCues: Array.isArray(response.formCues)
-      ? response.formCues.slice(0, 5)
+    // Form guidance (use user-provided values if available)
+    formCues: input.formCues && input.formCues.length > 0
+      ? input.formCues
+      : (Array.isArray(response.formCues) ? response.formCues.slice(0, 5) : []),
+    commonMistakes: input.commonMistakes && input.commonMistakes.length > 0
+      ? input.commonMistakes
       : [],
+    setupNote: input.setupNote || '',
 
     // Metadata
     aiConfidence: confidence,
