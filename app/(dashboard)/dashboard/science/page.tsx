@@ -53,12 +53,13 @@ const scienceConcepts = [
     color: 'primary',
   },
   {
-    title: 'TDEE & Adaptive Thermogenesis',
+    title: 'Adaptive TDEE Estimation',
     source: 'Metabolic Research',
     icon: '🔥',
-    explanation: 'Your Total Daily Energy Expenditure (TDEE) includes BMR, activity, and exercise. During dieting, metabolic adaptation can reduce TDEE by 10-15%. Tracking weight helps recalibrate.',
-    application: 'Our macro calculator computes TDEE from your stats and activity level. When you log new weight, we automatically recalculate your targets to keep progress on track.',
+    explanation: 'Generic formulas can be off by 300-500 calories. By tracking your actual weight changes against calorie intake, we back-calculate your personal burn rate using least-squares regression.',
+    application: 'After 2-3 weeks of logging, we calculate YOUR actual TDEE from real data. Weight predictions become highly accurate once your estimate stabilizes.',
     color: 'accent',
+    link: '/dashboard/learn/adaptive-tdee',
   },
   {
     title: 'Daily Undulating Periodization (DUP)',
@@ -199,6 +200,41 @@ export default function SciencePage() {
         </div>
       </Card>
 
+      {/* Deep Dive Articles */}
+      <Card className="p-6">
+        <h2 className="text-xl font-bold text-surface-100 mb-4">Deep Dive Articles</h2>
+        <p className="text-surface-400 mb-4">
+          Want to understand the science in more detail? Check out our Learn & Science section.
+        </p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <Link href="/dashboard/learn/adaptive-tdee">
+            <div className="p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🔥</span>
+                <div>
+                  <p className="font-semibold text-surface-200">Adaptive TDEE Estimation</p>
+                  <p className="text-xs text-surface-500">How we calculate your personal metabolism</p>
+                </div>
+              </div>
+            </div>
+          </Link>
+          <Link href="/dashboard/learn/injury-prevention">
+            <div className="p-4 bg-surface-800/50 rounded-lg hover:bg-surface-800 transition-colors cursor-pointer">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🛡️</span>
+                <div>
+                  <p className="font-semibold text-surface-200">Smart Injury Prevention</p>
+                  <p className="text-xs text-surface-500">How we keep you safe with biomechanics</p>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+        <Link href="/dashboard/learn" className="block mt-4 text-center text-sm text-primary-400 hover:text-primary-300 transition-colors">
+          View all articles →
+        </Link>
+      </Card>
+
       {/* CTA */}
       <Card className="p-8 text-center bg-gradient-to-r from-primary-500/10 via-purple-500/10 to-accent-500/10 border-primary-500/20">
         <h2 className="text-2xl font-bold text-surface-100 mb-2">Ready to Apply the Science?</h2>
@@ -216,7 +252,7 @@ export default function SciencePage() {
               Set Up Nutrition
             </button>
           </Link>
-          <Link href="/dashboard/about">
+          <Link href="/dashboard/learn">
             <button className="px-6 py-3 bg-surface-800 hover:bg-surface-700 text-surface-200 font-semibold rounded-lg transition-colors">
               Learn More
             </button>
