@@ -15,6 +15,63 @@ export type SessionState = 'planned' | 'in_progress' | 'completed' | 'skipped';
 /** Quality classification for a logged set based on RPE/RIR analysis */
 export type SetQuality = 'junk' | 'effective' | 'stimulative' | 'excessive';
 
+/** Form quality rating for a set */
+export type FormRating = 'clean' | 'some_breakdown' | 'ugly';
+
+/** Reps in tank (RIR) values: 4 means "4+", 2 represents "2-3" range */
+export type RepsInTank = 0 | 1 | 2 | 4;
+
+/** Body parts for discomfort logging */
+export type DiscomfortBodyPart =
+  | 'lower_back'
+  | 'upper_back'
+  | 'neck'
+  | 'left_shoulder'
+  | 'right_shoulder'
+  | 'shoulders'
+  | 'left_elbow'
+  | 'right_elbow'
+  | 'elbows'
+  | 'left_wrist'
+  | 'right_wrist'
+  | 'wrists'
+  | 'left_knee'
+  | 'right_knee'
+  | 'knees'
+  | 'left_hip'
+  | 'right_hip'
+  | 'hips'
+  | 'other';
+
+/** Discomfort severity levels */
+export type DiscomfortSeverity = 'twinge' | 'discomfort' | 'pain';
+
+/**
+ * Discomfort logged during a set
+ */
+export interface SetDiscomfort {
+  /** Body part affected */
+  bodyPart: DiscomfortBodyPart;
+  /** Which side if applicable */
+  side?: 'left' | 'right' | 'both';
+  /** Severity of the discomfort */
+  severity: DiscomfortSeverity;
+  /** Optional notes about the discomfort */
+  notes?: string;
+}
+
+/**
+ * Structured feedback for a set - replaces passive RPE input
+ */
+export interface SetFeedback {
+  /** Reps left in reserve (4 = "4+ Easy", 2 = "2-3 Good", 1 = "Hard", 0 = "Maxed Out") */
+  repsInTank: RepsInTank;
+  /** Form quality during the set */
+  form: FormRating;
+  /** Optional discomfort logged during the set */
+  discomfort?: SetDiscomfort;
+}
+
 /** Type of progression applied to an exercise */
 export type ProgressionType = 'load' | 'reps' | 'sets' | 'technique';
 
@@ -475,42 +532,45 @@ export type SetType = 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
 export interface SetLog {
   id: string;
   exerciseBlockId: string;
-  
+
   /** Set number within the exercise block (1-indexed) */
   setNumber: number;
-  
+
   /** Weight used in kg */
   weightKg: number;
-  
+
   /** Reps completed */
   reps: number;
-  
-  /** Rate of Perceived Exertion (1-10) */
+
+  /** Rate of Perceived Exertion (1-10) - derived from feedback.repsInTank */
   rpe: number;
-  
+
   /** Rest taken after this set in seconds */
   restSeconds: number | null;
-  
+
   /** Whether this is a warmup set (deprecated: use setType instead) */
   isWarmup: boolean;
-  
+
   /** Type of set for advanced training techniques */
   setType: SetType;
-  
+
   /** For dropsets: references the parent set this dropset follows */
   parentSetId: string | null;
-  
+
   /** Quality classification based on RPE analysis */
   quality: SetQuality;
-  
+
   /** Explanation for the quality classification */
   qualityReason: string;
-  
+
   /** Optional note for this specific set */
   note: string | null;
-  
+
   /** Timestamp when the set was logged */
   loggedAt: string;
+
+  /** Structured feedback for this set (RIR, form quality, discomfort) */
+  feedback?: SetFeedback;
 }
 
 // ============ ANALYTICS ============
@@ -1343,17 +1403,148 @@ export interface BodyCompRecommendation {
 export interface BodyCompTargets {
   /** Target body fat percentage */
   targetBodyFat: number;
-  
+
   /** Target FFMI */
   targetFfmi: number;
-  
+
   /** Estimated weeks to reach target */
   estimatedWeeks: number;
-  
+
   /** Required weekly calorie adjustment */
   calorieAdjustment: number;
-  
+
   /** Target direction */
   direction: 'bulk' | 'cut' | 'maintain';
+}
+
+// ============ SET QUALITY FEEDBACK & PR TRACKING ============
+
+/**
+ * PR (Personal Record) determination result
+ */
+export interface PRResult {
+  /** Whether this qualifies as a personal record */
+  isPR: boolean;
+  /** Type of PR if applicable */
+  type?: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form';
+  /** Reason code for the result */
+  reason: 'new_pr' | 'form_breakdown' | 'form_regression' | 'not_better' | 'first_time';
+  /** Human-readable message */
+  message: string;
+  /** Improvement percentage if applicable */
+  improvement?: number;
+}
+
+/**
+ * Criteria used to evaluate a potential PR
+ */
+export interface PRCriteria {
+  weight: number;
+  reps: number;
+  repsInTank: RepsInTank;
+  form: FormRating;
+  e1rm?: number;
+}
+
+/**
+ * Weight suggestion with form-based context
+ */
+export interface WeightSuggestion {
+  /** Suggested weight in kg */
+  weight: number;
+  /** Reason for the suggestion */
+  reason:
+    | 'form_correction'
+    | 'form_consolidation'
+    | 'progression'
+    | 'on_target'
+    | 'intensity_reduction'
+    | 'first_time';
+  /** Human-readable explanation */
+  message: string;
+  /** Confidence level in the suggestion */
+  confidence: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Form trend warning for exercise history
+ */
+export interface FormTrendWarning {
+  /** Type of form issue detected */
+  type: 'declining_form' | 'persistent_breakdown';
+  /** Warning message */
+  message: string;
+  /** Suggested action */
+  suggestion: string;
+  /** Recommended action type */
+  action: 'deload_suggested' | 'deload_required' | 'monitor';
+}
+
+/**
+ * Session history for form tracking
+ */
+export interface SessionFormHistory {
+  sessionDate: string;
+  exerciseId: string;
+  sets: Array<{
+    weight: number;
+    reps: number;
+    form: FormRating;
+    repsInTank: RepsInTank;
+  }>;
+}
+
+// ============ UTILITY FUNCTIONS ============
+
+/**
+ * Convert Reps In Reserve to RPE
+ * RIR 4+ = RPE 6, RIR 2-3 = RPE 7.5, RIR 1 = RPE 9, RIR 0 = RPE 10
+ */
+export function rirToRpe(rir: RepsInTank): number {
+  switch (rir) {
+    case 4:
+      return 6; // 4+ RIR = Easy
+    case 2:
+      return 7.5; // 2-3 RIR = Good
+    case 1:
+      return 9; // 1 RIR = Hard
+    case 0:
+      return 10; // 0 RIR = Maxed out
+    default:
+      return 10 - rir;
+  }
+}
+
+/**
+ * Convert RPE to approximate Reps In Reserve
+ */
+export function rpeToRir(rpe: number): RepsInTank {
+  if (rpe <= 6) return 4;
+  if (rpe <= 8) return 2;
+  if (rpe <= 9) return 1;
+  return 0;
+}
+
+/**
+ * Calculate form score (0-1 scale)
+ * clean = 1.0, some_breakdown = 0.5, ugly = 0
+ */
+export function calculateFormScore(form: FormRating): number {
+  switch (form) {
+    case 'clean':
+      return 1.0;
+    case 'some_breakdown':
+      return 0.5;
+    case 'ugly':
+      return 0;
+  }
+}
+
+/**
+ * Calculate average form score from an array of form ratings
+ */
+export function calculateAvgFormScore(forms: FormRating[]): number {
+  if (forms.length === 0) return 1.0;
+  return forms.reduce((sum, form) => sum + calculateFormScore(form), 0) / forms.length;
 }
 

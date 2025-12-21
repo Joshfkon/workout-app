@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, memo } from 'react';
-import { Input, Button, Badge } from '@/components/ui';
-import type { SetLog, SetQuality, WeightUnit } from '@/types/schema';
-import { calculateSetQuality } from '@/services/progressionEngine';
-import { formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
+import { useState, memo } from 'react';
+import { Button } from '@/components/ui';
+import { SetFeedbackCard } from './SetFeedbackCard';
+import type { SetLog, WeightUnit, SetFeedback } from '@/types/schema';
+import { formatWeightValue, inputWeightToKg } from '@/lib/utils';
 
 interface SetInputRowProps {
   setNumber: number;
@@ -18,10 +18,13 @@ interface SetInputRowProps {
     reps: number;
     rpe: number;
     note?: string;
+    feedback: SetFeedback;
   }) => void;
   disabled?: boolean;
   unit?: WeightUnit;
 }
+
+type InputPhase = 'weight_reps' | 'feedback';
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
 export const SetInputRow = memo(function SetInputRow({
@@ -38,79 +41,87 @@ export const SetInputRow = memo(function SetInputRow({
   // Convert from kg to display unit
   const displayWeight = (kg: number) => formatWeightValue(kg, unit);
   const initialWeight = previousSet?.weightKg ?? targetWeight;
-  
+
   const [weight, setWeight] = useState(String(displayWeight(initialWeight)));
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
-  const [rpe, setRpe] = useState(String(previousSet?.rpe ?? (10 - targetRir)));
   const [note, setNote] = useState('');
   const [showNote, setShowNote] = useState(false);
-  const [quality, setQuality] = useState<{ quality: SetQuality; reason: string } | null>(null);
+  const [phase, setPhase] = useState<InputPhase>('weight_reps');
 
-  // Calculate quality preview as user types
-  useEffect(() => {
+  // For smart defaults - use previous set's feedback if available
+  const defaultFeedback: SetFeedback | undefined = previousSet?.feedback;
+
+  const handleProceedToFeedback = () => {
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
-    const rpeNum = parseFloat(rpe);
 
-    if (!isNaN(weightNum) && !isNaN(repsNum) && !isNaN(rpeNum)) {
-      const result = calculateSetQuality({
-        rpe: rpeNum,
-        targetRir,
-        reps: repsNum,
-        targetRepRange,
-        isLastSet,
-      });
-      setQuality(result);
-    } else {
-      setQuality(null);
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1) {
+      return;
     }
-  }, [weight, reps, rpe, targetRir, targetRepRange, isLastSet]);
 
-  const handleSubmit = () => {
+    setPhase('feedback');
+  };
+
+  const handleFeedbackSave = (feedback: SetFeedback) => {
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
-    const rpeNum = parseFloat(rpe);
 
-    if (isNaN(weightNum) || isNaN(repsNum) || isNaN(rpeNum)) {
+    if (isNaN(weightNum) || isNaN(repsNum)) {
       return;
     }
 
     // Convert from display unit to kg for storage
     const weightKg = inputWeightToKg(weightNum, unit);
 
+    // Convert RIR to RPE for backwards compatibility
+    const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
+
     onSubmit({
       weightKg,
       reps: repsNum,
-      rpe: rpeNum,
+      rpe,
       note: note || undefined,
+      feedback,
     });
 
-    // Reset note
+    // Reset for next set
     setNote('');
     setShowNote(false);
+    setPhase('weight_reps');
   };
 
-  const getQualityColor = (q: SetQuality) => {
-    switch (q) {
-      case 'junk': return 'text-surface-500';
-      case 'effective': return 'text-primary-400';
-      case 'stimulative': return 'text-success-400';
-      case 'excessive': return 'text-danger-400';
-    }
+  const handleBackToWeightReps = () => {
+    setPhase('weight_reps');
   };
 
+  const weightKg = inputWeightToKg(parseFloat(weight) || 0, unit);
+  const repsNum = parseInt(reps) || 0;
+
+  // Show feedback card phase
+  if (phase === 'feedback') {
+    return (
+      <SetFeedbackCard
+        setNumber={setNumber}
+        weightKg={weightKg}
+        reps={repsNum}
+        unit={unit}
+        defaultFeedback={defaultFeedback}
+        onSave={handleFeedbackSave}
+        onCancel={handleBackToWeightReps}
+        disabled={disabled}
+      />
+    );
+  }
+
+  // Weight and reps input phase
   return (
     <div className="bg-surface-800/50 rounded-lg p-3 space-y-3">
       {/* Set header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-surface-300">
-          Set {setNumber}
+        <span className="text-sm font-medium text-surface-300">Set {setNumber}</span>
+        <span className="text-xs text-surface-500">
+          Target: {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
         </span>
-        {quality && (
-          <span className={`text-xs ${getQualityColor(quality.quality)}`}>
-            {quality.quality}
-          </span>
-        )}
       </div>
 
       {/* Input row */}
@@ -139,27 +150,14 @@ export const SetInputRow = memo(function SetInputRow({
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
-        <div className="flex-1">
-          <label className="block text-xs text-surface-500 mb-1">RPE</label>
-          <input
-            type="number"
-            value={rpe}
-            onChange={(e) => setRpe(e.target.value)}
-            disabled={disabled}
-            step="0.5"
-            min="1"
-            max="10"
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
-          />
-        </div>
         <Button
-          onClick={handleSubmit}
-          disabled={disabled}
+          onClick={handleProceedToFeedback}
+          disabled={disabled || !weight || !reps || parseInt(reps) < 1}
           size="md"
           className="shrink-0"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </Button>
       </div>
@@ -183,13 +181,6 @@ export const SetInputRow = memo(function SetInputRow({
           placeholder="Set note (optional)"
           className="w-full px-3 py-1.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-300 placeholder:text-surface-600 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
-      )}
-
-      {/* Quality feedback */}
-      {quality && (
-        <p className="text-xs text-surface-500 italic">
-          {quality.reason}
-        </p>
       )}
     </div>
   );

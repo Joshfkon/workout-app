@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
-import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup, WeightUnit } from '@/types/schema';
+import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup, WeightUnit, FormRating } from '@/types/schema';
 import { formatDuration, formatWeight } from '@/lib/utils';
+import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
 
 interface ExerciseWithHistory {
   exerciseId: string;
@@ -114,14 +115,21 @@ export function SessionSummary({
     return Math.round(score);
   }, [totalSets, qualityBreakdown]);
 
-  // Detect Personal Records (PRs)
+  // Detect Personal Records (PRs) - now incorporates form quality
   const personalRecords = useMemo(() => {
-    const prs: { exerciseName: string; type: 'weight' | 'reps' | 'e1rm' | 'volume'; value: number; improvement: number }[] = [];
-    
+    const prs: {
+      exerciseName: string;
+      type: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form';
+      value: number;
+      improvement: number;
+      form?: FormRating;
+      formNote?: string;
+    }[] = [];
+
     // Group sets by exercise
     const setsByExercise = new Map<string, SetLog[]>();
-    workingSets.forEach(set => {
-      const block = exerciseBlocks.find(b => b.id === set.exerciseBlockId);
+    workingSets.forEach((set) => {
+      const block = exerciseBlocks.find((b) => b.id === set.exerciseBlockId);
       if (block) {
         const existing = setsByExercise.get(block.id) || [];
         existing.push(set);
@@ -130,21 +138,33 @@ export function SessionSummary({
     });
 
     // Check each exercise for PRs
-    exerciseBlocks.forEach(block => {
+    exerciseBlocks.forEach((block) => {
       const sets = setsByExercise.get(block.id) || [];
       if (sets.length === 0) return;
 
       const history = exerciseHistories?.[block.exerciseId || ''];
       if (!history?.previousBest) return;
 
-      // Find best set this workout
+      // Find best set this workout (considering form)
       let bestWeight = 0;
       let bestReps = 0;
       let bestE1RM = 0;
+      let bestForm: FormRating = 'clean';
       let totalVolume = 0;
 
-      sets.forEach(set => {
-        if (set.weightKg > bestWeight) bestWeight = set.weightKg;
+      sets.forEach((set) => {
+        const setForm = set.feedback?.form || 'clean';
+
+        // Skip ugly form sets for PR consideration
+        if (setForm === 'ugly') {
+          totalVolume += set.weightKg * set.reps;
+          return;
+        }
+
+        if (set.weightKg > bestWeight) {
+          bestWeight = set.weightKg;
+          bestForm = setForm;
+        }
         if (set.reps > bestReps) bestReps = set.reps;
         const e1rm = calculateE1RM(set.weightKg, set.reps);
         if (e1rm > bestE1RM) bestE1RM = e1rm;
@@ -153,13 +173,26 @@ export function SessionSummary({
 
       const exerciseName = (block as any).exercise?.name || 'Exercise';
 
+      // No PR if best set had ugly form
+      const hasUglyBestSet = sets.some(
+        (s) => s.weightKg === bestWeight && s.feedback?.form === 'ugly'
+      );
+      if (hasUglyBestSet) {
+        // Could add a "potential PR" note here if desired
+        return;
+      }
+
       // Check for E1RM PR (most meaningful)
       if (bestE1RM > history.previousBest.e1rm) {
         prs.push({
           exerciseName,
           type: 'e1rm',
           value: bestE1RM,
-          improvement: Math.round(((bestE1RM - history.previousBest.e1rm) / history.previousBest.e1rm) * 100),
+          improvement: Math.round(
+            ((bestE1RM - history.previousBest.e1rm) / history.previousBest.e1rm) * 100
+          ),
+          form: bestForm,
+          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
       // Check for weight PR
@@ -168,7 +201,11 @@ export function SessionSummary({
           exerciseName,
           type: 'weight',
           value: bestWeight,
-          improvement: Math.round(((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100),
+          improvement: Math.round(
+            ((bestWeight - history.previousBest.weight) / history.previousBest.weight) * 100
+          ),
+          form: bestForm,
+          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
       // Check for reps PR (at same or higher weight)
@@ -178,6 +215,8 @@ export function SessionSummary({
           type: 'reps',
           value: bestReps,
           improvement: bestReps - history.previousBest.reps,
+          form: bestForm,
+          formNote: bestForm === 'clean' ? 'Clean form' : 'Some breakdown',
         });
       }
     });
@@ -350,11 +389,17 @@ export function SessionSummary({
                     {pr.type === 'e1rm' && `New Est. 1RM: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'weight' && `New Weight PR: ${displayWeight(pr.value)}${weightUnit}`}
                     {pr.type === 'reps' && `New Reps PR: ${pr.value} reps`}
+                    {pr.type === 'form' && 'Form PR: Cleaner technique!'}
                   </p>
+                  {pr.formNote && (
+                    <p className={`text-xs mt-0.5 ${pr.form === 'clean' ? 'text-success-400' : 'text-warning-400'}`}>
+                      {pr.formNote}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <Badge variant="warning" className="bg-yellow-500/20 text-yellow-400">
-                    {pr.type === 'reps' ? `+${pr.improvement}` : `+${pr.improvement}%`}
+                    {pr.type === 'reps' ? `+${pr.improvement}` : pr.type === 'form' ? 'Form' : `+${pr.improvement}%`}
                   </Badge>
                 </div>
               </div>
