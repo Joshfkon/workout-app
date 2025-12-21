@@ -11,6 +11,7 @@ import {
   type WeightPrediction,
   type DataQualityCheck,
   type DailyDataPoint,
+  type BurnRateHistoryPoint,
 } from '@/lib/nutrition/adaptive-tdee';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
 
@@ -273,7 +274,7 @@ export async function getStoredTDEEEstimate(): Promise<TDEEEstimate | null> {
     dataPointsUsed: data.data_points_used,
     windowDays: data.window_days,
     source: data.source as 'regression' | 'formula',
-    estimateHistory: data.estimate_history || [],
+    estimateHistory: (data.estimate_history || []) as BurnRateHistoryPoint[],
     lastUpdated: new Date(data.updated_at),
   };
 }
