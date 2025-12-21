@@ -111,7 +111,12 @@ export function CreateCustomExercise({
       clearExerciseCache();
       onSuccess?.(exercise.id);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save exercise');
+      // Check for duplicate name error (PostgreSQL error code 23505)
+      if (err?.message?.includes('duplicate key') || err?.message?.includes('already exists') || err?.code === '23505') {
+        setError(`An exercise named "${data.name}" already exists. Please choose a different name.`);
+      } else {
+        setError(err?.message || 'Failed to save exercise');
+      }
     } finally {
       setIsSaving(false);
     }

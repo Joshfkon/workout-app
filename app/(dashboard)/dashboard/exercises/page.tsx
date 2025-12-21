@@ -11,6 +11,7 @@ import { useExercisePreferences } from '@/hooks/useExercisePreferences';
 import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
 import { ExerciseStatusModal } from '@/components/exercises/ExerciseStatusModal';
 import type { ExerciseVisibilityStatus, ExerciseHideReason } from '@/types/user-exercise-preferences';
+import { batchCompleteAllExercises } from '@/lib/actions/exercise-completion';
 import {
   LineChart,
   Line,
@@ -131,6 +132,11 @@ export default function ExercisesPage() {
   } = useExercisePreferences();
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'muted' | 'archived'>('all');
   const [statusModalExercise, setStatusModalExercise] = useState<{ id: string; name: string; action: 'mute' | 'archive' } | null>(null);
+  
+  // Batch completion state
+  const [isBatchCompleting, setIsBatchCompleting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; exerciseName: string } | null>(null);
+  const [batchResult, setBatchResult] = useState<{ processed: number; updated: number; skipped: number; errors: number } | null>(null);
 
   // Set mounted flag to prevent hydration mismatches
   useEffect(() => {
@@ -402,15 +408,103 @@ export default function ExercisesPage() {
             {isLoading ? 'Loading...' : `${exercises.length} exercises available`}
           </p>
         </div>
-        <Link href="/dashboard/exercises/add">
-          <Button>
-            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Custom
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              if (!confirm('This will run AI completion on all exercises. This may take several minutes and use your AI quota. Continue?')) {
+                return;
+              }
+              setIsBatchCompleting(true);
+              setBatchProgress(null);
+              setBatchResult(null);
+              
+              const result = await batchCompleteAllExercises((current, total, exerciseName) => {
+                setBatchProgress({ current, total, exerciseName });
+              });
+              
+              setIsBatchCompleting(false);
+              setBatchProgress(null);
+              setBatchResult(result);
+              
+              // Refresh exercises list
+              const supabase = createUntypedClient();
+              const { data } = await supabase.from('exercises').select('*').order('name');
+              if (data) {
+                setExercises(data as Exercise[]);
+              }
+            }}
+            disabled={isBatchCompleting}
+            isLoading={isBatchCompleting}
+          >
+            {isBatchCompleting ? (
+              <>
+                <svg className="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : 'Processing...'}
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                Complete All with AI
+              </>
+            )}
           </Button>
-        </Link>
+          <Link href="/dashboard/exercises/add">
+            <Button>
+              <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Custom
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* Batch completion progress */}
+      {batchProgress && (
+        <div className="bg-primary-500/10 border border-primary-500/20 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-primary-300">
+              Processing: {batchProgress.exerciseName}
+            </p>
+            <p className="text-xs text-primary-400">
+              {batchProgress.current} / {batchProgress.total}
+            </p>
+          </div>
+          <div className="w-full bg-surface-800 rounded-full h-2">
+            <div
+              className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Batch completion result */}
+      {batchResult && !isBatchCompleting && (
+        <div className={`rounded-lg p-4 ${
+          batchResult.errors > 0 
+            ? 'bg-orange-500/10 border border-orange-500/20' 
+            : 'bg-emerald-500/10 border border-emerald-500/20'
+        }`}>
+          <p className={`text-sm font-medium mb-2 ${
+            batchResult.errors > 0 ? 'text-orange-300' : 'text-emerald-300'
+          }`}>
+            Batch completion finished!
+          </p>
+          <div className="text-xs space-y-1 text-surface-400">
+            <p>Processed: {batchResult.processed}</p>
+            <p>Updated: {batchResult.updated}</p>
+            <p>Skipped: {batchResult.skipped}</p>
+            {batchResult.errors > 0 && <p className="text-orange-400">Errors: {batchResult.errors}</p>}
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="flex flex-col sm:flex-row gap-4">

@@ -16,7 +16,7 @@ import {
   inheritFromBaseExercise,
   type AIResponse,
 } from '@/lib/exercises/exercise-ai-completion';
-import { getExerciseById } from '@/services/exerciseService';
+import { getExerciseById, getExercises } from '@/services/exerciseService';
 
 // ============================================
 // USAGE TRACKING
@@ -287,5 +287,156 @@ export async function getIncompleteExercises(): Promise<
       .filter((e: any): e is { id: string; name: string; missingFields: string[] } => e !== null);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Batch complete all exercises with AI
+ * Returns progress updates via callback
+ */
+export async function batchCompleteAllExercises(
+  onProgress?: (current: number, total: number, exerciseName: string) => void
+): Promise<{
+  success: boolean;
+  processed: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return {
+        success: false,
+        processed: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
+        error: 'Not authenticated',
+      };
+    }
+
+    // Get all non-custom exercises
+    const exercises = await getExercises(false);
+    
+    let processed = 0;
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    // Process in small batches to avoid rate limits
+    const BATCH_SIZE = 3;
+    const DELAY_BETWEEN_EXERCISES = 1000; // 1 second
+
+    for (let i = 0; i < exercises.length; i++) {
+      const exercise = exercises[i];
+      processed++;
+
+      try {
+        onProgress?.(i + 1, exercises.length, exercise.name);
+
+        // Check if already complete
+        const hasFormCues = exercise.formCues && exercise.formCues.length > 0;
+        const hasHypertrophyScore = exercise.hypertrophyScore?.tier;
+
+        if (hasFormCues && hasHypertrophyScore) {
+          skipped++;
+          continue;
+        }
+
+        // Prepare AI input
+        const input: BasicExerciseInput = {
+          name: exercise.name,
+          primaryMuscle: exercise.primaryMuscle,
+          equipment: exercise.equipment || 'barbell',
+          description: exercise.notes,
+        };
+
+        // Get AI completion
+        const result = await completeExerciseWithAI(input);
+
+        if (!result.success || !result.data) {
+          errors++;
+          continue;
+        }
+
+        const completed = result.data;
+        const updateData: any = {};
+
+        // Only update missing fields
+        if (!hasFormCues && completed.formCues?.length) {
+          updateData.form_cues = completed.formCues;
+        }
+
+        if (!hasHypertrophyScore && completed.hypertrophyScore) {
+          updateData.hypertrophy_tier = completed.hypertrophyScore.tier;
+          updateData.stretch_under_load = completed.hypertrophyScore.stretchUnderLoad;
+          updateData.resistance_profile = completed.hypertrophyScore.resistanceProfile;
+          updateData.progression_ease = completed.hypertrophyScore.progressionEase;
+        }
+
+        if (!exercise.secondaryMuscles?.length && completed.secondaryMuscles?.length) {
+          updateData.secondary_muscles = completed.secondaryMuscles;
+        }
+
+        if (!exercise.stabilizers?.length && completed.stabilizers?.length) {
+          updateData.stabilizers = completed.stabilizers;
+        }
+
+        if (!exercise.spinalLoading && completed.spinalLoading) {
+          updateData.spinal_loading = completed.spinalLoading;
+        }
+
+        if (completed.contraindications?.length) {
+          updateData.contraindications = completed.contraindications;
+        }
+
+        // Update if we have changes
+        if (Object.keys(updateData).length > 0) {
+          const { error: updateError } = await (supabase
+            .from('exercises') as any)
+            .update(updateData)
+            .eq('id', exercise.id);
+
+          if (updateError) {
+            errors++;
+          } else {
+            updated++;
+          }
+        } else {
+          skipped++;
+        }
+
+        // Delay to avoid rate limits
+        if (i < exercises.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_EXERCISES));
+        }
+
+      } catch (err: any) {
+        console.error(`Error processing ${exercise.name}:`, err);
+        errors++;
+      }
+    }
+
+    return {
+      success: true,
+      processed,
+      updated,
+      skipped,
+      errors,
+    };
+
+  } catch (error: any) {
+    return {
+      success: false,
+      processed: 0,
+      updated: 0,
+      skipped: 0,
+      errors: 0,
+      error: error.message,
+    };
   }
 }

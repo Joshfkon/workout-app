@@ -367,6 +367,13 @@ export async function createCustomExercise(
         auth_uid_check: authenticatedUserId,
       });
       
+      // Throw error with code so it can be caught and handled properly
+      if (error) {
+        const err = new Error(error.message || 'Failed to create exercise');
+        (err as any).code = error.code;
+        throw err;
+      }
+      
       return null;
     }
     
