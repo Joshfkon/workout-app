@@ -121,18 +121,10 @@ async function batchCompleteExercises() {
             updateData.contraindications = completed.contraindications;
           }
 
-          if (completed.commonMistakes?.length) {
-            updateData.common_mistakes = completed.commonMistakes;
-          }
-
-          if (completed.setupNote) {
-            updateData.setup_note = completed.setupNote;
-          }
-
           // Only update if we have fields to update
           if (Object.keys(updateData).length > 0) {
-            const { error: updateError } = await supabase
-              .from('exercises')
+            const { error: updateError } = await (supabase
+              .from('exercises') as any)
               .update(updateData)
               .eq('id', exercise.id);
 
