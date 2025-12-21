@@ -45,7 +45,18 @@ export async function getAdaptiveTDEE(
     .from('user_preferences')
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .single() as {
+      data: {
+        height_cm?: number;
+        age?: number;
+        sex?: 'male' | 'female';
+        body_fat_percent?: number;
+        activity_level?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'athlete';
+        workouts_per_week?: number;
+        avg_workout_minutes?: number;
+        workout_intensity?: 'light' | 'moderate' | 'intense';
+      } | null;
+    };
 
   // Get weight log entries (last 35 days for a good window)
   const thirtyFiveDaysAgo = new Date();
