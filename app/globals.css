@@ -30,6 +30,46 @@
     border-color: var(--border);
   }
 
+  /* ================================================
+     NATIVE APP FEEL - SELECTION & TAP BEHAVIOR
+     ================================================ */
+
+  /* Disable text selection globally */
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Remove tap highlight on iOS/Android */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none; /* Disable callout (copy/paste popup) on long-press */
+  }
+
+  /* Re-enable selection for form inputs */
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Prevent image drag for native feel */
+  img {
+    -webkit-user-drag: none;
+    user-drag: none;
+  }
+
+  /* If images need to be clickable (like exercise demos) */
+  img.interactive {
+    pointer-events: auto;
+  }
+
   /* Native app-like behavior - prevent zoom, horizontal scroll, and rubber-band effect */
   html {
     touch-action: manipulation;
@@ -160,6 +200,23 @@
 
   .gradient-radial {
     background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
+  }
+
+  /* Utility class for selectable content */
+  .selectable {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Utility class for selectable + copyable (re-enables callout) */
+  .copyable {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
   }
 }
 

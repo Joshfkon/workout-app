@@ -897,7 +897,7 @@ export function extractPerformanceFromSets(
   exerciseId: string
 ): LastSessionPerformance | null {
   const workingSets = sets.filter((s) => !s.isWarmup);
-  
+
   if (workingSets.length === 0) return null;
 
   // Get top set (highest weight or most reps at same weight)
@@ -919,5 +919,333 @@ export function extractPerformanceFromSets(
     allSetsCompleted: true, // Would need target to verify
     averageRpe: Math.round(averageRpe * 10) / 10,
   };
+}
+
+// ============================================
+// PR (PERSONAL RECORD) LOGIC WITH FORM QUALITY
+// ============================================
+
+import type {
+  PRResult,
+  PRCriteria,
+  FormRating,
+  RepsInTank,
+  WeightSuggestion,
+  FormTrendWarning,
+  SessionFormHistory,
+} from '@/types/schema';
+
+/**
+ * Check if a performance qualifies as a Personal Record
+ * PRs with ugly form are NOT counted
+ */
+export function checkForPR(
+  current: PRCriteria,
+  previousPR: PRCriteria | null
+): PRResult {
+  // Calculate E1RM for comparison
+  const currentE1RM = calculateE1RM(
+    current.weight,
+    current.reps,
+    current.repsInTank === 4 ? 6 : current.repsInTank === 2 ? 7.5 : current.repsInTank === 1 ? 9 : 10
+  );
+
+  // First time doing this exercise
+  if (!previousPR) {
+    // Even first time, ugly form doesn't count as PR
+    if (current.form === 'ugly') {
+      return {
+        isPR: false,
+        reason: 'form_breakdown',
+        message: 'First attempt recorded. Work on form before setting your PR baseline.',
+      };
+    }
+    return {
+      isPR: true,
+      type: 'e1rm',
+      reason: 'first_time',
+      message: 'First PR set! Great starting point.',
+    };
+  }
+
+  const previousE1RM = calculateE1RM(
+    previousPR.weight,
+    previousPR.reps,
+    previousPR.repsInTank === 4 ? 6 : previousPR.repsInTank === 2 ? 7.5 : previousPR.repsInTank === 1 ? 9 : 10
+  );
+
+  // NO PR if form was ugly
+  if (current.form === 'ugly') {
+    return {
+      isPR: false,
+      reason: 'form_breakdown',
+      message: 'Great effort! Not counted as PR due to form breakdown.',
+    };
+  }
+
+  // Form PR: Same or better performance with cleaner form
+  if (
+    current.form === 'clean' &&
+    previousPR.form !== 'clean' &&
+    currentE1RM >= previousE1RM * 0.95
+  ) {
+    return {
+      isPR: true,
+      type: 'form',
+      reason: 'new_pr',
+      message: 'Form PR! Same weight with cleaner technique.',
+    };
+  }
+
+  // Require same or better form to count as PR
+  if (current.form === 'some_breakdown' && previousPR.form === 'clean') {
+    const improvement = (currentE1RM - previousE1RM) / previousE1RM;
+    if (improvement < 0.05) {
+      return {
+        isPR: false,
+        reason: 'form_regression',
+        message: 'Matched previous PR but with less clean form.',
+      };
+    }
+    // Significant improvement overcomes form regression
+    return {
+      isPR: true,
+      type: 'e1rm',
+      reason: 'new_pr',
+      message: `New PR! +${Math.round(improvement * 100)}% despite some form breakdown.`,
+      improvement: Math.round(improvement * 100),
+    };
+  }
+
+  // Standard PR logic for E1RM
+  if (currentE1RM > previousE1RM) {
+    const improvement = (currentE1RM - previousE1RM) / previousE1RM;
+    return {
+      isPR: true,
+      type: 'e1rm',
+      reason: 'new_pr',
+      message: `New PR! +${Math.round(improvement * 100)}% improvement.`,
+      improvement: Math.round(improvement * 100),
+    };
+  }
+
+  // Weight PR (heavier weight even with fewer reps)
+  if (current.weight > previousPR.weight && current.reps >= previousPR.reps * 0.7) {
+    const improvement = (current.weight - previousPR.weight) / previousPR.weight;
+    return {
+      isPR: true,
+      type: 'weight',
+      reason: 'new_pr',
+      message: `Weight PR! +${Math.round(improvement * 100)}% heavier.`,
+      improvement: Math.round(improvement * 100),
+    };
+  }
+
+  // Reps PR (more reps at same or higher weight)
+  if (current.weight >= previousPR.weight && current.reps > previousPR.reps) {
+    return {
+      isPR: true,
+      type: 'reps',
+      reason: 'new_pr',
+      message: `Rep PR! +${current.reps - previousPR.reps} more reps.`,
+      improvement: current.reps - previousPR.reps,
+    };
+  }
+
+  return {
+    isPR: false,
+    reason: 'not_better',
+    message: 'Good set! Keep pushing for that PR.',
+  };
+}
+
+// ============================================
+// WEIGHT SUGGESTION WITH FORM QUALITY
+// ============================================
+
+export interface FormAwareProgressionInput {
+  lastSession: {
+    weight: number;
+    reps: number[];
+    repsInTank: RepsInTank[];
+    form: FormRating[];
+  };
+  targetRepRange: [number, number];
+  targetRIR: number;
+  exerciseMinIncrement: number;
+}
+
+/**
+ * Calculate suggested weight factoring in form quality
+ */
+export function calculateSuggestedWeight(
+  input: FormAwareProgressionInput
+): WeightSuggestion {
+  const { lastSession, targetRepRange, targetRIR, exerciseMinIncrement } = input;
+
+  // Import form score calculation
+  const formScoreHelper = (form: FormRating): number => {
+    switch (form) {
+      case 'clean':
+        return 1.0;
+      case 'some_breakdown':
+        return 0.5;
+      case 'ugly':
+        return 0;
+    }
+  };
+
+  const avgForm =
+    lastSession.form.reduce((sum, f) => sum + formScoreHelper(f), 0) / lastSession.form.length;
+  const avgRIR =
+    lastSession.repsInTank.reduce((sum: number, r: number) => sum + r, 0) / lastSession.repsInTank.length;
+  const avgReps = lastSession.reps.reduce((sum, r) => sum + r, 0) / lastSession.reps.length;
+
+  // FORM REGRESSION: Suggest lower weight (avg form < 0.5 means mostly ugly/some breakdown)
+  if (avgForm < 0.5) {
+    return {
+      weight: roundToIncrement(lastSession.weight * 0.9, exerciseMinIncrement),
+      reason: 'form_correction',
+      message: 'Reducing weight to rebuild clean form',
+      confidence: 'high',
+    };
+  }
+
+  // FORM BREAKDOWN: Hold weight, don't progress (0.5 <= avgForm < 0.8)
+  if (avgForm < 0.8) {
+    return {
+      weight: lastSession.weight,
+      reason: 'form_consolidation',
+      message: 'Same weight - focus on cleaner reps before progressing',
+      confidence: 'high',
+    };
+  }
+
+  // CLEAN FORM + TOO EASY: Progress (avgRIR > targetRIR + 1)
+  if (avgForm >= 0.8 && avgRIR > targetRIR + 1) {
+    return {
+      weight: roundToIncrement(lastSession.weight + exerciseMinIncrement, exerciseMinIncrement),
+      reason: 'progression',
+      message: 'Clean form and reps in tank - time to progress!',
+      confidence: 'high',
+    };
+  }
+
+  // CLEAN FORM + ON TARGET: Maintain
+  if (avgForm >= 0.8 && avgRIR >= targetRIR - 0.5 && avgRIR <= targetRIR + 1) {
+    return {
+      weight: lastSession.weight,
+      reason: 'on_target',
+      message: 'Perfect - stay here until it feels easier',
+      confidence: 'high',
+    };
+  }
+
+  // CLEAN FORM + TOO HARD: Reduce slightly
+  if (avgForm >= 0.8 && avgRIR < targetRIR - 0.5) {
+    return {
+      weight: roundToIncrement(lastSession.weight * 0.95, exerciseMinIncrement),
+      reason: 'intensity_reduction',
+      message: 'Reps were harder than target - slight reduction',
+      confidence: 'medium',
+    };
+  }
+
+  // Default: maintain weight
+  return {
+    weight: lastSession.weight,
+    reason: 'on_target',
+    message: 'Continue at current weight',
+    confidence: 'medium',
+  };
+}
+
+// ============================================
+// FORM TREND WARNINGS
+// ============================================
+
+/**
+ * Check for declining form trends across multiple sessions
+ */
+export function checkFormTrend(
+  exerciseHistory: SessionFormHistory[]
+): FormTrendWarning | null {
+  if (exerciseHistory.length < 3) return null;
+
+  const recentSessions = exerciseHistory.slice(0, 5);
+
+  // Calculate average form score per session
+  const formScoreHelper = (form: FormRating): number => {
+    switch (form) {
+      case 'clean':
+        return 1.0;
+      case 'some_breakdown':
+        return 0.5;
+      case 'ugly':
+        return 0;
+    }
+  };
+
+  const formScores = recentSessions.map((session) => {
+    const forms = session.sets.map((s) => s.form);
+    return forms.reduce((sum, f) => sum + formScoreHelper(f), 0) / forms.length;
+  });
+
+  // Declining form trend (each session worse than 2 sessions ago)
+  if (
+    formScores.length >= 4 &&
+    formScores[0] < formScores[2] &&
+    formScores[1] < formScores[3]
+  ) {
+    return {
+      type: 'declining_form',
+      message: 'Form has been declining over recent sessions',
+      suggestion: 'Consider a 10% deload to rebuild movement quality',
+      action: 'deload_suggested',
+    };
+  }
+
+  // Consistently ugly form (3 sessions in a row with avg < 0.5)
+  if (
+    formScores.length >= 3 &&
+    formScores.slice(0, 3).every((s) => s < 0.5)
+  ) {
+    return {
+      type: 'persistent_breakdown',
+      message: 'Form breakdown 3 sessions in a row',
+      suggestion: 'Weight may be too heavy - recommending 15% reduction',
+      action: 'deload_required',
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Get form quality label for display
+ */
+export function getFormLabel(form: FormRating): string {
+  switch (form) {
+    case 'clean':
+      return 'Clean';
+    case 'some_breakdown':
+      return 'Some Breakdown';
+    case 'ugly':
+      return 'Form Breakdown';
+  }
+}
+
+/**
+ * Get form quality color class for display
+ */
+export function getFormColorClass(form: FormRating): string {
+  switch (form) {
+    case 'clean':
+      return 'text-success-400';
+    case 'some_breakdown':
+      return 'text-warning-400';
+    case 'ugly':
+      return 'text-danger-400';
+  }
 }
 

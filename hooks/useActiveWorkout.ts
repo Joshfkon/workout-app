@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from 'react';
 import { useWorkoutStore } from '@/stores';
 import { createClient, createUntypedClient } from '@/lib/supabase/client';
-import type { WorkoutSession, ExerciseBlock, SetLog, PreWorkoutCheckIn } from '@/types/schema';
+import type { WorkoutSession, ExerciseBlock, SetLog, PreWorkoutCheckIn, SetFeedback } from '@/types/schema';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { generateId } from '@/lib/utils';
 
@@ -71,6 +71,7 @@ export function useActiveWorkout() {
       reps: number;
       rpe: number;
       note?: string;
+      feedback?: SetFeedback;
     }
   ) => {
     const block = exerciseBlocks.find((b) => b.id === blockId);
@@ -80,7 +81,7 @@ export function useActiveWorkout() {
     const setNumber = existingSets.filter((s) => !s.isWarmup).length + 1;
     const isLastSet = setNumber === block.targetSets;
 
-    // Calculate quality
+    // Calculate quality - factor in form if available
     const quality = calculateSetQuality({
       rpe: data.rpe,
       targetRir: block.targetRir,
@@ -88,6 +89,18 @@ export function useActiveWorkout() {
       targetRepRange: block.targetRepRange,
       isLastSet,
     });
+
+    // Enhance quality reason with form feedback
+    let qualityReason = quality.reason;
+    if (data.feedback) {
+      const formLabel =
+        data.feedback.form === 'clean'
+          ? 'Clean form'
+          : data.feedback.form === 'some_breakdown'
+            ? 'Some form breakdown'
+            : 'Form breakdown';
+      qualityReason = `${formLabel}. ${quality.reason}`;
+    }
 
     const newSet: SetLog = {
       id: generateId(),
@@ -101,9 +114,10 @@ export function useActiveWorkout() {
       setType: 'normal',
       parentSetId: null,
       quality: quality.quality,
-      qualityReason: quality.reason,
+      qualityReason,
       note: data.note || null,
       loggedAt: new Date().toISOString(),
+      feedback: data.feedback,
     };
 
     // Optimistic update
@@ -124,6 +138,7 @@ export function useActiveWorkout() {
       quality_reason: newSet.qualityReason,
       note: newSet.note,
       logged_at: newSet.loggedAt,
+      feedback: data.feedback ? JSON.stringify(data.feedback) : null,
     });
 
     if (error) {

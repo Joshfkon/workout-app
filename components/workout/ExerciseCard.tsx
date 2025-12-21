@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
+import { SetFeedbackCard } from './SetFeedbackCard';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -113,15 +114,17 @@ interface SetCompleteData {
   note?: string;
   setType?: SetType;
   parentSetId?: string;  // For dropsets: the ID of the parent set
+  feedback?: SetFeedback;  // New feedback data
 }
 
 interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
   sets: SetLog[];
-  onSetComplete?: (setData: SetCompleteData) => void;
+  onSetComplete?: (setData: SetCompleteData) => Promise<string | null> | void;  // Returns set ID for feedback
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   onSetDelete?: (setId: string) => void;
+  onSetFeedbackUpdate?: (setId: string, feedback: SetFeedback) => void;  // Update feedback on existing set
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
@@ -166,6 +169,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onSetComplete,
   onSetEdit,
   onSetDelete,
+  onSetFeedbackUpdate,
   onTargetSetsChange,
   onExerciseSwap,
   onExerciseDelete,
@@ -205,7 +209,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
   const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
-  
+  // Optional feedback overlay: shown after set is completed, user can fill in or skip
+  const [pendingFeedbackSet, setPendingFeedbackSet] = useState<{
+    setId: string;
+    weightKg: number;
+    reps: number;
+    setNumber: number;
+  } | null>(null);
+
   // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
     if (showSwapOnMount) {
@@ -515,43 +526,74 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   };
 
-  const completePendingSet = (index: number, asDropset = false) => {
-    // Prevent double-clicks
+  // Complete set immediately, then show optional feedback overlay
+  const completeSetImmediately = async (index: number, asDropset = false) => {
     if (isCompletingSet || !onSetComplete) return;
-    
+
     const input = pendingInputs[index];
     if (!input) return;
-    
+
     const weightNum = parseFloat(input.weight);
     const repsNum = parseInt(input.reps);
-    const rpeNum = parseFloat(input.rpe);
-    
-    if (isNaN(weightNum) || isNaN(repsNum) || isNaN(rpeNum)) {
+
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1) {
       return;
     }
-    
+
     // Lock to prevent double-clicks
     setIsCompletingSet(true);
-    
+
     // Convert from display unit to kg
     const weightKg = inputWeightToKg(weightNum, unit);
-    
-    onSetComplete({
+    const setNumber = completedSets.length + index + 1;
+
+    // Use target RPE as default (will be updated if user provides feedback)
+    const targetRpe = 10 - block.targetRir;
+
+    // Complete the set immediately (rest timer starts in parent)
+    const result = await onSetComplete({
       weightKg,
       reps: repsNum,
-      rpe: rpeNum,
+      rpe: targetRpe,
       setType: asDropset && dropsetMode ? 'dropset' : 'normal',
       parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
+      // No feedback yet - user can add it optionally
     });
-    
+
     // Clear dropset mode after completing
     if (asDropset) {
       setDropsetMode(null);
     }
-    
-    // Unlock after a short delay (the parent will update completedSets)
+
+    // Show feedback overlay if we got a set ID back
+    if (result && typeof result === 'string') {
+      setPendingFeedbackSet({
+        setId: result,
+        weightKg,
+        reps: repsNum,
+        setNumber,
+      });
+    }
+
+    // Unlock after a short delay
     setTimeout(() => setIsCompletingSet(false), 500);
   };
+
+  // Submit feedback for the pending set
+  const submitFeedback = (feedback: SetFeedback) => {
+    if (!pendingFeedbackSet || !onSetFeedbackUpdate) return;
+
+    onSetFeedbackUpdate(pendingFeedbackSet.setId, feedback);
+    setPendingFeedbackSet(null);
+  };
+
+  // Skip feedback entry
+  const skipFeedback = () => {
+    setPendingFeedbackSet(null);
+  };
+
+  // Alias for backwards compatibility
+  const completePendingSet = completeSetImmediately;
   
   // Start dropset mode with reduced weight
   const startDropset = (parentSet: SetLog) => {
@@ -931,20 +973,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
               <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
               <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
-              <th className="px-2 py-2 text-center text-surface-400 font-medium">
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowRpeGuide(true);
-                  }}
-                  className="inline-flex items-center gap-1 hover:text-primary-400 transition-colors"
-                >
-                  RPE
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-              </th>
+              <th className="px-2 py-2 text-center text-surface-400 font-medium">Form</th>
               <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
               <th className="px-2 py-2 w-12"></th>
             </tr>
@@ -1182,11 +1211,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                   >
                     {set.reps}
                   </td>
-                  <td 
-                    className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                  <td
+                    className={`px-2 py-2.5 text-center text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                     onClick={() => onSetEdit && startEditing(set)}
                   >
-                    {set.rpe}
+                    {set.feedback?.form === 'clean' ? (
+                      <span className="text-success-400 text-xs">Clean</span>
+                    ) : set.feedback?.form === 'some_breakdown' ? (
+                      <span className="text-warning-400 text-xs">~Form</span>
+                    ) : set.feedback?.form === 'ugly' ? (
+                      <span className="text-danger-400 text-xs">Ugly</span>
+                    ) : (
+                      <span className="text-surface-500 text-xs">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-center">
                     <SetQualityBadge quality={set.quality} />
@@ -1373,7 +1410,6 @@ export const ExerciseCard = memo(function ExerciseCard({
             {/* Pending sets - editable with pre-filled values */}
             {isActive && pendingInputs.map((input, index) => {
               const setNumber = completedSets.length + index + 1;
-              const qualityPreview = getQualityPreview(input);
               const pendingId = `pending-set-${setNumber}`;
 
               return (
@@ -1409,29 +1445,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                       className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
                   </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={input.rpe}
-                      onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      step="0.5"
-                      min="1"
-                      max="10"
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
+                  <td className="px-3 py-1.5 text-center">
+                    <span className="text-surface-600 text-xs">—</span>
                   </td>
                   <td className="px-3 py-1.5 text-center">
-                    {qualityPreview ? (
-                      <span className={`text-xs font-medium ${getQualityColor(qualityPreview.quality)}`}>
-                        {qualityPreview.quality}
-                      </span>
-                    ) : (
-                      <span className="text-surface-600">—</span>
-                    )}
+                    <span className="text-surface-600">—</span>
                   </td>
                   <td className="px-2 py-1.5 relative">
-                    {/* Delete reveal background for swipe - positioned relative to this cell */}
+                    {/* Delete reveal background for swipe */}
                     {swipeState.setId === pendingId && swipeState.isSwiping && (
                       <div
                         className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
@@ -1442,8 +1463,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </div>
                     )}
                     <button
-                      onClick={() => completePendingSet(index)}
-                      disabled={!input.weight || !input.reps || !input.rpe || isCompletingSet}
+                      onClick={() => completeSetImmediately(index)}
+                      disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
                       className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
                       title="Complete set"
                     >
@@ -1832,6 +1853,57 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Optional Feedback Overlay - appears after set completion */}
+      {pendingFeedbackSet && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={skipFeedback}>
+          <div
+            className="w-full max-w-md bg-surface-900 border border-surface-700 rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 bg-surface-800/50">
+              <div>
+                <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
+                <p className="text-xs text-surface-400">
+                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} reps
+                </p>
+              </div>
+              <button
+                onClick={skipFeedback}
+                className="p-1.5 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Feedback Card Content */}
+            <div className="p-4">
+              <SetFeedbackCard
+                setNumber={pendingFeedbackSet.setNumber}
+                weightKg={pendingFeedbackSet.weightKg}
+                reps={pendingFeedbackSet.reps}
+                unit={unit}
+                onSave={submitFeedback}
+                onCancel={skipFeedback}
+                disabled={false}
+              />
+            </div>
+
+            {/* Skip button */}
+            <div className="px-4 pb-4">
+              <button
+                onClick={skipFeedback}
+                className="w-full py-2 text-sm text-surface-400 hover:text-surface-300 transition-colors"
+              >
+                Skip for now
+              </button>
+            </div>
           </div>
         </div>
       )}
