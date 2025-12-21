@@ -158,7 +158,7 @@ export interface UserVolumeProfile {
 
   // Context flags
   isEnhanced: boolean;                // PEDs increase recovery capacity
-  trainingAge: 'beginner' | 'intermediate' | 'advanced';
+  trainingAge: 'novice' | 'intermediate' | 'advanced';
 }
 
 /**
@@ -246,7 +246,7 @@ export const BASELINE_VOLUME_RECOMMENDATIONS: Record<MuscleGroup, {
  */
 export function getAdjustedBaseline(
   muscle: MuscleGroup,
-  trainingAge: 'beginner' | 'intermediate' | 'advanced',
+  trainingAge: 'novice' | 'intermediate' | 'advanced',
   isEnhanced: boolean
 ): { mev: number; mrv: number; optimal: number } {
   const base = BASELINE_VOLUME_RECOMMENDATIONS[muscle];
@@ -254,8 +254,8 @@ export function getAdjustedBaseline(
   let multiplier = 1.0;
 
   // Training age adjustments
-  if (trainingAge === 'beginner') {
-    multiplier = 0.7;  // Beginners need less volume
+  if (trainingAge === 'novice') {
+    multiplier = 0.7;  // Novices need less volume
   } else if (trainingAge === 'advanced') {
     multiplier = 1.15; // Advanced may need more
   }
@@ -277,7 +277,7 @@ export function getAdjustedBaseline(
  */
 export function createInitialVolumeProfile(
   userId: string,
-  trainingAge: 'beginner' | 'intermediate' | 'advanced',
+  trainingAge: 'novice' | 'intermediate' | 'advanced',
   isEnhanced: boolean = false
 ): UserVolumeProfile {
   const muscleTolerance: Record<MuscleGroup, MuscleTolerance> = {} as Record<MuscleGroup, MuscleTolerance>;
