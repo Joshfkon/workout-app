@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -19,12 +19,22 @@ export function WeightLogModal({
   onSave,
   existingEntry,
 }: WeightLogModalProps) {
-  const today = new Date().toISOString().split('T')[0];
-  const [weight, setWeight] = useState(existingEntry?.weight.toString() || '');
-  const [date, setDate] = useState(existingEntry?.logged_at || today);
-  const [notes, setNotes] = useState(existingEntry?.notes || '');
+  const [weight, setWeight] = useState('');
+  const [date, setDate] = useState('');
+  const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Sync state with existingEntry when modal opens or entry changes
+  useEffect(() => {
+    if (isOpen) {
+      const today = new Date().toISOString().split('T')[0];
+      setWeight(existingEntry?.weight.toString() || '');
+      setDate(existingEntry?.logged_at || today);
+      setNotes(existingEntry?.notes || '');
+      setError('');
+    }
+  }, [isOpen, existingEntry]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,10 +50,7 @@ export function WeightLogModal({
     try {
       await onSave(weightNum, date, notes || undefined);
       onClose();
-      // Reset form
-      setWeight('');
-      setDate(today);
-      setNotes('');
+      // Form will be reset by useEffect when modal opens again
     } catch (err) {
       setError('Failed to save weight. Please try again.');
     } finally {
