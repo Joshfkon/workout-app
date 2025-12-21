@@ -169,7 +169,7 @@ export function detectDiscomfortPatterns(
         0
       ) / bodyPartEntries.length;
 
-    const exercises = [...new Set(bodyPartEntries.map((e) => e.exerciseName))];
+    const exercises = Array.from(new Set(bodyPartEntries.map((e) => e.exerciseName)));
 
     // Pattern is concerning if 3+ occurrences or any pain-level severity
     const hasPain = bodyPartEntries.some((e) => e.discomfort.severity === 'pain');
