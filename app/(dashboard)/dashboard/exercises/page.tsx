@@ -7,6 +7,10 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { formatWeight, convertWeight } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { useExercisePreferences } from '@/hooks/useExercisePreferences';
+import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
+import { ExerciseStatusModal } from '@/components/exercises/ExerciseStatusModal';
+import type { ExerciseVisibilityStatus, ExerciseHideReason } from '@/types/user-exercise-preferences';
 import {
   LineChart,
   Line,
@@ -108,12 +112,23 @@ export default function ExercisesPage() {
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
   const { preferences } = useUserPreferences();
   const unit = preferences.units;
-  
+
   // Edit exercise state
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [editMuscle, setEditMuscle] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Exercise preferences
+  const {
+    getExerciseStatus,
+    muteExercise,
+    archiveExercise,
+    restoreExercise,
+    summary: prefsSummary
+  } = useExercisePreferences();
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'muted' | 'archived'>('all');
+  const [statusModalExercise, setStatusModalExercise] = useState<{ id: string; name: string; action: 'mute' | 'archive' } | null>(null);
 
   useEffect(() => {
     async function fetchExercises() {
@@ -340,7 +355,23 @@ export default function ExercisesPage() {
   const filteredExercises = exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     const matchesMuscle = !selectedMuscle || ex.primary_muscle === selectedMuscle;
-    return matchesSearch && matchesMuscle;
+    const status = getExerciseStatus(ex.id);
+
+    // Status filtering
+    let matchesStatus = true;
+    if (statusFilter === 'all') {
+      // When searching, show all including archived
+      // Otherwise hide archived
+      matchesStatus = search.length > 0 || status !== 'archived';
+    } else if (statusFilter === 'active') {
+      matchesStatus = status === 'active';
+    } else if (statusFilter === 'muted') {
+      matchesStatus = status === 'do_not_suggest';
+    } else if (statusFilter === 'archived') {
+      matchesStatus = status === 'archived';
+    }
+
+    return matchesSearch && matchesMuscle && matchesStatus;
   });
 
   // Transform chart data for display with unit conversion
@@ -389,6 +420,51 @@ export default function ExercisesPage() {
         </div>
       </div>
 
+      {/* Status filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-surface-500 uppercase tracking-wide">Status:</span>
+        <button
+          onClick={() => setStatusFilter('all')}
+          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+            statusFilter === 'all'
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+          }`}
+        >
+          All
+        </button>
+        <button
+          onClick={() => setStatusFilter('active')}
+          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+            statusFilter === 'active'
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+          }`}
+        >
+          Active {prefsSummary && `(${prefsSummary.activeCount})`}
+        </button>
+        <button
+          onClick={() => setStatusFilter('muted')}
+          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+            statusFilter === 'muted'
+              ? 'bg-amber-500 text-white'
+              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+          }`}
+        >
+          Not Suggesting {prefsSummary && prefsSummary.doNotSuggestCount > 0 && `(${prefsSummary.doNotSuggestCount})`}
+        </button>
+        <button
+          onClick={() => setStatusFilter('archived')}
+          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+            statusFilter === 'archived'
+              ? 'bg-surface-600 text-white'
+              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+          }`}
+        >
+          Archived {prefsSummary && prefsSummary.archivedCount > 0 && `(${prefsSummary.archivedCount})`}
+        </button>
+      </div>
+
       {/* Muscle filter chips */}
       <div className="flex flex-wrap gap-2">
         <button
@@ -399,7 +475,7 @@ export default function ExercisesPage() {
               : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
           }`}
         >
-          All
+          All Muscles
         </button>
         {MUSCLE_GROUPS.map((muscle) => (
           <button
@@ -436,11 +512,14 @@ export default function ExercisesPage() {
             const isLoadingThis = loadingHistory === exercise.id;
             const chartData = history ? getChartData(history) : [];
             const hasChartData = chartData.length >= 2;
+            const exerciseStatus = getExerciseStatus(exercise.id);
 
             return (
               <Card
                 key={exercise.id}
-                className={`transition-all ${isExpanded ? 'ring-1 ring-primary-500/30' : 'hover:border-surface-700'}`}
+                className={`transition-all ${isExpanded ? 'ring-1 ring-primary-500/30' : 'hover:border-surface-700'} ${
+                  exerciseStatus === 'archived' ? 'opacity-75' : ''
+                }`}
               >
                 {/* Header - always visible */}
                 <div className="flex items-center justify-between">
@@ -453,6 +532,24 @@ export default function ExercisesPage() {
                       {exercise.hypertrophy_tier && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${getTierColorClasses(exercise.hypertrophy_tier)}`}>
                           {exercise.hypertrophy_tier}
+                        </span>
+                      )}
+                      {/* Status indicators */}
+                      {exerciseStatus === 'do_not_suggest' && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                          </svg>
+                          Muted
+                        </span>
+                      )}
+                      {exerciseStatus === 'archived' && (
+                        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-700 text-surface-400 border border-surface-600">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                          Archived
                         </span>
                       )}
                     </div>
@@ -472,9 +569,25 @@ export default function ExercisesPage() {
                           </span>
                         </>
                       )}
+                      {exerciseStatus === 'archived' && search.length > 0 && (
+                        <>
+                          <span className="text-surface-700">•</span>
+                          <span className="text-xs text-surface-500">
+                            Found in search
+                          </span>
+                        </>
+                      )}
                     </div>
                   </button>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <ExerciseOptionsMenu
+                      exerciseId={exercise.id}
+                      exerciseName={exercise.name}
+                      status={exerciseStatus}
+                      onMute={() => setStatusModalExercise({ id: exercise.id, name: exercise.name, action: 'mute' })}
+                      onArchive={() => setStatusModalExercise({ id: exercise.id, name: exercise.name, action: 'archive' })}
+                      onRestore={() => restoreExercise(exercise.id)}
+                    />
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -491,10 +604,10 @@ export default function ExercisesPage() {
                       onClick={() => toggleExpand(exercise.id)}
                       className="p-1"
                     >
-                      <svg 
+                      <svg
                         className={`w-5 h-5 text-surface-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                        fill="none" 
-                        viewBox="0 0 24 24" 
+                        fill="none"
+                        viewBox="0 0 24 24"
                         stroke="currentColor"
                       >
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1027,6 +1140,23 @@ export default function ExercisesPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* Exercise Status Modal */}
+      {statusModalExercise && (
+        <ExerciseStatusModal
+          isOpen={true}
+          onClose={() => setStatusModalExercise(null)}
+          exerciseName={statusModalExercise.name}
+          action={statusModalExercise.action}
+          onConfirm={async (reason, reasonNote) => {
+            if (statusModalExercise.action === 'mute') {
+              await muteExercise(statusModalExercise.id, reason, reasonNote);
+            } else {
+              await archiveExercise(statusModalExercise.id, reason, reasonNote);
+            }
+          }}
+        />
       )}
     </div>
   );
