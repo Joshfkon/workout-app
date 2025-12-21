@@ -200,7 +200,8 @@ export async function saveTDEEEstimate(estimate: TDEEEstimate): Promise<boolean>
     return false;
   }
 
-  const { error } = await supabase.from('tdee_estimates').upsert(
+  // Use type assertion since tdee_estimates is a new table not in generated types
+  const { error } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>).upsert(
     {
       user_id: user.id,
       burn_rate_per_lb: estimate.burnRatePerLb,
@@ -237,11 +238,26 @@ export async function getStoredTDEEEstimate(): Promise<TDEEEstimate | null> {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('tdee_estimates')
+  // Use type assertion since tdee_estimates is a new table not in generated types
+  const { data, error } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>)
     .select('*')
     .eq('user_id', user.id)
-    .single();
+    .single() as {
+      data: {
+        burn_rate_per_lb: number;
+        estimated_tdee: number;
+        current_weight: number;
+        confidence: string;
+        confidence_score: number;
+        standard_error: number;
+        data_points_used: number;
+        window_days: number;
+        source: string;
+        estimate_history: unknown[];
+        updated_at: string;
+      } | null;
+      error: unknown;
+    };
 
   if (error || !data) {
     return null;
