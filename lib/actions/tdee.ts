@@ -53,17 +53,21 @@ export async function getAdaptiveTDEE(
 
   const { data: weightLogs } = await supabase
     .from('weight_log')
-    .select('*')
+    .select('logged_at, weight')
     .eq('user_id', user.id)
     .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
-    .order('logged_at', { ascending: true });
+    .order('logged_at', { ascending: true }) as {
+      data: Array<{ logged_at: string; weight: number }> | null;
+    };
 
   // Get food log entries (daily totals)
   const { data: foodLogs } = await supabase
     .from('food_log')
     .select('logged_at, calories')
     .eq('user_id', user.id)
-    .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0]);
+    .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0]) as {
+      data: Array<{ logged_at: string; calories: number }> | null;
+    };
 
   // Get nutrition targets
   const { data: nutritionTargets } = await supabase
