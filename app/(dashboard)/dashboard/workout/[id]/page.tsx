@@ -1251,10 +1251,62 @@ export default function WorkoutPage() {
         restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       }
       setError(null);
+
+      // Return the set ID for optional feedback
+      return insertedData.id;
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
+      return null;
     }
+  };
+
+  // Update feedback on an existing set
+  const handleSetFeedbackUpdate = async (setId: string, feedback: SetFeedback) => {
+    const supabase = createUntypedClient();
+
+    // Determine quality based on feedback
+    let quality: 'stimulative' | 'effective' | 'junk' = 'effective';
+    if (feedback.form === 'ugly') {
+      quality = 'junk';
+    } else if (feedback.repsInTank <= 2) {
+      quality = 'stimulative';
+    }
+
+    const qualityReason =
+      feedback.form === 'clean'
+        ? 'Clean form'
+        : feedback.form === 'some_breakdown'
+          ? 'Some form breakdown'
+          : 'Form breakdown';
+
+    // Convert RIR to RPE
+    const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
+
+    // Update database
+    const { error } = await supabase
+      .from('set_logs')
+      .update({
+        feedback: JSON.stringify(feedback),
+        quality,
+        quality_reason: qualityReason,
+        rpe,
+      })
+      .eq('id', setId);
+
+    if (error) {
+      console.error('Failed to update set feedback:', error);
+      return;
+    }
+
+    // Update local state
+    setCompletedSets(prevSets =>
+      prevSets.map(set =>
+        set.id === setId
+          ? { ...set, feedback, quality, qualityReason, rpe }
+          : set
+      )
+    );
   };
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number }) => {
@@ -3216,6 +3268,7 @@ export default function WorkoutPage() {
                     onShowTimerControls={() => setRestTimerPanelVisible(true)}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
+                    onSetFeedbackUpdate={handleSetFeedbackUpdate}
                     onTargetSetsChange={(newSets) => handleTargetSetsChange(block.id, newSets)}
                     onExerciseSwap={(newEx) => {
                       handleExerciseSwap(block.id, newEx);
