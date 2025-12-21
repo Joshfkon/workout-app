@@ -310,7 +310,13 @@ export async function createCustomExercise(
       .single();
     
     if (error || !data) {
-      console.error('Failed to create custom exercise:', error);
+      console.error('Failed to create custom exercise:', {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        full: error
+      });
       return null;
     }
     
