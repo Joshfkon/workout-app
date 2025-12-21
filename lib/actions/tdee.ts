@@ -85,7 +85,9 @@ export async function getAdaptiveTDEE(
     .from('nutrition_targets')
     .select('calories')
     .eq('user_id', user.id)
-    .single();
+    .single() as {
+      data: { calories?: number } | null;
+    };
 
   // Aggregate food logs by day
   const dailyCalories: Record<string, { total: number; entries: number }> = {};
