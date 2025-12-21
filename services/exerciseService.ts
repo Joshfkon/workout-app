@@ -86,6 +86,21 @@ export interface Exercise {
 
   /** Specific injury types to avoid (e.g., 'herniated_disc', 'shoulder_impingement') */
   contraindications?: string[];
+
+  /** Key form cues for proper execution */
+  formCues?: string[];
+
+  /** Common mistakes to avoid */
+  commonMistakes?: string[];
+
+  /** Setup instructions or notes */
+  setupNote?: string;
+
+  /** Movement pattern for finding similar exercises */
+  movementPattern?: string;
+
+  /** Equipment needed for this exercise */
+  equipmentRequired?: string[];
 }
 
 // Re-export hypertrophy types for convenience
@@ -275,6 +290,21 @@ export async function createCustomExercise(
         is_custom: true,
         created_by: userId,
         notes: exercise.notes || '',
+        // Hypertrophy scoring
+        hypertrophy_tier: exercise.hypertrophyScore?.tier,
+        stretch_under_load: exercise.hypertrophyScore?.stretchUnderLoad,
+        resistance_profile: exercise.hypertrophyScore?.resistanceProfile,
+        progression_ease: exercise.hypertrophyScore?.progressionEase,
+        // Safety/injury metadata
+        stabilizers: exercise.stabilizers || [],
+        spinal_loading: exercise.spinalLoading,
+        requires_back_arch: exercise.requiresBackArch,
+        requires_spinal_flexion: exercise.requiresSpinalFlexion,
+        requires_spinal_extension: exercise.requiresSpinalExtension,
+        requires_spinal_rotation: exercise.requiresSpinalRotation,
+        position_stress: exercise.positionStress || {},
+        contraindications: exercise.contraindications || [],
+        form_cues: exercise.formCues || [],
       })
       .select()
       .single();
