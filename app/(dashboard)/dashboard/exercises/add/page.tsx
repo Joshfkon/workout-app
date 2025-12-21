@@ -69,24 +69,35 @@ export default function AddExercisePage() {
         primary_muscle: primaryMuscle,
         secondary_muscles: secondaryMuscles,
         mechanic,
+        pattern: movementPattern || mechanic, // pattern field (derived from movement_pattern)
+        equipment: equipmentArray.length > 0 ? equipmentArray[0] : 'barbell', // equipment field (single value)
         default_rep_range: [parseInt(minReps), parseInt(maxReps)],
         default_rir: parseInt(defaultRir),
         min_weight_increment_kg: parseFloat(minIncrement),
-        movement_pattern: movementPattern || null,
+        movement_pattern: movementPattern || mechanic, // movement_pattern is NOT NULL, use mechanic as fallback
         equipment_required: equipmentArray.length > 0 ? equipmentArray : [],
         form_cues: cuesArray,
         common_mistakes: [],
-        setup_note: setupNote || null,
+        setup_note: setupNote || '', // setup_note is NOT NULL, use empty string as fallback
         hypertrophy_tier: hypertrophyTier,
         is_custom: true,
         created_by: user.id,
       });
 
       if (insertError) {
+        console.error('Exercise insert error:', {
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+        });
+        
         if (insertError.code === '23505') {
           throw new Error('An exercise with this name already exists');
         }
-        throw insertError;
+        
+        // Provide more helpful error message
+        throw new Error(insertError.message || 'Failed to create exercise. Please check all required fields.');
       }
 
       router.push('/dashboard/exercises');
