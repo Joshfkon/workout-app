@@ -278,3 +278,192 @@ export async function getStoredTDEEEstimate(): Promise<TDEEEstimate | null> {
     lastUpdated: new Date(data.updated_at),
   };
 }
+
+export interface SyncResult {
+  synced: boolean;
+  previousCalories: number | null;
+  newCalories: number | null;
+  tdeeSource: 'adaptive' | 'formula';
+  confidence: 'unstable' | 'stabilizing' | 'stable';
+  message: string;
+}
+
+/**
+ * Sync adaptive TDEE with nutrition targets.
+ * Recalculates macros using personalized TDEE when confidence is stable.
+ * Returns info about whether targets were updated.
+ */
+export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return null;
+  }
+
+  // Get the adaptive TDEE data
+  const tdeeData = await getAdaptiveTDEE();
+  if (!tdeeData) {
+    return null;
+  }
+
+  // Get current nutrition targets
+  const { data: currentTargets } = await supabase
+    .from('nutrition_targets')
+    .select('calories, protein, carbs, fat')
+    .eq('user_id', user.id)
+    .single() as {
+      data: { calories: number; protein: number; carbs: number; fat: number } | null;
+    };
+
+  const previousCalories = currentTargets?.calories || null;
+
+  // Only auto-sync when adaptive estimate is stable or stabilizing
+  if (!tdeeData.adaptiveEstimate || tdeeData.adaptiveEstimate.confidence === 'unstable') {
+    return {
+      synced: false,
+      previousCalories,
+      newCalories: null,
+      tdeeSource: 'formula',
+      confidence: tdeeData.adaptiveEstimate?.confidence || 'unstable',
+      message: 'Not enough data yet. Keep logging to unlock personalized targets.',
+    };
+  }
+
+  // Check if adaptive TDEE differs significantly from current targets
+  const adaptiveTDEE = tdeeData.adaptiveEstimate.estimatedTDEE;
+  const currentTDEE = tdeeData.formulaEstimate.estimatedTDEE;
+  const difference = Math.abs(adaptiveTDEE - currentTDEE);
+
+  // If using stable estimate and it differs by more than 50 cal, update targets
+  if (tdeeData.adaptiveEstimate.confidence === 'stable' && difference > 50) {
+    // Get user preferences for macro calculation
+    const { data: userPrefs } = await supabase
+      .from('user_preferences')
+      .select('*')
+      .eq('user_id', user.id)
+      .single() as {
+        data: {
+          height_cm?: number;
+          age?: number;
+          sex?: 'male' | 'female';
+          body_fat_percent?: number;
+          activity_level?: 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'athlete';
+          workouts_per_week?: number;
+          avg_workout_minutes?: number;
+          workout_intensity?: 'light' | 'moderate' | 'intense';
+        } | null;
+      };
+
+    // Get macro settings for goal
+    const { data: macroSettings } = await supabase
+      .from('macro_settings')
+      .select('goal, peptide')
+      .eq('user_id', user.id)
+      .single() as {
+        data: { goal?: string; peptide?: string } | null;
+      };
+
+    // Import and use calculateMacros with adaptive TDEE
+    const { calculateMacros } = await import('@/lib/nutrition/macroCalculator');
+
+    const stats: UserStats = {
+      weightKg: tdeeData.currentWeight ? tdeeData.currentWeight / 2.20462 : 80,
+      heightCm: userPrefs?.height_cm || 175,
+      age: userPrefs?.age || 30,
+      sex: userPrefs?.sex || 'male',
+      bodyFatPercent: userPrefs?.body_fat_percent,
+    };
+
+    const activity: ActivityConfig = {
+      activityLevel: userPrefs?.activity_level || 'moderate',
+      workoutsPerWeek: userPrefs?.workouts_per_week || 4,
+      avgWorkoutMinutes: userPrefs?.avg_workout_minutes || 60,
+      workoutIntensity: userPrefs?.workout_intensity || 'moderate',
+    };
+
+    const goalConfig = {
+      goal: (macroSettings?.goal || 'maintain') as 'aggressive_cut' | 'moderate_cut' | 'slow_cut' | 'maintain' | 'slow_bulk' | 'moderate_bulk' | 'aggressive_bulk',
+      peptide: (macroSettings?.peptide || 'none') as 'none' | 'semaglutide' | 'tirzepatide' | 'retatrutide' | 'liraglutide' | 'tesofensine' | 'gh_peptides',
+    };
+
+    // Calculate new macros using adaptive TDEE
+    const newMacros = calculateMacros(stats, activity, goalConfig, adaptiveTDEE);
+
+    // Update nutrition targets - use type assertion since nutrition_targets typing is strict
+    await (supabase.from('nutrition_targets') as ReturnType<typeof supabase.from>)
+      .upsert({
+        user_id: user.id,
+        calories: newMacros.calories,
+        protein: newMacros.protein,
+        carbs: newMacros.carbs,
+        fat: newMacros.fat,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+      });
+
+    const direction = adaptiveTDEE > currentTDEE ? 'higher' : 'lower';
+    return {
+      synced: true,
+      previousCalories,
+      newCalories: newMacros.calories,
+      tdeeSource: 'adaptive',
+      confidence: 'stable',
+      message: `Your metabolism is ${Math.abs(difference)} cal/day ${direction} than estimated. Targets updated!`,
+    };
+  }
+
+  // Stabilizing but not yet stable enough to auto-update
+  if (tdeeData.adaptiveEstimate.confidence === 'stabilizing') {
+    return {
+      synced: false,
+      previousCalories,
+      newCalories: null,
+      tdeeSource: 'formula',
+      confidence: 'stabilizing',
+      message: 'Your estimate is stabilizing. A few more days of data needed.',
+    };
+  }
+
+  return {
+    synced: false,
+    previousCalories,
+    newCalories: null,
+    tdeeSource: 'adaptive',
+    confidence: tdeeData.adaptiveEstimate.confidence,
+    message: 'Targets are already up to date.',
+  };
+}
+
+/**
+ * Recalculate and sync TDEE after new weight is logged.
+ * Call this from the weight logging flow.
+ */
+export async function onWeightLoggedRecalculateTDEE(): Promise<{
+  estimate: TDEEEstimate | null;
+  syncResult: SyncResult | null;
+}> {
+  // Get fresh TDEE calculation
+  const tdeeData = await getAdaptiveTDEE();
+
+  if (!tdeeData) {
+    return { estimate: null, syncResult: null };
+  }
+
+  // Save the estimate if we have one
+  if (tdeeData.adaptiveEstimate) {
+    await saveTDEEEstimate(tdeeData.adaptiveEstimate);
+  }
+
+  // Try to sync with targets
+  const syncResult = await syncAdaptiveTDEEWithTargets();
+
+  return {
+    estimate: tdeeData.adaptiveEstimate,
+    syncResult,
+  };
+}

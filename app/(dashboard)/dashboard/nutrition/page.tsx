@@ -22,6 +22,8 @@ import type {
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
+import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
+import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { getLocalDateString } from '@/lib/utils';
 import {
   LineChart,
@@ -168,6 +170,7 @@ export default function NutritionPage() {
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
+  const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -366,6 +369,14 @@ export default function NutritionPage() {
       }
 
       setUserProfile(profileData);
+
+      // Load adaptive TDEE data
+      try {
+        const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+        setTdeeData(tdee);
+      } catch (tdeeError) {
+        console.error('Error loading TDEE data:', tdeeError);
+      }
     } catch (error) {
       console.error('Error loading nutrition data:', error);
     } finally {
@@ -597,18 +608,32 @@ export default function NutritionPage() {
       throw error;
     }
 
-    // Auto-recalculate macros based on new weight
+    // Auto-recalculate TDEE and sync with targets
     try {
-      const result = await recalculateMacrosForWeight(weightKg);
-      if (result.success && !result.skipped && result.newTargets) {
+      const tdeeResult = await onWeightLoggedRecalculateTDEE();
+      if (tdeeResult.syncResult?.synced && tdeeResult.syncResult.newCalories) {
         setMacroUpdateNotification(
-          `✅ Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
+          `✅ Adaptive TDEE updated targets: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
         );
-        // Clear notification after 5 seconds
-        setTimeout(() => setMacroUpdateNotification(null), 5000);
+        setTimeout(() => setMacroUpdateNotification(null), 6000);
+      } else if (tdeeResult.syncResult?.message && tdeeResult.estimate) {
+        // Show progress message even if not synced
+        setMacroUpdateNotification(
+          `📊 ${tdeeResult.syncResult.message}`
+        );
+        setTimeout(() => setMacroUpdateNotification(null), 4000);
+      } else {
+        // Fallback to weight-based recalculation if TDEE not ready
+        const result = await recalculateMacrosForWeight(weightKg);
+        if (result.success && !result.skipped && result.newTargets) {
+          setMacroUpdateNotification(
+            `✅ Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
+          );
+          setTimeout(() => setMacroUpdateNotification(null), 5000);
+        }
       }
     } catch (e) {
-      console.error('Failed to auto-recalculate macros:', e);
+      console.error('Failed to recalculate TDEE/macros:', e);
     }
 
     await loadData();
@@ -1242,6 +1267,20 @@ export default function NutritionPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Adaptive TDEE Dashboard */}
+      {tdeeData && (
+        <TDEEDashboard
+          estimate={tdeeData.adaptiveEstimate}
+          formulaEstimate={tdeeData.formulaEstimate}
+          predictions={tdeeData.predictions}
+          dataQuality={tdeeData.dataQuality}
+          currentWeight={tdeeData.currentWeight}
+          targetCalories={nutritionTargets?.calories}
+          onRefresh={loadData}
+          onSetTarget={() => setShowMacroCalculator(true)}
+        />
       )}
 
       {/* Modals */}

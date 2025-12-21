@@ -269,15 +269,19 @@ function calculateFat(calories: number, stats: UserStats): number {
 
 /**
  * Main function: Calculate complete macro recommendations
+ * @param overrideTDEE - Optional adaptive TDEE to use instead of formula calculation
  */
 export function calculateMacros(
   stats: UserStats,
   activity: ActivityConfig,
-  goalConfig: GoalConfig
+  goalConfig: GoalConfig,
+  overrideTDEE?: number
 ): MacroRecommendation {
   const bmr = calculateBMR(stats);
-  const tdee = calculateTDEE(stats, activity);
-  
+  const formulaTDEE = calculateTDEE(stats, activity);
+  const tdee = overrideTDEE || formulaTDEE;
+  const isAdaptive = !!overrideTDEE;
+
   // Get peptide configuration
   const peptide = goalConfig.peptide || 'none';
   const peptideConfig = PEPTIDE_CONFIG[peptide];
@@ -320,8 +324,10 @@ export function calculateMacros(
   const fatPercent = Math.round((fat * 9 / actualCalories) * 100);
   
   // Generate explanation
-  let explanation = `Based on your stats, your maintenance calories (TDEE) is ${tdee} cal/day. `;
-  
+  let explanation = isAdaptive
+    ? `Based on your tracked data, your personalized TDEE is ${tdee} cal/day. `
+    : `Based on your stats, your estimated TDEE is ${tdee} cal/day. `;
+
   if (weeklyChangeKg < 0) {
     const weeklyLbs = Math.abs(weeklyChangeKg * 2.20462).toFixed(1);
     explanation += `To lose ~${weeklyLbs} lbs per week, you need a ${Math.abs(Math.round(dailyCalorieAdjustment))} calorie daily deficit. `;
