@@ -271,25 +271,61 @@ export async function createCustomExercise(
   try {
     const supabase = createUntypedClient();
     
+    // Verify the user is authenticated and get their actual ID
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      console.error('Authentication error:', authError);
+      return null;
+    }
+    
+    // Verify session exists and refresh if needed
+    let { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.error('No active session found');
+      return null;
+    }
+    
+    // Refresh the session to ensure we have a valid token
+    const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) {
+      console.warn('Session refresh failed, using existing session:', refreshError);
+    } else if (refreshedSession) {
+      session = refreshedSession;
+    }
+    
+    // Use the authenticated user's ID, not the passed userId (for security)
+    const authenticatedUserId = user.id;
+    
+    console.log('Creating exercise with:', {
+      userId: authenticatedUserId,
+      sessionExists: !!session,
+      accessToken: session?.access_token ? 'present' : 'missing',
+      tokenExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown'
+    });
+    
     const { data, error } = await supabase
       .from('exercises')
       .insert({
         name: exercise.name,
         primary_muscle: exercise.primaryMuscle,
-        secondary_muscles: exercise.secondaryMuscles,
-        mechanic: exercise.mechanic,
+        secondary_muscles: exercise.secondaryMuscles || [],
+        mechanic: exercise.mechanic || 'compound',
         pattern: exercise.pattern,
         equipment: exercise.equipment,
         difficulty: exercise.difficulty,
         fatigue_rating: exercise.fatigueRating,
-        default_rep_range: exercise.defaultRepRange,
-        default_rir: exercise.defaultRir,
-        min_weight_increment_kg: exercise.minWeightIncrementKg,
-        movement_pattern: exercise.pattern,
-        equipment_required: [exercise.equipment],
+        default_rep_range: exercise.defaultRepRange || [8, 12],
+        default_rir: exercise.defaultRir || 2,
+        min_weight_increment_kg: exercise.minWeightIncrementKg || 2.5,
+        movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
+        equipment_required: exercise.equipmentRequired || (exercise.equipment ? [exercise.equipment] : []),
         is_custom: true,
-        created_by: userId,
+        created_by: authenticatedUserId,
         notes: exercise.notes || '',
+        // Required fields with defaults
+        form_cues: exercise.formCues || [],
+        common_mistakes: exercise.commonMistakes || [],
+        setup_note: exercise.setupNote || '',
         // Hypertrophy scoring
         hypertrophy_tier: exercise.hypertrophyScore?.tier,
         stretch_under_load: exercise.hypertrophyScore?.stretchUnderLoad,
@@ -304,7 +340,6 @@ export async function createCustomExercise(
         requires_spinal_rotation: exercise.requiresSpinalRotation,
         position_stress: exercise.positionStress || {},
         contraindications: exercise.contraindications || [],
-        form_cues: exercise.formCues || [],
       })
       .select()
       .single();
@@ -315,8 +350,23 @@ export async function createCustomExercise(
         details: error?.details,
         hint: error?.hint,
         code: error?.code,
-        full: error
+        full: error,
+        userId: authenticatedUserId,
+        isCustom: true,
+        createdBy: authenticatedUserId,
+        authUserId: authenticatedUserId
       });
+      
+      // Log the actual insert payload for debugging
+      console.error('Insert payload:', {
+        name: exercise.name,
+        primary_muscle: exercise.primaryMuscle,
+        is_custom: true,
+        created_by: authenticatedUserId,
+        movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
+        auth_uid_check: authenticatedUserId,
+      });
+      
       return null;
     }
     

@@ -63,6 +63,14 @@ export async function getUserExercisePreferences(
       .eq('user_id', userId);
 
     if (error) {
+      // If table doesn't exist (404/PGRST205), return empty map gracefully
+      if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.code === '42P01') {
+        console.warn('Exercise preferences table not found - returning empty preferences. Run migration 20241221000001_user_exercise_preferences.sql to create table.');
+        // Cache empty result to avoid repeated errors
+        preferencesCache.set(userId, new Map());
+        cacheTimestamp.set(userId, Date.now());
+        return new Map();
+      }
       console.warn('Failed to load exercise preferences:', error);
       return new Map();
     }

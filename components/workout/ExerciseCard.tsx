@@ -1312,7 +1312,8 @@ export const ExerciseCard = memo(function ExerciseCard({
             )}
 
             {/* Inline Rest Timer - appears after completing a set or warmup (NOT during dropset) */}
-            {isActive && showRestTimer && !pendingDropset && (
+            {/* Show when timer is active OR when skipped (to show "Rested for X" message) */}
+            {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
               <InlineRestTimerBar
                 seconds={timerSeconds}
                 initialSeconds={timerInitialSeconds}

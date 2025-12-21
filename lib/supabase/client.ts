@@ -10,6 +10,7 @@ export function createClient() {
 
 // Untyped client for write operations to avoid strict type checking
 // Uses the same browser client but cast to any to bypass type issues
+// Note: createBrowserClient automatically handles cookies in the browser
 export function createUntypedClient() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

@@ -36,6 +36,12 @@ CREATE INDEX IF NOT EXISTS idx_user_exercise_prefs_exercise
 -- Enable Row Level Security
 ALTER TABLE user_exercise_preferences ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (to allow re-running migration)
+DROP POLICY IF EXISTS "Users can view own exercise preferences" ON user_exercise_preferences;
+DROP POLICY IF EXISTS "Users can insert own exercise preferences" ON user_exercise_preferences;
+DROP POLICY IF EXISTS "Users can update own exercise preferences" ON user_exercise_preferences;
+DROP POLICY IF EXISTS "Users can delete own exercise preferences" ON user_exercise_preferences;
+
 -- RLS Policy: Users can only see their own preferences
 CREATE POLICY "Users can view own exercise preferences"
   ON user_exercise_preferences

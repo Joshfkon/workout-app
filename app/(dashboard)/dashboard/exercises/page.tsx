@@ -102,6 +102,7 @@ function calculateE1RM(weight: number, reps: number): number {
 }
 
 export default function ExercisesPage() {
+  const [mounted, setMounted] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -111,7 +112,7 @@ export default function ExercisesPage() {
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
   const { preferences } = useUserPreferences();
-  const unit = preferences.units;
+  const unit = preferences?.units || 'kg'; // Default fallback
 
   // Edit exercise state
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -125,10 +126,16 @@ export default function ExercisesPage() {
     muteExercise,
     archiveExercise,
     restoreExercise,
-    summary: prefsSummary
+    summary: prefsSummary,
+    isLoading: prefsLoading
   } = useExercisePreferences();
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'muted' | 'archived'>('all');
   const [statusModalExercise, setStatusModalExercise] = useState<{ id: string; name: string; action: 'mute' | 'archive' } | null>(null);
+
+  // Set mounted flag to prevent hydration mismatches
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     async function fetchExercises() {
@@ -144,8 +151,10 @@ export default function ExercisesPage() {
       setIsLoading(false);
     }
 
-    fetchExercises();
-  }, []);
+    if (mounted) {
+      fetchExercises();
+    }
+  }, [mounted]);
 
   const fetchExerciseHistory = async (exerciseId: string) => {
     if (exerciseHistories[exerciseId]) return; // Already loaded
@@ -195,10 +204,9 @@ export default function ExercisesPage() {
 
           const sessionId = session.id;
           const date = session.completed_at;
-          const displayDate = new Date(date).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-          });
+          // Use a consistent date format to avoid hydration mismatches
+          const dateObj = new Date(date);
+          const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
 
           const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
           
@@ -355,7 +363,7 @@ export default function ExercisesPage() {
   const filteredExercises = exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     const matchesMuscle = !selectedMuscle || ex.primary_muscle === selectedMuscle;
-    const status = getExerciseStatus(ex.id);
+    const status = getExerciseStatus ? getExerciseStatus(ex.id) : 'active';
 
     // Status filtering
     let matchesStatus = true;
@@ -493,7 +501,7 @@ export default function ExercisesPage() {
       </div>
 
       {/* Exercise list */}
-      {isLoading ? (
+      {!mounted || isLoading ? (
         <div className="space-y-4">
           <div className="flex justify-center py-8">
             <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
@@ -512,7 +520,7 @@ export default function ExercisesPage() {
             const isLoadingThis = loadingHistory === exercise.id;
             const chartData = history ? getChartData(history) : [];
             const hasChartData = chartData.length >= 2;
-            const exerciseStatus = getExerciseStatus(exercise.id);
+            const exerciseStatus = getExerciseStatus ? getExerciseStatus(exercise.id) : 'active';
 
             return (
               <Card
@@ -652,10 +660,10 @@ export default function ExercisesPage() {
                         <div className="bg-surface-800/50 rounded-lg p-3 text-center">
                           <p className="text-xs text-surface-500 uppercase">Last Done</p>
                           <p className="text-sm font-medium text-surface-300">
-                            {new Date(history.lastWorkoutDate).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                            })}
+                            {(() => {
+                              const date = new Date(history.lastWorkoutDate);
+                              return `${date.getMonth() + 1}/${date.getDate()}`;
+                            })()}
                           </p>
                         </div>
                       </div>

@@ -32,7 +32,10 @@ function notifyListeners(prefs: Map<string, UserExercisePreference>) {
  * Hook for managing exercise visibility preferences
  */
 export function useExercisePreferences() {
-  const [preferences, setPreferences] = useState<Map<string, UserExercisePreference>>(globalPreferences);
+  const [preferences, setPreferences] = useState<Map<string, UserExercisePreference>>(() => {
+    // Ensure we always have a valid Map
+    return globalPreferences || new Map();
+  });
   const [summary, setSummary] = useState<ExercisePreferenceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(globalUserId);
@@ -59,14 +62,43 @@ export function useExercisePreferences() {
           setUserId(user.id);
           globalUserId = user.id;
 
-          const prefs = await getUserExercisePreferences(user.id);
-          notifyListeners(prefs);
+          try {
+            const prefs = await getUserExercisePreferences(user.id);
+            notifyListeners(prefs);
 
-          const summaryData = await getPreferenceSummary(user.id);
-          setSummary(summaryData);
+            const summaryData = await getPreferenceSummary(user.id);
+            setSummary(summaryData);
+          } catch (prefError: any) {
+            // Handle missing table gracefully
+            if (prefError?.code === 'PGRST205' || prefError?.message?.includes('Could not find the table')) {
+              console.warn('Exercise preferences table not found - using defaults. Run migration to create table.');
+              notifyListeners(new Map());
+              setSummary({
+                activeCount: 0,
+                doNotSuggestCount: 0,
+                archivedCount: 0,
+              });
+            } else {
+              console.error('Failed to load exercise preferences:', prefError);
+              // Set defaults on error
+              notifyListeners(new Map());
+              setSummary({
+                activeCount: 0,
+                doNotSuggestCount: 0,
+                archivedCount: 0,
+              });
+            }
+          }
         }
       } catch (err) {
         console.error('Failed to load exercise preferences:', err);
+        // Set defaults on error
+        notifyListeners(new Map());
+        setSummary({
+          activeCount: 0,
+          doNotSuggestCount: 0,
+          archivedCount: 0,
+        });
       } finally {
         setIsLoading(false);
       }
@@ -80,8 +112,13 @@ export function useExercisePreferences() {
    */
   const getExerciseStatus = useCallback(
     (exerciseId: string): ExerciseVisibilityStatus => {
-      const pref = preferences.get(exerciseId);
-      return pref?.status || 'active';
+      if (!exerciseId) return 'active';
+      try {
+        const pref = preferences?.get(exerciseId);
+        return pref?.status || 'active';
+      } catch {
+        return 'active';
+      }
     },
     [preferences]
   );
