@@ -121,9 +121,10 @@ interface ExerciseCardProps {
   exercise: Exercise;
   block: ExerciseBlock;
   sets: SetLog[];
-  onSetComplete?: (setData: SetCompleteData) => void;
+  onSetComplete?: (setData: SetCompleteData) => Promise<string | null> | void;  // Returns set ID for feedback
   onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
   onSetDelete?: (setId: string) => void;
+  onSetFeedbackUpdate?: (setId: string, feedback: SetFeedback) => void;  // Update feedback on existing set
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
@@ -168,6 +169,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onSetComplete,
   onSetEdit,
   onSetDelete,
+  onSetFeedbackUpdate,
   onTargetSetsChange,
   onExerciseSwap,
   onExerciseDelete,
@@ -207,13 +209,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
   const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
-  // Feedback mode: when user clicks "Next" after entering weight/reps, show feedback card
-  const [feedbackMode, setFeedbackMode] = useState<{
-    index: number;
+  // Optional feedback overlay: shown after set is completed, user can fill in or skip
+  const [pendingFeedbackSet, setPendingFeedbackSet] = useState<{
+    setId: string;
     weightKg: number;
     reps: number;
-    isDropset?: boolean;
-    parentSetId?: string;
+    setNumber: number;
   } | null>(null);
 
   // Auto-show swap modal when showSwapOnMount is true
@@ -525,8 +526,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   };
 
-  // Open feedback card for a pending set (replaces direct completion)
-  const openFeedbackForSet = (index: number, asDropset = false) => {
+  // Complete set immediately, then show optional feedback overlay
+  const completeSetImmediately = async (index: number, asDropset = false) => {
+    if (isCompletingSet || !onSetComplete) return;
+
     const input = pendingInputs[index];
     if (!input) return;
 
@@ -537,90 +540,24 @@ export const ExerciseCard = memo(function ExerciseCard({
       return;
     }
 
-    // Convert from display unit to kg
-    const weightKg = inputWeightToKg(weightNum, unit);
-
-    setFeedbackMode({
-      index,
-      weightKg,
-      reps: repsNum,
-      isDropset: asDropset,
-      parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
-    });
-  };
-
-  // Complete set with feedback from the feedback card
-  const completePendingSetWithFeedback = (feedback: SetFeedback) => {
-    if (!feedbackMode || isCompletingSet || !onSetComplete) return;
-
-    // Lock to prevent double-clicks
-    setIsCompletingSet(true);
-
-    // Convert RIR to RPE for backwards compatibility
-    const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
-
-    onSetComplete({
-      weightKg: feedbackMode.weightKg,
-      reps: feedbackMode.reps,
-      rpe,
-      setType: feedbackMode.isDropset ? 'dropset' : 'normal',
-      parentSetId: feedbackMode.parentSetId,
-      feedback,
-    });
-
-    // Clear dropset mode after completing
-    if (feedbackMode.isDropset) {
-      setDropsetMode(null);
-    }
-
-    // Clear feedback mode
-    setFeedbackMode(null);
-
-    // Unlock after a short delay (the parent will update completedSets)
-    setTimeout(() => setIsCompletingSet(false), 500);
-  };
-
-  // Cancel feedback entry and go back to editing
-  const cancelFeedback = () => {
-    setFeedbackMode(null);
-  };
-
-  // Legacy function for backwards compatibility (dropset quick complete etc)
-  const completePendingSet = (index: number, asDropset = false) => {
-    // For dropsets entered via quick input, use default feedback
-    if (isCompletingSet || !onSetComplete) return;
-
-    const input = pendingInputs[index];
-    if (!input) return;
-
-    const weightNum = parseFloat(input.weight);
-    const repsNum = parseInt(input.reps);
-    const rpeNum = parseFloat(input.rpe);
-
-    if (isNaN(weightNum) || isNaN(repsNum) || isNaN(rpeNum)) {
-      return;
-    }
-
     // Lock to prevent double-clicks
     setIsCompletingSet(true);
 
     // Convert from display unit to kg
     const weightKg = inputWeightToKg(weightNum, unit);
+    const setNumber = completedSets.length + index + 1;
 
-    // Create default feedback based on RPE
-    const repsInTank = rpeNum >= 10 ? 0 : rpeNum >= 9 ? 1 : rpeNum >= 7.5 ? 2 : 4;
-    const defaultFeedback: SetFeedback = {
-      repsInTank: repsInTank as 0 | 1 | 2 | 4,
-      form: 'clean',
-    };
+    // Use target RPE as default (will be updated if user provides feedback)
+    const targetRpe = 10 - block.targetRir;
 
-    onSetComplete({
+    // Complete the set immediately (rest timer starts in parent)
+    const result = await onSetComplete({
       weightKg,
       reps: repsNum,
-      rpe: rpeNum,
+      rpe: targetRpe,
       setType: asDropset && dropsetMode ? 'dropset' : 'normal',
       parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
-      feedback: defaultFeedback,
+      // No feedback yet - user can add it optionally
     });
 
     // Clear dropset mode after completing
@@ -628,9 +565,35 @@ export const ExerciseCard = memo(function ExerciseCard({
       setDropsetMode(null);
     }
 
-    // Unlock after a short delay (the parent will update completedSets)
+    // Show feedback overlay if we got a set ID back
+    if (result && typeof result === 'string') {
+      setPendingFeedbackSet({
+        setId: result,
+        weightKg,
+        reps: repsNum,
+        setNumber,
+      });
+    }
+
+    // Unlock after a short delay
     setTimeout(() => setIsCompletingSet(false), 500);
   };
+
+  // Submit feedback for the pending set
+  const submitFeedback = (feedback: SetFeedback) => {
+    if (!pendingFeedbackSet || !onSetFeedbackUpdate) return;
+
+    onSetFeedbackUpdate(pendingFeedbackSet.setId, feedback);
+    setPendingFeedbackSet(null);
+  };
+
+  // Skip feedback entry
+  const skipFeedback = () => {
+    setPendingFeedbackSet(null);
+  };
+
+  // Alias for backwards compatibility
+  const completePendingSet = completeSetImmediately;
   
   // Start dropset mode with reduced weight
   const startDropset = (parentSet: SetLog) => {
@@ -1448,26 +1411,6 @@ export const ExerciseCard = memo(function ExerciseCard({
             {isActive && pendingInputs.map((input, index) => {
               const setNumber = completedSets.length + index + 1;
               const pendingId = `pending-set-${setNumber}`;
-              const isInFeedbackMode = feedbackMode?.index === index;
-
-              // If in feedback mode for this set, show the feedback card instead
-              if (isInFeedbackMode) {
-                return (
-                  <tr key={pendingId} className="bg-primary-500/10">
-                    <td colSpan={6} className="p-0">
-                      <SetFeedbackCard
-                        setNumber={setNumber}
-                        weightKg={feedbackMode.weightKg}
-                        reps={feedbackMode.reps}
-                        unit={unit}
-                        onSave={completePendingSetWithFeedback}
-                        onCancel={cancelFeedback}
-                        disabled={isCompletingSet}
-                      />
-                    </td>
-                  </tr>
-                );
-              }
 
               return (
                 <tr
@@ -1503,15 +1446,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                     />
                   </td>
                   <td className="px-3 py-1.5 text-center">
-                    {/* Form column - will be set after feedback */}
                     <span className="text-surface-600 text-xs">—</span>
                   </td>
                   <td className="px-3 py-1.5 text-center">
-                    {/* Quality preview removed - determined after feedback */}
                     <span className="text-surface-600">—</span>
                   </td>
                   <td className="px-2 py-1.5 relative">
-                    {/* Delete reveal background for swipe - positioned relative to this cell */}
+                    {/* Delete reveal background for swipe */}
                     {swipeState.setId === pendingId && swipeState.isSwiping && (
                       <div
                         className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
@@ -1522,10 +1463,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                       </div>
                     )}
                     <button
-                      onClick={() => openFeedbackForSet(index)}
+                      onClick={() => completeSetImmediately(index)}
                       disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
-                      className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-primary-500 hover:border-solid hover:bg-primary-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
-                      title="Rate this set"
+                      className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
+                      title="Complete set"
                     >
                       {isCompletingSet ? (
                         <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1534,7 +1475,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         </svg>
                       ) : (
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
                       )}
                     </button>
@@ -1912,6 +1853,57 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Optional Feedback Overlay - appears after set completion */}
+      {pendingFeedbackSet && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={skipFeedback}>
+          <div
+            className="w-full max-w-md bg-surface-900 border border-surface-700 rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 bg-surface-800/50">
+              <div>
+                <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
+                <p className="text-xs text-surface-400">
+                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} reps
+                </p>
+              </div>
+              <button
+                onClick={skipFeedback}
+                className="p-1.5 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Feedback Card Content */}
+            <div className="p-4">
+              <SetFeedbackCard
+                setNumber={pendingFeedbackSet.setNumber}
+                weightKg={pendingFeedbackSet.weightKg}
+                reps={pendingFeedbackSet.reps}
+                unit={unit}
+                onSave={submitFeedback}
+                onCancel={skipFeedback}
+                disabled={false}
+              />
+            </div>
+
+            {/* Skip button */}
+            <div className="px-4 pb-4">
+              <button
+                onClick={skipFeedback}
+                className="w-full py-2 text-sm text-surface-400 hover:text-surface-300 transition-colors"
+              >
+                Skip for now
+              </button>
+            </div>
           </div>
         </div>
       )}
