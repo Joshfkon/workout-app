@@ -24,6 +24,7 @@ import {
   type InjuryContext,
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
+import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -404,10 +405,6 @@ export default function WorkoutPage() {
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
-  const [customExerciseName, setCustomExerciseName] = useState('');
-  const [customExerciseMuscle, setCustomExerciseMuscle] = useState('chest');
-  const [customExerciseMechanic, setCustomExerciseMechanic] = useState<'compound' | 'isolation'>('compound');
-  const [isCreatingExercise, setIsCreatingExercise] = useState(false);
   
   // Coach message state
   const [showCoachMessage, setShowCoachMessage] = useState(true);
@@ -2248,45 +2245,19 @@ export default function WorkoutPage() {
     setExerciseSearch('');
   };
 
-  // Create custom exercise and add to workout
-  const handleCreateCustomExercise = async () => {
-    if (!customExerciseName.trim()) {
-      setError('Please enter an exercise name');
-      return;
-    }
-
-    setIsCreatingExercise(true);
-    setError(null);
-
+  // Handle custom exercise creation success
+  const handleCustomExerciseSuccess = async (exerciseId: string) => {
     try {
+      // Fetch the newly created exercise
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Create the custom exercise
-      const { data: newExercise, error: createError } = await supabase
+      const { data: newExercise, error } = await supabase
         .from('exercises')
-        .insert({
-          name: customExerciseName.trim(),
-          primary_muscle: customExerciseMuscle,
-          secondary_muscles: [],
-          mechanic: customExerciseMechanic,
-          default_rep_range: customExerciseMechanic === 'compound' ? [6, 10] : [10, 15],
-          default_rir: 2,
-          min_weight_increment_kg: 2.5,
-          form_cues: [],
-          common_mistakes: [],
-          setup_note: '',
-          movement_pattern: customExerciseMechanic === 'compound' ? 'compound' : 'isolation',
-          equipment_required: [],
-          is_custom: true,
-          created_by: user.id,
-        })
-        .select()
+        .select('id, name, primary_muscle, secondary_muscles, mechanic')
+        .eq('id', exerciseId)
         .single();
 
-      if (createError || !newExercise) {
-        throw new Error(createError?.message || 'Failed to create exercise');
+      if (error || !newExercise) {
+        throw new Error('Failed to fetch created exercise');
       }
 
       // Add it to the available exercises list
@@ -2307,16 +2278,11 @@ export default function WorkoutPage() {
         mechanic: newExercise.mechanic,
       });
 
-      // Reset custom exercise form
+      // Close the custom exercise modal
       setShowCustomExercise(false);
-      setCustomExerciseName('');
-      setCustomExerciseMuscle('chest');
-      setCustomExerciseMechanic('compound');
     } catch (err) {
-      console.error('Failed to create custom exercise:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create exercise');
-    } finally {
-      setIsCreatingExercise(false);
+      console.error('Failed to add custom exercise to workout:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add exercise to workout');
     }
   };
 
@@ -3769,8 +3735,8 @@ export default function WorkoutPage() {
         </div>
       )}
 
-      {/* Custom Exercise Creation Modal */}
-      {showCustomExercise && (
+      {/* Custom Exercise Creation Modal with AI */}
+      {showCustomExercise && session && (
         <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <div 
@@ -3779,111 +3745,29 @@ export default function WorkoutPage() {
           />
           
           {/* Modal */}
-          <div className="relative w-full max-w-md bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden">
+          <div className="relative w-full max-w-lg max-h-[90vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setShowCustomExercise(false)}
                   className="p-1 text-surface-400 hover:text-surface-200"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
                 <h2 className="text-lg font-semibold text-surface-100">Create Custom Exercise</h2>
               </div>
             </div>
 
-            {/* Form */}
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Exercise Name *
-                </label>
-                <Input
-                  placeholder="e.g., Cable Chest Fly Machine"
-                  value={customExerciseName}
-                  onChange={(e) => setCustomExerciseName(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Primary Muscle Group *
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {MUSCLE_GROUPS.map((muscle) => (
-                    <button
-                      key={muscle}
-                      onClick={() => setCustomExerciseMuscle(muscle)}
-                      className={`px-3 py-2 rounded-lg text-xs font-medium capitalize transition-colors ${
-                        customExerciseMuscle === muscle
-                          ? 'bg-primary-500 text-white'
-                          : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                      }`}
-                    >
-                      {muscle}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Exercise Type *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setCustomExerciseMechanic('compound')}
-                    className={`p-3 rounded-lg text-center transition-colors ${
-                      customExerciseMechanic === 'compound'
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                    }`}
-                  >
-                    <p className="font-medium">Compound</p>
-                    <p className="text-xs opacity-75 mt-0.5">Multi-joint movement</p>
-                  </button>
-                  <button
-                    onClick={() => setCustomExerciseMechanic('isolation')}
-                    className={`p-3 rounded-lg text-center transition-colors ${
-                      customExerciseMechanic === 'isolation'
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                    }`}
-                  >
-                    <p className="font-medium">Isolation</p>
-                    <p className="text-xs opacity-75 mt-0.5">Single-joint movement</p>
-                  </button>
-                </div>
-              </div>
-
-              {/* Error display */}
-              {error && (
-                <div className="p-2 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-xs">
-                  {error}
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  className="flex-1"
-                  onClick={() => setShowCustomExercise(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={handleCreateCustomExercise}
-                  disabled={!customExerciseName.trim() || isCreatingExercise}
-                  isLoading={isCreatingExercise}
-                >
-                  Create & Add
-                </Button>
-              </div>
+            {/* AI-Powered Exercise Creation Component */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <CreateCustomExercise
+                userId={session.userId}
+                onSuccess={handleCustomExerciseSuccess}
+                onCancel={() => setShowCustomExercise(false)}
+              />
             </div>
           </div>
         </div>
