@@ -63,17 +63,20 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     try {
       const supabase = createUntypedClient();
 
-      // Calculate week boundaries
+      // Calculate rolling 7-day period (last 7 days including today)
       const now = new Date();
-      const day = now.getDay();
-      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
       const weekStart = new Date(now);
-      weekStart.setDate(diff);
+      weekStart.setDate(weekStart.getDate() - 6); // 7 days ago (including today = 6 days back)
+      weekStart.setHours(0, 0, 0, 0);
       const weekStartStr = weekStart.toISOString().split('T')[0];
 
       const prevWeekStart = new Date(weekStart);
       prevWeekStart.setDate(prevWeekStart.getDate() - 7);
       const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
+      
+      const weekEnd = new Date(now);
+      weekEnd.setHours(23, 59, 59, 999);
+      const weekEndStr = weekEnd.toISOString();
 
       // Fetch current week volume
       const { data: currentData } = await supabase
@@ -91,13 +94,9 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       // If no pre-computed data, calculate from set logs
       if (!currentData || currentData.length === 0) {
-        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for week ${weekStartStr}`);
+        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for rolling 7-day period ${weekStartStr} to ${weekEndStr}`);
         
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekEnd.getDate() + 6);
-        const weekEndStr = weekEnd.toISOString().split('T')[0];
-        
-        console.log(`[useAdaptiveVolume] Week range: ${weekStartStr} to ${weekEndStr}`);
+        console.log(`[useAdaptiveVolume] Rolling 7-day range: ${weekStartStr} to ${weekEndStr}`);
 
         // Fetch exercise blocks and sets for current week
         const { data: blocks, error: blocksError } = await supabase
@@ -128,7 +127,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           `)
           .eq('workout_sessions.user_id', user.id)
           .gte('workout_sessions.completed_at', weekStartStr)
-          .lte('workout_sessions.completed_at', weekEndStr + 'T23:59:59')
+          .lte('workout_sessions.completed_at', weekEndStr)
           .eq('workout_sessions.state', 'completed');
 
         if (blocksError) {
