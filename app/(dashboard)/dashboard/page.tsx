@@ -7,6 +7,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
+import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
@@ -1085,6 +1086,11 @@ export default function DashboardPage() {
       {/* ===== HYDRATION ===== */}
       {userId && (
         <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} />
+      )}
+
+      {/* ===== ACTIVITY / STEPS ===== */}
+      {userId && (
+        <ActivityCard userId={userId} />
       )}
 
       {/* ===== WEEKLY VOLUME ===== */}
