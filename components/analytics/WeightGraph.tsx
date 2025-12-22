@@ -36,11 +36,35 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     '90d': 90,
   };
 
-  // Convert weight to preferred unit
+  // Convert weight to preferred unit with validation
   const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
-    // If unit is missing, assume it's already in the preferred unit (no conversion)
-    // This prevents incorrect conversions when unit data is missing
-    if (!fromUnit || fromUnit === preferredUnit) return weight;
+    // If unit is missing, try to infer from weight value
+    // If weight > 300 in preferred unit 'lb', it's likely in kg
+    // If weight > 150 in preferred unit 'kg', it's likely in lb
+    if (!fromUnit) {
+      if (preferredUnit === 'lb' && weight > 300) {
+        // Likely stored in kg, convert
+        return weight * 2.20462;
+      } else if (preferredUnit === 'kg' && weight > 150) {
+        // Likely stored in lb, convert
+        return weight / 2.20462;
+      }
+      // Assume already in preferred unit
+      return weight;
+    }
+    
+    // Validate: if unit says 'lb' but weight > 500, it's probably in kg
+    // If unit says 'kg' but weight > 250, it's probably in lb
+    if (fromUnit === 'lb' && weight > 500) {
+      // Probably stored in kg, convert
+      return weight * 2.20462;
+    } else if (fromUnit === 'kg' && weight > 250) {
+      // Probably stored in lb, convert
+      return weight / 2.20462;
+    }
+    
+    // Normal conversion
+    if (fromUnit === preferredUnit) return weight;
     return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
   };
 

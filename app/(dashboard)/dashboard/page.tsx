@@ -351,15 +351,26 @@ export default function DashboardPage() {
           });
         }
 
-        // Process weight history
+        // Process weight history with unit validation
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
-          // Use user's preferred unit as default if unit is missing from database
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
-          setWeightHistory(weightHistoryResult.data.map((w: any) => ({
-            date: w.logged_at,
-            weight: w.weight,
-            unit: w.unit || defaultUnit,
-          })));
+          setWeightHistory(weightHistoryResult.data.map((w: any) => {
+            let unit = w.unit || defaultUnit;
+            
+            // Validate: if unit says 'lb' but weight > 500, it's probably in kg
+            // If unit says 'kg' but weight > 250, it's probably in lb
+            if (unit === 'lb' && w.weight > 500) {
+              unit = 'kg'; // Correct the unit
+            } else if (unit === 'kg' && w.weight > 250) {
+              unit = 'lb'; // Correct the unit
+            }
+            
+            return {
+              date: w.logged_at,
+              weight: w.weight,
+              unit: unit,
+            };
+          }));
         }
 
         // Process weekly volume
@@ -992,18 +1003,24 @@ export default function DashboardPage() {
                   <div>
                     <p className="text-2xl font-bold text-surface-100">
                       {(() => {
-                        // Convert to user's preferred unit if needed
+                        // Convert to user's preferred unit if needed, with validation
                         let displayWeight = todaysWeight.weight;
-                        // Use the stored unit from database, defaulting to user's preferred unit if missing
-                        // This ensures we don't double-convert or assume wrong units
                         const storedUnit = todaysWeight.unit || weightUnit;
                         
-                        // Only convert if units actually differ
-                        if (storedUnit && storedUnit !== weightUnit) {
-                          // Convert: stored in kg but user wants lb, or vice versa
-                          if (storedUnit === 'kg' && weightUnit === 'lb') {
+                        // Validate: if unit says 'lb' but weight > 500, it's probably in kg
+                        // If unit says 'kg' but weight > 250, it's probably in lb
+                        let actualStoredUnit = storedUnit;
+                        if (storedUnit === 'lb' && todaysWeight.weight > 500) {
+                          actualStoredUnit = 'kg'; // Correct the unit
+                        } else if (storedUnit === 'kg' && todaysWeight.weight > 250) {
+                          actualStoredUnit = 'lb'; // Correct the unit
+                        }
+                        
+                        // Convert if units differ
+                        if (actualStoredUnit !== weightUnit) {
+                          if (actualStoredUnit === 'kg' && weightUnit === 'lb') {
                             displayWeight = todaysWeight.weight * 2.20462;
-                          } else if (storedUnit === 'lb' && weightUnit === 'kg') {
+                          } else if (actualStoredUnit === 'lb' && weightUnit === 'kg') {
                             displayWeight = todaysWeight.weight / 2.20462;
                           }
                         }

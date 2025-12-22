@@ -173,8 +173,32 @@ export default function NutritionPage() {
   const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
 
-  // Convert weight to preferred unit
-  const convertWeight = (weight: number, fromUnit: string): number => {
+  // Convert weight to preferred unit with validation
+  const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
+    // If unit is missing, try to infer from weight value
+    if (!fromUnit) {
+      if (weightUnit === 'lb' && weight > 300) {
+        // Likely stored in kg, convert
+        return weight * 2.20462;
+      } else if (weightUnit === 'kg' && weight > 150) {
+        // Likely stored in lb, convert
+        return weight / 2.20462;
+      }
+      // Assume already in preferred unit
+      return weight;
+    }
+    
+    // Validate: if unit says 'lb' but weight > 500, it's probably in kg
+    // If unit says 'kg' but weight > 250, it's probably in lb
+    if (fromUnit === 'lb' && weight > 500) {
+      // Probably stored in kg, convert
+      return weight * 2.20462;
+    } else if (fromUnit === 'kg' && weight > 250) {
+      // Probably stored in lb, convert
+      return weight / 2.20462;
+    }
+    
+    // Normal conversion
     if (fromUnit === weightUnit) return weight;
     return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
   };
