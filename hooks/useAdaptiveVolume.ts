@@ -492,11 +492,19 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Load data on mount - only when user is available
   useEffect(() => {
+    console.log(`[useAdaptiveVolume] useEffect triggered:`, {
+      hasUser: !!user,
+      userId: user?.id,
+      fetchProfileExists: !!fetchProfile
+    });
+    
     if (user?.id) {
-      console.log(`[useAdaptiveVolume] User available, calling fetchProfile`);
-      fetchProfile();
+      console.log(`[useAdaptiveVolume] User available (${user.id}), calling fetchProfile`);
+      fetchProfile().catch(err => {
+        console.error(`[useAdaptiveVolume] Error in fetchProfile:`, err);
+      });
     } else {
-      console.log(`[useAdaptiveVolume] User not available yet, waiting...`);
+      console.log(`[useAdaptiveVolume] User not available yet, waiting... (user:`, user, `)`);
     }
   }, [user?.id, fetchProfile]);
 
