@@ -156,43 +156,52 @@ export default function DashboardPage() {
     });
     
     // Use muscleVolume (from dashboard query) as primary source, fallback to volumeSummary
-    const sourceData = muscleVolume.length > 0 ? muscleVolume : volumeSummary.map(vs => ({
-      muscle: vs.muscle,
-      sets: vs.currentSets,
-      target: vs.estimatedMEV,
-      status: vs.status === 'below_mev' ? 'low' : vs.status === 'optimal' ? 'optimal' : 'high',
-      exercises: []
-    }));
+    if (muscleVolume.length > 0) {
+      return muscleVolume
+        .filter(mv => {
+          const mev = mevTargets[mv.muscle] || 8;
+          const isBelowMev = mv.sets < mev;
+          
+          console.log(`[Dashboard] Checking ${mv.muscle}: ${mv.sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
+          
+          return isBelowMev;
+        })
+        .map(mv => {
+          const mev = mevTargets[mv.muscle] || 8;
+          const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
+          
+          return {
+            muscleGroup: mv.muscle,
+            totalSets: mv.sets,
+            directSets: mv.sets,
+            indirectSets: 0,
+            landmarks: {
+              mev: mev,
+              mav: Math.round((mev + mrv) / 2),
+              mrv: mrv,
+            },
+            status: 'below_mev' as const,
+            percentOfMrv: Math.round((mv.sets / mrv) * 100),
+          };
+        });
+    }
     
-    return sourceData
-      .filter(item => {
-        const mev = mevTargets[item.muscle] || 8;
-        const currentSets = 'sets' in item ? item.sets : item.currentSets;
-        const isBelowMev = currentSets < mev;
-        
-        console.log(`[Dashboard] Checking ${item.muscle}: ${currentSets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
-        
-        return isBelowMev;
-      })
-      .map(item => {
-        const mev = mevTargets[item.muscle] || 8;
-        const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
-        const currentSets = 'sets' in item ? item.sets : item.currentSets;
-        
-        return {
-          muscleGroup: item.muscle,
-          totalSets: currentSets,
-          directSets: currentSets,
-          indirectSets: 0,
-          landmarks: {
-            mev: mev,
-            mav: Math.round((mev + mrv) / 2),
-            mrv: mrv,
-          },
-          status: 'below_mev' as const,
-          percentOfMrv: Math.round((currentSets / mrv) * 100),
-        };
-      });
+    // Fallback to volumeSummary if muscleVolume is empty
+    return volumeSummary
+      .filter(vs => vs.status === 'below_mev')
+      .map(vs => ({
+        muscleGroup: vs.muscle,
+        totalSets: vs.currentSets,
+        directSets: vs.currentSets,
+        indirectSets: 0,
+        landmarks: {
+          mev: vs.estimatedMEV,
+          mav: Math.round((vs.estimatedMEV + vs.estimatedMRV) / 2),
+          mrv: vs.estimatedMRV,
+        },
+        status: 'below_mev' as const,
+        percentOfMrv: vs.percentOfMRV,
+      }));
   }, [muscleVolume, volumeSummary]);
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
