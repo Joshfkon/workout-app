@@ -94,11 +94,26 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       // If no pre-computed data, calculate from set logs
       if (!currentData || currentData.length === 0) {
-        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for rolling 7-day period ${weekStartStr} to ${weekEndStr}`);
+        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for rolling 7-day period`);
+        console.log(`[useAdaptiveVolume] Date calculation:`, {
+          now: now.toISOString(),
+          weekStart: weekStart.toISOString(),
+          weekStartStr,
+          weekEnd: weekEnd.toISOString(),
+          weekEndStr,
+          user_id: user.id
+        });
         
         console.log(`[useAdaptiveVolume] Rolling 7-day range: ${weekStartStr} to ${weekEndStr}`);
 
         // Fetch exercise blocks and sets for current week
+        console.log(`[useAdaptiveVolume] Querying exercise_blocks with filters:`, {
+          user_id: user.id,
+          completed_at_gte: weekStartStr,
+          completed_at_lte: weekEndStr,
+          state: 'completed'
+        });
+        
         const { data: blocks, error: blocksError } = await supabase
           .from('exercise_blocks')
           .select(`
@@ -134,18 +149,58 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           console.error('[useAdaptiveVolume] Error fetching blocks:', blocksError);
         }
         
-        console.log(`[useAdaptiveVolume] Found ${blocks?.length || 0} exercise blocks for current week`);
+        console.log(`[useAdaptiveVolume] Query result:`, {
+          blocksCount: blocks?.length || 0,
+          blocks: blocks?.slice(0, 3).map((b: any) => ({
+            id: b.id,
+            exercise_name: b.exercises?.name,
+            primary_muscle: b.exercises?.primary_muscle,
+            completed_at: b.workout_sessions?.completed_at,
+            state: b.workout_sessions?.state,
+            set_logs_count: b.set_logs?.length || 0
+          }))
+        });
+        
+        console.log(`[useAdaptiveVolume] Found ${blocks?.length || 0} exercise blocks for rolling 7-day period`);
 
         if (blocks && blocks.length > 0) {
           console.log(`[useAdaptiveVolume] Processing ${blocks.length} blocks`);
           
           // Calculate volume from blocks
           const volumeByMuscle = new Map<string, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
+          let processedBlocks = 0;
+          let skippedBlocks = 0;
           
-          blocks.forEach((block: any) => {
+          blocks.forEach((block: any, index: number) => {
+            if (index < 5) {
+              console.log(`[useAdaptiveVolume] Block ${index + 1}/${blocks.length}:`, {
+                block_id: block.id,
+                exercise_id: block.exercise_id,
+                exercise: block.exercises ? {
+                  id: block.exercises.id,
+                  name: block.exercises.name,
+                  primary_muscle: block.exercises.primary_muscle
+                } : null,
+                workout_session: block.workout_sessions ? {
+                  id: block.workout_sessions.id,
+                  completed_at: block.workout_sessions.completed_at,
+                  state: block.workout_sessions.state,
+                  user_id: block.workout_sessions.user_id
+                } : null,
+                set_logs_count: block.set_logs?.length || 0,
+                set_logs: block.set_logs?.slice(0, 2).map((s: any) => ({
+                  id: s.id,
+                  is_warmup: s.is_warmup,
+                  weight_kg: s.weight_kg,
+                  reps: s.reps
+                }))
+              });
+            }
+            
             const exercise = block.exercises;
             if (!exercise) {
               console.log(`[useAdaptiveVolume] Block ${block.id} has no exercise`);
+              skippedBlocks++;
               return;
             }
             
@@ -153,17 +208,23 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             const workingSets = allSets.filter((s: any) => !s.is_warmup);
             
             if (workingSets.length === 0) {
-              console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets`);
+              if (index < 5) {
+                console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets (total sets: ${allSets.length}, warmups: ${allSets.filter((s: any) => s.is_warmup).length})`);
+              }
+              skippedBlocks++;
               return;
             }
 
             const primaryMuscle = exercise.primary_muscle?.toLowerCase();
             if (!primaryMuscle) {
               console.log(`[useAdaptiveVolume] Exercise ${exercise.name} has no primary_muscle`);
+              skippedBlocks++;
               return;
             }
             
-            console.log(`[useAdaptiveVolume] Block ${block.id}: ${exercise.name} (${primaryMuscle}) - ${workingSets.length} working sets`);
+            if (index < 5) {
+              console.log(`[useAdaptiveVolume] Block ${block.id}: ${exercise.name} (${primaryMuscle}) - ${workingSets.length} working sets`);
+            }
             
             if (!volumeByMuscle.has(primaryMuscle)) {
               volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
@@ -185,8 +246,22 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
               data.totalRIR += rir;
               data.rirCount += 1;
             });
+            
+            processedBlocks++;
           });
 
+          console.log(`[useAdaptiveVolume] Processing summary:`, {
+            totalBlocks: blocks.length,
+            processedBlocks,
+            skippedBlocks,
+            musclesFound: volumeByMuscle.size,
+            volumeByMuscle: Array.from(volumeByMuscle.entries()).map(([m, d]) => ({
+              muscle: m,
+              totalSets: d.totalSets,
+              effectiveSets: d.effectiveSets
+            }))
+          });
+          
           console.log(`[useAdaptiveVolume] Calculated volume for ${volumeByMuscle.size} muscles:`, Array.from(volumeByMuscle.entries()).map(([m, d]) => `${m}: ${d.totalSets} sets`));
 
           // Convert to MuscleVolumeData format
