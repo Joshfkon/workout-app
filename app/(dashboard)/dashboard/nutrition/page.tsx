@@ -319,7 +319,18 @@ export default function NutritionPage() {
       // Process results
       setFoodEntries(foodResult.data || []);
       setNutritionTargets(targetsResult.data);
-      setWeightEntries(weightResult.data || []);
+      
+      // Process weight entries with debugging
+      const rawWeightEntries = weightResult.data || [];
+      console.log(`[Nutrition Page Debug] Raw weight entries from DB:`, rawWeightEntries);
+      
+      // Debug: Log Dec 19 entries specifically
+      const dec19Raw = rawWeightEntries.filter((e: any) => e.logged_at === '2025-12-19' || e.logged_at?.includes('2025-12-19'));
+      if (dec19Raw.length > 0) {
+        console.log(`[Nutrition Page Debug] Raw Dec 19 entries from DB:`, dec19Raw);
+      }
+      
+      setWeightEntries(rawWeightEntries);
       setCustomFoods(customFoodsResult.data || []);
 
       // Set weight unit preference
@@ -831,15 +842,35 @@ export default function NutritionPage() {
     .map((entry) => {
       // Use logged_at directly as date string to avoid timezone issues
       const dateStr = entry.logged_at;
+      const entryUnit = (entry as any).unit || 'lb';
+      const convertedWeight = convertWeight(entry.weight, entryUnit);
+      
+      // Debug logging for Dec 19 specifically
+      if (dateStr === '2025-12-19' || dateStr?.includes('2025-12-19')) {
+        console.log(`[Nutrition Page Debug] Dec 19 entry:`, {
+          logged_at: dateStr,
+          raw_weight: entry.weight,
+          raw_unit: entryUnit,
+          weight_unit_preference: weightUnit,
+          converted_weight: convertedWeight,
+        });
+      }
+      
       return {
         date: dateStr,
         displayDate: formatDate(dateStr, {
           month: 'short',
           day: 'numeric',
         }),
-        weight: Number(convertWeight(entry.weight, (entry as any).unit || 'lb').toFixed(1)),
+        weight: Number(convertedWeight.toFixed(1)),
       };
     });
+  
+  // Debug: Log all weight entries for Dec 19
+  const dec19Entries = weightEntries.filter(e => e.logged_at === '2025-12-19' || e.logged_at?.includes('2025-12-19'));
+  if (dec19Entries.length > 0) {
+    console.log(`[Nutrition Page Debug] All Dec 19 entries:`, dec19Entries);
+  }
 
   // Get recent foods for quick add
   const recentFoods: FoodSearchResult[] = Array.from(
@@ -1381,6 +1412,7 @@ export default function NutritionPage() {
         isOpen={showWeightHistory}
         onClose={() => setShowWeightHistory(false)}
         entries={weightEntries}
+        preferredUnit={weightUnit}
         onEdit={(entry) => {
           setShowWeightHistory(false);
           setEditingWeight(entry);

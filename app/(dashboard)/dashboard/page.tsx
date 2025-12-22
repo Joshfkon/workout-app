@@ -351,18 +351,32 @@ export default function DashboardPage() {
           });
         }
 
-        // Process weight history with unit validation
+        // Process weight history with unit validation and debugging
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
-          setWeightHistory(weightHistoryResult.data.map((w: any) => {
+          const processedHistory = weightHistoryResult.data.map((w: any) => {
             let unit = w.unit || defaultUnit;
             
             // Validate: if unit says 'lb' but weight > 500, it's probably in kg
             // If unit says 'kg' but weight > 250, it's probably in lb
             if (unit === 'lb' && w.weight > 500) {
+              console.log(`[Weight Debug] Correcting unit for ${w.logged_at}: weight=${w.weight}, unit was 'lb', correcting to 'kg'`);
               unit = 'kg'; // Correct the unit
             } else if (unit === 'kg' && w.weight > 250) {
+              console.log(`[Weight Debug] Correcting unit for ${w.logged_at}: weight=${w.weight}, unit was 'kg', correcting to 'lb'`);
               unit = 'lb'; // Correct the unit
+            }
+            
+            // Debug logging for Dec 19 specifically
+            if (w.logged_at === '2025-12-19' || w.logged_at?.includes('2025-12-19')) {
+              console.log(`[Weight Debug] Dec 19 entry:`, {
+                logged_at: w.logged_at,
+                raw_weight: w.weight,
+                raw_unit: w.unit,
+                corrected_unit: unit,
+                user_preferred_unit: defaultUnit,
+                weight_in_lbs: unit === 'kg' ? w.weight * 2.20462 : w.weight,
+              });
             }
             
             return {
@@ -370,7 +384,10 @@ export default function DashboardPage() {
               weight: w.weight,
               unit: unit,
             };
-          }));
+          });
+          
+          console.log(`[Weight Debug] Processed ${processedHistory.length} weight entries for graph`);
+          setWeightHistory(processedHistory);
         }
 
         // Process weekly volume

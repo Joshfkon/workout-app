@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { SwipeableRow } from '@/components/ui/SwipeableRow';
+import { convertWeight } from '@/lib/utils';
 import type { WeightLogEntry } from '@/types/nutrition';
 
 interface WeightHistoryModalProps {
@@ -12,6 +13,7 @@ interface WeightHistoryModalProps {
   entries: WeightLogEntry[];
   onEdit: (entry: WeightLogEntry) => void;
   onDelete: (id: string) => Promise<void>;
+  preferredUnit?: 'lb' | 'kg'; // User's preferred unit for display
 }
 
 export function WeightHistoryModal({
@@ -20,6 +22,7 @@ export function WeightHistoryModal({
   entries,
   onEdit,
   onDelete,
+  preferredUnit = 'lb',
 }: WeightHistoryModalProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -32,11 +35,41 @@ export function WeightHistoryModal({
     }
   };
 
-  // Calculate change from previous entry
+  // Convert weight to preferred unit with validation
+  const convertWeightWithValidation = (weight: number, fromUnit: string | null | undefined): number => {
+    // If unit is missing, try to infer from weight value
+    if (!fromUnit) {
+      if (preferredUnit === 'lb' && weight > 300) {
+        // Likely stored in kg, convert
+        return weight * 2.20462;
+      } else if (preferredUnit === 'kg' && weight > 150) {
+        // Likely stored in lb, convert
+        return weight / 2.20462;
+      }
+      // Assume already in preferred unit
+      return weight;
+    }
+    
+    // Validate: if unit says 'lb' but weight > 500, it's probably in kg
+    // If unit says 'kg' but weight > 250, it's probably in lb
+    if (fromUnit === 'lb' && weight > 500) {
+      console.log(`[WeightHistoryModal Debug] Correcting unit: weight=${weight}, unit was 'lb', correcting to 'kg'`);
+      return weight * 2.20462; // Convert from kg
+    } else if (fromUnit === 'kg' && weight > 250) {
+      console.log(`[WeightHistoryModal Debug] Correcting unit: weight=${weight}, unit was 'kg', correcting to 'lb'`);
+      return weight / 2.20462; // Convert from lb
+    }
+    
+    // Normal conversion
+    if (fromUnit === preferredUnit) return weight;
+    return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
+  };
+
+  // Calculate change from previous entry (in preferred unit)
   const getChange = (index: number) => {
     if (index >= entries.length - 1) return null;
-    const current = entries[index].weight;
-    const previous = entries[index + 1].weight;
+    const current = convertWeightWithValidation(entries[index].weight, entries[index].unit);
+    const previous = convertWeightWithValidation(entries[index + 1].weight, entries[index + 1].unit);
     return current - previous;
   };
 
@@ -83,7 +116,21 @@ export function WeightHistoryModal({
                   {/* Weight */}
                   <div className="flex-1">
                     <div className="text-lg font-semibold text-surface-100">
-                      {entry.weight.toFixed(1)} lbs
+                      {(() => {
+                        const displayWeight = convertWeightWithValidation(entry.weight, entry.unit);
+                        // Debug logging for Dec 19
+                        if (entry.logged_at === '2025-12-19' || entry.logged_at?.includes('2025-12-19')) {
+                          console.log(`[WeightHistoryModal Debug] Dec 19 entry:`, {
+                            id: entry.id,
+                            logged_at: entry.logged_at,
+                            raw_weight: entry.weight,
+                            raw_unit: entry.unit,
+                            preferred_unit: preferredUnit,
+                            display_weight: displayWeight,
+                          });
+                        }
+                        return `${displayWeight.toFixed(1)} ${preferredUnit === 'kg' ? 'kg' : 'lbs'}`;
+                      })()}
                     </div>
                     {entry.notes && (
                       <div className="text-xs text-surface-500 truncate max-w-[200px]">
@@ -100,7 +147,7 @@ export function WeightHistoryModal({
                       <div className="text-sm font-medium">
                         {change > 0 ? '+' : ''}{change.toFixed(1)}
                       </div>
-                      <div className="text-xs">lbs</div>
+                      <div className="text-xs">{preferredUnit === 'kg' ? 'kg' : 'lbs'}</div>
                     </div>
                   )}
 

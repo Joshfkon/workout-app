@@ -74,7 +74,8 @@ export interface WeightLogEntry {
   id: string;
   user_id: string;
   logged_at: string; // ISO date string (YYYY-MM-DD)
-  weight: number; // in lbs
+  weight: number; // weight value (unit stored separately)
+  unit?: string | null; // 'lb' or 'kg' - may be missing for old entries
   notes: string | null;
   created_at: string;
 }

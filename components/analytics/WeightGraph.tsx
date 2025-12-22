@@ -74,16 +74,35 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     const cutoffDate = new Date();
     cutoffDate.setDate(now.getDate() - timeframeDays[timeframe]);
 
-    return weightHistory
+    const filtered = weightHistory
       .filter((entry) => new Date(entry.date) >= cutoffDate)
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .map((entry) => ({
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    
+    const mapped = filtered.map((entry) => {
+      const convertedWeight = convertWeight(entry.weight, entry.unit);
+      
+      // Debug logging for Dec 19 specifically
+      if (entry.date === '2025-12-19' || entry.date?.includes('2025-12-19')) {
+        console.log(`[WeightGraph Debug] Dec 19 conversion:`, {
+          date: entry.date,
+          originalWeight: entry.weight,
+          originalUnit: entry.unit,
+          preferredUnit: preferredUnit,
+          convertedWeight: convertedWeight,
+        });
+      }
+      
+      return {
         date: entry.date,
         displayDate: formatDate(entry.date, { month: 'short', day: 'numeric' }),
-        weight: Number(convertWeight(entry.weight, entry.unit).toFixed(1)),
+        weight: Number(convertedWeight.toFixed(1)),
         originalWeight: entry.weight,
         originalUnit: entry.unit,
-      }));
+      };
+    });
+    
+    console.log(`[WeightGraph Debug] Chart data for ${timeframe}:`, mapped);
+    return mapped;
   }, [weightHistory, timeframe, preferredUnit]);
 
   // Calculate trend
