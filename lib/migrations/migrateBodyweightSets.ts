@@ -135,7 +135,7 @@ export async function migrateUserBodyweightSets(
       };
     }
 
-    const bodyweightExerciseIds = exercises.map(e => e.id);
+    const bodyweightExerciseIds = exercises.map((e: any) => e.id);
 
     if (bodyweightExerciseIds.length === 0) {
       return {
@@ -175,10 +175,10 @@ export async function migrateUserBodyweightSets(
       };
     }
 
-    const userSessionIds = new Set(userSessions.map(s => s.id));
+    const userSessionIds = new Set(userSessions.map((s: any) => s.id));
     const userBlockIds = blocks
-      .filter(b => userSessionIds.has(b.workout_session_id))
-      .map(b => b.id);
+      .filter((b: any) => userSessionIds.has(b.workout_session_id))
+      .map((b: any) => b.id);
 
     if (userBlockIds.length === 0) {
       return {
