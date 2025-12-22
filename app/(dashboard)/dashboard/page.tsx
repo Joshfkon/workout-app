@@ -135,27 +135,65 @@ export default function DashboardPage() {
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
-  // Get volume data for atrophy risk alert
+  // Get volume data for atrophy risk alert - use the same data source as Weekly Volume box
+  // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
   const { volumeSummary } = useAdaptiveVolume();
+  
+  // MEV targets (minimum effective volume per muscle)
+  const mevTargets: Record<string, number> = {
+    chest: 8, back: 8, shoulders: 6, quads: 6, hamstrings: 4,
+    glutes: 4, biceps: 4, triceps: 4, calves: 6, abs: 8,
+    traps: 4, forearms: 4, adductors: 4,
+  };
 
-  // Find muscles below MEV (for atrophy risk alert)
+  // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
-    return volumeSummary
-      .filter(summary => summary.status === 'below_mev')
-      .map(summary => ({
-        muscleGroup: summary.muscle,
-        totalSets: summary.currentSets,
-        directSets: summary.currentSets,
-        indirectSets: 0,
-        landmarks: {
-          mev: summary.estimatedMEV,
-          mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
-          mrv: summary.estimatedMRV,
-        },
-        status: 'below_mev' as const,
-        percentOfMrv: summary.percentOfMRV,
-      }));
-  }, [volumeSummary]);
+    console.log(`[Dashboard] Calculating musclesBelowMev from muscleVolume:`, {
+      muscleVolumeLength: muscleVolume.length,
+      muscleVolume: muscleVolume.map(mv => `${mv.muscle}: ${mv.sets} sets`),
+      volumeSummaryLength: volumeSummary.length,
+      volumeSummary: volumeSummary.map(vs => `${vs.muscle}: ${vs.currentSets} sets, status: ${vs.status}`)
+    });
+    
+    // Use muscleVolume (from dashboard query) as primary source, fallback to volumeSummary
+    const sourceData = muscleVolume.length > 0 ? muscleVolume : volumeSummary.map(vs => ({
+      muscle: vs.muscle,
+      sets: vs.currentSets,
+      target: vs.estimatedMEV,
+      status: vs.status === 'below_mev' ? 'low' : vs.status === 'optimal' ? 'optimal' : 'high',
+      exercises: []
+    }));
+    
+    return sourceData
+      .filter(item => {
+        const mev = mevTargets[item.muscle] || 8;
+        const currentSets = 'sets' in item ? item.sets : item.currentSets;
+        const isBelowMev = currentSets < mev;
+        
+        console.log(`[Dashboard] Checking ${item.muscle}: ${currentSets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
+        
+        return isBelowMev;
+      })
+      .map(item => {
+        const mev = mevTargets[item.muscle] || 8;
+        const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
+        const currentSets = 'sets' in item ? item.sets : item.currentSets;
+        
+        return {
+          muscleGroup: item.muscle,
+          totalSets: currentSets,
+          directSets: currentSets,
+          indirectSets: 0,
+          landmarks: {
+            mev: mev,
+            mav: Math.round((mev + mrv) / 2),
+            mrv: mrv,
+          },
+          status: 'below_mev' as const,
+          percentOfMrv: Math.round((currentSets / mrv) * 100),
+        };
+      });
+  }, [muscleVolume, volumeSummary]);
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
   const normalizedGoal = useMemo(() => {
