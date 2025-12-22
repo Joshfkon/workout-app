@@ -415,7 +415,6 @@ export default function SciencePage() {
       {/* Science Concepts */}
       <div className="space-y-4">
         <h2 className="text-xl font-bold text-surface-100">Core Principles</h2>
-        <p className="text-sm text-surface-400">Tap any principle to read the full article</p>
         <div className="grid gap-4">
           {scienceConcepts.map((concept) => {
             const colors = colorClasses[concept.color];
@@ -423,85 +422,76 @@ export default function SciencePage() {
             return (
               <Card
                 key={concept.title}
-                className={`${colors.border} hover:border-opacity-50 transition-all duration-200 overflow-hidden`}
+                className={`p-6 ${colors.border} hover:border-opacity-50 transition-all duration-200 overflow-hidden`}
               >
-                {/* Clickable Header */}
-                <button
-                  onClick={() => toggleExpanded(concept.title)}
-                  className="w-full p-6 text-left focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:ring-inset"
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="text-3xl shrink-0">{concept.icon}</div>
-                    <div className="flex-1 space-y-3">
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-bold text-surface-100">{concept.title}</h3>
-                          <svg
-                            className={`w-5 h-5 text-surface-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                        <span className={`px-3 py-1 ${colors.bg} ${colors.text} rounded-full text-xs font-medium shrink-0`}>
-                          {concept.source}
-                        </span>
-                      </div>
-                      <p className="text-surface-300">{concept.explanation}</p>
-                      {!isExpanded && (
-                        <p className={`text-xs ${colors.text} flex items-center gap-1`}>
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Tap to read more
-                        </p>
-                      )}
+                <div className="flex items-start gap-4">
+                  <div className="text-3xl shrink-0">{concept.icon}</div>
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <h3 className="text-lg font-bold text-surface-100">{concept.title}</h3>
+                      <span className={`px-3 py-1 ${colors.bg} ${colors.text} rounded-full text-xs font-medium shrink-0`}>
+                        {concept.source}
+                      </span>
                     </div>
-                  </div>
-                </button>
+                    <p className="text-surface-300">{concept.explanation}</p>
 
-                {/* Expandable Content */}
-                {isExpanded && (
-                  <div className="px-6 pb-6 animate-slide-down">
-                    {/* Deep Dive Article */}
-                    <div className={`p-4 ${colors.bg} rounded-lg border ${colors.border} mb-4`}>
-                      <h4 className={`font-bold ${colors.text} mb-4 text-lg`}>
-                        {concept.deepDive.title}
-                      </h4>
-                      <div className="space-y-4">
-                        {concept.deepDive.sections.map((section, idx) => (
-                          <div key={idx}>
-                            <h5 className="font-semibold text-surface-200 mb-1">{section.heading}</h5>
-                            <p className="text-surface-400 text-sm leading-relaxed">{section.content}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* In HyperTracker section */}
-                    <div className={`p-3 bg-surface-800/50 rounded-lg border border-surface-700`}>
+                    {/* In HyperTracker section - always visible */}
+                    <div className={`p-3 ${colors.bg} rounded-lg border ${colors.border}`}>
                       <p className="text-sm">
                         <span className={`font-semibold ${colors.text}`}>In HyperTracker: </span>
                         <span className="text-surface-300">{concept.application}</span>
                       </p>
                     </div>
 
-                    {/* Link to learn page if available */}
-                    {concept.link && (
-                      <Link
-                        href={concept.link}
-                        className={`inline-flex items-center gap-1 mt-3 text-sm ${colors.text} hover:underline`}
+                    {/* Deep Dive Toggle Button */}
+                    <button
+                      onClick={() => toggleExpanded(concept.title)}
+                      className={`flex items-center gap-2 text-sm ${colors.text} hover:opacity-80 transition-opacity`}
+                    >
+                      <svg
+                        className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
                       >
-                        Read full article
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </Link>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      {isExpanded ? 'Hide deep dive' : 'Read deep dive article'}
+                    </button>
+
+                    {/* Expandable Deep Dive Content */}
+                    {isExpanded && (
+                      <div className="animate-slide-down space-y-4 pt-2">
+                        <div className={`p-4 bg-surface-800/50 rounded-lg border border-surface-700`}>
+                          <h4 className={`font-bold ${colors.text} mb-4 text-lg`}>
+                            {concept.deepDive.title}
+                          </h4>
+                          <div className="space-y-4">
+                            {concept.deepDive.sections.map((section, idx) => (
+                              <div key={idx}>
+                                <h5 className="font-semibold text-surface-200 mb-1">{section.heading}</h5>
+                                <p className="text-surface-400 text-sm leading-relaxed">{section.content}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Link to learn page if available */}
+                        {concept.link && (
+                          <Link
+                            href={concept.link}
+                            className={`inline-flex items-center gap-1 text-sm ${colors.text} hover:underline`}
+                          >
+                            Read full article
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </Link>
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
               </Card>
             );
           })}
