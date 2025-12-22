@@ -18,7 +18,7 @@ import {
   type Peptide,
   type MacroRecommendation,
 } from '@/lib/nutrition/macroCalculator';
-import { saveMacroSettings } from '@/lib/actions/nutrition';
+import { saveMacroSettings, type MacroSettings } from '@/lib/actions/nutrition';
 
 interface MacroCalculatorModalProps {
   isOpen: boolean;
@@ -44,6 +44,7 @@ interface MacroCalculatorModalProps {
     bodyFatPercent?: number;
   };
   workoutsPerWeek?: number;
+  savedSettings?: MacroSettings | null;
 }
 
 export function MacroCalculatorModal({
@@ -53,26 +54,42 @@ export function MacroCalculatorModal({
   existingTargets,
   userStats,
   workoutsPerWeek = 4,
+  savedSettings,
 }: MacroCalculatorModalProps) {
-  // User stats
+  // Helper to convert height_cm to feet/inches
+  const getHeightFromCm = (heightCm: number | null | undefined): { feet: string; inches: string } => {
+    if (!heightCm) return { feet: '', inches: '' };
+    const totalInches = Math.round(heightCm / 2.54);
+    return {
+      feet: Math.floor(totalInches / 12).toString(),
+      inches: (totalInches % 12).toString(),
+    };
+  };
+
+  // Get initial height from userStats (preferred) or savedSettings
+  const initialHeight = userStats?.heightInches
+    ? { feet: Math.floor(userStats.heightInches / 12).toString(), inches: (userStats.heightInches % 12).toString() }
+    : getHeightFromCm(savedSettings?.height_cm);
+
+  // User stats - prefer userStats (current profile data), fallback to savedSettings
   const [weight, setWeight] = useState(userStats?.weightLbs?.toString() || '');
-  const [heightFeet, setHeightFeet] = useState('');
-  const [heightInches, setHeightInches] = useState('');
-  const [age, setAge] = useState(userStats?.age?.toString() || '');
-  const [sex, setSex] = useState<Sex>(userStats?.sex || 'male');
+  const [heightFeet, setHeightFeet] = useState(initialHeight.feet);
+  const [heightInches, setHeightInches] = useState(initialHeight.inches);
+  const [age, setAge] = useState(userStats?.age?.toString() || savedSettings?.age?.toString() || '');
+  const [sex, setSex] = useState<Sex>(userStats?.sex || savedSettings?.sex || 'male');
   const [bodyFat, setBodyFat] = useState(userStats?.bodyFatPercent?.toString() || '');
 
-  // Activity
-  const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
-  const [workouts, setWorkouts] = useState(workoutsPerWeek.toString());
-  const [workoutDuration, setWorkoutDuration] = useState('60');
-  const [workoutIntensity, setWorkoutIntensity] = useState<'light' | 'moderate' | 'intense'>('moderate');
+  // Activity - use savedSettings if available
+  const [activityLevel, setActivityLevel] = useState<ActivityLevel>(savedSettings?.activity_level || 'moderate');
+  const [workouts, setWorkouts] = useState(savedSettings?.workouts_per_week?.toString() || workoutsPerWeek.toString());
+  const [workoutDuration, setWorkoutDuration] = useState(savedSettings?.avg_workout_minutes?.toString() || '60');
+  const [workoutIntensity, setWorkoutIntensity] = useState<'light' | 'moderate' | 'intense'>(savedSettings?.workout_intensity || 'moderate');
 
-  // Goal
-  const [goal, setGoal] = useState<Goal>('maintain');
-  
-  // Peptides/Medications
-  const [peptide, setPeptide] = useState<Peptide>('none');
+  // Goal - use savedSettings if available
+  const [goal, setGoal] = useState<Goal>(savedSettings?.goal || 'maintain');
+
+  // Peptides/Medications - use savedSettings if available
+  const [peptide, setPeptide] = useState<Peptide>(savedSettings?.peptide || 'none');
 
   // Results
   const [recommendation, setRecommendation] = useState<MacroRecommendation | null>(null);
@@ -80,6 +97,7 @@ export function MacroCalculatorModal({
   const [error, setError] = useState('');
 
   // Update form when userStats props change (after data loads)
+  // userStats is the preferred source for profile data (always current)
   useEffect(() => {
     if (userStats?.weightLbs) {
       setWeight(userStats.weightLbs.toString());
@@ -101,12 +119,50 @@ export function MacroCalculatorModal({
     }
   }, [userStats]);
 
-  // Update workouts when prop changes
+  // Update form when savedSettings loads (for activity, goal, peptide, etc.)
   useEffect(() => {
-    if (workoutsPerWeek) {
+    if (savedSettings) {
+      // Activity settings
+      if (savedSettings.activity_level) {
+        setActivityLevel(savedSettings.activity_level);
+      }
+      if (savedSettings.workouts_per_week !== null && savedSettings.workouts_per_week !== undefined) {
+        setWorkouts(savedSettings.workouts_per_week.toString());
+      }
+      if (savedSettings.avg_workout_minutes) {
+        setWorkoutDuration(savedSettings.avg_workout_minutes.toString());
+      }
+      if (savedSettings.workout_intensity) {
+        setWorkoutIntensity(savedSettings.workout_intensity);
+      }
+      // Goal & peptide
+      if (savedSettings.goal) {
+        setGoal(savedSettings.goal);
+      }
+      if (savedSettings.peptide) {
+        setPeptide(savedSettings.peptide);
+      }
+      // Height/age/sex from savedSettings only if userStats doesn't have them
+      if (!userStats?.heightInches && savedSettings.height_cm) {
+        const { feet, inches } = getHeightFromCm(savedSettings.height_cm);
+        setHeightFeet(feet);
+        setHeightInches(inches);
+      }
+      if (!userStats?.age && savedSettings.age) {
+        setAge(savedSettings.age.toString());
+      }
+      if (!userStats?.sex && savedSettings.sex) {
+        setSex(savedSettings.sex);
+      }
+    }
+  }, [savedSettings, userStats]);
+
+  // Update workouts from mesocycle only if no saved settings
+  useEffect(() => {
+    if (workoutsPerWeek && !savedSettings?.workouts_per_week) {
       setWorkouts(workoutsPerWeek.toString());
     }
-  }, [workoutsPerWeek]);
+  }, [workoutsPerWeek, savedSettings]);
 
   const calculateRecommendation = () => {
     setError('');

@@ -21,7 +21,7 @@ import type {
   MealNames,
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
-import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
+import { recalculateMacrosForWeight, getMacroSettings, type MacroSettings } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { getLocalDateString } from '@/lib/utils';
@@ -171,6 +171,7 @@ export default function NutritionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
   const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
+  const [macroSettings, setMacroSettings] = useState<MacroSettings | null>(null);
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -370,12 +371,16 @@ export default function NutritionPage() {
 
       setUserProfile(profileData);
 
-      // Load adaptive TDEE data
+      // Load adaptive TDEE data and macro settings in parallel
       try {
-        const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+        const [tdee, savedMacroSettings] = await Promise.all([
+          getAdaptiveTDEE(targetsResult.data?.calories),
+          getMacroSettings(),
+        ]);
         setTdeeData(tdee);
+        setMacroSettings(savedMacroSettings);
       } catch (tdeeError) {
-        console.error('Error loading TDEE data:', tdeeError);
+        console.error('Error loading TDEE/macro settings:', tdeeError);
       }
     } catch (error) {
       console.error('Error loading nutrition data:', error);
@@ -1349,6 +1354,7 @@ export default function NutritionPage() {
         } : undefined}
         userStats={userProfile}
         workoutsPerWeek={userProfile.workoutsPerWeek || 4}
+        savedSettings={macroSettings}
       />
 
       <EditFoodModal
