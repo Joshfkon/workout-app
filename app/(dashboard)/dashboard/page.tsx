@@ -8,6 +8,7 @@ import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
+import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 
