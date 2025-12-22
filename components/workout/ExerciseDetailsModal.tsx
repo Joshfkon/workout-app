@@ -5,6 +5,7 @@ import { Button, Card, Badge } from '@/components/ui';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight } from '@/lib/utils';
+import { completeSingleExercise } from '@/lib/actions/exercise-completion';
 import {
   LineChart,
   Line,
@@ -75,6 +76,9 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
   const [history, setHistory] = useState<ExerciseHistoryData | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
+  const [isCompletingWithAI, setIsCompletingWithAI] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [completionSuccess, setCompletionSuccess] = useState(false);
 
   // Fetch exercise history when modal opens
   useEffect(() => {
@@ -223,6 +227,52 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
       fetchHistory();
     }
   }, [isOpen, exercise?.id]);
+
+  // Check if exercise has missing fields
+  const hasMissingFields = () => {
+    if (!exercise) return false;
+    const hasFormCues = getExerciseProp(exercise, 'formCues', 'form_cues') && 
+      Array.isArray(getExerciseProp(exercise, 'formCues', 'form_cues')) && 
+      getExerciseProp(exercise, 'formCues', 'form_cues').length > 0;
+    const hasHypertrophyScore = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score')?.tier;
+    const hasStabilizers = getExerciseProp(exercise, 'stabilizers', 'stabilizers') && 
+      Array.isArray(getExerciseProp(exercise, 'stabilizers', 'stabilizers')) && 
+      getExerciseProp(exercise, 'stabilizers', 'stabilizers').length > 0;
+    const hasSpinalLoading = getExerciseProp(exercise, 'spinalLoading', 'spinal_loading');
+    const hasContraindications = getExerciseProp(exercise, 'contraindications', 'contraindications') && 
+      Array.isArray(getExerciseProp(exercise, 'contraindications', 'contraindications')) && 
+      getExerciseProp(exercise, 'contraindications', 'contraindications').length > 0;
+    
+    return !hasFormCues || !hasHypertrophyScore || !hasStabilizers || !hasSpinalLoading || !hasContraindications;
+  };
+
+  const handleCompleteWithAI = async () => {
+    if (!exercise?.id) return;
+    
+    setIsCompletingWithAI(true);
+    setCompletionError(null);
+    setCompletionSuccess(false);
+    
+    try {
+      const result = await completeSingleExercise(exercise.id);
+      
+      if (result.success && result.updated) {
+        setCompletionSuccess(true);
+        // Refresh the page or reload exercise data
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else if (result.limitReached) {
+        setCompletionError(result.error || 'AI limit reached. Please try again tomorrow.');
+      } else {
+        setCompletionError(result.error || 'Failed to complete exercise with AI');
+      }
+    } catch (err: any) {
+      setCompletionError(err?.message || 'An error occurred');
+    } finally {
+      setIsCompletingWithAI(false);
+    }
+  };
 
   if (!isOpen || !exercise) return null;
 
@@ -800,6 +850,53 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               </div>
             )}
           </div>
+
+          {/* Complete with AI Button */}
+          {hasMissingFields() && (
+            <div className="pt-4 border-t border-surface-800">
+              {completionSuccess ? (
+                <div className="p-3 bg-success-900/30 border border-success-700 rounded-lg">
+                  <p className="text-sm text-success-400 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Exercise completed successfully! Refreshing...
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Button
+                    variant="primary"
+                    onClick={handleCompleteWithAI}
+                    disabled={isCompletingWithAI}
+                    className="w-full"
+                  >
+                    {isCompletingWithAI ? (
+                      <>
+                        <svg className="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Completing with AI...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        Complete Fields with AI
+                      </>
+                    )}
+                  </Button>
+                  {completionError && (
+                    <div className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg">
+                      <p className="text-sm text-danger-400">{completionError}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t border-surface-800">
