@@ -142,6 +142,7 @@ interface ExerciseCardProps {
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
   currentInjuries?: TemporaryInjury[];  // Current injuries to filter swap suggestions
+  onExerciseNameClick?: () => void;  // Callback when exercise name is clicked
   // Rest timer state for inline display
   showRestTimer?: boolean;
   timerSeconds?: number;
@@ -168,6 +169,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   block,
   sets,
   onSetComplete,
+  onExerciseNameClick,
   onSetEdit,
   onSetDelete,
   onSetFeedbackUpdate,
@@ -732,9 +734,12 @@ export const ExerciseCard = memo(function ExerciseCard({
           {!hideHeader && (
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-surface-100 truncate">
+                <button
+                  onClick={onExerciseNameClick}
+                  className="font-semibold text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+                >
                   {exercise.name}
-                </h3>
+                </button>
                 {exercise.hypertrophyScore?.tier && (
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
                     {exercise.hypertrophyScore.tier}

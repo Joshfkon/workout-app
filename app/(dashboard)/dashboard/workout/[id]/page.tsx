@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
-import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
+import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary, ExerciseDetailsModal } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating } from '@/types/schema';
@@ -455,7 +455,10 @@ export default function WorkoutPage() {
   const [showPageLevelSwapModal, setShowPageLevelSwapModal] = useState(false);
   const [swapTargetBlockId, setSwapTargetBlockId] = useState<string | null>(null);
   const [swapSearchQuery, setSwapSearchQuery] = useState('');
-
+  
+  // State for exercise details modal
+  const [selectedExerciseForDetails, setSelectedExerciseForDetails] = useState<Exercise | null>(null);
+  
   // Cancel workout modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -3173,14 +3176,17 @@ export default function WorkoutPage() {
                     return (
                       <>
                         <div className="flex items-center gap-2">
-                          <p className={`font-medium ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}>
+                          <button
+                            onClick={() => setSelectedExerciseForDetails(block.exercise)}
+                            className={`font-medium text-left hover:text-primary-400 transition-colors ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}
+                          >
                             {block.exercise.name}
                             {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
                               <span className="text-surface-500 font-normal text-sm ml-1">
                                 ({block.exercise.equipmentRequired[0]})
                               </span>
                             )}
-                          </p>
+                          </button>
                           {/* Tier badge */}
                           {block.exercise.hypertrophyScore?.tier && (
                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
@@ -4251,6 +4257,14 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+      
+      {/* Exercise Details Modal */}
+      <ExerciseDetailsModal
+        exercise={selectedExerciseForDetails}
+        isOpen={!!selectedExerciseForDetails}
+        onClose={() => setSelectedExerciseForDetails(null)}
+        unit={preferences.units}
+      />
     </div>
   );
 }

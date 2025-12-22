@@ -1,5 +1,6 @@
 // Workout Components
 export { ExerciseCard } from './ExerciseCard';
+export { ExerciseDetailsModal } from './ExerciseDetailsModal';
 export { SetInputRow } from './SetInputRow';
 export { RestTimer } from './RestTimer';
 export { InlineRestTimerBar } from './InlineRestTimerBar';
