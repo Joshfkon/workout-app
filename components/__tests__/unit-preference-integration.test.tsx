@@ -116,12 +116,19 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: 100, // 100kg stored as 100kg
           reps: 10,
+          rpe: 7.5, // RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
             repsInTank: 2, // Selected "2-3" RIR
             form: 'clean', // Selected "Clean" form
           }),
         })
       );
+      
+      // Verify weightKg is a number, not a string
+      const submittedData = onSubmit.mock.calls[0][0];
+      expect(typeof submittedData.weightKg).toBe('number');
+      expect(typeof submittedData.reps).toBe('number');
+      expect(typeof submittedData.rpe).toBe('number');
     });
 
     test('submits weight in kg regardless of display unit (imperial)', async () => {
@@ -185,6 +192,7 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: expect.any(Number), // 225lbs converted to kg
           reps: 10,
+          rpe: 7.5, // RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
             repsInTank: 2, // Selected "2-3" RIR
             form: 'clean', // Selected "Clean" form
@@ -192,8 +200,14 @@ describe('Unit Preference Integration', () => {
         })
       );
       
-      const submittedKg = onSubmit.mock.calls[0][0].weightKg;
+      const submittedData = onSubmit.mock.calls[0][0];
+      const submittedKg = submittedData.weightKg;
       expect(submittedKg).toBeCloseTo(102.06, 0);
+      
+      // Verify all values are numbers, not strings
+      expect(typeof submittedData.weightKg).toBe('number');
+      expect(typeof submittedData.reps).toBe('number');
+      expect(typeof submittedData.rpe).toBe('number');
     });
 
     test('displays previous set weight in user preferred unit', () => {
