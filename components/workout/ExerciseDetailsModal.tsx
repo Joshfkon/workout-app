@@ -5,6 +5,18 @@ import { Button, Card, Badge } from '@/components/ui';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight } from '@/lib/utils';
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
 import Link from 'next/link';
 
 interface ExerciseDetailsModalProps {
@@ -14,12 +26,23 @@ interface ExerciseDetailsModalProps {
   unit?: 'kg' | 'lb';
 }
 
+interface SessionData {
+  date: string;
+  displayDate: string;
+  volume: number;
+  e1rm: number;
+  bestWeight: number;
+  bestReps: number;
+  sets: number;
+}
+
 interface ExerciseHistoryData {
   lastWorkoutDate: string;
   lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
   estimatedE1RM: number;
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
+  chartData: SessionData[];
 }
 
 // Calculate E1RM using Brzycki formula
@@ -51,6 +74,7 @@ function getTierBadgeClasses(tier: string): string {
 export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }: ExerciseDetailsModalProps) {
   const [history, setHistory] = useState<ExerciseHistoryData | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
 
   // Fetch exercise history when modal opens
   useEffect(() => {
@@ -100,12 +124,77 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
 
         let bestE1RM = 0;
         let personalRecord: ExerciseHistoryData['personalRecord'] = null;
-        let totalSessions = 0;
-        const seenSessions = new Set<string>();
+        const sessionMap = new Map<string, SessionData>();
 
-        // Get last workout data
+        // Process history blocks to create chart data
+        historyBlocks.forEach((block: any) => {
+          const session = block.workout_sessions;
+          if (!session?.completed_at) return;
+
+          const sessionId = session.id;
+          const date = session.completed_at;
+          const dateObj = new Date(date);
+          const displayDate = `${dateObj.getMonth() + 1}/${dateObj.getDate()}`;
+
+          const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+          
+          let sessionVolume = 0;
+          let sessionBestE1RM = 0;
+          let sessionBestWeight = 0;
+          let sessionBestReps = 0;
+
+          sets.forEach((set: any) => {
+            const weight = set.weight_kg || 0;
+            const reps = set.reps || 0;
+            sessionVolume += weight * reps;
+            
+            const e1rm = calculateE1RM(weight, reps);
+            if (e1rm > sessionBestE1RM) {
+              sessionBestE1RM = e1rm;
+              sessionBestWeight = weight;
+              sessionBestReps = reps;
+            }
+
+            if (e1rm > bestE1RM) {
+              bestE1RM = e1rm;
+              personalRecord = {
+                weightKg: weight,
+                reps: reps,
+                e1rm,
+                date,
+              };
+            }
+          });
+
+          // Aggregate by session (in case of multiple blocks per session)
+          if (sessionMap.has(sessionId)) {
+            const existing = sessionMap.get(sessionId)!;
+            existing.volume += sessionVolume;
+            existing.sets += sets.length;
+            if (sessionBestE1RM > existing.e1rm) {
+              existing.e1rm = sessionBestE1RM;
+              existing.bestWeight = sessionBestWeight;
+              existing.bestReps = sessionBestReps;
+            }
+          } else {
+            sessionMap.set(sessionId, {
+              date,
+              displayDate,
+              volume: sessionVolume,
+              e1rm: sessionBestE1RM,
+              bestWeight: sessionBestWeight,
+              bestReps: sessionBestReps,
+              sets: sets.length,
+            });
+          }
+        });
+
+        const chartData = Array.from(sessionMap.values()).sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+
+        // Get the last session's sets for display
         const lastBlock = historyBlocks[0];
-        const lastSession = lastBlock.workout_sessions as any;
         const lastSets = ((lastBlock.set_logs as any[]) || [])
           .filter((s: any) => !s.is_warmup)
           .map((s: any) => ({
@@ -114,35 +203,13 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
             rpe: s.rpe,
           }));
 
-        // Calculate best E1RM and PR
-        historyBlocks.forEach((block: any) => {
-          const session = block.workout_sessions;
-          if (session && !seenSessions.has(session.id)) {
-            seenSessions.add(session.id);
-            totalSessions++;
-          }
-
-          const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-          sets.forEach((set: any) => {
-            const e1rm = calculateE1RM(set.weight_kg, set.reps);
-            if (e1rm > bestE1RM) {
-              bestE1RM = e1rm;
-              personalRecord = {
-                weightKg: set.weight_kg,
-                reps: set.reps,
-                e1rm,
-                date: session?.completed_at || set.logged_at,
-              };
-            }
-          });
-        });
-
         setHistory({
-          lastWorkoutDate: lastSession?.completed_at || '',
+          lastWorkoutDate: chartData[chartData.length - 1]?.date || '',
           lastWorkoutSets: lastSets,
-          estimatedE1RM: bestE1RM,
+          estimatedE1RM: chartData[chartData.length - 1]?.e1rm || 0,
           personalRecord,
-          totalSessions,
+          totalSessions: chartData.length,
+          chartData,
         });
       } catch (err) {
         console.error('Failed to fetch exercise history:', err);
@@ -430,6 +497,309 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               </div>
             );
           })()}
+
+          {/* Exercise History */}
+          <div className="pt-4 border-t border-surface-800">
+            <h3 className="text-sm font-medium text-surface-200 mb-4">Your History</h3>
+            
+            {isLoadingHistory ? (
+              <div className="text-sm text-surface-400">Loading history...</div>
+            ) : history && history.totalSessions > 0 ? (
+              <div className="space-y-4">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-surface-500 uppercase">Est 1RM</p>
+                    <p className="text-lg font-bold text-primary-400">
+                      {formatWeight(convertWeight(history.estimatedE1RM, 'kg', unit), unit)} {unit}
+                    </p>
+                  </div>
+                  {history.personalRecord && (
+                    <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                      <p className="text-xs text-surface-500 uppercase">PR</p>
+                      <p className="text-lg font-bold text-success-400">
+                        {formatWeight(convertWeight(history.personalRecord.weightKg, 'kg', unit), unit)} × {history.personalRecord.reps}
+                      </p>
+                    </div>
+                  )}
+                  <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-surface-500 uppercase">Sessions</p>
+                    <p className="text-lg font-bold text-surface-200">
+                      {history.totalSessions}
+                    </p>
+                  </div>
+                  <div className="bg-surface-800/50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-surface-500 uppercase">Last Done</p>
+                    <p className="text-sm font-medium text-surface-300">
+                      {(() => {
+                        const date = new Date(history.lastWorkoutDate);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Charts */}
+                {history.chartData && history.chartData.length >= 2 && (
+                  <div className="bg-surface-800/30 rounded-lg p-4">
+                    {/* Chart tabs */}
+                    <div className="flex gap-2 mb-4">
+                      <button
+                        onClick={() => setActiveChart('e1rm')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          activeChart === 'e1rm'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:text-surface-200'
+                        }`}
+                      >
+                        Est 1RM
+                      </button>
+                      <button
+                        onClick={() => setActiveChart('volume')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          activeChart === 'volume'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:text-surface-200'
+                        }`}
+                      >
+                        Volume
+                      </button>
+                      <button
+                        onClick={() => setActiveChart('best')}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          activeChart === 'best'
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:text-surface-200'
+                        }`}
+                      >
+                        Best Set
+                      </button>
+                    </div>
+
+                    {/* Chart Data */}
+                    {(() => {
+                      const chartData = history.chartData.map(session => ({
+                        date: session.displayDate,
+                        e1rm: Math.round(convertWeight(session.e1rm, 'kg', unit)),
+                        volume: Math.round(convertWeight(session.volume, 'kg', unit)),
+                        bestWeight: Math.round(convertWeight(session.bestWeight, 'kg', unit)),
+                        bestReps: session.bestReps,
+                      }));
+
+                      return (
+                        <>
+                          {/* E1RM Chart */}
+                          {activeChart === 'e1rm' && (
+                            <div className="h-48">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    stroke="#9ca3af" 
+                                    fontSize={11}
+                                    tick={{ fill: '#9ca3af' }}
+                                  />
+                                  <YAxis 
+                                    stroke="#9ca3af" 
+                                    fontSize={11}
+                                    tick={{ fill: '#9ca3af' }}
+                                    domain={['dataMin - 5', 'dataMax + 5']}
+                                  />
+                                  <Tooltip 
+                                    contentStyle={{ 
+                                      backgroundColor: '#1f2937', 
+                                      border: '1px solid #374151', 
+                                      borderRadius: '8px',
+                                      color: '#f3f4f6' 
+                                    }}
+                                    formatter={(value: number) => [`${value} ${unit}`, 'Est 1RM']}
+                                  />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="e1rm" 
+                                    stroke="#8b5cf6" 
+                                    strokeWidth={2}
+                                    dot={{ r: 4, fill: '#8b5cf6' }}
+                                    activeDot={{ r: 6, fill: '#a78bfa' }}
+                                  />
+                                  {history.personalRecord && (
+                                    <ReferenceLine
+                                      y={Math.round(convertWeight(history.personalRecord.e1rm, 'kg', unit))}
+                                      stroke="#22c55e"
+                                      strokeDasharray="5 5"
+                                      label={{ 
+                                        value: 'PR', 
+                                        fill: '#22c55e', 
+                                        fontSize: 11,
+                                        position: 'right'
+                                      }}
+                                    />
+                                  )}
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+
+                          {/* Volume Chart */}
+                          {activeChart === 'volume' && (
+                            <div className="h-48">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    stroke="#9ca3af" 
+                                    fontSize={11}
+                                    tick={{ fill: '#9ca3af' }}
+                                  />
+                                  <YAxis 
+                                    stroke="#9ca3af" 
+                                    fontSize={11}
+                                    tick={{ fill: '#9ca3af' }}
+                                  />
+                                  <Tooltip 
+                                    contentStyle={{ 
+                                      backgroundColor: '#1f2937', 
+                                      border: '1px solid #374151', 
+                                      borderRadius: '8px',
+                                      color: '#f3f4f6' 
+                                    }}
+                                    formatter={(value: number) => [`${value.toLocaleString()} ${unit}`, 'Volume']}
+                                  />
+                                  <defs>
+                                    <linearGradient id="volumeGradient" x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                    </linearGradient>
+                                  </defs>
+                                  <Area 
+                                    type="monotone" 
+                                    dataKey="volume" 
+                                    stroke="#3b82f6" 
+                                    strokeWidth={2}
+                                    fill="url(#volumeGradient)"
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+
+                          {/* Best Set Chart */}
+                          {activeChart === 'best' && (
+                            <div className="h-48">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    stroke="#9ca3af" 
+                                    fontSize={11}
+                                    tick={{ fill: '#9ca3af' }}
+                                  />
+                                  <YAxis 
+                                    yAxisId="weight"
+                                    stroke="#f59e0b" 
+                                    fontSize={11}
+                                    tick={{ fill: '#f59e0b' }}
+                                    orientation="left"
+                                  />
+                                  <YAxis 
+                                    yAxisId="reps"
+                                    stroke="#10b981" 
+                                    fontSize={11}
+                                    tick={{ fill: '#10b981' }}
+                                    orientation="right"
+                                  />
+                                  <Tooltip 
+                                    contentStyle={{ 
+                                      backgroundColor: '#1f2937', 
+                                      border: '1px solid #374151', 
+                                      borderRadius: '8px',
+                                      color: '#f3f4f6' 
+                                    }}
+                                    formatter={(value: number, name: string) => {
+                                      if (name === 'bestWeight') return [`${value} ${unit}`, 'Weight'];
+                                      return [`${value}`, 'Reps'];
+                                    }}
+                                  />
+                                  <Line 
+                                    yAxisId="weight"
+                                    type="monotone" 
+                                    dataKey="bestWeight" 
+                                    stroke="#f59e0b" 
+                                    strokeWidth={2}
+                                    dot={{ r: 4, fill: '#f59e0b' }}
+                                    name="bestWeight"
+                                  />
+                                  <Line 
+                                    yAxisId="reps"
+                                    type="monotone" 
+                                    dataKey="bestReps" 
+                                    stroke="#10b981" 
+                                    strokeWidth={2}
+                                    dot={{ r: 4, fill: '#10b981' }}
+                                    name="bestReps"
+                                  />
+                                </LineChart>
+                              </ResponsiveContainer>
+                              <div className="flex justify-center gap-6 mt-2 text-xs">
+                                <span className="flex items-center gap-1">
+                                  <span className="w-3 h-3 rounded-full bg-amber-500"></span>
+                                  <span className="text-surface-400">Weight ({unit})</span>
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                  <span className="text-surface-400">Reps</span>
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Not enough data for charts */}
+                {history.chartData && history.chartData.length < 2 && (
+                  <div className="bg-surface-800/30 rounded-lg p-4 text-center">
+                    <p className="text-surface-500 text-sm">
+                      Complete at least 2 workouts with this exercise to see progress charts
+                    </p>
+                  </div>
+                )}
+
+                {/* Last Workout Sets */}
+                {history.lastWorkoutSets && history.lastWorkoutSets.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                      Last Workout Sets
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {history.lastWorkoutSets.map((set, idx) => (
+                        <span 
+                          key={idx}
+                          className="px-3 py-1.5 bg-surface-800 rounded-lg text-sm text-surface-300"
+                        >
+                          {formatWeight(convertWeight(set.weightKg, 'kg', unit), unit)} × {set.reps}
+                          {set.rpe && <span className="text-surface-500 ml-1">@{set.rpe}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <svg className="w-12 h-12 mx-auto text-surface-700 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <p className="text-surface-400 text-sm">No workout history for this exercise yet</p>
+                <p className="text-surface-600 text-xs mt-1">Add it to a workout to start tracking progress!</p>
+              </div>
+            )}
+          </div>
 
           {/* Action Buttons */}
           <div className="flex gap-3 pt-4 border-t border-surface-800">
