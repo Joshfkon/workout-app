@@ -66,10 +66,14 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
       // Probably stored in kg, convert
       console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'lb' but > 500, treating as kg`);
       return weight * 2.20462;
-    } else if (fromUnit === 'kg' && (weight > 250 || (weight >= 150 && weight <= 200))) {
-      // Probably stored in lb, convert
-      // Common weights 150-200 lbs are often mislabeled as kg
-      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but in human weight range (150-200), treating as lb`);
+    } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
+      // Common weights 150-200 are human weights in lbs, mislabeled as kg
+      // The weight is already in lbs, just mislabeled - don't convert, use as-is
+      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but in human weight range (150-200), treating as already in lbs (no conversion)`);
+      return weight; // Already in lbs, just mislabeled
+    } else if (fromUnit === 'kg' && weight > 250) {
+      // Weight > 250 kg is probably in lbs, convert
+      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but > 250, treating as lb`);
       return weight / 2.20462;
     }
     
