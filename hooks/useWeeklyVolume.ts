@@ -95,9 +95,13 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
       ? Math.round(volumeData.reduce((sum, d) => sum + d.percentOfMrv, 0) / volumeData.length)
       : 0;
 
+    // Full data for muscles below MEV (for atrophy risk alerts)
+    const musclesBelowMevData = volumeData.filter((d) => d.status === 'below_mev');
+
     return {
       totalSets,
       musclesBelowMev,
+      musclesBelowMevData,
       musclesOptimal,
       musclesOverMrv,
       avgPercentMrv,

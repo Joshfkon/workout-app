@@ -1066,9 +1066,18 @@ function capitalize(str: string): string {
 export interface VolumeSummary {
   muscle: MuscleGroup;
   currentSets: number;
+  estimatedMEV: number;
   estimatedMRV: number;
   percentOfMRV: number;
-  status: 'low' | 'optimal' | 'high' | 'at_limit';
+  /**
+   * Volume status:
+   * - 'below_mev': Under minimum effective volume (atrophy risk)
+   * - 'low': Between MEV and optimal (adequate but suboptimal)
+   * - 'optimal': In the ideal growth range
+   * - 'high': Approaching MRV
+   * - 'at_limit': At or exceeding MRV
+   */
+  status: 'below_mev' | 'low' | 'optimal' | 'high' | 'at_limit';
   trend: 'up' | 'down' | 'stable';
 }
 
@@ -1090,9 +1099,17 @@ export function getVolumeSummary(
     const prevSets = prevData?.workingSets ?? data.workingSets;
 
     const percentOfMRV = Math.round((data.workingSets / tolerance.estimatedMRV) * 100);
+    const percentOfMEV = tolerance.estimatedMEV > 0
+      ? Math.round((data.workingSets / tolerance.estimatedMEV) * 100)
+      : 100;
 
+    // Determine status based on MEV and MRV thresholds
     let status: VolumeSummary['status'] = 'optimal';
-    if (percentOfMRV < 50) {
+    if (data.workingSets < tolerance.estimatedMEV) {
+      // Below minimum effective volume - atrophy risk
+      status = 'below_mev';
+    } else if (percentOfMRV < 50) {
+      // Above MEV but suboptimal
       status = 'low';
     } else if (percentOfMRV >= 100) {
       status = 'at_limit';
@@ -1110,6 +1127,7 @@ export function getVolumeSummary(
     summaries.push({
       muscle: data.muscle,
       currentSets: data.workingSets,
+      estimatedMEV: tolerance.estimatedMEV,
       estimatedMRV: tolerance.estimatedMRV,
       percentOfMRV,
       status,
