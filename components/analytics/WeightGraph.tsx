@@ -37,8 +37,10 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
   };
 
   // Convert weight to preferred unit
-  const convertWeight = (weight: number, fromUnit: string): number => {
-    if (fromUnit === preferredUnit) return weight;
+  const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
+    // If unit is missing, assume it's already in the preferred unit (no conversion)
+    // This prevents incorrect conversions when unit data is missing
+    if (!fromUnit || fromUnit === preferredUnit) return weight;
     return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
   };
 

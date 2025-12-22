@@ -337,21 +337,28 @@ export default function DashboardPage() {
           setNutritionTargets(targetsResult.data);
         }
 
-        // Process weight
-        if (weightResult.data) {
-          setTodaysWeight({ weight: weightResult.data.weight, unit: weightResult.data.unit || 'lb' });
-        }
-
+        // Set user's preferred unit first (needed for weight processing)
         if (prefsResult.data?.weight_unit) {
           setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
         }
 
+        // Process weight - use user's preferred unit as default if unit is missing
+        if (weightResult.data) {
+          const userPreferredUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
+          setTodaysWeight({ 
+            weight: weightResult.data.weight, 
+            unit: weightResult.data.unit || userPreferredUnit
+          });
+        }
+
         // Process weight history
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
+          // Use user's preferred unit as default if unit is missing from database
+          const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
           setWeightHistory(weightHistoryResult.data.map((w: any) => ({
             date: w.logged_at,
             weight: w.weight,
-            unit: w.unit || 'lb',
+            unit: w.unit || defaultUnit,
           })));
         }
 
@@ -987,8 +994,12 @@ export default function DashboardPage() {
                       {(() => {
                         // Convert to user's preferred unit if needed
                         let displayWeight = todaysWeight.weight;
-                        const storedUnit = todaysWeight.unit || 'kg';
-                        if (storedUnit !== weightUnit) {
+                        // Use the stored unit from database, defaulting to user's preferred unit if missing
+                        // This ensures we don't double-convert or assume wrong units
+                        const storedUnit = todaysWeight.unit || weightUnit;
+                        
+                        // Only convert if units actually differ
+                        if (storedUnit && storedUnit !== weightUnit) {
                           // Convert: stored in kg but user wants lb, or vice versa
                           if (storedUnit === 'kg' && weightUnit === 'lb') {
                             displayWeight = todaysWeight.weight * 2.20462;
