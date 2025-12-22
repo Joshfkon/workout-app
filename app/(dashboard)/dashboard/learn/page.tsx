@@ -27,6 +27,17 @@ const articles = [
     readTime: '5 min read',
   },
   {
+    id: 'body-composition',
+    icon: '⚖️',
+    title: 'Body Composition Prediction',
+    subtitle: 'Understanding P-ratio and why we show ranges, not guarantees',
+    description:
+      'Learn how we model fat vs. lean mass changes using partition ratio, and why honest uncertainty ranges are more valuable than false precision.',
+    color: 'cyan',
+    tag: 'Body Science',
+    readTime: '6 min read',
+  },
+  {
     id: 'injury-prevention',
     icon: '🛡️',
     title: 'Smart Injury Prevention',
