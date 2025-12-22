@@ -143,12 +143,16 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       // If no pre-computed data, calculate from set logs
       if (!currentData || currentData.length === 0) {
+        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for week ${weekStartStr}`);
+        
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 6);
         const weekEndStr = weekEnd.toISOString().split('T')[0];
+        
+        console.log(`[useAdaptiveVolume] Week range: ${weekStartStr} to ${weekEndStr}`);
 
         // Fetch exercise blocks and sets for current week
-        const { data: blocks } = await supabase
+        const { data: blocks, error: blocksError } = await supabase
           .from('exercise_blocks')
           .select(`
             id,
@@ -162,7 +166,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             workout_sessions!inner (
               id,
               completed_at,
-              user_id
+              user_id,
+              state
             ),
             set_logs (
               id,
@@ -178,41 +183,64 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           .lte('workout_sessions.completed_at', weekEndStr + 'T23:59:59')
           .eq('workout_sessions.state', 'completed');
 
+        if (blocksError) {
+          console.error('[useAdaptiveVolume] Error fetching blocks:', blocksError);
+        }
+        
+        console.log(`[useAdaptiveVolume] Found ${blocks?.length || 0} exercise blocks for current week`);
+
         if (blocks && blocks.length > 0) {
+          console.log(`[useAdaptiveVolume] Processing ${blocks.length} blocks`);
+          
           // Calculate volume from blocks
           const volumeByMuscle = new Map<string, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
           
           blocks.forEach((block: any) => {
             const exercise = block.exercises;
-            if (!exercise) return;
+            if (!exercise) {
+              console.log(`[useAdaptiveVolume] Block ${block.id} has no exercise`);
+              return;
+            }
             
-            const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-            if (workingSets.length === 0) return;
+            const allSets = block.set_logs || [];
+            const workingSets = allSets.filter((s: any) => !s.is_warmup);
+            
+            if (workingSets.length === 0) {
+              console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets`);
+              return;
+            }
 
             const primaryMuscle = exercise.primary_muscle?.toLowerCase();
-            if (primaryMuscle) {
-              if (!volumeByMuscle.has(primaryMuscle)) {
-                volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
-              }
-              const data = volumeByMuscle.get(primaryMuscle)!;
-              data.totalSets += workingSets.length;
-              
-              // Count effective sets (RPE 7+ or RIR 0-3 with clean/some_breakdown form)
-              const effective = workingSets.filter((s: any) => {
-                const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
-                const form = s.feedback?.form ?? 'clean';
-                return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
-              });
-              data.effectiveSets += effective.length;
-              
-              // Calculate average RIR
-              workingSets.forEach((s: any) => {
-                const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2);
-                data.totalRIR += rir;
-                data.rirCount += 1;
-              });
+            if (!primaryMuscle) {
+              console.log(`[useAdaptiveVolume] Exercise ${exercise.name} has no primary_muscle`);
+              return;
             }
+            
+            console.log(`[useAdaptiveVolume] Block ${block.id}: ${exercise.name} (${primaryMuscle}) - ${workingSets.length} working sets`);
+            
+            if (!volumeByMuscle.has(primaryMuscle)) {
+              volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
+            }
+            const data = volumeByMuscle.get(primaryMuscle)!;
+            data.totalSets += workingSets.length;
+            
+            // Count effective sets (RPE 7+ or RIR 0-3 with clean/some_breakdown form)
+            const effective = workingSets.filter((s: any) => {
+              const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
+              const form = s.feedback?.form ?? 'clean';
+              return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
+            });
+            data.effectiveSets += effective.length;
+            
+            // Calculate average RIR
+            workingSets.forEach((s: any) => {
+              const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2);
+              data.totalRIR += rir;
+              data.rirCount += 1;
+            });
           });
+
+          console.log(`[useAdaptiveVolume] Calculated volume for ${volumeByMuscle.size} muscles:`, Array.from(volumeByMuscle.entries()).map(([m, d]) => `${m}: ${d.totalSets} sets`));
 
           // Convert to MuscleVolumeData format
           const calculatedData: MuscleVolumeData[] = Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
@@ -229,7 +257,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             exercisePerformance: [],
           }));
           
+          console.log(`[useAdaptiveVolume] Setting volume data:`, calculatedData.map(d => `${d.muscle}: ${d.workingSets} sets`));
           setVolumeData(calculatedData);
+        } else {
+          console.log(`[useAdaptiveVolume] No blocks found for week ${weekStartStr}`);
         }
       } else {
         // Use pre-computed data
