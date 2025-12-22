@@ -495,7 +495,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     console.log(`[useAdaptiveVolume] useEffect triggered:`, {
       hasUser: !!user,
       userId: user?.id,
-      fetchProfileExists: !!fetchProfile
+      fetchProfileExists: !!fetchProfile,
+      userObject: user
     });
     
     if (user?.id) {
@@ -506,7 +507,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     } else {
       console.log(`[useAdaptiveVolume] User not available yet, waiting... (user:`, user, `)`);
     }
-  }, [user?.id, fetchProfile]);
+  }, [user, fetchProfile]);
 
   return {
     volumeProfile,
