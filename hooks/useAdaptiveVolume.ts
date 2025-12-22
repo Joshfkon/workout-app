@@ -416,10 +416,15 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     return assessCurrentFatigueStatus(volumeData, volumeProfile);
   }, [volumeProfile, volumeData]);
 
-  // Load data on mount
+  // Load data on mount - only when user is available
   useEffect(() => {
-    fetchProfile();
-  }, [fetchProfile]);
+    if (user?.id) {
+      console.log(`[useAdaptiveVolume] User available, calling fetchProfile`);
+      fetchProfile();
+    } else {
+      console.log(`[useAdaptiveVolume] User not available yet, waiting...`);
+    }
+  }, [user?.id, fetchProfile]);
 
   return {
     volumeProfile,
