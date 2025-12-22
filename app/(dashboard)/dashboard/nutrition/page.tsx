@@ -24,7 +24,7 @@ import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, formatDate } from '@/lib/utils';
 import {
   LineChart,
   Line,
@@ -800,16 +800,22 @@ export default function NutritionPage() {
       : null;
 
   // Prepare weight chart data (with unit conversion)
-  const weightChartData = weightEntries
-    .slice(0, 30)
-    .reverse()
-    .map((entry) => ({
-      date: new Date(entry.logged_at).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
-      weight: Number(convertWeight(entry.weight, (entry as any).unit || 'lb').toFixed(1)),
-    }));
+  // Sort by date ascending (oldest first) for proper graph display
+  const weightChartData = [...weightEntries]
+    .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime())
+    .slice(-30) // Take last 30 entries (most recent)
+    .map((entry) => {
+      // Use logged_at directly as date string to avoid timezone issues
+      const dateStr = entry.logged_at;
+      return {
+        date: dateStr,
+        displayDate: formatDate(dateStr, {
+          month: 'short',
+          day: 'numeric',
+        }),
+        weight: Number(convertWeight(entry.weight, (entry as any).unit || 'lb').toFixed(1)),
+      };
+    });
 
   // Get recent foods for quick add
   const recentFoods: FoodSearchResult[] = Array.from(
@@ -1256,7 +1262,7 @@ export default function NutritionPage() {
                     <LineChart data={weightChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
                       <XAxis
-                        dataKey="date"
+                        dataKey="displayDate"
                         stroke="#888"
                         style={{ fontSize: '12px' }}
                       />
@@ -1271,6 +1277,15 @@ export default function NutritionPage() {
                           border: '1px solid #333',
                           borderRadius: '8px',
                         }}
+                        labelFormatter={(value) => {
+                          // Find the entry for this date to show the actual logged date
+                          const entry = weightChartData.find((d) => d.displayDate === value);
+                          return entry ? formatDate(entry.date) : value;
+                        }}
+                        formatter={(value: number) => [
+                          `${value.toFixed(1)} ${weightUnit}`,
+                          'Weight',
+                        ]}
                       />
                       <Line
                         type="monotone"
