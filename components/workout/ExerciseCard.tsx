@@ -5,7 +5,8 @@ import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
-import { isBodyweightExercise, canAddWeight, canUseAssistance } from '@/services/exerciseService';
+// Note: Using exercise.isBodyweight directly instead of exerciseService helpers
+// to avoid type conflicts between schema.Exercise and exerciseService.Exercise
 import { BodyweightInput } from './BodyweightInput';
 import { BodyweightDisplayInline } from './BodyweightDisplay';
 import { calculateSetQuality } from '@/services/progressionEngine';
@@ -304,8 +305,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     bodyweightData?: BodyweightData;
   }[]>([]);
 
-  // Check if this is a bodyweight exercise
-  const isBwExercise = isBodyweightExercise(exercise);
+  // Check if this is a bodyweight exercise (using property directly to avoid type conflicts)
+  const isBwExercise = exercise.isBodyweight === true;
 
   const completedSets = sets.filter((s) => !s.isWarmup);
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);

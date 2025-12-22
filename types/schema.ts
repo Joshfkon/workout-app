@@ -279,6 +279,15 @@ export interface Exercise {
   
   /** Hypertrophy effectiveness score based on Nippard methodology (optional) */
   hypertrophyScore?: HypertrophyScore;
+
+  /** Whether this is a bodyweight exercise */
+  isBodyweight?: boolean;
+
+  /** Type of bodyweight exercise for modification options */
+  bodyweightType?: BodyweightType;
+
+  /** Default assistance type for assisted bodyweight exercises */
+  assistanceType?: AssistanceType;
 }
 
 // ============ MESOCYCLE ============
