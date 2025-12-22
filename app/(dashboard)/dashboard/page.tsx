@@ -297,9 +297,9 @@ export default function DashboardPage() {
             .gte('logged_at', getLocalDateString(ninetyDaysAgo))
             .order('logged_at', { ascending: true }),
           
-          // Weekly volume data
+          // Weekly volume data (include secondary_muscles for compound exercise credit)
           supabase.from('exercise_blocks')
-            .select(`id, exercises (id, name, primary_muscle), set_logs (id, is_warmup),
+            .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
               workout_sessions!inner (user_id, completed_at, state)`)
             .eq('workout_sessions.user_id', user.id)
             .eq('workout_sessions.state', 'completed')
@@ -491,31 +491,51 @@ export default function DashboardPage() {
           setWeightHistory(processedHistory);
         }
 
-        // Process weekly volume
+        // Process weekly volume (accounting for compound exercises - secondary muscles get 0.5x credit)
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
           const volumeByMuscle: Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }> = {};
           
           weeklyBlocks.forEach((block: any) => {
-            const muscle = block.exercises?.primary_muscle;
+            const primaryMuscle = block.exercises?.primary_muscle;
+            const secondaryMuscles = block.exercises?.secondary_muscles || [];
             const exerciseId = block.exercises?.id;
             const exerciseName = block.exercises?.name;
-            if (!muscle || !exerciseId) return;
+            if (!primaryMuscle || !exerciseId) return;
             
             const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
             if (workingSets === 0) return;
             
-            if (!volumeByMuscle[muscle]) {
-              volumeByMuscle[muscle] = { sets: 0, exercises: new Map() };
+            // Primary muscle: full credit (1.0x)
+            if (!volumeByMuscle[primaryMuscle]) {
+              volumeByMuscle[primaryMuscle] = { sets: 0, exercises: new Map() };
             }
-            volumeByMuscle[muscle].sets += workingSets;
+            volumeByMuscle[primaryMuscle].sets += workingSets;
             
-            const existing = volumeByMuscle[muscle].exercises.get(exerciseId);
-            if (existing) {
-              existing.sets += workingSets;
+            const existingPrimary = volumeByMuscle[primaryMuscle].exercises.get(exerciseId);
+            if (existingPrimary) {
+              existingPrimary.sets += workingSets;
             } else {
-              volumeByMuscle[muscle].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
+              volumeByMuscle[primaryMuscle].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
             }
+            
+            // Secondary muscles: partial credit (0.5x) for compound exercises
+            secondaryMuscles.forEach((secondaryMuscle: string) => {
+              const secondaryMuscleLower = secondaryMuscle.toLowerCase();
+              if (!volumeByMuscle[secondaryMuscleLower]) {
+                volumeByMuscle[secondaryMuscleLower] = { sets: 0, exercises: new Map() };
+              }
+              // Give 0.5x credit (round up to at least 1 set if workingSets > 0)
+              const indirectSets = Math.max(1, Math.round(workingSets * 0.5));
+              volumeByMuscle[secondaryMuscleLower].sets += indirectSets;
+              
+              const existingSecondary = volumeByMuscle[secondaryMuscleLower].exercises.get(exerciseId);
+              if (existingSecondary) {
+                existingSecondary.sets += indirectSets;
+              } else {
+                volumeByMuscle[secondaryMuscleLower].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: indirectSets });
+              }
+            });
           });
 
           const volumeTargets: Record<string, number> = {
