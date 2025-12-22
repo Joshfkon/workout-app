@@ -1592,6 +1592,34 @@ export default function WorkoutPage() {
     }
   };
 
+  const handleBlockNoteUpdate = async (blockId: string, note: string | null) => {
+    // Update local state immediately
+    setBlocks(prevBlocks => prevBlocks.map(block =>
+      block.id === blockId
+        ? { ...block, note }
+        : block
+    ));
+
+    // Update in database
+    try {
+      const supabase = createUntypedClient();
+      const { error: updateError } = await supabase
+        .from('exercise_blocks')
+        .update({ note })
+        .eq('id', blockId);
+
+      if (updateError) {
+        console.error('Failed to update exercise note:', updateError);
+        setError(`Failed to update note: ${updateError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to update exercise note:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update note');
+    }
+  };
+
   // Toggle individual exercise collapse
   const toggleBlockCollapse = useCallback((blockId: string) => {
     setCollapsedBlocks(prev => {
@@ -3244,6 +3272,7 @@ export default function WorkoutPage() {
                       setShowSwapForInjury(null); // Clear after swap
                     }}
                     onExerciseDelete={() => handleExerciseDelete(block.id)}
+                    onBlockNoteUpdate={(note) => handleBlockNoteUpdate(block.id, note)}
                     availableExercises={blocks.map(b => b.exercise).concat(
                       availableExercises.map(ex => ({
                         id: ex.id,
