@@ -154,6 +154,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchDashboardData() {
+      console.log(`[Dashboard Debug] Starting to fetch dashboard data...`);
       try {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
