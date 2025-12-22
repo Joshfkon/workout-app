@@ -60,6 +60,8 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
     }
 
     async function fetchHistory() {
+      if (!exercise?.id) return;
+      
       setIsLoadingHistory(true);
       try {
         const supabase = createUntypedClient();
@@ -150,7 +152,9 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
       }
     }
 
-    fetchHistory();
+    if (exercise?.id) {
+      fetchHistory();
+    }
   }, [isOpen, exercise?.id]);
 
   if (!isOpen || !exercise) return null;
