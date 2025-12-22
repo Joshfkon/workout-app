@@ -60,12 +60,16 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     }
     
     // Validate: if unit says 'lb' but weight > 500, it's probably in kg
-    // If unit says 'kg' but weight > 250, it's probably in lb
+    // If unit says 'kg' but weight > 250 OR in human weight range (150-200), it's probably in lb
+    // Common weights 150-200 lbs are often mislabeled as kg
     if (fromUnit === 'lb' && weight > 500) {
       // Probably stored in kg, convert
+      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'lb' but > 500, treating as kg`);
       return weight * 2.20462;
-    } else if (fromUnit === 'kg' && weight > 250) {
+    } else if (fromUnit === 'kg' && (weight > 250 || (weight >= 150 && weight <= 200))) {
       // Probably stored in lb, convert
+      // Common weights 150-200 lbs are often mislabeled as kg
+      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but in human weight range (150-200), treating as lb`);
       return weight / 2.20462;
     }
     
