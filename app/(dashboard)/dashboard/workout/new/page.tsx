@@ -134,6 +134,7 @@ function NewWorkoutContent() {
     exercises: string[]; 
     reason: string;
     detailedExplanations?: Array<{ exerciseId: string; exerciseName: string; explanation: string }>;
+    skippedMuscles?: Array<{ muscle: string; reason: string }>;
   } | null>(null);
   const [showExplanations, setShowExplanations] = useState(false);
   
@@ -212,14 +213,107 @@ function NewWorkoutContent() {
         });
       });
       
-      // Find least trained muscles
+      // Find least trained muscles with improved prioritization
       const allMuscles = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'biceps', 'triceps', 'glutes', 'calves', 'abs'];
-      const sortedMuscles = allMuscles.sort((a, b) => (trainedMuscles[a] || 0) - (trainedMuscles[b] || 0));
+      
+      // Opposing muscle groups (antagonist pairs)
+      const opposingMuscles: Record<string, string> = {
+        'biceps': 'triceps',
+        'triceps': 'biceps',
+        'chest': 'back',
+        'back': 'chest',
+        'quads': 'hamstrings',
+        'hamstrings': 'quads',
+      };
+      
+      // Get recent workout dates to check recovery
+      const muscleLastTrained: Record<string, Date | null> = {};
+      recentWorkouts?.forEach((workout: any) => {
+        const workoutDate = new Date(workout.completed_at);
+        (workout.exercise_blocks || []).forEach((block: any) => {
+          const primaryMuscle = block.exercises?.primary_muscle;
+          if (primaryMuscle) {
+            const existing = muscleLastTrained[primaryMuscle];
+            if (!existing || workoutDate > existing) {
+              muscleLastTrained[primaryMuscle] = workoutDate;
+            }
+          }
+        });
+      });
+      
+      // Sort muscles with improved logic:
+      // 1. Prioritize completely untrained (0 sets) over partially trained
+      // 2. Consider opposing muscle balance (don't suggest triceps if biceps are at 0)
+      // 3. Consider recovery time (avoid muscles trained very recently)
+      const sortedMuscles = allMuscles.sort((a, b) => {
+        const aCount = trainedMuscles[a] || 0;
+        const bCount = trainedMuscles[b] || 0;
+        
+        // Priority 1: Completely untrained (0 sets) beats partially trained
+        if (aCount === 0 && bCount > 0) return -1;
+        if (bCount === 0 && aCount > 0) return 1;
+        
+        // Priority 2: Check opposing muscle balance
+        // If biceps are at 0 and we're comparing biceps vs triceps, prioritize biceps
+        const aOpposing = opposingMuscles[a];
+        const bOpposing = opposingMuscles[b];
+        
+        // If 'a' is the opposing muscle of 'b', and 'a' is untrained, prioritize 'a'
+        if (aOpposing === b && aCount === 0 && bCount > 0) {
+          return -1; // Prioritize untrained 'a' over trained 'b'
+        }
+        // If 'b' is the opposing muscle of 'a', and 'b' is untrained, prioritize 'b'
+        if (bOpposing === a && bCount === 0 && aCount > 0) {
+          return 1; // Prioritize untrained 'b' over trained 'a'
+        }
+        
+        // Priority 3: Least trained overall
+        if (aCount !== bCount) return aCount - bCount;
+        
+        // Priority 4: Prefer muscles not trained recently (better recovery)
+        const aLastTrained = muscleLastTrained[a];
+        const bLastTrained = muscleLastTrained[b];
+        if (aLastTrained && bLastTrained) {
+          return aLastTrained.getTime() - bLastTrained.getTime(); // Older = better
+        }
+        if (aLastTrained && !bLastTrained) return 1; // b hasn't been trained, prefer it
+        if (!aLastTrained && bLastTrained) return -1; // a hasn't been trained, prefer it
+        
+        return 0;
+      });
       
       // Pick muscles based on time available
       // Short workouts: 1-2 muscles, long workouts: 2-3 muscles
       const muscleCount = workoutDuration <= 30 ? 2 : workoutDuration <= 45 ? 2 : 3;
       const suggestedMuscles = sortedMuscles.slice(0, muscleCount);
+      
+      // Debug logging
+      console.log('[Workout Suggestion] Muscle prioritization:', {
+        trainedMuscles,
+        sortedOrder: sortedMuscles.map(m => ({ muscle: m, count: trainedMuscles[m] || 0 })),
+        suggestedMuscles,
+      });
+      
+      // Track which muscles were skipped and why (for explanations)
+      const skippedMuscles: Array<{ muscle: string; reason: string }> = [];
+      const checkedMuscles = new Set(suggestedMuscles);
+      
+      // Check why other top candidates were skipped
+      for (let i = 0; i < Math.min(muscleCount + 3, sortedMuscles.length); i++) {
+        const muscle = sortedMuscles[i];
+        if (checkedMuscles.has(muscle)) continue;
+        
+        const lastTrained = muscleLastTrained[muscle];
+        if (lastTrained) {
+          const daysSince = Math.floor((Date.now() - lastTrained.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSince < 2) {
+            skippedMuscles.push({ 
+              muscle, 
+              reason: `Trained ${daysSince === 0 ? 'today' : `${daysSince} day${daysSince > 1 ? 's' : ''} ago`} - allowing recovery time` 
+            });
+          }
+        }
+      }
       
       // Fetch exercises for suggested muscles, including hypertrophy tier
       const { data: exercisesData } = await supabase
@@ -282,12 +376,27 @@ function NewWorkoutContent() {
         // Why this muscle group?
         const muscle = exercise.primary_muscle;
         const muscleTrainingCount = trainedMuscles[muscle] || 0;
+        const opposingMuscle = opposingMuscles[muscle];
+        
         if (muscleTrainingCount === 0) {
           explanations.push(`You haven't trained ${muscle} in the last 7 days`);
+          // If opposing muscle is also untrained, mention balance
+          if (opposingMuscle && (trainedMuscles[opposingMuscle] || 0) === 0) {
+            explanations.push(`Balancing with ${opposingMuscle} (also untrained)`);
+          }
         } else if (muscleTrainingCount < 1) {
           explanations.push(`${muscle} was only partially trained recently (via compound exercises)`);
         } else {
           explanations.push(`${muscle} needs more volume (trained ${Math.round(muscleTrainingCount)} time${Math.round(muscleTrainingCount) > 1 ? 's' : ''} in last 7 days)`);
+        }
+        
+        // Recovery consideration
+        const lastTrained = muscleLastTrained[muscle];
+        if (lastTrained) {
+          const daysSince = Math.floor((Date.now() - lastTrained.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSince >= 2) {
+            explanations.push(`Adequate recovery time (last trained ${daysSince} days ago)`);
+          }
         }
         
         // Why this specific exercise?
@@ -320,6 +429,7 @@ function NewWorkoutContent() {
         exercises: picked.map((e: { id: string }) => e.id),
         reason,
         detailedExplanations,
+        skippedMuscles, // Add skipped muscles info for display
       });
       
       // Apply suggestions
@@ -828,9 +938,10 @@ function NewWorkoutContent() {
                     </button>
                   )}
                   
-                  {showExplanations && suggestions.detailedExplanations && (
+                  {showExplanations && (
                     <div className="mt-4 space-y-3 pt-3 border-t border-accent-500/20">
-                      {suggestions.detailedExplanations.map((item) => {
+                      {/* Exercise explanations */}
+                      {suggestions.detailedExplanations && suggestions.detailedExplanations.map((item) => {
                         const exercise = exercises.find(e => e.id === item.exerciseId);
                         if (!exercise) return null;
                         
@@ -841,6 +952,18 @@ function NewWorkoutContent() {
                           </div>
                         );
                       })}
+                      
+                      {/* Skipped muscles (recovery considerations) */}
+                      {suggestions.skippedMuscles && suggestions.skippedMuscles.length > 0 && (
+                        <div className="mt-4 pt-3 border-t border-surface-700">
+                          <p className="text-xs font-medium text-surface-500 uppercase mb-2">Muscles Skipped (Recovery)</p>
+                          {suggestions.skippedMuscles.map((item, idx) => (
+                            <div key={idx} className="text-sm text-surface-400 mb-1">
+                              <span className="capitalize font-medium text-surface-300">{item.muscle}</span>: {item.reason}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
