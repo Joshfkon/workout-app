@@ -27,6 +27,17 @@ const articles = [
     readTime: '5 min read',
   },
   {
+    id: 'wearable-integration',
+    icon: '⌚',
+    title: 'Activity-Adjusted TDEE',
+    subtitle: 'How we use your Apple Watch or Fitbit data for day-by-day accuracy',
+    description:
+      'Learn how we integrate step data and workout calories to give you daily calorie targets that match your actual activity level.',
+    color: 'blue',
+    tag: 'Wearable Integration',
+    readTime: '6 min read',
+  },
+  {
     id: 'injury-prevention',
     icon: '🛡️',
     title: 'Smart Injury Prevention',
