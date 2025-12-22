@@ -129,7 +129,13 @@ function NewWorkoutContent() {
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState<{ muscles: string[]; exercises: string[]; reason: string } | null>(null);
+  const [suggestions, setSuggestions] = useState<{ 
+    muscles: string[]; 
+    exercises: string[]; 
+    reason: string;
+    detailedExplanations?: Array<{ exerciseId: string; exerciseName: string; explanation: string }>;
+  } | null>(null);
+  const [showExplanations, setShowExplanations] = useState(false);
   
   // Search filter for exercises
   const [exerciseSearch, setExerciseSearch] = useState('');
@@ -269,10 +275,51 @@ function NewWorkoutContent() {
         ? `${picked.length} exercises for your ${workoutDuration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
         : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${workoutDuration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
       
+      // Generate detailed explanations for each exercise
+      const detailedExplanations = picked.map((exercise: any) => {
+        const explanations: string[] = [];
+        
+        // Why this muscle group?
+        const muscle = exercise.primary_muscle;
+        const muscleTrainingCount = trainedMuscles[muscle] || 0;
+        if (muscleTrainingCount === 0) {
+          explanations.push(`You haven't trained ${muscle} in the last 7 days`);
+        } else if (muscleTrainingCount < 1) {
+          explanations.push(`${muscle} was only partially trained recently (via compound exercises)`);
+        } else {
+          explanations.push(`${muscle} needs more volume (trained ${Math.round(muscleTrainingCount)} time${Math.round(muscleTrainingCount) > 1 ? 's' : ''} in last 7 days)`);
+        }
+        
+        // Why this specific exercise?
+        if (exercise.hypertrophy_tier === 'S' || exercise.hypertrophy_tier === 'A') {
+          explanations.push(`S-tier exercise for maximum hypertrophy`);
+        } else if (exercise.hypertrophy_tier === 'B') {
+          explanations.push(`High-quality B-tier exercise`);
+        }
+        
+        if (exercise.mechanic === 'compound') {
+          explanations.push(`Compound movement (trains multiple muscles efficiently)`);
+        } else {
+          explanations.push(`Isolation exercise (targeted muscle focus)`);
+        }
+        
+        // Time consideration
+        if (workoutDuration <= 30) {
+          explanations.push(`Time-efficient for your ${workoutDuration}-minute workout`);
+        }
+        
+        return {
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          explanation: explanations.join('. ') + '.'
+        };
+      });
+      
       setSuggestions({
         muscles: suggestedMuscles,
         exercises: picked.map((e: { id: string }) => e.id),
         reason,
+        detailedExplanations,
       });
       
       // Apply suggestions
@@ -759,9 +806,43 @@ function NewWorkoutContent() {
                 <svg className="w-5 h-5 text-accent-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
-                <div>
+                <div className="flex-1">
                   <p className="font-medium text-accent-300">AI Suggestion</p>
                   <p className="text-sm text-surface-400 mt-0.5">{suggestions.reason}</p>
+                  
+                  {/* Expandable detailed explanations */}
+                  {suggestions.detailedExplanations && suggestions.detailedExplanations.length > 0 && (
+                    <button
+                      onClick={() => setShowExplanations(!showExplanations)}
+                      className="mt-3 flex items-center gap-2 text-sm text-accent-400 hover:text-accent-300 transition-colors"
+                    >
+                      <svg 
+                        className={`w-4 h-4 transition-transform ${showExplanations ? 'rotate-180' : ''}`} 
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      {showExplanations ? 'Hide' : 'Show'} why these exercises were chosen
+                    </button>
+                  )}
+                  
+                  {showExplanations && suggestions.detailedExplanations && (
+                    <div className="mt-4 space-y-3 pt-3 border-t border-accent-500/20">
+                      {suggestions.detailedExplanations.map((item) => {
+                        const exercise = exercises.find(e => e.id === item.exerciseId);
+                        if (!exercise) return null;
+                        
+                        return (
+                          <div key={item.exerciseId} className="bg-surface-800/50 rounded-lg p-3">
+                            <p className="font-medium text-surface-200 mb-1">{exercise.name}</p>
+                            <p className="text-sm text-surface-400">{item.explanation}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
