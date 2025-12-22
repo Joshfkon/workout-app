@@ -615,8 +615,8 @@ function NewWorkoutContent() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-4 gap-2">
-                {[20, 30, 45, 60].map((mins) => (
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {[20, 30, 45, 60, 75, 90].map((mins) => (
                   <button
                     key={mins}
                     onClick={() => setWorkoutDuration(mins)}
