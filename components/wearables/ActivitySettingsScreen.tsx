@@ -161,7 +161,7 @@ export function ActivitySettingsScreen() {
             <span className="text-surface-600 dark:text-surface-400">calories</span>
           </div>
           <p className="text-sm text-surface-500">
-            Even on very active/inactive days, your target won't change by more than
+            Even on very active/inactive days, your target will not change by more than
             this amount.
           </p>
         </CardContent>

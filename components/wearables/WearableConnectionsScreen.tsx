@@ -293,8 +293,8 @@ export function WearableConnectionsScreen() {
               <p className="font-medium mb-1">Why connect your wearable?</p>
               <p>
                 We use step data to improve your TDEE estimate and adjust daily calorie
-                targets based on activity. Your metabolism isn't the same every day - on
-                active days you burn more, and we can account for that.
+                targets based on activity. Your metabolism is not the same every day - on
+                active days you burn more, and we can account for that difference.
               </p>
             </div>
           </div>

@@ -296,8 +296,8 @@ class HealthKitService {
     try {
       // Dynamic import of the Capacitor HealthKit plugin
       // This assumes a plugin like @nickcis/capacitor-healthkit or similar
-      const module = await import('@nickcis/capacitor-healthkit');
-      this.plugin = module.HealthKit as unknown as HealthKitPlugin;
+      const healthKitModule = await import('@nickcis/capacitor-healthkit');
+      this.plugin = healthKitModule.HealthKit as unknown as HealthKitPlugin;
       return this.plugin;
     } catch (error) {
       console.warn('HealthKit plugin not available:', error);

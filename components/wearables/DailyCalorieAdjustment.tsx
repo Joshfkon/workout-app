@@ -105,7 +105,7 @@ export function DailyCalorieAdjustment({
         {showDetails && (
           <div className="p-3 bg-surface-50 dark:bg-surface-800 rounded-lg text-sm space-y-2">
             <div className="flex justify-between">
-              <span>Today's TDEE</span>
+              <span>Today&apos;s TDEE</span>
               <span>{target.tdeeEstimate.toLocaleString()} cal</span>
             </div>
             <div className="flex justify-between">

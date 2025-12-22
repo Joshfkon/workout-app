@@ -72,7 +72,7 @@ export function EnhancedTDEEDashboard({
         {hasActivityData && todayTDEE && (
           <div className="p-4 bg-surface-50 dark:bg-surface-800 rounded-lg">
             <div className="flex items-baseline justify-between mb-3">
-              <span className="text-sm text-surface-500">Today's Estimated Burn</span>
+              <span className="text-sm text-surface-500">Today&apos;s Estimated Burn</span>
               <span
                 className={`text-sm font-medium ${
                   todayTDEE.vsAverage > 0 ? 'text-green-500' : 'text-surface-500'

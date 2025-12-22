@@ -327,8 +327,8 @@ class GoogleFitService {
 
     try {
       // Dynamic import of the Capacitor Google Fit plugin
-      const module = await import('@nickcis/capacitor-google-fit');
-      this.plugin = module.GoogleFit as unknown as GoogleFitPlugin;
+      const googleFitModule = await import('@nickcis/capacitor-google-fit');
+      this.plugin = googleFitModule.GoogleFit as unknown as GoogleFitPlugin;
       return this.plugin;
     } catch (error) {
       console.warn('Google Fit plugin not available:', error);
