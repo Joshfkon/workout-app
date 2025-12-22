@@ -15,6 +15,8 @@ import type {
   AppWorkoutActivity,
   NetActivityExpenditure,
   ActivityLevel,
+} from '@/types/wearable';
+import {
   BASELINE_STEP_MULTIPLIERS,
   BASE_CALORIES_PER_STEP,
   getActivityLevelFromSteps,
