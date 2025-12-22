@@ -1,7 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type { Exercise } from '@/types/schema';
+import { createUntypedClient } from '@/lib/supabase/client';
+import { formatWeight, convertWeight } from '@/lib/utils';
 import Link from 'next/link';
 
 interface ExerciseDetailsModalProps {
@@ -9,6 +12,20 @@ interface ExerciseDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   unit?: 'kg' | 'lb';
+}
+
+interface ExerciseHistoryData {
+  lastWorkoutDate: string;
+  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  estimatedE1RM: number;
+  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
+  totalSessions: number;
+}
+
+// Calculate E1RM using Brzycki formula
+function calculateE1RM(weight: number, reps: number): number {
+  if (reps === 1) return weight;
+  return weight * (36 / (37 - reps));
 }
 
 // Helper to get property value from either camelCase or snake_case
@@ -32,6 +49,110 @@ function getTierBadgeClasses(tier: string): string {
 }
 
 export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }: ExerciseDetailsModalProps) {
+  const [history, setHistory] = useState<ExerciseHistoryData | null>(null);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Fetch exercise history when modal opens
+  useEffect(() => {
+    if (!isOpen || !exercise?.id) {
+      setHistory(null);
+      return;
+    }
+
+    async function fetchHistory() {
+      setIsLoadingHistory(true);
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch exercise blocks for this exercise
+        const { data: historyBlocks } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            id,
+            workout_sessions!inner (
+              id,
+              completed_at,
+              state,
+              user_id
+            ),
+            set_logs (
+              weight_kg,
+              reps,
+              rpe,
+              is_warmup,
+              logged_at
+            )
+          `)
+          .eq('exercise_id', exercise.id)
+          .eq('workout_sessions.user_id', user.id)
+          .eq('workout_sessions.state', 'completed')
+          .order('workout_sessions(completed_at)', { ascending: false })
+          .limit(50);
+
+        if (!historyBlocks || historyBlocks.length === 0) {
+          setHistory(null);
+          return;
+        }
+
+        let bestE1RM = 0;
+        let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+        let totalSessions = 0;
+        const seenSessions = new Set<string>();
+
+        // Get last workout data
+        const lastBlock = historyBlocks[0];
+        const lastSession = lastBlock.workout_sessions as any;
+        const lastSets = ((lastBlock.set_logs as any[]) || [])
+          .filter((s: any) => !s.is_warmup)
+          .map((s: any) => ({
+            weightKg: s.weight_kg,
+            reps: s.reps,
+            rpe: s.rpe,
+          }));
+
+        // Calculate best E1RM and PR
+        historyBlocks.forEach((block: any) => {
+          const session = block.workout_sessions;
+          if (session && !seenSessions.has(session.id)) {
+            seenSessions.add(session.id);
+            totalSessions++;
+          }
+
+          const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+          sets.forEach((set: any) => {
+            const e1rm = calculateE1RM(set.weight_kg, set.reps);
+            if (e1rm > bestE1RM) {
+              bestE1RM = e1rm;
+              personalRecord = {
+                weightKg: set.weight_kg,
+                reps: set.reps,
+                e1rm,
+                date: session?.completed_at || set.logged_at,
+              };
+            }
+          });
+        });
+
+        setHistory({
+          lastWorkoutDate: lastSession?.completed_at || '',
+          lastWorkoutSets: lastSets,
+          estimatedE1RM: bestE1RM,
+          personalRecord,
+          totalSessions,
+        });
+      } catch (err) {
+        console.error('Failed to fetch exercise history:', err);
+        setHistory(null);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }
+
+    fetchHistory();
+  }, [isOpen, exercise?.id]);
+
   if (!isOpen || !exercise) return null;
 
   return (
