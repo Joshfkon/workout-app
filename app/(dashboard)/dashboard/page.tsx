@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -9,8 +9,11 @@ import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { WeightGraph } from '@/components/analytics/WeightGraph';
+import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
+import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
+import type { MuscleVolumeData } from '@/services/volumeTracker';
 
 interface NutritionTotals {
   calories: number;
@@ -131,6 +134,35 @@ export default function DashboardPage() {
   const [debugError, setDebugError] = useState<string | null>(null);
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
+
+  // Get volume data for atrophy risk alert
+  const { volumeSummary } = useAdaptiveVolume();
+
+  // Find muscles below MEV (for atrophy risk alert)
+  const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
+    return volumeSummary
+      .filter(summary => summary.status === 'below_mev')
+      .map(summary => ({
+        muscleGroup: summary.muscle,
+        totalSets: summary.currentSets,
+        directSets: summary.currentSets,
+        indirectSets: 0,
+        landmarks: {
+          mev: summary.estimatedMEV,
+          mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
+          mrv: summary.estimatedMRV,
+        },
+        status: 'below_mev' as const,
+        percentOfMrv: summary.percentOfMRV,
+      }));
+  }, [volumeSummary]);
+
+  // Normalize goal to the Goal type expected by AtrophyRiskAlert
+  const normalizedGoal = useMemo(() => {
+    if (userGoal === 'maintain' || userGoal === 'maintenance') return 'maintenance';
+    if (userGoal === 'recomp') return 'maintenance'; // Recomp treated as maintenance for atrophy risk
+    return userGoal as 'bulk' | 'cut' | 'maintenance';
+  }, [userGoal]);
 
   // Debug: Catch global errors
   useEffect(() => {
@@ -1150,6 +1182,14 @@ export default function DashboardPage() {
       )}
 
       {/* ===== WEEKLY VOLUME ===== */}
+      {/* Atrophy Risk Alert - shows prominently if muscles are below MEV */}
+      {musclesBelowMev.length > 0 && (
+        <AtrophyRiskAlert
+          musclesBelowMev={musclesBelowMev}
+          userGoal={normalizedGoal}
+        />
+      )}
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
