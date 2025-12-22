@@ -141,7 +141,98 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         .eq('user_id', user.id)
         .eq('week_start', prevWeekStartStr);
 
-      if (currentData) {
+      // If no pre-computed data, calculate from set logs
+      if (!currentData || currentData.length === 0) {
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+        // Fetch exercise blocks and sets for current week
+        const { data: blocks } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            id,
+            exercise_id,
+            exercises!inner (
+              id,
+              name,
+              primary_muscle,
+              secondary_muscles
+            ),
+            workout_sessions!inner (
+              id,
+              completed_at,
+              user_id
+            ),
+            set_logs (
+              id,
+              is_warmup,
+              weight_kg,
+              reps,
+              rpe,
+              feedback
+            )
+          `)
+          .eq('workout_sessions.user_id', user.id)
+          .gte('workout_sessions.completed_at', weekStartStr)
+          .lte('workout_sessions.completed_at', weekEndStr + 'T23:59:59')
+          .eq('workout_sessions.state', 'completed');
+
+        if (blocks && blocks.length > 0) {
+          // Calculate volume from blocks
+          const volumeByMuscle = new Map<string, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
+          
+          blocks.forEach((block: any) => {
+            const exercise = block.exercises;
+            if (!exercise) return;
+            
+            const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+            if (workingSets.length === 0) return;
+
+            const primaryMuscle = exercise.primary_muscle?.toLowerCase();
+            if (primaryMuscle) {
+              if (!volumeByMuscle.has(primaryMuscle)) {
+                volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
+              }
+              const data = volumeByMuscle.get(primaryMuscle)!;
+              data.totalSets += workingSets.length;
+              
+              // Count effective sets (RPE 7+ or RIR 0-3 with clean/some_breakdown form)
+              const effective = workingSets.filter((s: any) => {
+                const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
+                const form = s.feedback?.form ?? 'clean';
+                return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
+              });
+              data.effectiveSets += effective.length;
+              
+              // Calculate average RIR
+              workingSets.forEach((s: any) => {
+                const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2);
+                data.totalRIR += rir;
+                data.rirCount += 1;
+              });
+            }
+          });
+
+          // Convert to MuscleVolumeData format
+          const calculatedData: MuscleVolumeData[] = Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
+            id: `${muscle}-${weekStartStr}`,
+            muscle: muscle as MuscleGroup,
+            weekNumber: 1,
+            mesocycleId: '',
+            totalSets: data.totalSets,
+            workingSets: data.totalSets,
+            effectiveSets: data.effectiveSets,
+            totalVolume: 0,
+            averageRIR: data.rirCount > 0 ? data.totalRIR / data.rirCount : 2,
+            averageFormScore: 0.8,
+            exercisePerformance: [],
+          }));
+          
+          setVolumeData(calculatedData);
+        }
+      } else {
+        // Use pre-computed data
         const mapped: MuscleVolumeData[] = currentData.map((row: any) => ({
           id: row.id || `${row.muscle_group}-${weekStartStr}`,
           muscle: row.muscle_group as MuscleGroup,
@@ -158,7 +249,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         setVolumeData(mapped);
       }
 
-      if (prevData) {
+      if (prevData && prevData.length > 0) {
         const mapped: MuscleVolumeData[] = prevData.map((row: any) => ({
           id: row.id || `${row.muscle_group}-${prevWeekStartStr}`,
           muscle: row.muscle_group as MuscleGroup,
