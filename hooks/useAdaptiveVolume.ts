@@ -50,7 +50,31 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { user } = useUserStore();
+  const { user: storeUser } = useUserStore();
+  const [user, setUser] = useState(storeUser);
+  
+  // Also try to get user directly from Supabase auth as fallback
+  useEffect(() => {
+    async function loadUser() {
+      if (storeUser?.id) {
+        setUser(storeUser);
+        return;
+      }
+      
+      // Fallback: get user directly from Supabase
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          console.log(`[useAdaptiveVolume] Got user from Supabase auth:`, authUser.id);
+          setUser({ id: authUser.id } as any);
+        }
+      } catch (err) {
+        console.error(`[useAdaptiveVolume] Error getting user from auth:`, err);
+      }
+    }
+    loadUser();
+  }, [storeUser]);
 
   // Fetch volume data for current and previous week
   const fetchVolumeData = useCallback(async () => {
