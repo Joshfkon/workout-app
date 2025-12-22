@@ -7,6 +7,10 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
+import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
+import { checkExerciseSafety } from '@/lib/training/exercise-safety';
+import type { UserInjury } from '@/lib/training/injury-types';
+import type { Exercise as ExerciseType } from '@/services/exerciseService';
 
 interface Exercise {
   id: string;
@@ -155,6 +159,7 @@ function NewWorkoutContent() {
   const [customExerciseError, setCustomExerciseError] = useState<string | null>(null);
 
   // Suggest exercises based on recent history, goals, AND time available
+  // COMPREHENSIVE VERSION: Addresses all 8 identified issues
   const suggestExercises = async () => {
     setIsSuggesting(true);
     try {
@@ -162,19 +167,81 @@ function NewWorkoutContent() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
-      // Get user's goal
+      // ============================================
+      // STEP 1: FETCH ALL REQUIRED DATA
+      // ============================================
+      
+      // Get user's goal and equipment
       const { data: userProfile } = await supabase
         .from('user_profiles')
         .select('goal')
         .eq('user_id', user.id)
         .single();
       
+      const { data: userData } = await supabase
+        .from('users')
+        .select('available_equipment, injury_history')
+        .eq('id', user.id)
+        .single();
+      
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
       
-      // Calculate how many exercises fit in the time
-      const exerciseBudget = getMaxExercisesForTime(workoutDuration, userGoal);
+      // Get active injuries (from workout sessions' temporary_injuries)
+      const { data: recentSessions } = await supabase
+        .from('workout_sessions')
+        .select('temporary_injuries')
+        .eq('user_id', user.id)
+        .not('temporary_injuries', 'is', null)
+        .order('started_at', { ascending: false })
+        .limit(1);
       
-      // Get recent workouts (last 7 days)
+      const activeInjuries: UserInjury[] = [];
+      if (recentSessions && recentSessions[0]?.temporary_injuries) {
+        const tempInjuries = recentSessions[0].temporary_injuries as any[];
+        tempInjuries.forEach((inj: any) => {
+          if (inj.isActive !== false) {
+            activeInjuries.push({
+              id: inj.id || '',
+              injuryTypeId: inj.area || '',
+              severity: inj.severity || 2,
+              isActive: true,
+              startDate: new Date(inj.startDate || Date.now()),
+              affectedSide: inj.affectedSide,
+            });
+          }
+        });
+      }
+      
+      // Get exercise preferences (exclude archived and do_not_suggest)
+      const exercisePreferences = await getUserExercisePreferences(user.id);
+      const excludedExerciseIds = new Set<string>();
+      exercisePreferences.forEach((pref, exerciseId) => {
+        if (pref.status === 'archived' || pref.status === 'do_not_suggest') {
+          excludedExerciseIds.add(exerciseId);
+        }
+      });
+      
+      // Get recent exercises (last 4 days) for recency penalty
+      const fourDaysAgo = new Date();
+      fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+      
+      const { data: recentExerciseBlocks } = await supabase
+        .from('exercise_blocks')
+        .select(`
+          exercise_id,
+          workout_sessions!inner(user_id, completed_at)
+        `)
+        .eq('workout_sessions.user_id', user.id)
+        .gte('workout_sessions.completed_at', fourDaysAgo.toISOString())
+        .eq('workout_sessions.state', 'completed');
+      
+      const recentlyDoneIds = new Set<string>();
+      recentExerciseBlocks?.forEach((block: any) => {
+        if (block.exercise_id) recentlyDoneIds.add(block.exercise_id);
+      });
+      
+      // Get recent workouts (last 7 days) for muscle volume tracking
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
       
@@ -182,7 +249,9 @@ function NewWorkoutContent() {
         .from('workout_sessions')
         .select(`
           id,
+          completed_at,
           exercise_blocks (
+            exercise_id,
             exercises (
               primary_muscle,
               secondary_muscles
@@ -193,19 +262,24 @@ function NewWorkoutContent() {
         .gte('completed_at', weekAgo.toISOString())
         .eq('state', 'completed');
       
-      // Count trained muscles (accounting for compound exercises - secondary muscles get 0.5x credit)
+      // Count trained muscles (with secondary muscle credit)
       const trainedMuscles: Record<string, number> = {};
-      recentWorkouts?.forEach((workout: { id: string; exercise_blocks: Array<{ exercises: { primary_muscle: string; secondary_muscles?: string[] } | null }> | null }) => {
-        (workout.exercise_blocks || []).forEach((block) => {
+      const muscleLastTrained: Record<string, Date | null> = {};
+      
+      recentWorkouts?.forEach((workout: any) => {
+        const workoutDate = new Date(workout.completed_at);
+        (workout.exercise_blocks || []).forEach((block: any) => {
           const primaryMuscle = block.exercises?.primary_muscle;
           const secondaryMuscles = block.exercises?.secondary_muscles || [];
           
-          // Primary muscle: full credit (1.0x)
           if (primaryMuscle) {
             trainedMuscles[primaryMuscle] = (trainedMuscles[primaryMuscle] || 0) + 1;
+            const existing = muscleLastTrained[primaryMuscle];
+            if (!existing || workoutDate > existing) {
+              muscleLastTrained[primaryMuscle] = workoutDate;
+            }
           }
           
-          // Secondary muscles: partial credit (0.5x) for compound exercises
           secondaryMuscles.forEach((secondaryMuscle: string) => {
             const secondaryMuscleLower = secondaryMuscle.toLowerCase();
             trainedMuscles[secondaryMuscleLower] = (trainedMuscles[secondaryMuscleLower] || 0) + 0.5;
@@ -213,10 +287,11 @@ function NewWorkoutContent() {
         });
       });
       
-      // Find least trained muscles with improved prioritization
-      const allMuscles = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'biceps', 'triceps', 'glutes', 'calves', 'abs'];
+      // ============================================
+      // STEP 2: RANK MUSCLES BY NEED
+      // ============================================
       
-      // Opposing muscle groups (antagonist pairs)
+      const allMuscles = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'biceps', 'triceps', 'glutes', 'calves', 'abs'];
       const opposingMuscles: Record<string, string> = {
         'biceps': 'triceps',
         'triceps': 'biceps',
@@ -226,25 +301,6 @@ function NewWorkoutContent() {
         'hamstrings': 'quads',
       };
       
-      // Get recent workout dates to check recovery
-      const muscleLastTrained: Record<string, Date | null> = {};
-      recentWorkouts?.forEach((workout: any) => {
-        const workoutDate = new Date(workout.completed_at);
-        (workout.exercise_blocks || []).forEach((block: any) => {
-          const primaryMuscle = block.exercises?.primary_muscle;
-          if (primaryMuscle) {
-            const existing = muscleLastTrained[primaryMuscle];
-            if (!existing || workoutDate > existing) {
-              muscleLastTrained[primaryMuscle] = workoutDate;
-            }
-          }
-        });
-      });
-      
-      // Sort muscles with improved logic:
-      // 1. Prioritize completely untrained (0 sets) over partially trained
-      // 2. Consider opposing muscle balance (don't suggest triceps if biceps are at 0)
-      // 3. Consider recovery time (avoid muscles trained very recently)
       const sortedMuscles = allMuscles.sort((a, b) => {
         const aCount = trainedMuscles[a] || 0;
         const bCount = trainedMuscles[b] || 0;
@@ -253,16 +309,14 @@ function NewWorkoutContent() {
         if (aCount === 0 && bCount > 0) return -1;
         if (bCount === 0 && aCount > 0) return 1;
         
-        // Priority 2: Check opposing muscle balance
-        // If biceps are at 0 and we're comparing biceps vs triceps, prioritize biceps
+        // Priority 2: Opposing muscle balance (FIXED LOGIC)
+        // If comparing biceps (a) vs triceps (b), and biceps are at 0 while triceps are trained, prioritize biceps
         const aOpposing = opposingMuscles[a];
         const bOpposing = opposingMuscles[b];
         
-        // If 'a' is the opposing muscle of 'b', and 'a' is untrained, prioritize 'a'
         if (aOpposing === b && aCount === 0 && bCount > 0) {
-          return -1; // Prioritize untrained 'a' over trained 'b'
+          return -1; // Prioritize untrained 'a' (biceps) over trained 'b' (triceps)
         }
-        // If 'b' is the opposing muscle of 'a', and 'b' is untrained, prioritize 'b'
         if (bOpposing === a && bCount === 0 && aCount > 0) {
           return 1; // Prioritize untrained 'b' over trained 'a'
         }
@@ -270,35 +324,252 @@ function NewWorkoutContent() {
         // Priority 3: Least trained overall
         if (aCount !== bCount) return aCount - bCount;
         
-        // Priority 4: Prefer muscles not trained recently (better recovery)
+        // Priority 4: Recovery time
         const aLastTrained = muscleLastTrained[a];
         const bLastTrained = muscleLastTrained[b];
         if (aLastTrained && bLastTrained) {
-          return aLastTrained.getTime() - bLastTrained.getTime(); // Older = better
+          return aLastTrained.getTime() - bLastTrained.getTime();
         }
-        if (aLastTrained && !bLastTrained) return 1; // b hasn't been trained, prefer it
-        if (!aLastTrained && bLastTrained) return -1; // a hasn't been trained, prefer it
+        if (aLastTrained && !bLastTrained) return 1;
+        if (!aLastTrained && bLastTrained) return -1;
         
         return 0;
       });
       
-      // Pick muscles based on time available
-      // Short workouts: 1-2 muscles, long workouts: 2-3 muscles
       const muscleCount = workoutDuration <= 30 ? 2 : workoutDuration <= 45 ? 2 : 3;
       const suggestedMuscles = sortedMuscles.slice(0, muscleCount);
       
-      // Debug logging
-      console.log('[Workout Suggestion] Muscle prioritization:', {
-        trainedMuscles,
-        sortedOrder: sortedMuscles.map(m => ({ muscle: m, count: trainedMuscles[m] || 0 })),
-        suggestedMuscles,
+      // ============================================
+      // STEP 3: FETCH AND FILTER EXERCISES
+      // ============================================
+      
+      const { data: exercisesData } = await supabase
+        .from('exercises')
+        .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required')
+        .in('primary_muscle', suggestedMuscles)
+        .order('name');
+      
+      if (!exercisesData || exercisesData.length === 0) {
+        setError('No exercises found for suggested muscles');
+        return;
+      }
+      
+      // Filter by preferences (exclude archived and do_not_suggest)
+      let candidateExercises = exercisesData.filter((e: any) => !excludedExerciseIds.has(e.id));
+      
+      // Filter by equipment availability
+      candidateExercises = candidateExercises.filter((e: any) => {
+        if (!e.equipment_required || e.equipment_required.length === 0) return true;
+        return e.equipment_required.every((eq: string) => availableEquipment.includes(eq));
       });
       
-      // Track which muscles were skipped and why (for explanations)
+      // Filter by injury safety (exclude 'avoid' exercises)
+      const safeExercises: any[] = [];
+      const cautionExercises: any[] = [];
+      
+      for (const exercise of candidateExercises) {
+        // Convert to ExerciseType format for safety check
+        const exerciseForSafety: ExerciseType = {
+          id: exercise.id,
+          name: exercise.name,
+          primaryMuscle: exercise.primary_muscle,
+          secondaryMuscles: [],
+          pattern: exercise.movement_pattern || 'isolation',
+          equipment: exercise.equipment_required?.[0] || 'barbell',
+          difficulty: 'intermediate',
+          fatigueRating: 2,
+          defaultRepRange: [8, 12],
+          defaultRir: 2,
+          minWeightIncrementKg: 2.5,
+          mechanic: exercise.mechanic,
+          isCustom: false,
+          hypertrophyScore: { tier: exercise.hypertrophy_tier || 'C', stretchUnderLoad: 3, resistanceProfile: 3, progressionEase: 3 },
+          spinalLoading: 'none',
+          requiresBackArch: false,
+          requiresSpinalFlexion: false,
+          requiresSpinalExtension: false,
+          requiresSpinalRotation: false,
+          positionStress: {},
+        } as ExerciseType;
+        
+        const safety = checkExerciseSafety(exerciseForSafety, activeInjuries);
+        
+        if (safety.level === 'avoid') {
+          continue; // Skip unsafe exercises
+        } else if (safety.level === 'caution') {
+          cautionExercises.push({ ...exercise, safetyReasons: safety.reasons });
+        } else {
+          safeExercises.push(exercise);
+        }
+      }
+      
+      // Prefer safe exercises, but include caution exercises if needed
+      const allSafeExercises = [...safeExercises, ...cautionExercises];
+      
+      // ============================================
+      // STEP 4: SCORE AND RANK EXERCISES
+      // ============================================
+      
+      interface ScoredExercise {
+        exercise: any;
+        score: number;
+        reasons: string[];
+        isCaution: boolean;
+      }
+      
+      const tierScore: Record<string, number> = { 'S': 50, 'A': 40, 'B': 25, 'C': 10, 'D': 0, 'F': 0 };
+      
+      const scoredExercises: ScoredExercise[] = allSafeExercises.map((exercise: any) => {
+        let score = 0;
+        const reasons: string[] = [];
+        
+        // Hypertrophy tier (0-50 points)
+        const tier = exercise.hypertrophy_tier || 'C';
+        score += tierScore[tier] || 15;
+        if (tier === 'S' || tier === 'A') {
+          reasons.push(`${tier}-tier for maximum hypertrophy`);
+        } else if (tier === 'B') {
+          reasons.push('High-quality B-tier exercise');
+        }
+        
+        // Compound bonus (0-15 points)
+        if (exercise.mechanic === 'compound') {
+          score += 15;
+          reasons.push('Compound movement (efficient)');
+        }
+        
+        // Frequency bonus (0-10 points) - user preference
+        const usageCount = frequentExerciseIds.get(exercise.id) || 0;
+        if (usageCount >= 3 && !recentlyDoneIds.has(exercise.id)) {
+          score += 10;
+          reasons.push('One of your frequent choices');
+        } else if (usageCount >= 2 && !recentlyDoneIds.has(exercise.id)) {
+          score += 5;
+        }
+        
+        // Recency penalty (-20 points)
+        if (recentlyDoneIds.has(exercise.id)) {
+          score -= 20;
+          reasons.push('Done recently (variety penalty)');
+        }
+        
+        // Injury caution penalty (-15 points)
+        const isCaution = cautionExercises.some(c => c.id === exercise.id);
+        if (isCaution) {
+          score -= 15;
+          reasons.push('Caution: may stress injured area');
+        }
+        
+        return { exercise, score, reasons, isCaution };
+      });
+      
+      // Sort by score (highest first)
+      scoredExercises.sort((a, b) => b.score - a.score);
+      
+      // ============================================
+      // STEP 5: SELECT WITH MOVEMENT PATTERN VARIETY
+      // ============================================
+      
+      const exerciseBudget = getMaxExercisesForTime(workoutDuration, userGoal);
+      const selectedPatterns = new Set<string>();
+      const picked: any[] = [];
+      
+      // Separate compounds and isolations
+      const compounds = scoredExercises.filter(s => s.exercise.mechanic === 'compound');
+      const isolations = scoredExercises.filter(s => s.exercise.mechanic === 'isolation');
+      
+      // Pick compounds with variety
+      for (const scored of compounds) {
+        if (picked.length >= exerciseBudget.total) break;
+        if (picked.filter(p => p.mechanic === 'compound').length >= exerciseBudget.compounds) break;
+        
+        const pattern = scored.exercise.movement_pattern || 'unknown';
+        
+        // Prefer new patterns, but allow repeats if we've exhausted variety
+        if (selectedPatterns.has(pattern) && 
+            compounds.some(c => !selectedPatterns.has(c.exercise.movement_pattern || 'unknown'))) {
+          continue; // Skip this one, we have other patterns available
+        }
+        
+        picked.push(scored.exercise);
+        selectedPatterns.add(pattern);
+      }
+      
+      // Pick isolations with variety
+      for (const scored of isolations) {
+        if (picked.length >= exerciseBudget.total) break;
+        if (picked.filter(p => p.mechanic === 'isolation').length >= exerciseBudget.isolations) break;
+        
+        const pattern = scored.exercise.movement_pattern || 'unknown';
+        
+        if (selectedPatterns.has(pattern) && 
+            isolations.some(c => !selectedPatterns.has(c.exercise.movement_pattern || 'unknown'))) {
+          continue;
+        }
+        
+        picked.push(scored.exercise);
+        selectedPatterns.add(pattern);
+      }
+      
+      // ============================================
+      // STEP 6: GENERATE EXPLANATIONS
+      // ============================================
+      
+      const detailedExplanations = picked.map((exercise: any) => {
+        const explanations: string[] = [];
+        const muscle = exercise.primary_muscle;
+        const muscleTrainingCount = trainedMuscles[muscle] || 0;
+        const opposingMuscle = opposingMuscles[muscle];
+        
+        // Muscle need
+        if (muscleTrainingCount === 0) {
+          explanations.push(`You haven't trained ${muscle} in the last 7 days`);
+          if (opposingMuscle && (trainedMuscles[opposingMuscle] || 0) === 0) {
+            explanations.push(`Balancing with ${opposingMuscle} (also untrained)`);
+          }
+        } else if (muscleTrainingCount < 1) {
+          explanations.push(`${muscle} was only partially trained recently (via compound exercises)`);
+        } else {
+          explanations.push(`${muscle} needs more volume (trained ${Math.round(muscleTrainingCount)} time${Math.round(muscleTrainingCount) > 1 ? 's' : ''} in last 7 days)`);
+        }
+        
+        // Recovery
+        const lastTrained = muscleLastTrained[muscle];
+        if (lastTrained) {
+          const daysSince = Math.floor((Date.now() - lastTrained.getTime()) / (1000 * 60 * 60 * 24));
+          if (daysSince >= 2) {
+            explanations.push(`Adequate recovery time (last trained ${daysSince} days ago)`);
+          }
+        }
+        
+        // Exercise-specific reasons (from scoring)
+        const scored = scoredExercises.find(s => s.exercise.id === exercise.id);
+        if (scored) {
+          explanations.push(...scored.reasons);
+        }
+        
+        // Frequency
+        const usageCount = frequentExerciseIds.get(exercise.id) || 0;
+        if (usageCount >= 3 && !recentlyDoneIds.has(exercise.id)) {
+          explanations.push('One of your frequent choices');
+        }
+        
+        // Recency
+        if (recentlyDoneIds.has(exercise.id)) {
+          explanations.push('Done recently (variety penalty applied)');
+        }
+        
+        return {
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          explanation: explanations.join('. ') + '.'
+        };
+      });
+      
+      // Track skipped muscles
       const skippedMuscles: Array<{ muscle: string; reason: string }> = [];
       const checkedMuscles = new Set(suggestedMuscles);
       
-      // Check why other top candidates were skipped
       for (let i = 0; i < Math.min(muscleCount + 3, sortedMuscles.length); i++) {
         const muscle = sortedMuscles[i];
         if (checkedMuscles.has(muscle)) continue;
@@ -315,47 +586,7 @@ function NewWorkoutContent() {
         }
       }
       
-      // Fetch exercises for suggested muscles, including hypertrophy tier
-      const { data: exercisesData } = await supabase
-        .from('exercises')
-        .select('id, name, primary_muscle, mechanic, hypertrophy_tier')
-        .in('primary_muscle', suggestedMuscles)
-        .order('name');
-      
-      // Sort by hypertrophy tier (S > A > B > C > D > F), then by mechanic
-      const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
-      const sortedExercises = (exercisesData || []).sort((a: any, b: any) => {
-        const tierA = tierRank[a.hypertrophy_tier || 'C'] ?? 3;
-        const tierB = tierRank[b.hypertrophy_tier || 'C'] ?? 3;
-        if (tierA !== tierB) return tierA - tierB;
-        // Then compounds first
-        const mechA = a.mechanic === 'compound' ? 0 : 1;
-        const mechB = b.mechanic === 'compound' ? 0 : 1;
-        return mechA - mechB;
-      });
-      
-      // Pick exercises based on time budget
-      const compounds = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'compound');
-      const isolations = sortedExercises.filter((e: { mechanic: string }) => e.mechanic === 'isolation');
-      
-      // Prioritize S and A tier for short workouts
-      const tieredCompounds = workoutDuration <= 30 
-        ? compounds.filter((e: any) => ['S', 'A'].includes(e.hypertrophy_tier))
-        : compounds;
-      const tieredIsolations = workoutDuration <= 30
-        ? isolations.filter((e: any) => ['S', 'A'].includes(e.hypertrophy_tier))
-        : isolations;
-      
-      // Use the fallback if not enough S/A tier exercises
-      const finalCompounds = tieredCompounds.length >= exerciseBudget.compounds ? tieredCompounds : compounds;
-      const finalIsolations = tieredIsolations.length >= exerciseBudget.isolations ? tieredIsolations : isolations;
-      
-      const picked = [
-        ...finalCompounds.slice(0, exerciseBudget.compounds),
-        ...finalIsolations.slice(0, exerciseBudget.isolations),
-      ];
-      
-      // Calculate estimated time for the picked exercises
+      // Calculate estimated time
       let estimatedMinutes = 0;
       const warmupMuscles = new Set<string>();
       picked.forEach((e: any) => {
@@ -369,75 +600,20 @@ function NewWorkoutContent() {
         ? `${picked.length} exercises for your ${workoutDuration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
         : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${workoutDuration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
       
-      // Generate detailed explanations for each exercise
-      const detailedExplanations = picked.map((exercise: any) => {
-        const explanations: string[] = [];
-        
-        // Why this muscle group?
-        const muscle = exercise.primary_muscle;
-        const muscleTrainingCount = trainedMuscles[muscle] || 0;
-        const opposingMuscle = opposingMuscles[muscle];
-        
-        if (muscleTrainingCount === 0) {
-          explanations.push(`You haven't trained ${muscle} in the last 7 days`);
-          // If opposing muscle is also untrained, mention balance
-          if (opposingMuscle && (trainedMuscles[opposingMuscle] || 0) === 0) {
-            explanations.push(`Balancing with ${opposingMuscle} (also untrained)`);
-          }
-        } else if (muscleTrainingCount < 1) {
-          explanations.push(`${muscle} was only partially trained recently (via compound exercises)`);
-        } else {
-          explanations.push(`${muscle} needs more volume (trained ${Math.round(muscleTrainingCount)} time${Math.round(muscleTrainingCount) > 1 ? 's' : ''} in last 7 days)`);
-        }
-        
-        // Recovery consideration
-        const lastTrained = muscleLastTrained[muscle];
-        if (lastTrained) {
-          const daysSince = Math.floor((Date.now() - lastTrained.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysSince >= 2) {
-            explanations.push(`Adequate recovery time (last trained ${daysSince} days ago)`);
-          }
-        }
-        
-        // Why this specific exercise?
-        if (exercise.hypertrophy_tier === 'S' || exercise.hypertrophy_tier === 'A') {
-          explanations.push(`S-tier exercise for maximum hypertrophy`);
-        } else if (exercise.hypertrophy_tier === 'B') {
-          explanations.push(`High-quality B-tier exercise`);
-        }
-        
-        if (exercise.mechanic === 'compound') {
-          explanations.push(`Compound movement (trains multiple muscles efficiently)`);
-        } else {
-          explanations.push(`Isolation exercise (targeted muscle focus)`);
-        }
-        
-        // Time consideration
-        if (workoutDuration <= 30) {
-          explanations.push(`Time-efficient for your ${workoutDuration}-minute workout`);
-        }
-        
-        return {
-          exerciseId: exercise.id,
-          exerciseName: exercise.name,
-          explanation: explanations.join('. ') + '.'
-        };
-      });
-      
       setSuggestions({
         muscles: suggestedMuscles,
-        exercises: picked.map((e: { id: string }) => e.id),
+        exercises: picked.map((e: any) => e.id),
         reason,
         detailedExplanations,
-        skippedMuscles, // Add skipped muscles info for display
+        skippedMuscles,
       });
       
-      // Apply suggestions
       setSelectedMuscles(suggestedMuscles);
       setStep(2);
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
+      setError('Failed to generate workout suggestions. Please try again.');
     } finally {
       setIsSuggesting(false);
     }
