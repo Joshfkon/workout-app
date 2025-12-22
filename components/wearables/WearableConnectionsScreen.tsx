@@ -16,9 +16,32 @@ import {
   upsertWearableConnection,
   disconnectWearable,
 } from '@/lib/actions/wearable';
-import { isHealthKitAvailable, requestHealthKitPermissions } from '@/lib/integrations/healthkit';
-import { isGoogleFitAvailable, requestGoogleFitPermissions } from '@/lib/integrations/google-fit';
-import { initiateFitbitOAuth, isFitbitConnected } from '@/lib/integrations/fitbit';
+
+// Dynamic imports for native platform integrations to avoid build errors
+// These modules depend on Capacitor plugins that may not be installed
+async function getHealthKitModule() {
+  try {
+    return await import('@/lib/integrations/healthkit');
+  } catch {
+    return null;
+  }
+}
+
+async function getGoogleFitModule() {
+  try {
+    return await import('@/lib/integrations/google-fit');
+  } catch {
+    return null;
+  }
+}
+
+async function getFitbitModule() {
+  try {
+    return await import('@/lib/integrations/fitbit');
+  } catch {
+    return null;
+  }
+}
 
 interface WearableOption {
   source: WearableSource;
@@ -89,10 +112,13 @@ export function WearableConnectionsScreen() {
   }
 
   async function checkAvailability() {
-    const [healthKit, googleFit] = await Promise.all([
-      isHealthKitAvailable(),
-      isGoogleFitAvailable(),
+    const [healthKitModule, googleFitModule] = await Promise.all([
+      getHealthKitModule(),
+      getGoogleFitModule(),
     ]);
+
+    const healthKit = healthKitModule ? await healthKitModule.isHealthKitAvailable() : false;
+    const googleFit = googleFitModule ? await googleFitModule.isGoogleFitAvailable() : false;
 
     setAvailability((prev) => ({
       ...prev,
@@ -111,7 +137,12 @@ export function WearableConnectionsScreen() {
     try {
       switch (source) {
         case 'apple_healthkit': {
-          const result = await requestHealthKitPermissions();
+          const healthKitModule = await getHealthKitModule();
+          if (!healthKitModule) {
+            console.warn('HealthKit not available');
+            break;
+          }
+          const result = await healthKitModule.requestHealthKitPermissions();
           if (result.granted) {
             await upsertWearableConnection({
               source,
@@ -123,7 +154,12 @@ export function WearableConnectionsScreen() {
         }
 
         case 'google_fit': {
-          const result = await requestGoogleFitPermissions();
+          const googleFitModule = await getGoogleFitModule();
+          if (!googleFitModule) {
+            console.warn('Google Fit not available');
+            break;
+          }
+          const result = await googleFitModule.requestGoogleFitPermissions();
           if (result.granted) {
             await upsertWearableConnection({
               source,
@@ -135,8 +171,13 @@ export function WearableConnectionsScreen() {
         }
 
         case 'fitbit': {
+          const fitbitModule = await getFitbitModule();
+          if (!fitbitModule) {
+            console.warn('Fitbit module not available');
+            break;
+          }
           // OAuth flow - redirects to Fitbit
-          initiateFitbitOAuth();
+          fitbitModule.initiateFitbitOAuth();
           return; // Don't reload - page will redirect
         }
 

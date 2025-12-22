@@ -325,10 +325,17 @@ class GoogleFitService {
   private async getPlugin(): Promise<GoogleFitPlugin | null> {
     if (this.plugin) return this.plugin;
 
+    // Only attempt to load plugin on native Android
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'android') {
+      return null;
+    }
+
     try {
-      // Dynamic import of the Capacitor Google Fit plugin
-      // @ts-expect-error - Optional native module, may not be installed
-      const googleFitModule = await import('@nickcis/capacitor-google-fit');
+      // Use Function constructor to hide import from webpack's static analysis
+      // This prevents build errors when the native module isn't installed
+      const modulePath = '@nickcis/capacitor-google-fit';
+      const importFn = new Function('modulePath', 'return import(modulePath)');
+      const googleFitModule = await importFn(modulePath);
       this.plugin = googleFitModule.GoogleFit as unknown as GoogleFitPlugin;
       return this.plugin;
     } catch (error) {

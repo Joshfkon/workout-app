@@ -293,10 +293,17 @@ class HealthKitService {
   private async getPlugin(): Promise<HealthKitPlugin | null> {
     if (this.plugin) return this.plugin;
 
+    // Only attempt to load plugin on native iOS
+    if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') {
+      return null;
+    }
+
     try {
-      // Dynamic import of the Capacitor HealthKit plugin
-      // @ts-expect-error - Optional native module, may not be installed
-      const healthKitModule = await import('@nickcis/capacitor-healthkit');
+      // Use Function constructor to hide import from webpack's static analysis
+      // This prevents build errors when the native module isn't installed
+      const modulePath = '@nickcis/capacitor-healthkit';
+      const importFn = new Function('modulePath', 'return import(modulePath)');
+      const healthKitModule = await importFn(modulePath);
       this.plugin = healthKitModule.HealthKit as unknown as HealthKitPlugin;
       return this.plugin;
     } catch (error) {
