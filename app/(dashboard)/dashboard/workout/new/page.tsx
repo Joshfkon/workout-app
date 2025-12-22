@@ -177,7 +177,8 @@ function NewWorkoutContent() {
           id,
           exercise_blocks (
             exercises (
-              primary_muscle
+              primary_muscle,
+              secondary_muscles
             )
           )
         `)
@@ -185,14 +186,23 @@ function NewWorkoutContent() {
         .gte('completed_at', weekAgo.toISOString())
         .eq('state', 'completed');
       
-      // Count trained muscles
+      // Count trained muscles (accounting for compound exercises - secondary muscles get 0.5x credit)
       const trainedMuscles: Record<string, number> = {};
-      recentWorkouts?.forEach((workout: { id: string; exercise_blocks: Array<{ exercises: { primary_muscle: string } | null }> | null }) => {
+      recentWorkouts?.forEach((workout: { id: string; exercise_blocks: Array<{ exercises: { primary_muscle: string; secondary_muscles?: string[] } | null }> | null }) => {
         (workout.exercise_blocks || []).forEach((block) => {
-          const muscle = block.exercises?.primary_muscle;
-          if (muscle) {
-            trainedMuscles[muscle] = (trainedMuscles[muscle] || 0) + 1;
+          const primaryMuscle = block.exercises?.primary_muscle;
+          const secondaryMuscles = block.exercises?.secondary_muscles || [];
+          
+          // Primary muscle: full credit (1.0x)
+          if (primaryMuscle) {
+            trainedMuscles[primaryMuscle] = (trainedMuscles[primaryMuscle] || 0) + 1;
           }
+          
+          // Secondary muscles: partial credit (0.5x) for compound exercises
+          secondaryMuscles.forEach((secondaryMuscle: string) => {
+            const secondaryMuscleLower = secondaryMuscle.toLowerCase();
+            trainedMuscles[secondaryMuscleLower] = (trainedMuscles[secondaryMuscleLower] || 0) + 0.5;
+          });
         });
       });
       
