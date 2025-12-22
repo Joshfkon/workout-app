@@ -389,7 +389,7 @@ export default function DashboardPage() {
           console.log(`[Weight Debug] Processed ${processedHistory.length} weight entries for graph`);
           
           // Debug: Log Dec 19 entry specifically
-          const dec19Processed = processedHistory.find(w => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
+          const dec19Processed = processedHistory.find((w: { date: string; weight: number; unit: string }) => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
           if (dec19Processed) {
             console.log(`[Dashboard Debug] Dec 19 processed entry:`, dec19Processed);
           }
