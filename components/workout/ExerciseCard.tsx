@@ -1469,8 +1469,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className={isBwExercise ? "px-1 py-1.5 col-span-1" : "px-1 py-1.5"}>
                     {isBwExercise ? (
                       <BodyweightInput
-                        exercise={exercise}
                         userBodyweightKg={75} // TODO: Get from user profile
+                        canAddWeight={exercise.bodyweightType === 'weighted_possible' || exercise.bodyweightType === 'both'}
+                        canUseAssistance={exercise.bodyweightType === 'assisted_possible' || exercise.bodyweightType === 'both'}
+                        isPureBodyweight={exercise.bodyweightType === 'pure'}
                         value={input.bodyweightData}
                         onChange={(data) => updatePendingBodyweightData(index, data)}
                         compact={true}
