@@ -706,11 +706,23 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              {todaysWorkout.state !== 'completed' && (
-                <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
-                  <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard/learn/progressive-overload">
+                  <button
+                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                    title="Learn about progressive overload"
+                  >
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
                 </Link>
-              )}
+                {todaysWorkout.state !== 'completed' && (
+                  <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                    <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
+                  </Link>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -734,9 +746,21 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              <Link href="/dashboard/mesocycle">
-                <Button>Start Workout</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard/learn/progressive-overload">
+                  <button
+                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                    title="Learn about progressive overload"
+                  >
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </Link>
+                <Link href="/dashboard/mesocycle">
+                  <Button>Start Workout</Button>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -753,9 +777,21 @@ export default function DashboardPage() {
                 <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
                 <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
               </div>
-              <Link href="/dashboard/workout/quick">
-                <Button variant="outline" size="sm">Quick Workout</Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href="/dashboard/learn/progressive-overload">
+                  <button
+                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                    title="Learn about progressive overload"
+                  >
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </Link>
+                <Link href="/dashboard/workout/quick">
+                  <Button variant="outline" size="sm">Quick Workout</Button>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1119,10 +1155,24 @@ export default function DashboardPage() {
       {/* ===== WEEKLY VOLUME ===== */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>📊 Weekly Volume</span>
-            <span className="text-xs font-normal text-surface-500">sets per muscle</span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <span>📊</span> Weekly Volume
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-normal text-surface-500">sets per muscle</span>
+              <Link href="/dashboard/learn/adaptive-volume">
+                <button
+                  className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                  title="Learn about adaptive volume"
+                >
+                  <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+              </Link>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {muscleVolume.length > 0 ? (
