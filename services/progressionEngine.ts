@@ -880,17 +880,42 @@ function getRestSecondsForMechanic(mechanic: 'compound' | 'isolation'): number {
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
   if (reps === 0) return 0;
   if (reps === 1 && rpe === 10) return weight;
-  
+
   // Adjust reps for RIR
   const rir = 10 - rpe;
   const effectiveReps = reps + rir;
-  
+
   // Epley formula: weight * (1 + reps/30)
   return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
 }
 
 /**
+ * Calculate estimated 1 rep max for bodyweight exercises using effective load
+ * The effective load accounts for added weight or assistance
+ */
+export function calculateBodyweightE1RM(set: SetLog): number {
+  // Use effective load if available, otherwise fall back to weightKg
+  const effectiveLoad = set.bodyweightData?.effectiveLoadKg || set.weightKg;
+  const reps = set.reps;
+  const rpe = set.rpe;
+
+  return calculateE1RM(effectiveLoad, reps, rpe);
+}
+
+/**
+ * Calculate relative strength (effective load / bodyweight) for bodyweight exercises
+ * This normalizes strength across different bodyweights
+ */
+export function calculateRelativeStrength(set: SetLog): number {
+  if (!set.bodyweightData) return 1;
+  const { effectiveLoadKg, userBodyweightKg } = set.bodyweightData;
+  if (userBodyweightKg <= 0) return 1;
+  return Math.round((effectiveLoadKg / userBodyweightKg) * 100) / 100;
+}
+
+/**
  * Extract performance data from completed sets
+ * For bodyweight exercises, uses effective load (bodyweight +/- modifications)
  */
 export function extractPerformanceFromSets(
   sets: SetLog[],
@@ -900,24 +925,77 @@ export function extractPerformanceFromSets(
 
   if (workingSets.length === 0) return null;
 
-  // Get top set (highest weight or most reps at same weight)
+  // Get top set based on effective load for bodyweight exercises
   const topSet = workingSets.reduce((best, current) => {
-    if (current.weightKg > best.weightKg) return current;
-    if (current.weightKg === best.weightKg && current.reps > best.reps) return current;
+    // Use effective load if available (bodyweight exercises), otherwise weight
+    const currentLoad = current.bodyweightData?.effectiveLoadKg || current.weightKg;
+    const bestLoad = best.bodyweightData?.effectiveLoadKg || best.weightKg;
+
+    if (currentLoad > bestLoad) return current;
+    if (currentLoad === bestLoad && current.reps > best.reps) return current;
     return best;
   });
 
   const averageRpe =
     workingSets.reduce((sum, s) => sum + s.rpe, 0) / workingSets.length;
 
+  // Use effective load for bodyweight exercises
+  const weightKg = topSet.bodyweightData?.effectiveLoadKg || topSet.weightKg;
+
   return {
     exerciseId,
-    weightKg: topSet.weightKg,
+    weightKg,
     reps: topSet.reps,
     rpe: topSet.rpe,
     sets: workingSets.length,
     allSetsCompleted: true, // Would need target to verify
     averageRpe: Math.round(averageRpe * 10) / 10,
+  };
+}
+
+/**
+ * Extract bodyweight-specific performance data from completed sets
+ * Returns data needed for bodyweight exercise progression tracking
+ */
+export function extractBodyweightPerformance(
+  sets: SetLog[],
+  exerciseId: string
+): {
+  performance: LastSessionPerformance | null;
+  bodyweightData: {
+    modification: 'none' | 'weighted' | 'assisted';
+    addedWeightKg?: number;
+    assistanceWeightKg?: number;
+    userBodyweightKg: number;
+    effectiveLoadKg: number;
+  } | null;
+} {
+  const performance = extractPerformanceFromSets(sets, exerciseId);
+
+  const workingSets = sets.filter((s) => !s.isWarmup && s.bodyweightData);
+  if (workingSets.length === 0) {
+    return { performance, bodyweightData: null };
+  }
+
+  // Find the top set (same logic as extractPerformanceFromSets)
+  const topSet = workingSets.reduce((best, current) => {
+    const currentLoad = current.bodyweightData!.effectiveLoadKg;
+    const bestLoad = best.bodyweightData!.effectiveLoadKg;
+
+    if (currentLoad > bestLoad) return current;
+    if (currentLoad === bestLoad && current.reps > best.reps) return current;
+    return best;
+  });
+
+  return {
+    performance,
+    bodyweightData: {
+      modification: topSet.bodyweightData!.modification,
+      addedWeightKg: topSet.bodyweightData!.addedWeightKg,
+      assistanceWeightKg: topSet.bodyweightData!.assistanceWeightKg,
+      userBodyweightKg: topSet.bodyweightData!.userBodyweightKg,
+      effectiveLoadKg: topSet.bodyweightData!.effectiveLoadKg,
+    },
   };
 }
 
