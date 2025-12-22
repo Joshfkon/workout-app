@@ -7,7 +7,7 @@
  * and activity settings.
  */
 
-import { createClient } from '@/lib/supabase/server';
+import { createUntypedServerClient } from '@/lib/supabase/server';
 import type {
   WearableSource,
   WearableConnection,
@@ -28,7 +28,7 @@ import { getActivityLevelFromSteps } from '@/types/wearable';
  * Get all wearable connections for the current user
  */
 export async function getWearableConnections(): Promise<WearableConnection[]> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -53,7 +53,7 @@ export async function getWearableConnections(): Promise<WearableConnection[]> {
  * Get active (connected) wearable connections
  */
 export async function getActiveWearableConnections(): Promise<WearableConnection[]> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -81,7 +81,7 @@ export async function getActiveWearableConnections(): Promise<WearableConnection
 export async function upsertWearableConnection(
   input: WearableConnectionInput
 ): Promise<{ success: boolean; connection?: WearableConnection; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -124,7 +124,7 @@ export async function upsertWearableConnection(
 export async function disconnectWearable(
   source: WearableSource
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -158,7 +158,7 @@ export async function updateStepCalibration(
   newFactor: number,
   reason: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -207,7 +207,7 @@ export async function updateStepCalibration(
 export async function getDailyActivityData(
   date: string
 ): Promise<DailyActivityData | null> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -241,7 +241,7 @@ export async function getDailyActivityRange(
   startDate: string,
   endDate: string
 ): Promise<DailyActivityData[]> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -271,7 +271,7 @@ export async function saveDailyActivityData(
   input: DailyActivityInput,
   userWeightKg: number
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -324,7 +324,7 @@ export async function updateWorkoutExpenditure(
   date: string,
   workoutExpenditure: number
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -365,7 +365,7 @@ export async function updateWorkoutExpenditure(
  * Get user's activity settings
  */
 export async function getActivitySettings(): Promise<ActivitySettings | null> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -402,7 +402,7 @@ export async function getActivitySettings(): Promise<ActivitySettings | null> {
 export async function saveActivitySettings(
   settings: Partial<ActivitySettings>
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
@@ -451,7 +451,7 @@ export async function getEnhancedDailyDataPoints(
     activityLevel: string;
   }>
 > {
-  const supabase = await createClient();
+  const supabase = await createUntypedServerClient();
 
   const {
     data: { user },
