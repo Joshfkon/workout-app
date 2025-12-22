@@ -5,6 +5,17 @@ import { Card } from '@/components/ui/Card';
 
 const articles = [
   {
+    id: 'adaptive-volume',
+    icon: '📊',
+    title: 'Personalized Volume & Recovery',
+    subtitle: 'How we learn your optimal training volume through data, not guesswork',
+    description:
+      'Discover how we track your progression, RIR drift, and form quality to calculate YOUR personal Maximum Recoverable Volume for each muscle group.',
+    color: 'purple',
+    tag: 'Training Science',
+    readTime: '8 min read',
+  },
+  {
     id: 'adaptive-tdee',
     icon: '🔥',
     title: 'How We Calculate Your Metabolism',

@@ -390,6 +390,51 @@ export default function InjuryPreventionArticle() {
           </Card>
         </section>
 
+        {/* Volume and Injury Risk */}
+        <section>
+          <h2 className="text-xl font-bold text-surface-100 mb-4">Volume and Injury Risk</h2>
+          <p className="mb-4 text-surface-400">
+            Excessive volume doesn&apos;t just hurt gains - it increases injury risk.
+          </p>
+          <Card className="p-4 bg-warning-500/10 border-warning-500/20 mb-4">
+            <h4 className="font-semibold text-warning-300 mb-2">When fatigue accumulates:</h4>
+            <ul className="space-y-2 text-sm text-surface-400">
+              <li className="flex items-start gap-2">
+                <span className="text-warning-400">{'\u26A0'}</span>
+                <span>Form breaks down (the system tracks this)</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-warning-400">{'\u26A0'}</span>
+                <span>Stabilizer muscles fatigue before prime movers</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-warning-400">{'\u26A0'}</span>
+                <span>Connective tissue stress accumulates</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-warning-400">{'\u26A0'}</span>
+                <span>Reaction time and coordination suffer</span>
+              </li>
+            </ul>
+          </Card>
+          <p className="text-sm text-surface-400 mb-4">
+            This is why we monitor form quality and RIR drift. Catching fatigue early isn&apos;t just
+            about optimizing gains - it&apos;s injury prevention.
+          </p>
+          <Card className="p-4 bg-danger-500/10 border-danger-500/20">
+            <p className="text-sm text-danger-300 font-medium">
+              If you&apos;re seeing form degradation warnings, take them seriously. An ugly set today
+              could be a tweaked back tomorrow.
+            </p>
+          </Card>
+          <Link
+            href="/dashboard/learn/adaptive-volume"
+            className="block mt-4 text-sm text-primary-400 hover:text-primary-300 transition-colors"
+          >
+            Learn more about our volume tracking {'\u2192'}
+          </Link>
+        </section>
+
         {/* The Bottom Line */}
         <section>
           <h2 className="text-xl font-bold text-surface-100 mb-4">The Bottom Line</h2>
@@ -442,24 +487,24 @@ export default function InjuryPreventionArticle() {
       <div className="mt-12 pt-8 border-t border-surface-800">
         <h3 className="text-lg font-semibold text-surface-100 mb-4">Related Articles</h3>
         <div className="grid md:grid-cols-2 gap-4">
-          <Link href="/dashboard/learn/adaptive-tdee">
+          <Link href="/dashboard/learn/adaptive-volume">
             <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">🔥</span>
+                <span className="text-2xl">{'\uD83D\uDCCA'}</span>
                 <div>
-                  <p className="font-medium text-surface-200">How We Calculate Your Metabolism</p>
-                  <p className="text-xs text-surface-500">Adaptive TDEE estimation</p>
+                  <p className="font-medium text-surface-200">Personalized Volume & Recovery</p>
+                  <p className="text-xs text-surface-500">How we track fatigue to prevent injury</p>
                 </div>
               </div>
             </Card>
           </Link>
-          <Link href="/dashboard/science">
+          <Link href="/dashboard/learn/adaptive-tdee">
             <Card className="p-4 hover:border-surface-600 transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">📊</span>
+                <span className="text-2xl">{'\uD83D\uDD25'}</span>
                 <div>
-                  <p className="font-medium text-surface-200">All Science Principles</p>
-                  <p className="text-xs text-surface-500">12+ research-backed algorithms</p>
+                  <p className="font-medium text-surface-200">How We Calculate Your Metabolism</p>
+                  <p className="text-xs text-surface-500">Adaptive TDEE estimation</p>
                 </div>
               </div>
             </Card>
