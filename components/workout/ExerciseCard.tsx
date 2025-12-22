@@ -1475,7 +1475,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                         isPureBodyweight={exercise.bodyweightType === 'pure'}
                         value={input.bodyweightData}
                         onChange={(data) => updatePendingBodyweightData(index, data)}
-                        compact={true}
                       />
                     ) : (
                       <input
