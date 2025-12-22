@@ -9,7 +9,7 @@
  * - The migration is idempotent (safe to run multiple times)
  */
 
-import { createServerActionClient } from '@/lib/supabase/server-actions';
+import { createClient } from '@/lib/supabase/server';
 import type { BodyweightData, BodyweightModification } from '@/types/schema';
 import { calculateEffectiveLoad } from '@/types/schema';
 
@@ -34,7 +34,7 @@ interface BodyweightEntry {
  * Get the user's latest bodyweight from bodyweight_entries
  */
 async function getUserLatestBodyweight(
-  supabase: ReturnType<typeof createServerActionClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<number | null> {
   const { data, error } = await supabase
@@ -105,7 +105,7 @@ export async function migrateUserBodyweightSets(
   reviewNeededCount: number;
   error?: string;
 }> {
-  const supabase = createServerActionClient();
+  const supabase = await createClient();
 
   try {
     // Get user's current bodyweight
@@ -269,7 +269,7 @@ export async function getSetsNeedingReview(
   }>;
   error?: string;
 }> {
-  const supabase = createServerActionClient();
+  const supabase = await createClient();
 
   try {
     // Query sets with _needsReview flag
@@ -331,7 +331,7 @@ export async function updateSetBodyweightData(
   setId: string,
   bodyweightData: BodyweightData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createServerActionClient();
+  const supabase = await createClient();
 
   try {
     // Remove the _needsReview flag
