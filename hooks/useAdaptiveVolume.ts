@@ -248,9 +248,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       return MUSCLE_GROUPS.map(muscle => ({
         muscle,
         currentSets: 0,
+        estimatedMEV: BASELINE_VOLUME_RECOMMENDATIONS[muscle]?.mev || 8,
         estimatedMRV: BASELINE_VOLUME_RECOMMENDATIONS[muscle]?.mrv || 20,
         percentOfMRV: 0,
-        status: 'low' as const,
+        status: 'below_mev' as const,
         trend: 'stable' as const,
       }));
     }

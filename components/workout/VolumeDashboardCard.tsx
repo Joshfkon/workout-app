@@ -10,7 +10,7 @@ interface VolumeBarProps {
   muscle: MuscleGroup;
   currentSets: number;
   estimatedMRV: number;
-  status: 'low' | 'optimal' | 'high' | 'at_limit';
+  status: 'below_mev' | 'low' | 'optimal' | 'high' | 'at_limit';
 }
 
 function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps) {
@@ -18,6 +18,8 @@ function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps
 
   const barColor = useMemo(() => {
     switch (status) {
+      case 'below_mev':
+        return 'bg-danger-500/60';
       case 'low':
         return 'bg-surface-500';
       case 'optimal':
@@ -29,7 +31,7 @@ function VolumeBar({ muscle, currentSets, estimatedMRV, status }: VolumeBarProps
     }
   }, [status]);
 
-  const statusIcon = status === 'at_limit' ? ' \u26A0\uFE0F' : '';
+  const statusIcon = status === 'at_limit' ? ' \u26A0\uFE0F' : status === 'below_mev' ? ' \u2193' : '';
 
   // Capitalize first letter
   const displayName = muscle.charAt(0).toUpperCase() + muscle.slice(1);

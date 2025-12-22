@@ -4,10 +4,13 @@ import { useMemo } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
+import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
+import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import type { MuscleVolumeData } from '@/services/volumeTracker';
 
 function VolumeProgressBar({
   muscle,
@@ -132,6 +135,9 @@ export default function VolumeProfilePage() {
     isLoading,
   } = useAdaptiveVolume();
 
+  const { user } = useUserStore();
+  const userGoal = user?.goal ?? 'maintenance';
+
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
     if (!volumeProfile) return { level: 'low', dataPoints: 0, mesocycles: 0 };
@@ -154,6 +160,25 @@ export default function VolumeProfilePage() {
   // Sort muscles by current usage (highest first)
   const sortedMuscles = useMemo(() => {
     return [...volumeSummary].sort((a, b) => b.percentOfMRV - a.percentOfMRV);
+  }, [volumeSummary]);
+
+  // Find muscles below MEV (for atrophy risk alert)
+  const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
+    return volumeSummary
+      .filter(summary => summary.status === 'below_mev')
+      .map(summary => ({
+        muscleGroup: summary.muscle,
+        totalSets: summary.currentSets,
+        directSets: summary.currentSets,
+        indirectSets: 0,
+        landmarks: {
+          mev: summary.estimatedMEV,
+          mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
+          mrv: summary.estimatedMRV,
+        },
+        status: 'below_mev' as const,
+        percentOfMrv: summary.percentOfMRV,
+      }));
   }, [volumeSummary]);
 
   if (isLoading) {
@@ -212,6 +237,16 @@ export default function VolumeProfilePage() {
       {fatigueAlerts.length > 0 && (
         <div className="mb-6">
           <FatigueAlertList alerts={fatigueAlerts} />
+        </div>
+      )}
+
+      {/* Atrophy Risk Alert - shows muscles below MEV with cut warning */}
+      {musclesBelowMev.length > 0 && (
+        <div className="mb-6">
+          <AtrophyRiskAlert
+            musclesBelowMev={musclesBelowMev}
+            userGoal={userGoal}
+          />
         </div>
       )}
 
