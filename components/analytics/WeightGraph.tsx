@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -29,6 +29,12 @@ interface WeightGraphProps {
 
 export function WeightGraph({ weightHistory, preferredUnit, className }: WeightGraphProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Prevent hydration errors by only rendering after mount
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const timeframeDays: Record<Timeframe, number> = {
     '7d': 7,

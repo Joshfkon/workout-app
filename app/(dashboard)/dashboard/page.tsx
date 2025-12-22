@@ -387,6 +387,13 @@ export default function DashboardPage() {
           });
           
           console.log(`[Weight Debug] Processed ${processedHistory.length} weight entries for graph`);
+          
+          // Debug: Log Dec 19 entry specifically
+          const dec19Processed = processedHistory.find(w => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
+          if (dec19Processed) {
+            console.log(`[Dashboard Debug] Dec 19 processed entry:`, dec19Processed);
+          }
+          
           setWeightHistory(processedHistory);
         }
 
@@ -1055,24 +1062,11 @@ export default function DashboardPage() {
               {/* Weight Trend Graph */}
               {weightHistory.length >= 2 && (
                 <div className="pt-2 border-t border-surface-800">
-                  {(() => {
-                    // Debug: Log what we're passing to WeightGraph
-                    const dec19InHistory = weightHistory.find(w => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
-                    if (dec19InHistory) {
-                      console.log(`[Dashboard Debug] Passing to WeightGraph:`, {
-                        date: dec19InHistory.date,
-                        weight: dec19InHistory.weight,
-                        unit: dec19InHistory.unit,
-                        preferredUnit: weightUnit,
-                      });
-                    }
-                    return (
-                      <WeightGraph
-                        weightHistory={weightHistory}
-                        preferredUnit={weightUnit}
-                      />
-                    );
-                  })()}
+                  <WeightGraph
+                    key={`weight-graph-${weightHistory.length}-${weightUnit}`}
+                    weightHistory={weightHistory}
+                    preferredUnit={weightUnit}
+                  />
                 </div>
               )}
             </div>
