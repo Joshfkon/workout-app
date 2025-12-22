@@ -157,7 +157,7 @@ export default function DashboardPage() {
     
     // Use muscleVolume (from dashboard query) as primary source, fallback to volumeSummary
     if (muscleVolume.length > 0) {
-      return muscleVolume
+      const result = muscleVolume
         .filter(mv => {
           const mev = mevTargets[mv.muscle] || 8;
           const isBelowMev = mv.sets < mev;
@@ -184,10 +184,13 @@ export default function DashboardPage() {
             percentOfMrv: Math.round((mv.sets / mrv) * 100),
           };
         });
+      
+      console.log(`[Dashboard] Found ${result.length} muscles below MEV from muscleVolume`);
+      return result;
     }
     
     // Fallback to volumeSummary if muscleVolume is empty
-    return volumeSummary
+    const fallbackResult = volumeSummary
       .filter(vs => vs.status === 'below_mev')
       .map(vs => ({
         muscleGroup: vs.muscle,
@@ -202,6 +205,9 @@ export default function DashboardPage() {
         status: 'below_mev' as const,
         percentOfMrv: vs.percentOfMRV,
       }));
+    
+    console.log(`[Dashboard] Found ${fallbackResult.length} muscles below MEV from volumeSummary (fallback)`);
+    return fallbackResult;
   }, [muscleVolume, volumeSummary]);
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
