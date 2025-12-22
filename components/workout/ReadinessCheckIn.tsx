@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button, Card, Slider, Badge } from '@/components/ui';
 import type { PreWorkoutCheckIn, Rating, TemporaryInjury, WeightUnit } from '@/types/schema';
 import { calculateReadinessScore, getReadinessInterpretation } from '@/services/fatigueEngine';
@@ -45,21 +45,64 @@ interface ReadinessCheckInProps {
   unit?: WeightUnit;
   todayNutrition?: TodayNutrition;
   userGoal?: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
+  // Initial values from daily check-in and weight log
+  initialValues?: {
+    sleepHours?: number | null;
+    sleepQuality?: Rating | null;
+    stressLevel?: Rating | null;
+    focusRating?: Rating | null;
+    libidoRating?: Rating | null;
+    bodyweightKg?: number | null;
+  };
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition, userGoal }: ReadinessCheckInProps) {
-  const [sleepHours, setSleepHours] = useState(7);
-  const [sleepQuality, setSleepQuality] = useState<Rating>(3);
-  const [stressLevel, setStressLevel] = useState<Rating>(3);
-  const [bodyweight, setBodyweight] = useState('');
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition, userGoal, initialValues }: ReadinessCheckInProps) {
+  // Initialize with daily check-in data if available
+  const [sleepHours, setSleepHours] = useState(initialValues?.sleepHours ?? 7);
+  const [sleepQuality, setSleepQuality] = useState<Rating>(initialValues?.sleepQuality ?? 3);
+  const [stressLevel, setStressLevel] = useState<Rating>(initialValues?.stressLevel ?? 3);
+  
+  // Initialize bodyweight from weight log (convert to display unit)
+  const initialBodyweight = initialValues?.bodyweightKg 
+    ? (unit === 'lb' ? (initialValues.bodyweightKg * 2.20462).toFixed(1) : initialValues.bodyweightKg.toFixed(1))
+    : '';
+  const [bodyweight, setBodyweight] = useState(initialBodyweight);
+  
   const [showInjurySection, setShowInjurySection] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
   const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
   const [selectedSeverity, setSelectedSeverity] = useState<1 | 2 | 3>(1);
   
-  // Cut-specific tracking for refeed detection
-  const [focusRating, setFocusRating] = useState<Rating>(3);
-  const [libidoRating, setLibidoRating] = useState<Rating>(3);
+  // Cut-specific tracking for refeed detection (initialize from daily check-in)
+  const [focusRating, setFocusRating] = useState<Rating>(initialValues?.focusRating ?? 3);
+  const [libidoRating, setLibidoRating] = useState<Rating>(initialValues?.libidoRating ?? 3);
+  
+  // Update values when initialValues are loaded (in case they load after mount)
+  useEffect(() => {
+    if (initialValues) {
+      if (initialValues.sleepHours !== undefined) {
+        setSleepHours(initialValues.sleepHours ?? 7);
+      }
+      if (initialValues.sleepQuality !== undefined && initialValues.sleepQuality !== null) {
+        setSleepQuality(initialValues.sleepQuality);
+      }
+      if (initialValues.stressLevel !== undefined && initialValues.stressLevel !== null) {
+        setStressLevel(initialValues.stressLevel);
+      }
+      if (initialValues.focusRating !== undefined && initialValues.focusRating !== null) {
+        setFocusRating(initialValues.focusRating);
+      }
+      if (initialValues.libidoRating !== undefined && initialValues.libidoRating !== null) {
+        setLibidoRating(initialValues.libidoRating);
+      }
+      if (initialValues.bodyweightKg !== undefined && initialValues.bodyweightKg !== null) {
+        const bodyweightStr = unit === 'lb' 
+          ? (initialValues.bodyweightKg * 2.20462).toFixed(1)
+          : initialValues.bodyweightKg.toFixed(1);
+        setBodyweight(bodyweightStr);
+      }
+    }
+  }, [initialValues, unit]);
   
   // Show cut-specific questions when user is cutting
   const isOnCut = userGoal === 'cut';

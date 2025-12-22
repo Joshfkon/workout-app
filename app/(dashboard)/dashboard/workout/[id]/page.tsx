@@ -6,7 +6,7 @@ import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -438,6 +438,16 @@ export default function WorkoutPage() {
     fat: number;
     targetCalories?: number;
     targetProtein?: number;
+  } | null>(null);
+  
+  // Today's daily check-in and weight for pre-filling pre-workout check-in
+  const [todayCheckInData, setTodayCheckInData] = useState<{
+    sleepHours?: number | null;
+    sleepQuality?: Rating | null;
+    stressLevel?: Rating | null;
+    focusRating?: Rating | null;
+    libidoRating?: Rating | null;
+    bodyweightKg?: number | null;
   } | null>(null);
   
   // State for showing swap modal for a specific exercise due to injury
@@ -953,9 +963,9 @@ export default function WorkoutPage() {
     loadFrequentExercises();
   }, []);
 
-  // Fetch today's nutrition data for check-in
+  // Fetch today's nutrition data, daily check-in, and weight for check-in
   useEffect(() => {
-    async function loadTodayNutrition() {
+    async function loadTodayData() {
       try {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -994,12 +1004,50 @@ export default function WorkoutPage() {
             targetProtein: targets?.protein,
           });
         }
+        
+        // Fetch today's daily check-in
+        const { data: dailyCheckIn } = await supabase
+          .from('daily_check_ins')
+          .select('sleep_hours, sleep_quality, stress_level, focus_rating, libido_rating')
+          .eq('user_id', user.id)
+          .eq('date', today)
+          .maybeSingle();
+        
+        // Fetch today's weight log
+        const { data: weightEntry } = await supabase
+          .from('weight_log')
+          .select('weight, unit')
+          .eq('user_id', user.id)
+          .eq('logged_at', today)
+          .maybeSingle();
+        
+        // Convert weight to kg if needed
+        let bodyweightKg: number | null = null;
+        if (weightEntry?.weight) {
+          if (weightEntry.unit === 'lb') {
+            bodyweightKg = weightEntry.weight * 0.453592;
+          } else {
+            bodyweightKg = weightEntry.weight;
+          }
+        }
+        
+        // Set check-in data for pre-filling
+        if (dailyCheckIn || weightEntry) {
+          setTodayCheckInData({
+            sleepHours: dailyCheckIn?.sleep_hours ?? null,
+            sleepQuality: dailyCheckIn?.sleep_quality as Rating | null ?? null,
+            stressLevel: dailyCheckIn?.stress_level as Rating | null ?? null,
+            focusRating: dailyCheckIn?.focus_rating as Rating | null ?? null,
+            libidoRating: dailyCheckIn?.libido_rating as Rating | null ?? null,
+            bodyweightKg,
+          });
+        }
       } catch (err) {
-        console.error('Failed to load nutrition:', err);
+        console.error('Failed to load today\'s data:', err);
       }
     }
 
-    loadTodayNutrition();
+    loadTodayData();
   }, []);
 
   // Function to regenerate AI coach notes with injury context
@@ -2419,6 +2467,7 @@ export default function WorkoutPage() {
           unit={preferences.units}
           todayNutrition={todayNutrition || undefined}
           userGoal={userGoal}
+          initialValues={todayCheckInData || undefined}
         />
       </div>
     );
