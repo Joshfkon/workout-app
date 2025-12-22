@@ -37,7 +37,8 @@ async function getUserLatestBodyweight(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<number | null> {
-  const { data, error } = await supabase
+  // Cast to any since bodyweight_entries may not be in Database type
+  const { data, error } = await (supabase as any)
     .from('bodyweight_entries')
     .select('weight_kg')
     .eq('user_id', userId)
@@ -46,7 +47,7 @@ async function getUserLatestBodyweight(
     .single();
 
   if (error || !data) return null;
-  return data.weight_kg;
+  return (data as BodyweightEntry).weight_kg;
 }
 
 /**
