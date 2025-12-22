@@ -327,6 +327,7 @@ class GoogleFitService {
 
     try {
       // Dynamic import of the Capacitor Google Fit plugin
+      // @ts-expect-error - Optional native module, may not be installed
       const googleFitModule = await import('@nickcis/capacitor-google-fit');
       this.plugin = googleFitModule.GoogleFit as unknown as GoogleFitPlugin;
       return this.plugin;
