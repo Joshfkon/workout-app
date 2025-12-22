@@ -516,12 +516,12 @@ export async function getEnhancedDailyDataPoints(
   }> = [];
 
   const allDates = new Set([
-    ...weightByDate.keys(),
-    ...caloriesByDate.keys(),
-    ...activityByDate.keys(),
+    ...Array.from(weightByDate.keys()),
+    ...Array.from(caloriesByDate.keys()),
+    ...Array.from(activityByDate.keys()),
   ]);
 
-  for (const date of allDates) {
+  Array.from(allDates).forEach((date) => {
     const weight = weightByDate.get(date) || 0;
     const calories = caloriesByDate.get(date) || 0;
     const activity = activityByDate.get(date);
@@ -539,7 +539,7 @@ export async function getEnhancedDailyDataPoints(
       workoutCalories: activity?.workout_expenditure || 0,
       activityLevel: activity?.activity_level || 'sedentary',
     });
-  }
+  });
 
   return dataPoints.sort((a, b) => a.date.localeCompare(b.date));
 }
