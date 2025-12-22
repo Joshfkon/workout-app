@@ -356,19 +356,26 @@ export default function DashboardPage() {
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
           
-          // Debug: Log raw data from database
-          console.log(`[Dashboard Debug] Raw weight entries from DB:`, weightHistoryResult.data);
+          // Debug: Log raw data from database - expand to see all fields
+          console.log(`[Dashboard Debug] Received ${weightHistoryResult.data.length} weight entries from DB`);
+          console.log(`[Dashboard Debug] Raw weight entries from DB:`, JSON.parse(JSON.stringify(weightHistoryResult.data)));
           
           const processedHistory = weightHistoryResult.data.map((w: any) => {
             // Log the actual unit field from database
+            const hasUnit = 'unit' in w;
+            const unitValue = w.unit;
             console.log(`[Dashboard Debug] Processing entry ${w.logged_at}:`, {
               weight: w.weight,
-              unit_from_db: w.unit,
-              unit_type: typeof w.unit,
-              has_unit: 'unit' in w,
+              unit_from_db: unitValue,
+              unit_type: typeof unitValue,
+              unit_is_null: unitValue === null,
+              unit_is_undefined: unitValue === undefined,
+              has_unit_field: hasUnit,
+              all_fields: Object.keys(w),
             });
             
-            let unit = w.unit || defaultUnit;
+            // Handle NULL or undefined unit - use default
+            let unit = (unitValue === null || unitValue === undefined) ? defaultUnit : unitValue;
             
             // Validate: if unit says 'lb' but weight > 500, it's probably in kg
             // If unit says 'kg' but weight > 250, it's probably in lb
@@ -385,10 +392,12 @@ export default function DashboardPage() {
               console.log(`[Dashboard Debug] Dec 19 entry processing:`, {
                 logged_at: w.logged_at,
                 raw_weight: w.weight,
-                raw_unit_from_db: w.unit,
+                raw_unit_from_db: unitValue,
+                unit_is_null: unitValue === null,
                 default_unit: defaultUnit,
                 final_unit: unit,
                 weight_in_lbs: unit === 'kg' ? w.weight * 2.20462 : w.weight,
+                will_convert: unit !== defaultUnit,
               });
             }
             
