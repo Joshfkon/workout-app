@@ -3,8 +3,11 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
+import { isBodyweightExercise, canAddWeight, canUseAssistance } from '@/services/exerciseService';
+import { BodyweightInput } from './BodyweightInput';
+import { BodyweightDisplayInline } from './BodyweightDisplay';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
@@ -115,6 +118,7 @@ interface SetCompleteData {
   setType?: SetType;
   parentSetId?: string;  // For dropsets: the ID of the parent set
   feedback?: SetFeedback;  // New feedback data
+  bodyweightData?: BodyweightData;  // For bodyweight exercises
 }
 
 interface ExerciseCardProps {
@@ -297,7 +301,11 @@ export const ExerciseCard = memo(function ExerciseCard({
     weight: string;
     reps: string;
     rpe: string;
+    bodyweightData?: BodyweightData;
   }[]>([]);
+
+  // Check if this is a bodyweight exercise
+  const isBwExercise = isBodyweightExercise(exercise);
 
   const completedSets = sets.filter((s) => !s.isWarmup);
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
@@ -537,6 +545,21 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   };
 
+  // Update bodyweight data for a pending input
+  const updatePendingBodyweightData = (index: number, bodyweightData: BodyweightData) => {
+    setPendingInputs(prev => {
+      const updated = [...prev];
+      if (updated[index]) {
+        updated[index] = {
+          ...updated[index],
+          bodyweightData,
+          weight: String(bodyweightData.effectiveLoadKg), // Keep weight in sync for validation
+        };
+      }
+      return updated;
+    });
+  };
+
   // Complete set immediately, then show optional feedback overlay
   const completeSetImmediately = async (index: number, asDropset = false) => {
     if (isCompletingSet || !onSetComplete) return;
@@ -555,7 +578,10 @@ export const ExerciseCard = memo(function ExerciseCard({
     setIsCompletingSet(true);
 
     // Convert from display unit to kg
-    const weightKg = inputWeightToKg(weightNum, unit);
+    // For bodyweight exercises, use effective load from bodyweightData
+    const weightKg = isBwExercise && input.bodyweightData
+      ? input.bodyweightData.effectiveLoadKg
+      : inputWeightToKg(weightNum, unit);
     const setNumber = completedSets.length + index + 1;
 
     // Use target RPE as default (will be updated if user provides feedback)
@@ -568,6 +594,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       rpe: targetRpe,
       setType: asDropset && dropsetMode ? 'dropset' : 'normal',
       parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
+      bodyweightData: input.bodyweightData,
       // No feedback yet - user can add it optionally
     });
 
@@ -1210,11 +1237,15 @@ export const ExerciseCard = memo(function ExerciseCard({
                         {set.setNumber}
                       </div>
                     </td>
-                  <td 
+                  <td
                     className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                     onClick={() => onSetEdit && startEditing(set)}
                   >
-                    {displayWeight(set.weightKg)}
+                    {set.bodyweightData ? (
+                      <BodyweightDisplayInline data={set.bodyweightData} unit={unit} />
+                    ) : (
+                      displayWeight(set.weightKg)
+                    )}
                   </td>
                   <td 
                     className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
@@ -1434,17 +1465,27 @@ export const ExerciseCard = memo(function ExerciseCard({
                   style={getSwipeTransform(pendingId)}
                 >
                   <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={input.weight}
-                      onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      step="0.5"
-                      min="0"
-                      placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—'}
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
+                  <td className={isBwExercise ? "px-1 py-1.5 col-span-1" : "px-1 py-1.5"}>
+                    {isBwExercise ? (
+                      <BodyweightInput
+                        exercise={exercise}
+                        userBodyweightKg={75} // TODO: Get from user profile
+                        value={input.bodyweightData}
+                        onChange={(data) => updatePendingBodyweightData(index, data)}
+                        compact={true}
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        value={input.weight}
+                        onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        step="0.5"
+                        min="0"
+                        placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—'}
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    )}
                   </td>
                   <td className="px-1 py-1.5">
                     <input
