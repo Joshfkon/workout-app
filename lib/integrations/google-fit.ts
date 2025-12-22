@@ -5,7 +5,7 @@
  * for Android devices via Capacitor native bridge.
  */
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor } from './capacitor-stub';
 import type {
   StepData,
   EnergyData,
