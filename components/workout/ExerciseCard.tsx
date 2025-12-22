@@ -128,6 +128,7 @@ interface ExerciseCardProps {
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
+  onBlockNoteUpdate?: (note: string | null) => void;  // Callback to update exercise block note
   onWarmupComplete?: (restSeconds: number) => void;  // Callback when a warmup set is completed
   availableExercises?: Exercise[];  // All exercises for swap suggestions
   frequentExerciseIds?: Map<string, number>;  // Exercise usage counts for sorting
@@ -173,6 +174,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onTargetSetsChange,
   onExerciseSwap,
   onExerciseDelete,
+  onBlockNoteUpdate,
   onWarmupComplete,
   availableExercises = [],
   frequentExerciseIds = new Map(),
@@ -216,6 +218,15 @@ export const ExerciseCard = memo(function ExerciseCard({
     reps: number;
     setNumber: number;
   } | null>(null);
+
+  // Note editing state
+  const [isEditingNote, setIsEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState(block.note || '');
+
+  // Sync noteText when block.note changes
+  useEffect(() => {
+    setNoteText(block.note || '');
+  }, [block.note]);
 
   // Auto-show swap modal when showSwapOnMount is true
   useEffect(() => {
@@ -1556,6 +1567,73 @@ export const ExerciseCard = memo(function ExerciseCard({
           </Accordion>
         </div>
       )}
+
+      {/* Exercise Notes Section */}
+      <div className="border-t border-surface-800 p-4">
+        {isEditingNote ? (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-surface-400 uppercase tracking-wide">
+              Notes
+            </label>
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="Add notes for this exercise (e.g., form reminders, weight adjustments, how it felt...)"
+              className="w-full px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-sm text-surface-200 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+              rows={3}
+              autoFocus
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setNoteText(block.note || '');
+                  setIsEditingNote(false);
+                }}
+                className="px-3 py-1.5 text-sm text-surface-400 hover:text-surface-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const newNote = noteText.trim() || null;
+                  onBlockNoteUpdate?.(newNote);
+                  setIsEditingNote(false);
+                }}
+                className="px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : block.note ? (
+          <button
+            onClick={() => setIsEditingNote(true)}
+            className="w-full text-left group"
+          >
+            <div className="flex items-start gap-2">
+              <svg className="w-4 h-4 text-surface-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm text-surface-300 whitespace-pre-wrap">{block.note}</p>
+                <span className="text-xs text-surface-500 group-hover:text-primary-400 transition-colors">
+                  Click to edit
+                </span>
+              </div>
+            </div>
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsEditingNote(true)}
+            className="flex items-center gap-2 text-sm text-surface-500 hover:text-surface-300 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add note
+          </button>
+        )}
+      </div>
 
       {/* Swap Exercise Modal */}
       {showSwapModal && (
