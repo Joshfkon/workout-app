@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -103,7 +103,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     
     console.log(`[WeightGraph Debug] Chart data for ${timeframe}:`, mapped);
     return mapped;
-  }, [weightHistory, timeframe, preferredUnit]);
+  }, [weightHistory, timeframe, preferredUnit, convertWeight]);
 
   // Calculate trend
   const trend = useMemo(() => {

@@ -1055,10 +1055,24 @@ export default function DashboardPage() {
               {/* Weight Trend Graph */}
               {weightHistory.length >= 2 && (
                 <div className="pt-2 border-t border-surface-800">
-                  <WeightGraph
-                    weightHistory={weightHistory}
-                    preferredUnit={weightUnit}
-                  />
+                  {(() => {
+                    // Debug: Log what we're passing to WeightGraph
+                    const dec19InHistory = weightHistory.find(w => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
+                    if (dec19InHistory) {
+                      console.log(`[Dashboard Debug] Passing to WeightGraph:`, {
+                        date: dec19InHistory.date,
+                        weight: dec19InHistory.weight,
+                        unit: dec19InHistory.unit,
+                        preferredUnit: weightUnit,
+                      });
+                    }
+                    return (
+                      <WeightGraph
+                        weightHistory={weightHistory}
+                        preferredUnit={weightUnit}
+                      />
+                    );
+                  })()}
                 </div>
               )}
             </div>
