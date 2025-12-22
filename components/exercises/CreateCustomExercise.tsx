@@ -100,6 +100,9 @@ export function CreateCustomExercise({
           setupNote: '',
           movementPattern: data.pattern,
           equipmentRequired: [data.equipment],
+          // Bodyweight exercise flags - derived from equipment type
+          isBodyweight: data.equipment === 'bodyweight',
+          bodyweightType: data.equipment === 'bodyweight' ? 'weighted_possible' : undefined,
         },
         userId
       );

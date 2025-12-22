@@ -519,6 +519,113 @@ export interface WarmupSet {
   restSeconds: number;
 }
 
+// ============ BODYWEIGHT EXERCISE TYPES ============
+
+/**
+ * Type of bodyweight exercise modification
+ * - pure: Always just bodyweight (e.g., plank, dead bug)
+ * - weighted_possible: Can add weight (e.g., push-up, glute bridge)
+ * - assisted_possible: Can use assistance (e.g., assisted pull-up machine)
+ * - both: Can be weighted OR assisted (e.g., pull-ups, dips)
+ */
+export type BodyweightType = 'pure' | 'weighted_possible' | 'assisted_possible' | 'both';
+
+/**
+ * Type of modification applied to a bodyweight exercise
+ */
+export type BodyweightModification = 'none' | 'weighted' | 'assisted';
+
+/**
+ * Type of assistance used for assisted exercises
+ */
+export type AssistanceType = 'machine' | 'band' | 'partner';
+
+/**
+ * Band color/strength for assistance band exercises
+ */
+export interface BandAssistance {
+  color: 'yellow' | 'red' | 'black' | 'purple' | 'green';
+  label: string;
+  /** Approximate assistance range in lbs [min, max] */
+  assistanceLbsRange: [number, number];
+}
+
+/**
+ * Band assistance presets with approximate resistance values
+ */
+export const BAND_ASSISTANCE_PRESETS: BandAssistance[] = [
+  { color: 'yellow', label: 'Extra Light', assistanceLbsRange: [5, 15] },
+  { color: 'red', label: 'Light', assistanceLbsRange: [15, 25] },
+  { color: 'black', label: 'Medium', assistanceLbsRange: [25, 40] },
+  { color: 'purple', label: 'Heavy', assistanceLbsRange: [40, 60] },
+  { color: 'green', label: 'Extra Heavy', assistanceLbsRange: [60, 80] },
+];
+
+/**
+ * Bodyweight-specific data for a set
+ * Tracks user's bodyweight, any modifications, and calculates effective load
+ */
+export interface BodyweightData {
+  /** User's body weight at time of set (in kg) */
+  userBodyweightKg: number;
+
+  /** Type of modification applied */
+  modification: BodyweightModification;
+
+  /** Weight added via vest, belt, or plate (in kg) - for weighted sets */
+  addedWeightKg?: number;
+
+  /** Amount of assistance provided (in kg) - for assisted sets */
+  assistanceWeightKg?: number;
+
+  /** Type of assistance used */
+  assistanceType?: AssistanceType;
+
+  /** Band color if using band assistance */
+  bandColor?: BandAssistance['color'];
+
+  /**
+   * Calculated effective load = bodyweight + added - assistance (in kg)
+   * This is what the user is actually "lifting"
+   */
+  effectiveLoadKg: number;
+
+  /**
+   * Flag indicating this data needs user review (used during migration)
+   */
+  _needsReview?: boolean;
+}
+
+/**
+ * Calculate effective load for bodyweight exercises
+ */
+export function calculateEffectiveLoad(
+  bodyweightKg: number,
+  modification: BodyweightModification,
+  addedWeightKg?: number,
+  assistanceWeightKg?: number
+): number {
+  switch (modification) {
+    case 'none':
+      return bodyweightKg;
+    case 'weighted':
+      return bodyweightKg + (addedWeightKg || 0);
+    case 'assisted':
+      return Math.max(0, bodyweightKg - (assistanceWeightKg || 0));
+  }
+}
+
+/**
+ * Get approximate band assistance in kg from color
+ */
+export function getBandAssistanceKg(color: BandAssistance['color']): number {
+  const preset = BAND_ASSISTANCE_PRESETS.find(b => b.color === color);
+  if (!preset) return 0;
+  // Return midpoint of range, converted to kg
+  const midpointLbs = (preset.assistanceLbsRange[0] + preset.assistanceLbsRange[1]) / 2;
+  return Math.round(midpointLbs * 0.453592 * 10) / 10;
+}
+
 // ============ SET LOG ============
 
 /**
@@ -571,6 +678,9 @@ export interface SetLog {
 
   /** Structured feedback for this set (RIR, form quality, discomfort) */
   feedback?: SetFeedback;
+
+  /** Bodyweight-specific data for bodyweight exercises */
+  bodyweightData?: BodyweightData;
 }
 
 // ============ ANALYTICS ============
@@ -1546,5 +1656,93 @@ export function calculateFormScore(form: FormRating): number {
 export function calculateAvgFormScore(forms: FormRating[]): number {
   if (forms.length === 0) return 1.0;
   return forms.reduce((sum, form) => sum + calculateFormScore(form), 0) / forms.length;
+}
+
+// ============ BODYWEIGHT PR & PROGRESSION ============
+
+/**
+ * PR type for bodyweight exercises
+ */
+export type BodyweightPRType = 'weighted' | 'assisted' | 'pure_reps';
+
+/**
+ * Personal record for bodyweight exercises
+ * Tracks different types of PRs (weighted, assisted, pure BW)
+ */
+export interface BodyweightPR {
+  type: BodyweightPRType;
+
+  /** For weighted PRs: highest added weight */
+  maxAddedWeightKg?: number;
+  /** Reps achieved at max added weight */
+  maxAddedWeightReps?: number;
+
+  /** For assisted PRs: lowest assistance weight (lower = better) */
+  minAssistanceWeightKg?: number;
+  /** Reps achieved at min assistance */
+  minAssistanceReps?: number;
+
+  /** For pure bodyweight PRs: max reps */
+  maxReps?: number;
+
+  /** Calculated max effective load */
+  maxEffectiveLoadKg?: number;
+  /** Reps at max effective load */
+  maxEffectiveLoadReps?: number;
+
+  /** User's bodyweight at time of PR */
+  bodyweightAtPRKg: number;
+
+  /** Date of the PR */
+  date: string;
+}
+
+/**
+ * Metrics for tracking bodyweight exercise progression
+ */
+export interface BodyweightProgressionMetrics {
+  /** Track added weight increases over time (for weighted sets) */
+  addedWeightProgression: number[];
+
+  /** Track assistance reduction over time (for assisted sets) - lower is better */
+  assistanceReduction: number[];
+
+  /** Track effective load over time */
+  effectiveLoadProgression: number[];
+
+  /** Track percentage of bodyweight being moved */
+  percentBodyweightProgression: number[];
+}
+
+/**
+ * Suggestion for bodyweight exercise progression
+ */
+export interface BodyweightProgressionSuggestion {
+  type: 'graduate' | 'reduce_assistance' | 'add_weight' | 'increase_weight' | 'maintain';
+  message: string;
+  suggestion: string;
+  /** Suggested value (new assistance weight, new added weight, etc.) */
+  suggestedValue?: number;
+}
+
+/**
+ * Context for bodyweight changes between sessions
+ */
+export interface BodyweightChangeContext {
+  message: string;
+  previousTotalKg: number;
+  newTotalKg: number;
+  suggestedAdjustment: string;
+}
+
+/**
+ * Calculate percentage of bodyweight being moved
+ */
+export function calculatePercentBodyweight(
+  effectiveLoadKg: number,
+  userBodyweightKg: number
+): number {
+  if (userBodyweightKg <= 0) return 100;
+  return Math.round((effectiveLoadKg / userBodyweightKg) * 100);
 }
 
