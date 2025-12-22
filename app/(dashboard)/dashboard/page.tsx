@@ -146,6 +146,9 @@ export default function DashboardPage() {
     traps: 4, forearms: 4, adductors: 4,
   };
 
+  // All muscle groups to check (including those with 0 sets)
+  const allMuscleGroups = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'biceps', 'triceps', 'calves', 'abs', 'traps', 'forearms', 'adductors'];
+
   // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
     console.log(`[Dashboard] Calculating musclesBelowMev from muscleVolume:`, {
@@ -155,59 +158,43 @@ export default function DashboardPage() {
       volumeSummary: volumeSummary.map(vs => `${vs.muscle}: ${vs.currentSets} sets, status: ${vs.status}`)
     });
     
-    // Use muscleVolume (from dashboard query) as primary source, fallback to volumeSummary
-    if (muscleVolume.length > 0) {
-      const result = muscleVolume
-        .filter(mv => {
-          const mev = mevTargets[mv.muscle] || 8;
-          const isBelowMev = mv.sets < mev;
-          
-          console.log(`[Dashboard] Checking ${mv.muscle}: ${mv.sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
-          
-          return isBelowMev;
-        })
-        .map(mv => {
-          const mev = mevTargets[mv.muscle] || 8;
-          const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
-          
-          return {
-            muscleGroup: mv.muscle,
-            totalSets: mv.sets,
-            directSets: mv.sets,
-            indirectSets: 0,
-            landmarks: {
-              mev: mev,
-              mav: Math.round((mev + mrv) / 2),
-              mrv: mrv,
-            },
-            status: 'below_mev' as const,
-            percentOfMrv: Math.round((mv.sets / mrv) * 100),
-          };
-        });
-      
-      console.log(`[Dashboard] Found ${result.length} muscles below MEV from muscleVolume`);
-      return result;
-    }
+    // Create a map of muscle -> sets from muscleVolume for quick lookup
+    const volumeMap = new Map<string, number>();
+    muscleVolume.forEach(mv => {
+      volumeMap.set(mv.muscle, mv.sets);
+    });
     
-    // Fallback to volumeSummary if muscleVolume is empty
-    const fallbackResult = volumeSummary
-      .filter(vs => vs.status === 'below_mev')
-      .map(vs => ({
-        muscleGroup: vs.muscle,
-        totalSets: vs.currentSets,
-        directSets: vs.currentSets,
-        indirectSets: 0,
-        landmarks: {
-          mev: vs.estimatedMEV,
-          mav: Math.round((vs.estimatedMEV + vs.estimatedMRV) / 2),
-          mrv: vs.estimatedMRV,
-        },
-        status: 'below_mev' as const,
-        percentOfMrv: vs.percentOfMRV,
-      }));
+    // Check ALL muscle groups, including those with 0 sets
+    const result = allMuscleGroups
+      .map(muscle => {
+        const sets = volumeMap.get(muscle) || 0;
+        const mev = mevTargets[muscle] || 8;
+        const isBelowMev = sets < mev;
+        
+        console.log(`[Dashboard] Checking ${muscle}: ${sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
+        
+        if (!isBelowMev) return null;
+        
+        const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
+        
+        return {
+          muscleGroup: muscle,
+          totalSets: sets,
+          directSets: sets,
+          indirectSets: 0,
+          landmarks: {
+            mev: mev,
+            mav: Math.round((mev + mrv) / 2),
+            mrv: mrv,
+          },
+          status: 'below_mev' as const,
+          percentOfMrv: Math.round((sets / mrv) * 100),
+        };
+      })
+      .filter((item): item is MuscleVolumeData => item !== null);
     
-    console.log(`[Dashboard] Found ${fallbackResult.length} muscles below MEV from volumeSummary (fallback)`);
-    return fallbackResult;
+    console.log(`[Dashboard] Found ${result.length} muscles below MEV (including 0-set muscles):`, result.map(r => `${r.muscleGroup}: ${r.totalSets} sets`));
+    return result;
   }, [muscleVolume, volumeSummary]);
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
