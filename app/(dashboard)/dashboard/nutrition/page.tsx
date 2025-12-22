@@ -188,13 +188,18 @@ export default function NutritionPage() {
       return weight;
     }
     
-    // Validate: if unit says 'lb' but weight > 500, it's probably in kg
-    // If unit says 'kg' but weight > 250, it's probably in lb
+    // Validate: detect mislabeled units
+    // If unit says 'lb' but weight > 500, it's probably stored in kg (convert)
+    // If unit says 'kg' but weight is in human range (150-200), it's probably mislabeled as kg but actually in lbs (don't convert, just use as-is)
     if (fromUnit === 'lb' && weight > 500) {
       // Probably stored in kg, convert
       return weight * 2.20462;
+    } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
+      // Common weights 150-200 are human weights in lbs, mislabeled as kg
+      // The weight is already in lbs, just mislabeled - don't convert, use as-is
+      return weight; // Already in lbs, just mislabeled
     } else if (fromUnit === 'kg' && weight > 250) {
-      // Probably stored in lb, convert
+      // Weight > 250 kg is probably in lbs, convert
       return weight / 2.20462;
     }
     
