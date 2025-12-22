@@ -165,19 +165,19 @@ export default function DashboardPage() {
     });
     
     // Check ALL muscle groups, including those with 0 sets
-    const result = allMuscleGroups
-      .map(muscle => {
-        const sets = volumeMap.get(muscle) || 0;
-        const mev = mevTargets[muscle] || 8;
-        const isBelowMev = sets < mev;
-        
-        console.log(`[Dashboard] Checking ${muscle}: ${sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
-        
-        if (!isBelowMev) return null;
-        
+    const result: MuscleVolumeData[] = [];
+    
+    allMuscleGroups.forEach(muscle => {
+      const sets = volumeMap.get(muscle) || 0;
+      const mev = mevTargets[muscle] || 8;
+      const isBelowMev = sets < mev;
+      
+      console.log(`[Dashboard] Checking ${muscle}: ${sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
+      
+      if (isBelowMev) {
         const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
         
-        return {
+        result.push({
           muscleGroup: muscle,
           totalSets: sets,
           directSets: sets,
@@ -189,9 +189,9 @@ export default function DashboardPage() {
           },
           status: 'below_mev' as const,
           percentOfMrv: Math.round((sets / mrv) * 100),
-        };
-      })
-      .filter((item): item is MuscleVolumeData => item !== null);
+        });
+      }
+    });
     
     console.log(`[Dashboard] Found ${result.length} muscles below MEV (including 0-set muscles):`, result.map(r => `${r.muscleGroup}: ${r.totalSets} sets`));
     return result;
