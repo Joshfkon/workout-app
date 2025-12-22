@@ -20,9 +20,21 @@ export function getLocalDateString(date: Date = new Date()): string {
 
 /**
  * Format a date to a readable string
+ * Handles date strings in YYYY-MM-DD format by parsing as local date (not UTC)
  */
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  let d: Date;
+  if (typeof date === 'string') {
+    // If it's a date string in YYYY-MM-DD format, parse it as local date to avoid timezone issues
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const [year, month, day] = date.split('-').map(Number);
+      d = new Date(year, month - 1, day); // month is 0-indexed
+    } else {
+      d = new Date(date);
+    }
+  } else {
+    d = date;
+  }
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
