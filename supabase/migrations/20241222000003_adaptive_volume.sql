@@ -79,6 +79,12 @@ ALTER TABLE weekly_muscle_volume ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mesocycle_analyses ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for user_volume_profiles
+-- Drop existing policies if they exist (to allow re-running migration)
+DROP POLICY IF EXISTS "Users can view own volume profiles" ON user_volume_profiles;
+DROP POLICY IF EXISTS "Users can insert own volume profiles" ON user_volume_profiles;
+DROP POLICY IF EXISTS "Users can update own volume profiles" ON user_volume_profiles;
+DROP POLICY IF EXISTS "Users can delete own volume profiles" ON user_volume_profiles;
+
 CREATE POLICY "Users can view own volume profiles"
     ON user_volume_profiles FOR SELECT
     USING (auth.uid() = user_id);
@@ -97,6 +103,12 @@ CREATE POLICY "Users can delete own volume profiles"
     USING (auth.uid() = user_id);
 
 -- RLS Policies for weekly_muscle_volume
+-- Drop existing policies if they exist (to allow re-running migration)
+DROP POLICY IF EXISTS "Users can view own weekly volume" ON weekly_muscle_volume;
+DROP POLICY IF EXISTS "Users can insert own weekly volume" ON weekly_muscle_volume;
+DROP POLICY IF EXISTS "Users can update own weekly volume" ON weekly_muscle_volume;
+DROP POLICY IF EXISTS "Users can delete own weekly volume" ON weekly_muscle_volume;
+
 CREATE POLICY "Users can view own weekly volume"
     ON weekly_muscle_volume FOR SELECT
     USING (auth.uid() = user_id);
@@ -115,6 +127,12 @@ CREATE POLICY "Users can delete own weekly volume"
     USING (auth.uid() = user_id);
 
 -- RLS Policies for mesocycle_analyses
+-- Drop existing policies if they exist (to allow re-running migration)
+DROP POLICY IF EXISTS "Users can view own mesocycle analyses" ON mesocycle_analyses;
+DROP POLICY IF EXISTS "Users can insert own mesocycle analyses" ON mesocycle_analyses;
+DROP POLICY IF EXISTS "Users can update own mesocycle analyses" ON mesocycle_analyses;
+DROP POLICY IF EXISTS "Users can delete own mesocycle analyses" ON mesocycle_analyses;
+
 CREATE POLICY "Users can view own mesocycle analyses"
     ON mesocycle_analyses FOR SELECT
     USING (auth.uid() = user_id);
