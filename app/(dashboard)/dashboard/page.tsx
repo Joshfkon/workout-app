@@ -163,8 +163,8 @@ export default function DashboardPage() {
         const today = new Date();
         const todayStr = getLocalDateString(today);
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
-        const thirtyDaysAgo = new Date(today);
-        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const ninetyDaysAgo = new Date(today);
+        ninetyDaysAgo.setDate(today.getDate() - 90);
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6); // Rolling 7 days (including today)
         
@@ -216,11 +216,11 @@ export default function DashboardPage() {
             .eq('logged_at', todayStr)
             .maybeSingle(),
           
-          // Weight history (30 days)
+          // Weight history (90 days for graph timeframe options)
           supabase.from('weight_log')
             .select('logged_at, weight, unit')
             .eq('user_id', user.id)
-            .gte('logged_at', getLocalDateString(thirtyDaysAgo))
+            .gte('logged_at', getLocalDateString(ninetyDaysAgo))
             .order('logged_at', { ascending: true }),
           
           // Weekly volume data
@@ -1009,63 +1009,10 @@ export default function DashboardPage() {
               {/* Weight Trend Graph */}
               {weightHistory.length >= 2 && (
                 <div className="pt-2 border-t border-surface-800">
-                  <div className="flex items-center justify-between text-xs text-surface-500 mb-2">
-                    <span>30 Day Trend</span>
-                    {(() => {
-                      // Convert weights to user's preferred unit for diff calculation
-                      const convertWeight = (w: { weight: number; unit: string }) => {
-                        if (w.unit === weightUnit) return w.weight;
-                        return w.unit === 'kg' ? w.weight * 2.20462 : w.weight / 2.20462;
-                      };
-                      const first = weightHistory[0] ? convertWeight(weightHistory[0]) : 0;
-                      const last = weightHistory[weightHistory.length - 1] ? convertWeight(weightHistory[weightHistory.length - 1]) : 0;
-                      const diff = last - first;
-                      const diffFormatted = diff > 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1);
-                      return (
-                        <span className={diff > 0 ? 'text-warning-400' : diff < 0 ? 'text-success-400' : 'text-surface-400'}>
-                          {diffFormatted} {weightUnit}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  <div className="h-16 flex items-end gap-0.5">
-                    {(() => {
-                      // Normalize weights for display and convert if needed
-                      const normalizedHistory = weightHistory.map(w => {
-                        // Convert to user's preferred unit
-                        let displayWeight = w.weight;
-                        if (w.unit !== weightUnit) {
-                          displayWeight = w.unit === 'kg' ? w.weight * 2.20462 : w.weight * 0.453592;
-                        }
-                        return { ...w, displayWeight };
-                      });
-                      const weights = normalizedHistory.map(w => w.displayWeight);
-                      const min = Math.min(...weights);
-                      const max = Math.max(...weights);
-                      const range = max - min || 1;
-                      
-                      // Show last 14 data points or all if less
-                      const displayData = normalizedHistory.slice(-14);
-                      
-                      return displayData.map((entry, i) => {
-                        const heightPercent = ((entry.displayWeight - min) / range) * 100;
-                        const height = Math.max(8, heightPercent); // Minimum 8% height
-                        const isLast = i === displayData.length - 1;
-                        return (
-                          <div
-                            key={entry.date}
-                            className="flex-1 group relative"
-                            title={`${new Date(entry.date).toLocaleDateString()}: ${entry.displayWeight.toFixed(1)} ${weightUnit}`}
-                          >
-                            <div
-                              className={`w-full rounded-sm transition-all ${isLast ? 'bg-primary-500' : 'bg-surface-600 group-hover:bg-surface-500'}`}
-                              style={{ height: `${height}%`, minHeight: '4px' }}
-                            />
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
+                  <WeightGraph
+                    weightHistory={weightHistory}
+                    preferredUnit={weightUnit}
+                  />
                 </div>
               )}
             </div>
