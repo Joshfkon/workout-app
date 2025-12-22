@@ -354,7 +354,19 @@ export default function DashboardPage() {
         // Process weight history with unit validation and debugging
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
+          
+          // Debug: Log raw data from database
+          console.log(`[Dashboard Debug] Raw weight entries from DB:`, weightHistoryResult.data);
+          
           const processedHistory = weightHistoryResult.data.map((w: any) => {
+            // Log the actual unit field from database
+            console.log(`[Dashboard Debug] Processing entry ${w.logged_at}:`, {
+              weight: w.weight,
+              unit_from_db: w.unit,
+              unit_type: typeof w.unit,
+              has_unit: 'unit' in w,
+            });
+            
             let unit = w.unit || defaultUnit;
             
             // Validate: if unit says 'lb' but weight > 500, it's probably in kg
@@ -369,12 +381,12 @@ export default function DashboardPage() {
             
             // Debug logging for Dec 19 specifically
             if (w.logged_at === '2025-12-19' || w.logged_at?.includes('2025-12-19')) {
-              console.log(`[Weight Debug] Dec 19 entry:`, {
+              console.log(`[Dashboard Debug] Dec 19 entry processing:`, {
                 logged_at: w.logged_at,
                 raw_weight: w.weight,
-                raw_unit: w.unit,
-                corrected_unit: unit,
-                user_preferred_unit: defaultUnit,
+                raw_unit_from_db: w.unit,
+                default_unit: defaultUnit,
+                final_unit: unit,
                 weight_in_lbs: unit === 'kg' ? w.weight * 2.20462 : w.weight,
               });
             }
