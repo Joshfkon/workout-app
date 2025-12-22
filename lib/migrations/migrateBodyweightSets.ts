@@ -34,11 +34,10 @@ interface BodyweightEntry {
  * Get the user's latest bodyweight from bodyweight_entries
  */
 async function getUserLatestBodyweight(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: any,
   userId: string
 ): Promise<number | null> {
-  // Cast to any since bodyweight_entries may not be in Database type
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('bodyweight_entries')
     .select('weight_kg')
     .eq('user_id', userId)
@@ -106,7 +105,7 @@ export async function migrateUserBodyweightSets(
   reviewNeededCount: number;
   error?: string;
 }> {
-  const supabase = await createClient();
+  const supabase = await createClient() as any; // Cast to any for migration queries
 
   try {
     // Get user's current bodyweight
@@ -270,7 +269,7 @@ export async function getSetsNeedingReview(
   }>;
   error?: string;
 }> {
-  const supabase = await createClient();
+  const supabase = await createClient() as any; // Cast to any for migration queries
 
   try {
     // Query sets with _needsReview flag
@@ -332,7 +331,7 @@ export async function updateSetBodyweightData(
   setId: string,
   bodyweightData: BodyweightData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
+  const supabase = await createClient() as any; // Cast to any for migration queries
 
   try {
     // Remove the _needsReview flag
