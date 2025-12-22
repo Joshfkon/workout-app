@@ -672,13 +672,24 @@ export default function DashboardPage() {
 
       {/* ===== TODAY'S WORKOUT ===== */}
       {todaysWorkout ? (
-        <Card className={`overflow-hidden border-2 ${
-          todaysWorkout.state === 'completed' 
-            ? 'border-success-500/50 bg-success-500/5' 
+        <Card className={`overflow-hidden border-2 relative ${
+          todaysWorkout.state === 'completed'
+            ? 'border-success-500/50 bg-success-500/5'
             : todaysWorkout.state === 'in_progress'
             ? 'border-warning-500/50 bg-warning-500/5'
             : 'border-primary-500/50 bg-primary-500/5'
         }`}>
+          {/* Info icon in top right corner */}
+          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+            <button
+              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
+              title="Learn about mesocycle science"
+            >
+              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </Link>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -706,28 +717,27 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Link href="/dashboard/learn/progressive-overload">
-                  <button
-                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                    title="Learn about progressive overload"
-                  >
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
+              {todaysWorkout.state !== 'completed' && (
+                <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                  <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
                 </Link>
-                {todaysWorkout.state !== 'completed' && (
-                  <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
-                    <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
-                  </Link>
-                )}
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
       ) : scheduledWorkout ? (
-        <Card className="overflow-hidden border-2 border-primary-500/50 bg-primary-500/5">
+        <Card className="overflow-hidden border-2 border-primary-500/50 bg-primary-500/5 relative">
+          {/* Info icon in top right corner */}
+          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+            <button
+              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
+              title="Learn about mesocycle science"
+            >
+              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </Link>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
@@ -746,26 +756,25 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Link href="/dashboard/learn/progressive-overload">
-                  <button
-                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                    title="Learn about progressive overload"
-                  >
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                </Link>
-                <Link href="/dashboard/mesocycle">
-                  <Button>Start Workout</Button>
-                </Link>
-              </div>
+              <Link href="/dashboard/mesocycle">
+                <Button>Start Workout</Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
       ) : activeMesocycle ? (
-        <Card className="overflow-hidden border border-surface-700 bg-surface-800/30">
+        <Card className="overflow-hidden border border-surface-700 bg-surface-800/30 relative">
+          {/* Info icon in top right corner */}
+          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+            <button
+              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
+              title="Learn about mesocycle science"
+            >
+              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+          </Link>
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
@@ -777,21 +786,9 @@ export default function DashboardPage() {
                 <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
                 <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Link href="/dashboard/learn/progressive-overload">
-                  <button
-                    className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                    title="Learn about progressive overload"
-                  >
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                </Link>
-                <Link href="/dashboard/workout/quick">
-                  <Button variant="outline" size="sm">Quick Workout</Button>
-                </Link>
-              </div>
+              <Link href="/dashboard/workout/quick">
+                <Button variant="outline" size="sm">Quick Workout</Button>
+              </Link>
             </div>
           </CardContent>
         </Card>
