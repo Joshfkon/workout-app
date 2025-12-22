@@ -54,7 +54,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Fetch or create volume profile
   const fetchProfile = useCallback(async () => {
-    if (!user?.id) return;
+    console.log(`[useAdaptiveVolume] fetchProfile called, user:`, user?.id);
+    if (!user?.id) {
+      console.log(`[useAdaptiveVolume] No user ID, returning early`);
+      return;
+    }
 
     setIsLoading(true);
     setError(null);
@@ -63,6 +67,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const supabase = createUntypedClient();
 
       // Try to fetch existing profile
+      console.log(`[useAdaptiveVolume] Fetching existing profile for user ${user.id}`);
       const { data: profileData, error: profileError } = await supabase
         .from('user_volume_profiles')
         .select('*')
@@ -71,10 +76,12 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       if (profileError && profileError.code !== 'PGRST116') {
         // PGRST116 is "not found" - that's expected for new users
+        console.error(`[useAdaptiveVolume] Error fetching profile:`, profileError);
         throw profileError;
       }
 
       if (profileData) {
+        console.log(`[useAdaptiveVolume] Found existing profile`);
         // Parse stored profile
         const profile: UserVolumeProfile = {
           userId: profileData.user_id,
@@ -86,25 +93,31 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         };
         setVolumeProfile(profile);
       } else {
+        console.log(`[useAdaptiveVolume] No existing profile, creating initial profile`);
         // Create initial profile based on user's experience level
         const trainingAge = user.experience || 'intermediate';
         const initialProfile = createInitialVolumeProfile(user.id, trainingAge, false);
+        console.log(`[useAdaptiveVolume] Created initial profile:`, initialProfile);
         setVolumeProfile(initialProfile);
 
         // Optionally save to database
         await saveProfile(initialProfile);
+        console.log(`[useAdaptiveVolume] Saved initial profile to database`);
       }
 
       // Fetch current week volume data
+      console.log(`[useAdaptiveVolume] Calling fetchVolumeData`);
       await fetchVolumeData();
 
       // Fetch latest mesocycle analysis
       await fetchLatestAnalysis();
 
     } catch (err) {
+      console.error(`[useAdaptiveVolume] Error in fetchProfile:`, err);
       setError(err instanceof Error ? err.message : 'Failed to load volume profile');
     } finally {
       setIsLoading(false);
+      console.log(`[useAdaptiveVolume] fetchProfile completed, isLoading: false`);
     }
   }, [user?.id, user?.experience]);
 
