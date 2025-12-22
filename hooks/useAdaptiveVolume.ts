@@ -365,7 +365,14 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Calculate volume summary
   const volumeSummary = useMemo((): VolumeSummary[] => {
+    console.log(`[useAdaptiveVolume] Calculating volumeSummary:`, {
+      hasProfile: !!volumeProfile,
+      volumeDataLength: volumeData.length,
+      volumeData: volumeData.map(d => `${d.muscle}: ${d.workingSets} sets`),
+    });
+    
     if (!volumeProfile || volumeData.length === 0) {
+      console.log(`[useAdaptiveVolume] Returning default summary (no profile or no data)`);
       // Return default summary with baseline recommendations
       return MUSCLE_GROUPS.map(muscle => ({
         muscle,
@@ -378,7 +385,9 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       }));
     }
 
-    return getVolumeSummary(volumeData, previousWeekData, volumeProfile);
+    const summary = getVolumeSummary(volumeData, previousWeekData, volumeProfile);
+    console.log(`[useAdaptiveVolume] Calculated summary:`, summary.map(s => `${s.muscle}: ${s.currentSets}/${s.estimatedMEV} sets, status: ${s.status}`));
+    return summary;
   }, [volumeProfile, volumeData, previousWeekData]);
 
   // Calculate fatigue alerts
