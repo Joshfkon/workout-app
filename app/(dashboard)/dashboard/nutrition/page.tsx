@@ -171,6 +171,13 @@ export default function NutritionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
   const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+
+  // Convert weight to preferred unit
+  const convertWeight = (weight: number, fromUnit: string): number => {
+    if (fromUnit === weightUnit) return weight;
+    return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
+  };
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -215,6 +222,7 @@ export default function NutritionPage() {
         userResult,
         dexaResult,
         mesocycleResult,
+        prefsResult,
       ] = await Promise.all([
         // Food log entries for selected date
         supabase
@@ -276,6 +284,12 @@ export default function NutritionPage() {
           .eq('user_id', user.id)
           .eq('state', 'active')
           .single(),
+        // User preferences (for weight unit)
+        supabase
+          .from('user_preferences')
+          .select('weight_unit')
+          .eq('user_id', user.id)
+          .single(),
       ]);
 
       // Process results
@@ -283,6 +297,11 @@ export default function NutritionPage() {
       setNutritionTargets(targetsResult.data);
       setWeightEntries(weightResult.data || []);
       setCustomFoods(customFoodsResult.data || []);
+
+      // Set weight unit preference
+      if (prefsResult.data?.weight_unit) {
+        setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
+      }
 
       if (systemFoodsResult.data) {
         setSystemFoods(systemFoodsResult.data as SystemFood[]);
@@ -773,14 +792,14 @@ export default function NutritionPage() {
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
 
-  // Calculate 7-day weight average
+  // Calculate 7-day weight average (with unit conversion)
   const last7Days = weightEntries.slice(0, 7);
   const sevenDayAverage =
     last7Days.length > 0
-      ? last7Days.reduce((sum, e) => sum + e.weight, 0) / last7Days.length
+      ? last7Days.reduce((sum, e) => sum + convertWeight(e.weight, (e as any).unit || 'lb'), 0) / last7Days.length
       : null;
 
-  // Prepare weight chart data
+  // Prepare weight chart data (with unit conversion)
   const weightChartData = weightEntries
     .slice(0, 30)
     .reverse()
@@ -789,7 +808,7 @@ export default function NutritionPage() {
         month: 'short',
         day: 'numeric',
       }),
-      weight: entry.weight,
+      weight: Number(convertWeight(entry.weight, (entry as any).unit || 'lb').toFixed(1)),
     }));
 
   // Get recent foods for quick add
@@ -1215,7 +1234,7 @@ export default function NutritionPage() {
                 <div>
                   <div className="text-sm text-surface-400">Current Weight</div>
                   <div className="text-2xl font-bold text-surface-100">
-                    {weightEntries[0]?.weight.toFixed(1)} lbs
+                    {convertWeight(weightEntries[0]?.weight || 0, (weightEntries[0] as any)?.unit || 'lb').toFixed(1)} {weightUnit}
                   </div>
                   <div className="text-xs text-surface-500">
                     {new Date(weightEntries[0]?.logged_at).toLocaleDateString()}
@@ -1225,7 +1244,7 @@ export default function NutritionPage() {
                   <div>
                     <div className="text-sm text-surface-400">7-Day Average</div>
                     <div className="text-xl font-semibold text-surface-100">
-                      {sevenDayAverage.toFixed(1)} lbs
+                      {sevenDayAverage.toFixed(1)} {weightUnit}
                     </div>
                   </div>
                 )}
