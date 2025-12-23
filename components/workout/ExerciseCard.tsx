@@ -211,6 +211,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   userBodyweightKg,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editingRpeId, setEditingRpeId] = useState<string | null>(null);
+  const [editingFormId, setEditingFormId] = useState<string | null>(null);
+  const [editRpeValue, setEditRpeValue] = useState('');
+  const [editFormValue, setEditFormValue] = useState<'clean' | 'some_breakdown' | 'ugly' | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
@@ -1410,23 +1414,119 @@ export const ExerciseCard = memo(function ExerciseCard({
                         {set.reps}
                       </td>
                       <td
-                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                        onClick={() => onSetEdit && startEditing(set)}
+                        className="px-2 py-2.5 text-center"
                       >
-                        {set.rpe ? set.rpe.toFixed(1) : '—'}
+                        {editingRpeId === set.id ? (
+                          <input
+                            type="number"
+                            value={editRpeValue}
+                            onChange={(e) => setEditRpeValue(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onBlur={() => {
+                              const rpeNum = parseFloat(editRpeValue);
+                              if (!isNaN(rpeNum) && rpeNum >= 0 && rpeNum <= 10 && onSetEdit) {
+                                onSetEdit(set.id, {
+                                  weightKg: set.weightKg,
+                                  reps: set.reps,
+                                  rpe: rpeNum,
+                                });
+                              }
+                              setEditingRpeId(null);
+                              setEditRpeValue('');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const rpeNum = parseFloat(editRpeValue);
+                                if (!isNaN(rpeNum) && rpeNum >= 0 && rpeNum <= 10 && onSetEdit) {
+                                  onSetEdit(set.id, {
+                                    weightKg: set.weightKg,
+                                    reps: set.reps,
+                                    rpe: rpeNum,
+                                  });
+                                }
+                                setEditingRpeId(null);
+                                setEditRpeValue('');
+                              } else if (e.key === 'Escape') {
+                                setEditingRpeId(null);
+                                setEditRpeValue('');
+                              }
+                            }}
+                            step="0.5"
+                            min="0"
+                            max="10"
+                            className="w-16 px-2 py-1 bg-surface-900 border border-primary-500 rounded text-center font-mono text-surface-100 text-sm"
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={`font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                            onClick={() => {
+                              if (onSetEdit) {
+                                setEditingRpeId(set.id);
+                                setEditRpeValue(set.rpe ? set.rpe.toFixed(1) : '');
+                              }
+                            }}
+                          >
+                            {set.rpe ? set.rpe.toFixed(1) : '—'}
+                          </span>
+                        )}
                       </td>
                       <td
-                        className={`px-2 py-2.5 text-center text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                        onClick={() => onSetEdit && startEditing(set)}
+                        className="px-2 py-2.5 text-center"
                       >
-                        {set.feedback?.form === 'clean' ? (
-                          <span className="text-success-400 text-xs">Clean</span>
-                        ) : set.feedback?.form === 'some_breakdown' ? (
-                          <span className="text-warning-400 text-xs">~Form</span>
-                        ) : set.feedback?.form === 'ugly' ? (
-                          <span className="text-danger-400 text-xs">Ugly</span>
+                        {editingFormId === set.id ? (
+                          <select
+                            value={editFormValue || ''}
+                            onChange={(e) => {
+                              const formValue = e.target.value as 'clean' | 'some_breakdown' | 'ugly' | '';
+                              if (formValue && onSetFeedbackUpdate) {
+                                onSetFeedbackUpdate(set.id, {
+                                  ...set.feedback,
+                                  form: formValue as 'clean' | 'some_breakdown' | 'ugly',
+                                  repsInTank: set.feedback?.repsInTank || 2,
+                                });
+                              }
+                              setEditingFormId(null);
+                              setEditFormValue(null);
+                            }}
+                            onBlur={() => {
+                              setEditingFormId(null);
+                              setEditFormValue(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                setEditingFormId(null);
+                                setEditFormValue(null);
+                              }
+                            }}
+                            className="px-2 py-1 bg-surface-900 border border-primary-500 rounded text-center text-surface-100 text-xs"
+                            autoFocus
+                          >
+                            <option value="">—</option>
+                            <option value="clean">Clean</option>
+                            <option value="some_breakdown">~Form</option>
+                            <option value="ugly">Ugly</option>
+                          </select>
                         ) : (
-                          <span className="text-surface-500 text-xs">—</span>
+                          <span
+                            className={`text-surface-200 ${onSetFeedbackUpdate ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                            onClick={() => {
+                              if (onSetFeedbackUpdate) {
+                                setEditingFormId(set.id);
+                                setEditFormValue(set.feedback?.form || null);
+                              }
+                            }}
+                          >
+                            {set.feedback?.form === 'clean' ? (
+                              <span className="text-success-400 text-xs">Clean</span>
+                            ) : set.feedback?.form === 'some_breakdown' ? (
+                              <span className="text-warning-400 text-xs">~Form</span>
+                            ) : set.feedback?.form === 'ugly' ? (
+                              <span className="text-danger-400 text-xs">Ugly</span>
+                            ) : (
+                              <span className="text-surface-500 text-xs">—</span>
+                            )}
+                          </span>
                         )}
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -1667,20 +1767,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
-                    <td className="px-1 py-1.5">
-                      <input
-                        type="number"
-                        value={input.rpe}
-                        onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        step="0.5"
-                        min="0"
-                        max="10"
-                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
+                    <td className="px-1 py-1.5 text-center">
+                      <span className="text-surface-600 text-xs font-mono">—</span>
                     </td>
                     <td className="px-2 py-1.5 text-center">
-                      <span className="text-surface-600 text-xs">???</span>
+                      <span className="text-surface-600 text-xs">—</span>
                     </td>
                     <td className="px-3 py-1.5 text-center">
                       <span className="text-surface-600">???</span>
