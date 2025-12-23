@@ -73,8 +73,13 @@ export function GymEquipmentSettings() {
         .order('is_default DESC, created_at ASC');
       
       if (error) {
-        // Table might not exist yet (migration not run)
-        console.warn('gym_locations table not found, using fallback mode:', error);
+        // Check if it's a table not found error (PGRST205) or other error
+        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
+          console.warn('gym_locations table not found, using fallback mode:', error);
+        } else {
+          // Other errors (like 409 conflict) - might be constraint issue, try to continue
+          console.warn('Error loading gym locations:', error);
+        }
         locationsData = null;
       } else {
         locationsData = data;

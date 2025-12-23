@@ -86,7 +86,7 @@ export default function SettingsPage() {
     setUnits(newUnits);
   };
 
-  // Load settings on mount
+  // Load settings on mount and when page becomes visible
   useEffect(() => {
     async function loadSettings() {
       const supabase = createUntypedClient();
@@ -116,11 +116,32 @@ export default function SettingsPage() {
               : String(data.height_cm);
             setHeightDisplay(displayHeight);
           }
-          if (data.weight_kg) {
+          // Load latest weight from weight_log (most recent), fallback to users.weight_kg
+          const { data: latestWeightLog } = await supabase
+            .from('weight_log')
+            .select('weight, unit, logged_at')
+            .eq('user_id', user.id)
+            .order('logged_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          let weightToDisplay: number | null = null;
+          if (latestWeightLog) {
+            // Convert to kg if needed
+            const weightKg = latestWeightLog.unit === 'kg' 
+              ? Number(latestWeightLog.weight) 
+              : Number(latestWeightLog.weight) / 2.20462; // Convert lbs to kg
+            weightToDisplay = weightKg;
+            setStoredWeightKg(weightKg);
+          } else if (data.weight_kg) {
+            weightToDisplay = data.weight_kg;
             setStoredWeightKg(data.weight_kg);
+          }
+
+          if (weightToDisplay) {
             const displayWeight = userUnits === 'lb'
-              ? kgToLbs(data.weight_kg).toFixed(1)
-              : String(data.weight_kg);
+              ? kgToLbs(weightToDisplay).toFixed(1)
+              : weightToDisplay.toFixed(1);
             setWeightDisplay(displayWeight);
           }
           
@@ -156,6 +177,18 @@ export default function SettingsPage() {
       setIsLoading(false);
     }
     loadSettings();
+
+    // Reload weight when page becomes visible (in case user logged weight in another tab)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadSettings();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   const handleSave = async () => {
