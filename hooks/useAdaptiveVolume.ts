@@ -423,7 +423,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       } else {
         console.log(`[useAdaptiveVolume] No existing profile, creating initial profile`);
         // Create initial profile based on user's experience level
-        const trainingAge = user.experience || 'intermediate';
+        const trainingAge = (user.experience || 'intermediate') as 'novice' | 'intermediate' | 'advanced';
         const initialProfile = createInitialVolumeProfile(user.id, trainingAge, false);
         console.log(`[useAdaptiveVolume] Created initial profile:`, initialProfile);
         setVolumeProfile(initialProfile);

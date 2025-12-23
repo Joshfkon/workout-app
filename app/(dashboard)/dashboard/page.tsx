@@ -8,6 +8,7 @@ import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
+import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
@@ -910,11 +911,14 @@ export default function DashboardPage() {
 
       {/* ===== DAILY CHECK-IN ===== */}
       {userId && (
-        <DailyCheckIn 
-          userId={userId} 
+        <DailyCheckIn
+          userId={userId}
           userGoal={userGoal}
         />
       )}
+
+      {/* ===== MUSCLE RECOVERY COUNTDOWN ===== */}
+      <MuscleRecoveryCard limit={6} />
 
       {/* ===== TODAY'S NUTRITION ===== */}
       <Card>

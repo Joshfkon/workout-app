@@ -383,6 +383,7 @@ function NewWorkoutContent() {
           minWeightIncrementKg: 2.5,
           mechanic: exercise.mechanic,
           isCustom: false,
+          isBodyweight: exercise.is_bodyweight || false,
           hypertrophyScore: { tier: exercise.hypertrophy_tier || 'C', stretchUnderLoad: 3, resistanceProfile: 3, progressionEase: 3 },
           spinalLoading: 'none',
           requiresBackArch: false,
