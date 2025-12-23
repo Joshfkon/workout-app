@@ -148,6 +148,11 @@ function NewWorkoutContent() {
   // Workout duration
   const [workoutDuration, setWorkoutDuration] = useState(45); // Default 45 minutes
   
+  // Gym location selection
+  const [gymLocations, setGymLocations] = useState<Array<{ id: string; name: string; is_default: boolean }>>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+  
   // Custom exercise modal state
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
   const [customExerciseForm, setCustomExerciseForm] = useState<CustomExerciseForm>({
@@ -185,7 +190,26 @@ function NewWorkoutContent() {
         .single();
       
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
-      const availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+      
+      // Get equipment availability from selected location
+      let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+      
+      if (selectedLocationId && selectedLocationId !== 'fallback') {
+        // Load equipment for the selected location
+        const { data: locationEquipment } = await supabase
+          .from('user_equipment')
+          .select('equipment_id, is_available')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationId)
+          .eq('is_available', true);
+        
+        if (locationEquipment && locationEquipment.length > 0) {
+          availableEquipment = locationEquipment.map((eq: any) => eq.equipment_id);
+        }
+      } else {
+        // Fallback to user's general equipment preference
+        availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+      }
       
       // Get active injuries (from workout sessions' temporary_injuries)
       const { data: recentSessions } = await supabase
@@ -357,11 +381,57 @@ function NewWorkoutContent() {
       // Filter by preferences (exclude archived and do_not_suggest)
       let candidateExercises = exercisesData.filter((e: any) => !excludedExerciseIds.has(e.id));
       
-      // Filter by equipment availability
+      // Filter by equipment availability (basic equipment types)
       candidateExercises = candidateExercises.filter((e: any) => {
         if (!e.equipment_required || e.equipment_required.length === 0) return true;
         return e.equipment_required.every((eq: string) => availableEquipment.includes(eq));
       });
+      
+      // Additional filtering by equipment_types (if location is selected and not fallback)
+      if (selectedLocationId && selectedLocationId !== 'fallback') {
+        // Get unavailable equipment IDs for this location
+        const { data: unavailableEquipment } = await supabase
+          .from('user_equipment')
+          .select('equipment_id')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationId)
+          .eq('is_available', false);
+        
+        if (unavailableEquipment && unavailableEquipment.length > 0) {
+          const unavailableIds = new Set(unavailableEquipment.map((eq: any) => eq.equipment_id));
+          
+          // Get equipment_types to check which exercises require unavailable equipment
+          const { data: equipmentTypes } = await supabase
+            .from('equipment_types')
+            .select('id, name')
+            .in('id', Array.from(unavailableIds));
+          
+          if (equipmentTypes) {
+            const unavailableNames = new Set(equipmentTypes.map((et: any) => et.name.toLowerCase()));
+            
+            // Filter out exercises that require unavailable equipment
+            candidateExercises = candidateExercises.filter((e: any) => {
+              // Check if exercise name or equipment_required mentions unavailable equipment
+              const exerciseNameLower = e.name.toLowerCase();
+              const hasUnavailable = Array.from(unavailableNames).some(name => 
+                exerciseNameLower.includes(name)
+              );
+              
+              if (hasUnavailable) return false;
+              
+              // Also check equipment_required array
+              if (e.equipment_required) {
+                const hasUnavailableInRequired = e.equipment_required.some((req: string) => 
+                  Array.from(unavailableNames).some(name => req.toLowerCase().includes(name))
+                );
+                if (hasUnavailableInRequired) return false;
+              }
+              
+              return true;
+            });
+          }
+        }
+      }
       
       // Filter by injury safety (exclude 'avoid' exercises)
       const safeExercises: any[] = [];
@@ -610,7 +680,9 @@ function NewWorkoutContent() {
       });
       
       setSelectedMuscles(suggestedMuscles);
-      setStep(2);
+      
+      // Don't auto-advance - let user review suggestions first
+      // User can click "Next: Choose Exercises" button to proceed
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
@@ -640,6 +712,41 @@ function NewWorkoutContent() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiMode]);
+
+  // Load gym locations on mount
+  useEffect(() => {
+    const loadGymLocations = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        const { data: locations, error } = await supabase
+          .from('gym_locations')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (!error && locations && locations.length > 0) {
+          setGymLocations(locations);
+          // Select default location or first location
+          const defaultLocation = locations.find(l => l.is_default) || locations[0];
+          setSelectedLocationId(defaultLocation.id);
+        } else {
+          // Fallback: create virtual location
+          setGymLocations([{ id: 'fallback', name: 'Home Gym', is_default: true }]);
+          setSelectedLocationId('fallback');
+        }
+      } catch (err) {
+        // Fallback on error
+        setGymLocations([{ id: 'fallback', name: 'Home Gym', is_default: true }]);
+        setSelectedLocationId('fallback');
+      } finally {
+        setIsLoadingLocations(false);
+      }
+    };
+
+    loadGymLocations();
+  }, []);
 
   // Fetch frequently used exercises on mount
   useEffect(() => {
@@ -948,40 +1055,76 @@ function NewWorkoutContent() {
 
       {step === 1 && (
         <div className="space-y-4">
-          {/* Time Selection */}
+          {/* Time and Location Selection */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2">
                 <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                How much time do you have?
+                Workout Setup
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {[20, 30, 45, 60, 75, 90].map((mins) => (
-                  <button
-                    key={mins}
-                    onClick={() => setWorkoutDuration(mins)}
-                    className={`p-3 rounded-lg text-center transition-all ${
-                      workoutDuration === mins
-                        ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
-                        : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
-                    }`}
-                  >
-                    <div className="font-semibold">{mins}</div>
-                    <div className="text-xs text-surface-500">min</div>
-                  </button>
-                ))}
+            <CardContent className="space-y-6">
+              {/* Time Selection */}
+              <div>
+                <label className="block text-sm font-medium text-surface-200 mb-3">
+                  How much time do you have?
+                </label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[20, 30, 45, 60, 75, 90].map((mins) => (
+                    <button
+                      key={mins}
+                      onClick={() => setWorkoutDuration(mins)}
+                      className={`p-3 rounded-lg text-center transition-all ${
+                        workoutDuration === mins
+                          ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                          : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
+                      }`}
+                    >
+                      <div className="font-semibold">{mins}</div>
+                      <div className="text-xs text-surface-500">min</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-surface-500 mt-2 text-center">
+                  {workoutDuration <= 25 
+                    ? '⚡ Quick mode: Only S & A-tier exercises'
+                    : workoutDuration <= 45 
+                    ? '⏱️ Time-efficient: Focused on key compounds'
+                    : '💪 Full workout: Complete volume for optimal growth'}
+                </p>
               </div>
-              <p className="text-xs text-surface-500 mt-2 text-center">
-                {workoutDuration <= 25 
-                  ? '⚡ Quick mode: Only S & A-tier exercises'
-                  : workoutDuration <= 45 
-                  ? '⏱️ Time-efficient: Focused on key compounds'
-                  : '💪 Full workout: Complete volume for optimal growth'}
-              </p>
+
+              {/* Location Selection */}
+              {!isLoadingLocations && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-200 mb-3">
+                    Gym Location
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {gymLocations.map((location) => (
+                      <button
+                        key={location.id}
+                        onClick={() => setSelectedLocationId(location.id)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          selectedLocationId === location.id
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                        }`}
+                      >
+                        {location.name}
+                        {location.is_default && selectedLocationId !== location.id && (
+                          <span className="ml-1 text-xs opacity-75">(Default)</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-surface-500 mt-2">
+                    Exercises will be filtered based on equipment available at this location
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -997,7 +1140,7 @@ function NewWorkoutContent() {
                 <div className="flex-1 text-center sm:text-left">
                   <h3 className="font-semibold text-surface-100">Not sure what to train?</h3>
                   <p className="text-sm text-surface-400 mt-0.5">
-                    We&apos;ll suggest muscles and exercises based on your recent history and goals
+                    We&apos;ll suggest muscles and exercises based on your recent history, goals, and {selectedLocationId && gymLocations.find(l => l.id === selectedLocationId) ? `equipment at ${gymLocations.find(l => l.id === selectedLocationId)?.name}` : 'available equipment'}
                   </p>
                 </div>
                 <Button 
@@ -1011,6 +1154,31 @@ function NewWorkoutContent() {
                   Suggest Workout
                 </Button>
               </div>
+              
+              {/* Show suggestions if available */}
+              {suggestions && (
+                <div className="mt-4 pt-4 border-t border-accent-500/20">
+                  <p className="text-sm text-accent-300 font-medium mb-2">Suggested:</p>
+                  <p className="text-sm text-surface-400">{suggestions.reason}</p>
+                  {suggestions.muscles.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="text-xs text-surface-500">Muscles:</span>
+                      {suggestions.muscles.map((muscle) => (
+                        <span key={muscle} className="px-2 py-1 bg-primary-500/20 text-primary-400 rounded text-xs capitalize">
+                          {muscle}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <Button
+                    onClick={() => setStep(2)}
+                    className="mt-3 w-full"
+                    variant="outline"
+                  >
+                    Review & Choose Exercises →
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
           
