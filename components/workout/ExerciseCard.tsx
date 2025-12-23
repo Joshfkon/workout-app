@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
@@ -343,6 +343,43 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
   
+  // Recalculate pending inputs based on the last completed set
+  const recalculatePendingInputs = useCallback(() => {
+    if (pendingSetsCount === 0) return;
+    
+    const targetRpe = 10 - block.targetRir;
+    const lastCompleted = completedSets[completedSets.length - 1];
+    
+    if (!lastCompleted) return;
+    
+    // Calculate smart defaults based on the last completed set
+    let smartWeight: number;
+    let smartReps: number;
+    
+    const lastRpe = lastCompleted.rpe || targetRpe;
+    // Adjust weight and reps based on RPE difference
+    if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
+      smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
+      smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
+    } else {
+      // Close to target - keep same weight and reps
+      smartWeight = lastCompleted.weightKg;
+      smartReps = lastCompleted.reps;
+    }
+    
+    // Update all pending inputs
+    const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
+    for (let i = 0; i < pendingSetsCount; i++) {
+      updatedInputs.push({
+        weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
+        reps: String(smartReps),
+        rpe: String(targetRpe),
+      });
+    }
+    
+    setPendingInputs(updatedInputs);
+  }, [completedSets, pendingSetsCount, block.targetRir, block.targetRepRange, displayWeight]);
+  
   // Initialize pending inputs when component mounts or when we need a full reset
   // Only reinitialize when pendingSetsCount increases (sets were added) or on first mount
   useEffect(() => {
@@ -441,6 +478,31 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSets.length, pendingSetsCount]);
+  
+  // Recalculate suggestions when RPE or Form of the last completed set changes
+  const lastCompletedSetRef = useRef<{ id: string; rpe: number | null; form: string | null } | null>(null);
+  useEffect(() => {
+    const lastCompleted = completedSets[completedSets.length - 1];
+    if (lastCompleted && pendingSetsCount > 0) {
+      const currentLastSet = {
+        id: lastCompleted.id,
+        rpe: lastCompleted.rpe || null,
+        form: lastCompleted.feedback?.form || null,
+      };
+      
+      const prevLastSet = lastCompletedSetRef.current;
+      // Only recalculate if RPE or Form actually changed (not just on mount)
+      if (prevLastSet && 
+          prevLastSet.id === currentLastSet.id && 
+          (prevLastSet.rpe !== currentLastSet.rpe || prevLastSet.form !== currentLastSet.form)) {
+        recalculatePendingInputs();
+      }
+      
+      lastCompletedSetRef.current = currentLastSet;
+    } else if (!lastCompleted) {
+      lastCompletedSetRef.current = null;
+    }
+  }, [completedSets, pendingSetsCount, recalculatePendingInputs]);
 
   // Swipe to delete handlers
   const handleTouchStart = (setId: string, e: React.TouchEvent) => {
@@ -1464,6 +1526,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                                   reps: set.reps,
                                   rpe: rpeNum,
                                 });
+                                // Recalculate suggestions for next set after RPE is updated
+                                setTimeout(() => recalculatePendingInputs(), 100);
                               }
                               setEditingRpeId(null);
                               setEditRpeValue('');
@@ -1477,6 +1541,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                                     reps: set.reps,
                                     rpe: rpeNum,
                                   });
+                                  // Recalculate suggestions for next set after RPE is updated
+                                  setTimeout(() => recalculatePendingInputs(), 100);
                                 }
                                 setEditingRpeId(null);
                                 setEditRpeValue('');
@@ -1519,6 +1585,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                                   form: formValue as 'clean' | 'some_breakdown' | 'ugly',
                                   repsInTank: set.feedback?.repsInTank || 2,
                                 });
+                                // Recalculate suggestions for next set after Form is updated
+                                // (Form affects progression logic, though less directly than RPE)
+                                setTimeout(() => recalculatePendingInputs(), 100);
                               }
                               setEditingFormId(null);
                               setEditFormValue(null);

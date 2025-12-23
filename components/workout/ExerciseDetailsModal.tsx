@@ -79,6 +79,22 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
   const [isCompletingWithAI, setIsCompletingWithAI] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [completionSuccess, setCompletionSuccess] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  // Edit form state
+  const [editData, setEditData] = useState<{
+    isBodyweight: boolean;
+    bodyweightType: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
+    assistanceType: 'machine' | 'band' | 'partner' | null;
+    equipment: string;
+    equipmentRequired: string[];
+    movementPattern: string;
+    primaryMuscle: string;
+    secondaryMuscles: string[];
+  } | null>(null);
 
   // Fetch exercise history when modal opens
   useEffect(() => {
@@ -274,6 +290,90 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
     }
   };
 
+  // Initialize edit data when entering edit mode
+  useEffect(() => {
+    if (isEditing && exercise) {
+      const equipment = getExerciseProp(exercise, 'equipment', 'equipment') || 'barbell';
+      const equipmentRequired = getExerciseProp(exercise, 'equipmentRequired', 'equipment_required') || [];
+      const movementPattern = getExerciseProp(exercise, 'movementPattern', 'movement_pattern') || 'compound';
+      const primaryMuscle = getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle') || 'chest';
+      const secondaryMuscles = getExerciseProp(exercise, 'secondaryMuscles', 'secondary_muscles') || [];
+      const isBodyweight = getExerciseProp(exercise, 'isBodyweight', 'is_bodyweight') || false;
+      const bodyweightType = getExerciseProp(exercise, 'bodyweightType', 'bodyweight_type') || null;
+      const assistanceType = getExerciseProp(exercise, 'assistanceType', 'assistance_type') || null;
+      
+      setEditData({
+        isBodyweight,
+        bodyweightType,
+        assistanceType,
+        equipment,
+        equipmentRequired: Array.isArray(equipmentRequired) ? equipmentRequired : [],
+        movementPattern,
+        primaryMuscle,
+        secondaryMuscles: Array.isArray(secondaryMuscles) ? secondaryMuscles : [],
+      });
+    }
+  }, [isEditing, exercise]);
+  
+  const handleSaveEdit = async () => {
+    if (!exercise?.id || !editData) return;
+    
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setSaveError('You must be logged in to edit exercises');
+        return;
+      }
+      
+      // Build update payload
+      const updatePayload: any = {
+        is_bodyweight: editData.isBodyweight,
+        bodyweight_type: editData.bodyweightType,
+        assistance_type: editData.assistanceType,
+        equipment: editData.equipment,
+        equipment_required: editData.equipmentRequired,
+        movement_pattern: editData.movementPattern,
+        primary_muscle: editData.primaryMuscle,
+        secondary_muscles: editData.secondaryMuscles,
+      };
+      
+      // Remove null values
+      Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === null) {
+          delete updatePayload[key];
+        }
+      });
+      
+      const { error } = await supabase
+        .from('exercises')
+        .update(updatePayload)
+        .eq('id', exercise.id);
+      
+      if (error) {
+        console.error('Failed to update exercise:', error);
+        setSaveError(error.message || 'Failed to update exercise');
+        return;
+      }
+      
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setIsEditing(false);
+        setSaveSuccess(false);
+        window.location.reload(); // Refresh to show updated data
+      }, 1500);
+    } catch (err: any) {
+      console.error('Error updating exercise:', err);
+      setSaveError(err?.message || 'An error occurred');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
   if (!isOpen || !exercise) return null;
 
   return (
@@ -324,16 +424,198 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                 })()}
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
-            >
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={isSaving}
+                    className="px-3 py-1.5 text-sm bg-success-500 hover:bg-success-600 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsEditing(false);
+                      setSaveError(null);
+                      setSaveSuccess(false);
+                    }}
+                    className="px-3 py-1.5 text-sm bg-surface-700 hover:bg-surface-600 text-surface-200 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={onClose}
+                className="p-2 text-surface-400 hover:text-surface-200 hover:bg-surface-800 rounded-lg transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
+          {/* Edit Form or View Mode */}
+          {isEditing && editData ? (
+            <div className="space-y-4 p-4 bg-surface-800/50 rounded-lg border border-surface-700">
+              <h3 className="text-lg font-semibold text-surface-100 mb-4">Edit Exercise</h3>
+              
+              {/* Bodyweight Settings */}
+              <div className="space-y-3">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editData.isBodyweight}
+                    onChange={(e) => setEditData({ ...editData, isBodyweight: e.target.checked })}
+                    className="w-4 h-4 rounded border-surface-600 bg-surface-900 text-primary-500 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-surface-200">Bodyweight Exercise</span>
+                </label>
+                
+                {editData.isBodyweight && (
+                  <div className="ml-6 space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400 mb-1">Bodyweight Type</label>
+                      <select
+                        value={editData.bodyweightType || ''}
+                        onChange={(e) => setEditData({ ...editData, bodyweightType: e.target.value as any || null })}
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                      >
+                        <option value="">Not specified</option>
+                        <option value="pure">Pure (always bodyweight)</option>
+                        <option value="weighted_possible">Can add weight</option>
+                        <option value="assisted_possible">Can use assistance</option>
+                        <option value="both">Can be weighted OR assisted</option>
+                      </select>
+                    </div>
+                    
+                    {(editData.bodyweightType === 'assisted_possible' || editData.bodyweightType === 'both') && (
+                      <div>
+                        <label className="block text-xs font-medium text-surface-400 mb-1">Assistance Type</label>
+                        <select
+                          value={editData.assistanceType || ''}
+                          onChange={(e) => setEditData({ ...editData, assistanceType: e.target.value as any || null })}
+                          className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                        >
+                          <option value="">Not specified</option>
+                          <option value="machine">Machine</option>
+                          <option value="band">Band</option>
+                          <option value="partner">Partner</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Equipment */}
+              <div>
+                <label className="block text-xs font-medium text-surface-400 mb-1">Equipment</label>
+                <select
+                  value={editData.equipment}
+                  onChange={(e) => setEditData({ ...editData, equipment: e.target.value })}
+                  className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                >
+                  <option value="barbell">Barbell</option>
+                  <option value="dumbbell">Dumbbell</option>
+                  <option value="machine">Machine</option>
+                  <option value="cable">Cable</option>
+                  <option value="bodyweight">Bodyweight</option>
+                  <option value="kettlebell">Kettlebell</option>
+                  <option value="band">Band</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              
+              {/* Movement Pattern */}
+              <div>
+                <label className="block text-xs font-medium text-surface-400 mb-1">Movement Pattern</label>
+                <select
+                  value={editData.movementPattern}
+                  onChange={(e) => setEditData({ ...editData, movementPattern: e.target.value })}
+                  className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                >
+                  <option value="horizontal_push">Horizontal Push</option>
+                  <option value="horizontal_pull">Horizontal Pull</option>
+                  <option value="vertical_push">Vertical Push</option>
+                  <option value="vertical_pull">Vertical Pull</option>
+                  <option value="hip_hinge">Hip Hinge</option>
+                  <option value="squat">Squat</option>
+                  <option value="lunge">Lunge</option>
+                  <option value="knee_flexion">Knee Flexion</option>
+                  <option value="elbow_flexion">Elbow Flexion</option>
+                  <option value="elbow_extension">Elbow Extension</option>
+                  <option value="shoulder_isolation">Shoulder Isolation</option>
+                  <option value="calf_raise">Calf Raise</option>
+                  <option value="core">Core</option>
+                  <option value="isolation">Isolation</option>
+                  <option value="carry">Carry</option>
+                  <option value="compound">Compound</option>
+                </select>
+              </div>
+              
+              {/* Primary Muscle */}
+              <div>
+                <label className="block text-xs font-medium text-surface-400 mb-1">Primary Muscle</label>
+                <select
+                  value={editData.primaryMuscle}
+                  onChange={(e) => setEditData({ ...editData, primaryMuscle: e.target.value })}
+                  className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                >
+                  <option value="chest">Chest</option>
+                  <option value="back">Back</option>
+                  <option value="shoulders">Shoulders</option>
+                  <option value="biceps">Biceps</option>
+                  <option value="triceps">Triceps</option>
+                  <option value="quads">Quads</option>
+                  <option value="hamstrings">Hamstrings</option>
+                  <option value="glutes">Glutes</option>
+                  <option value="calves">Calves</option>
+                  <option value="abs">Abs</option>
+                </select>
+              </div>
+              
+              {/* Error/Success Messages */}
+              {saveError && (
+                <div className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg">
+                  <p className="text-sm text-danger-400">{saveError}</p>
+                </div>
+              )}
+              {saveSuccess && (
+                <div className="p-3 bg-success-900/30 border border-success-700 rounded-lg">
+                  <p className="text-sm text-success-400">Exercise updated successfully! Refreshing...</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
           {/* Hypertrophy Effectiveness */}
           {(() => {
             const hypertrophyScore = getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score');
@@ -897,8 +1179,11 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               )}
             </div>
           )}
-
+            </>
+          )}
+          
           {/* Action Buttons */}
+          {!isEditing && (
           <div className="flex gap-3 pt-4 border-t border-surface-800">
             <a
               href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
@@ -915,6 +1200,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               Close
             </Button>
           </div>
+          )}
         </div>
       </Card>
     </div>
