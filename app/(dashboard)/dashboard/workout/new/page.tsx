@@ -182,19 +182,27 @@ function NewWorkoutContent() {
       // ============================================
       
       // Get user's goal and equipment
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
-        .select('goal')
-        .eq('user_id', user.id)
-        .single();
+      let userGoal: Goal = 'maintain';
+      try {
+        const { data: userProfile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('goal')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (!profileError && userProfile?.goal) {
+          userGoal = userProfile.goal as Goal;
+        }
+      } catch (err) {
+        console.warn('user_profiles table not found or error:', err);
+        // Continue with default goal
+      }
       
       const { data: userData } = await supabase
         .from('users')
         .select('available_equipment, injury_history')
         .eq('id', user.id)
         .single();
-      
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
       
       // Get equipment availability from selected location
       let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
@@ -230,13 +238,25 @@ function NewWorkoutContent() {
       }
       
       // Get active injuries (from workout sessions' temporary_injuries)
-      const { data: recentSessions } = await supabase
-        .from('workout_sessions')
-        .select('temporary_injuries')
-        .eq('user_id', user.id)
-        .not('temporary_injuries', 'is', null)
-        .order('started_at', { ascending: false })
-        .limit(1);
+      let recentSessions: any[] | null = null;
+      try {
+        const { data, error: sessionsError } = await supabase
+          .from('workout_sessions')
+          .select('temporary_injuries')
+          .eq('user_id', user.id)
+          .not('temporary_injuries', 'is', null)
+          .order('started_at', { ascending: false })
+          .limit(1);
+        
+        if (!sessionsError && data) {
+          recentSessions = data;
+        } else if (sessionsError) {
+          console.warn('Error fetching workout sessions:', sessionsError);
+        }
+      } catch (err) {
+        console.warn('Error querying workout_sessions:', err);
+        // Continue without injury data
+      }
       
       const activeInjuries: UserInjury[] = [];
       if (recentSessions && recentSessions[0]?.temporary_injuries) {
