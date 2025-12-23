@@ -423,13 +423,20 @@ export default function NutritionPage() {
       }
 
       const userData = userResult.data;
+      console.log('[Nutrition Page] User data from database:', userData);
       if (userData) {
         if (userData.height_cm) {
           profileData.heightInches = Math.round(userData.height_cm / 2.54);
+          console.log('[Nutrition Page] Setting heightCm to:', userData.height_cm);
           setHeightCm(userData.height_cm);
         } else {
+          console.log('[Nutrition Page] No height_cm in userData, setting to null');
           setHeightCm(null);
         }
+      } else {
+        console.log('[Nutrition Page] No userData, setting heightCm to null');
+        setHeightCm(null);
+      }
         if (userData.date_of_birth) {
           const birthDate = new Date(userData.date_of_birth);
           const today = new Date();
