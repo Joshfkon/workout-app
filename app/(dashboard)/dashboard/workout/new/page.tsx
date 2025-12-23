@@ -237,26 +237,54 @@ function NewWorkoutContent() {
         availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
       }
       
-      // Get active injuries (from workout sessions' temporary_injuries)
-      // Note: This column may not exist in all database schemas, so we skip it if it fails
-      let recentSessions: any[] | null = null;
+      // Get active injuries from multiple sources
       const activeInjuries: UserInjury[] = [];
       
-      // Skip injury check if column doesn't exist - injuries are optional for suggestions
-      // We'll just continue without injury filtering
+      // Try to get injuries from the most recent workout session's pre_workout_check_in
+      try {
+        const { data: recentSession, error: sessionError } = await supabase
+          .from('workout_sessions')
+          .select('pre_workout_check_in')
+          .eq('user_id', user.id)
+          .order('started_at', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (!sessionError && recentSession?.pre_workout_check_in) {
+          const checkIn = recentSession.pre_workout_check_in as any;
+          if (checkIn.temporaryInjuries && Array.isArray(checkIn.temporaryInjuries)) {
+            checkIn.temporaryInjuries.forEach((inj: any) => {
+              if (inj.isActive !== false) {
+                activeInjuries.push({
+                  id: inj.id || '',
+                  injuryTypeId: inj.area || inj.injuryTypeId || '',
+                  severity: (inj.severity as any) || 'moderate',
+                  isActive: true,
+                  startDate: new Date(inj.startDate || Date.now()),
+                  affectedSide: inj.affectedSide,
+                });
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error fetching injuries from workout session:', err);
+        // Continue without injury data from sessions
+      }
       
-      const activeInjuries: UserInjury[] = [];
-      if (recentSessions && recentSessions[0]?.temporary_injuries) {
-        const tempInjuries = recentSessions[0].temporary_injuries as any[];
-        tempInjuries.forEach((inj: any) => {
-          if (inj.isActive !== false) {
+      // Also check user's injury_history if available
+      if (userData?.injury_history && Array.isArray(userData.injury_history) && userData.injury_history.length > 0) {
+        // Convert injury_history (array of muscle groups) to UserInjury format
+        // This is a simplified conversion - you may need to adjust based on your schema
+        userData.injury_history.forEach((muscleGroup: string) => {
+          // Only add if not already in activeInjuries
+          if (!activeInjuries.some(inj => inj.injuryTypeId === muscleGroup)) {
             activeInjuries.push({
-              id: inj.id || '',
-              injuryTypeId: inj.area || '',
-              severity: inj.severity || 2,
+              id: `history-${muscleGroup}`,
+              injuryTypeId: muscleGroup,
+              severity: 'moderate' as any, // Default severity
               isActive: true,
-              startDate: new Date(inj.startDate || Date.now()),
-              affectedSide: inj.affectedSide,
+              startDate: new Date(), // Unknown start date from history
             });
           }
         });
