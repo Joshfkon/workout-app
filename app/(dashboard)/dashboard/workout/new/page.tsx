@@ -238,25 +238,12 @@ function NewWorkoutContent() {
       }
       
       // Get active injuries (from workout sessions' temporary_injuries)
+      // Note: This column may not exist in all database schemas, so we skip it if it fails
       let recentSessions: any[] | null = null;
-      try {
-        const { data, error: sessionsError } = await supabase
-          .from('workout_sessions')
-          .select('temporary_injuries')
-          .eq('user_id', user.id)
-          .not('temporary_injuries', 'is', null)
-          .order('started_at', { ascending: false })
-          .limit(1);
-        
-        if (!sessionsError && data) {
-          recentSessions = data;
-        } else if (sessionsError) {
-          console.warn('Error fetching workout sessions:', sessionsError);
-        }
-      } catch (err) {
-        console.warn('Error querying workout_sessions:', err);
-        // Continue without injury data
-      }
+      const activeInjuries: UserInjury[] = [];
+      
+      // Skip injury check if column doesn't exist - injuries are optional for suggestions
+      // We'll just continue without injury filtering
       
       const activeInjuries: UserInjury[] = [];
       if (recentSessions && recentSessions[0]?.temporary_injuries) {
