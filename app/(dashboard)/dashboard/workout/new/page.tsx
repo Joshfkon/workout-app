@@ -12,6 +12,54 @@ import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
 
+// Equipment mapping from equipmentFilter service
+const EQUIPMENT_MAPPING: Record<string, string[]> = {
+  // Machines
+  leg_press: ['leg press', 'machine'],
+  leg_extension: ['leg extension', 'machine'],
+  leg_curl: ['leg curl', 'machine'],
+  hack_squat: ['hack squat', 'machine'],
+  smith_machine: ['smith machine', 'smith'],
+  chest_press: ['chest press machine', 'machine'],
+  pec_deck: ['pec deck', 'fly machine', 'machine'],
+  shoulder_press_machine: ['shoulder press machine', 'machine'],
+  lat_pulldown: ['lat pulldown', 'cable'],
+  seated_row: ['seated row', 'cable row', 'machine'],
+  cable_machine: ['cable', 'pulley'],
+  assisted_dip: ['assisted'],
+  preacher_curl: ['preacher'],
+  calf_raise: ['calf raise machine', 'machine'],
+  hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
+  glute_kickback: ['glute kickback', 'cable'],
+  reverse_hyper: ['reverse hyper'],
+  
+  // Free Weights
+  barbell: ['barbell', 'bar'],
+  dumbbells: ['dumbbell', 'db'],
+  dumbbell: ['dumbbell', 'db'],
+  kettlebells: ['kettlebell', 'kb'],
+  kettlebell: ['kettlebell', 'kb'],
+  ez_bar: ['ez bar', 'ez curl', 'curl bar'],
+  trap_bar: ['trap bar', 'hex bar'],
+  
+  // Benches & Racks
+  flat_bench: ['flat bench', 'bench'],
+  incline_bench: ['incline bench', 'incline'],
+  decline_bench: ['decline bench', 'decline'],
+  squat_rack: ['squat rack', 'power rack', 'rack'],
+  dip_station: ['dip', 'parallel bars'],
+  pull_up_bar: ['pull-up', 'pullup', 'chin-up', 'chinup'],
+  
+  // Other
+  resistance_bands: ['band', 'resistance band'],
+  trx: ['trx', 'suspension'],
+  ab_wheel: ['ab wheel', 'rollout'],
+  medicine_ball: ['medicine ball', 'med ball'],
+  battle_ropes: ['battle ropes', 'rope'],
+  landmine: ['landmine'],
+  bodyweight: ['bodyweight'],
+};
+
 interface Exercise {
   id: string;
   name: string;
