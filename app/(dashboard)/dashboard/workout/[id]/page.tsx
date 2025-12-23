@@ -587,6 +587,7 @@ export default function WorkoutPage() {
               setupNote: block.exercises.setup_note || '',
               movementPattern: block.exercises.movement_pattern || '',
               equipmentRequired: block.exercises.equipment_required || [],
+              equipment: block.exercises.equipment || (block.exercises.equipment_required?.[0] || 'barbell'),
               // Include hypertrophy scoring for tier badges
               hypertrophyScore: block.exercises.hypertrophy_tier ? {
                 tier: block.exercises.hypertrophy_tier,
@@ -595,7 +596,10 @@ export default function WorkoutPage() {
                 progressionEase: block.exercises.progression_ease || 3,
               } : undefined,
               // Bodyweight exercise metadata
-              isBodyweight: (block.exercises.is_bodyweight as boolean) ?? (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight')),
+              // Check is_bodyweight column first, then fall back to equipment field, then equipment_required array
+              isBodyweight: (block.exercises.is_bodyweight as boolean) ?? 
+                           (block.exercises.equipment === 'bodyweight' || 
+                            (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
               bodyweightType: block.exercises.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
               assistanceType: block.exercises.assistance_type as 'machine' | 'band' | 'partner' | undefined,
             },

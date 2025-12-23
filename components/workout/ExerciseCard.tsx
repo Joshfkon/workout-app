@@ -14,6 +14,8 @@ import { SetFeedbackCard } from './SetFeedbackCard';
 import { BodyweightSetInputRow } from './BodyweightSetInputRow';
 import { BodyweightDisplay } from './BodyweightDisplay';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
+import { CompactSetRow } from './CompactSetRow';
+import { SegmentedControl } from './SegmentedControl';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -319,6 +321,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   const canAddWeight = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'weighted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
   const canUseAssistance = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'assisted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
   const isPureBodyweight = isBodyweightExercise && exerciseWithBodyweight.bodyweightType === 'pure';
+
+  // Weight mode state for bodyweight exercises (header-level selection)
+  const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
+    isPureBodyweight ? 'bodyweight' : 'bodyweight'
+  );
 
   // Determine suggested weight
   const suggestedWeight = block.targetWeightKg > 0 
@@ -743,7 +750,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       className={`overflow-hidden transition-all ${isActive ? 'ring-2 ring-primary-500/50' : ''}`}
     >
       {/* Header - compact when hideHeader is true */}
-      <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800`}>
+      <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800 sticky top-0 bg-surface-900 z-10`}>
         <div className="flex items-start justify-between gap-2">
           {/* Exercise name and info - hidden when hideHeader */}
           {!hideHeader && (
@@ -754,6 +761,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                   className="font-semibold text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
                 >
                   {exercise.name}
+                  {isBodyweightExercise && (
+                    <span className="ml-2 text-xs text-surface-500 font-normal">(bodyweight)</span>
+                  )}
                 </button>
                 {exercise.hypertrophyScore?.tier && (
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
@@ -845,28 +855,26 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
 
-        {/* Targets - only show suggested weight, not empty state */}
-        <div className="flex flex-wrap gap-3 mt-2 text-sm">
-          {suggestedWeight > 0 && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-primary-500">💡 Suggested:</span>
-              <span className="font-medium text-primary-300">
-                {displayWeight(suggestedWeight)} {weightLabel}
-              </span>
-            </div>
+        {/* Compact header: Target prescription + Weight mode selector (for bodyweight) */}
+        <div className="flex items-center justify-between gap-3 mt-2">
+          <div className="flex items-center gap-2 text-xs text-surface-400">
+            <span>{block.targetRepRange[0]}-{block.targetRepRange[1]} reps</span>
+            <span>@</span>
+            <span>RIR {block.targetRir}</span>
+          </div>
+          
+          {/* Weight mode segmented control for bodyweight exercises */}
+          {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
+            <SegmentedControl
+              options={[
+                { value: 'bodyweight', label: 'Bodyweight', disabled: false },
+                { value: 'weighted', label: 'Weighted', disabled: !canAddWeight },
+                { value: 'assisted', label: 'Assisted', disabled: !canUseAssistance },
+              ]}
+              value={weightMode}
+              onChange={(value) => setWeightMode(value as 'bodyweight' | 'weighted' | 'assisted')}
+            />
           )}
-          <div className="flex items-center gap-1.5">
-            <span className="text-surface-500">Reps:</span>
-            <span className="font-medium text-surface-200">
-              {block.targetRepRange[0]}-{block.targetRepRange[1]}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-surface-500">RIR:</span>
-            <span className="font-medium text-surface-200">
-              {block.targetRir}
-            </span>
-          </div>
         </div>
 
         {/* Suggestion reason */}
@@ -996,164 +1004,153 @@ export const ExerciseCard = memo(function ExerciseCard({
         )}
       </div>
 
-      {/* Sets table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-800/50">
-            <tr>
-              <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
-              <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
-              <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
-              <th className="px-2 py-2 text-center text-surface-400 font-medium">Form</th>
-              <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
-              <th className="px-2 py-2 w-12"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-surface-800">
-            {/* Warmup sets - displayed inline before working sets */}
-            {isActive && warmupSets.length > 0 && workingWeight > 0 && warmupSets.map((warmup) => {
-              // Use custom weight if set, otherwise calculate from percentage
-              const calculatedWeightKg = workingWeight * (warmup.percentOfWorking / 100);
-              const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
-              const warmupWeightKg = hasCustomWeight 
-                ? customWarmupWeights.get(warmup.setNumber)! 
-                : calculatedWeightKg;
-              // Use exact custom weights (including .5 increments) instead of rounding them away
-              const warmupWeightForDisplayKg = hasCustomWeight
-                ? warmupWeightKg
-                : roundToPlateIncrement(warmupWeightKg, unit);
-
-              const warmupWeightForDisplay = parseFloat(
-                convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
-              );
-
-              const displayWarmupWeight = warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay;
-              const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
-              const isEditingThis = editingWarmupId === warmup.setNumber;
-              
-              return (
-                <tr 
-                  key={`warmup-${warmup.setNumber}`}
-                  className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
-                >
-                  <td className="px-3 py-2 text-amber-400 font-medium text-xs">
-                    W{warmup.setNumber}
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    {isEditingThis ? (
-                      <input
-                        type="number"
-                        value={warmupWeightInput}
-                        onChange={(e) => setWarmupWeightInput(e.target.value)}
-                        onBlur={() => {
-                          const newWeight = parseFloat(warmupWeightInput);
-                          if (!isNaN(newWeight) && newWeight >= 0) {
-                            // Convert to kg if needed
-                            const weightInKg = inputWeightToKg(newWeight, unit);
-                            setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
-                          }
-                          setEditingWarmupId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const newWeight = parseFloat(warmupWeightInput);
-                            if (!isNaN(newWeight) && newWeight >= 0) {
-                              const weightInKg = inputWeightToKg(newWeight, unit);
-                              setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
-                            }
-                            setEditingWarmupId(null);
-                          } else if (e.key === 'Escape') {
-                            setEditingWarmupId(null);
-                          }
-                        }}
-                        autoFocus
-                        className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setEditingWarmupId(warmup.setNumber);
-                          setWarmupWeightInput(warmupWeightForDisplay.toString());
-                        }}
-                        className="font-mono text-surface-300 text-sm hover:text-amber-400 transition-colors"
-                      >
-                        {displayWarmupWeight}
-                        {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">
-                    {warmup.targetReps}
-                  </td>
-                  <td className="px-2 py-2 text-center text-surface-500 text-xs">
-                    —
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
-                  </td>
-                  <td className="px-2 py-2">
-                    <button
-                      onClick={() => {
-                        const wasCompleted = completedWarmups.has(warmup.setNumber);
-                        
-                        setCompletedWarmups(prev => {
-                          const next = new Set(prev);
-                          if (next.has(warmup.setNumber)) {
-                            next.delete(warmup.setNumber);
-                          } else {
-                            next.add(warmup.setNumber);
-                          }
-                          return next;
-                        });
-                        
-                        // Trigger rest timer when completing (not unchecking) a warmup
-                        if (!wasCompleted && onWarmupComplete) {
-                          // Use warmup rest time, default to 45s if not specified
-                          const restTime = warmup.restSeconds || 45;
-                          onWarmupComplete(restTime);
-                        }
-                      }}
-                      className={`p-2 rounded-lg transition-colors ${
-                        isWarmupCompleted 
-                          ? 'bg-amber-500 text-white' 
-                          : 'bg-surface-700 hover:bg-surface-600 text-surface-400'
-                      }`}
-                    >
-                      {isWarmupCompleted ? (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                      )}
-                    </button>
-                  </td>
+      {/* Warmup sets - keep in separate table for now (legacy) */}
+      {isActive && warmupSets.length > 0 && workingWeight > 0 && (
+        <div className="border-b border-surface-800">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-surface-800/50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
+                  <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
+                  <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
+                  <th className="px-2 py-2 text-center text-surface-400 font-medium">Form</th>
+                  <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Purpose</th>
+                  <th className="px-2 py-2 w-12"></th>
                 </tr>
-              );
-            })}
-            
-            {/* Skip warmup button */}
-            {isActive && warmupSets.length > 0 && workingWeight > 0 && completedWarmups.size < warmupSets.length && (
-              <tr className="bg-surface-800/30">
-                <td colSpan={6} className="px-3 py-1.5 text-center">
-                  <button
-                    onClick={() => setCompletedWarmups(new Set(warmupSets.map(w => w.setNumber)))}
-                    className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
-                  >
-                    Skip warmup (already warm)
-                  </button>
-                </td>
-              </tr>
-            )}
-            
-            {/* Completed working sets */}
+              </thead>
+              <tbody className="divide-y divide-surface-800">
+                {warmupSets.map((warmup) => {
+                  const calculatedWeightKg = workingWeight * (warmup.percentOfWorking / 100);
+                  const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
+                  const warmupWeightKg = hasCustomWeight 
+                    ? customWarmupWeights.get(warmup.setNumber)! 
+                    : calculatedWeightKg;
+                  const warmupWeightForDisplayKg = hasCustomWeight
+                    ? warmupWeightKg
+                    : roundToPlateIncrement(warmupWeightKg, unit);
+                  const warmupWeightForDisplay = parseFloat(
+                    convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
+                  );
+                  const displayWarmupWeight = warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay;
+                  const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
+                  const isEditingThis = editingWarmupId === warmup.setNumber;
+                  
+                  return (
+                    <tr 
+                      key={`warmup-${warmup.setNumber}`}
+                      className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
+                    >
+                      <td className="px-3 py-2 text-amber-400 font-medium text-xs">W{warmup.setNumber}</td>
+                      <td className="px-2 py-2 text-center">
+                        {isEditingThis ? (
+                          <input
+                            type="number"
+                            value={warmupWeightInput}
+                            onChange={(e) => setWarmupWeightInput(e.target.value)}
+                            onBlur={() => {
+                              const newWeight = parseFloat(warmupWeightInput);
+                              if (!isNaN(newWeight) && newWeight >= 0) {
+                                const weightInKg = inputWeightToKg(newWeight, unit);
+                                setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
+                              }
+                              setEditingWarmupId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const newWeight = parseFloat(warmupWeightInput);
+                                if (!isNaN(newWeight) && newWeight >= 0) {
+                                  const weightInKg = inputWeightToKg(newWeight, unit);
+                                  setCustomWarmupWeights(prev => new Map(prev).set(warmup.setNumber, weightInKg));
+                                }
+                                setEditingWarmupId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingWarmupId(null);
+                              }
+                            }}
+                            autoFocus
+                            className="w-16 px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                          />
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditingWarmupId(warmup.setNumber);
+                              setWarmupWeightInput(warmupWeightForDisplay.toString());
+                            }}
+                            className="font-mono text-surface-300 text-sm hover:text-amber-400 transition-colors"
+                          >
+                            {displayWarmupWeight}
+                            {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-center font-mono text-surface-300 text-sm">{warmup.targetReps}</td>
+                      <td className="px-2 py-2 text-center text-surface-500 text-xs">—</td>
+                      <td className="px-3 py-2 text-center"><span className="text-xs text-amber-400/70">{warmup.purpose}</span></td>
+                      <td className="px-2 py-2">
+                        <button
+                          onClick={() => {
+                            const wasCompleted = completedWarmups.has(warmup.setNumber);
+                            setCompletedWarmups(prev => {
+                              const next = new Set(prev);
+                              if (next.has(warmup.setNumber)) {
+                                next.delete(warmup.setNumber);
+                              } else {
+                                next.add(warmup.setNumber);
+                              }
+                              return next;
+                            });
+                            if (!wasCompleted && onWarmupComplete) {
+                              const restTime = warmup.restSeconds || 45;
+                              onWarmupComplete(restTime);
+                            }
+                          }}
+                          className={`p-2 rounded-lg transition-colors ${
+                            isWarmupCompleted 
+                              ? 'bg-amber-500 text-white' 
+                              : 'bg-surface-700 hover:bg-surface-600 text-surface-400'
+                          }`}
+                        >
+                          {isWarmupCompleted ? (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {completedWarmups.size < warmupSets.length && (
+                  <tr className="bg-surface-800/30">
+                    <td colSpan={6} className="px-3 py-1.5 text-center">
+                      <button
+                        onClick={() => setCompletedWarmups(new Set(warmupSets.map(w => w.setNumber)))}
+                        className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
+                      >
+                        Skip warmup (already warm)
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Compact set rows - new streamlined design */}
+      <div className="divide-y divide-surface-800">
+            {/* Completed working sets - NEW COMPACT DESIGN */}
             {completedSets.map((set, setIndex) => {
               const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
               const isLastCompletedSet = setIndex === completedSets.length - 1;
               
-              // Use bodyweight edit row for bodyweight sets
+              // Use bodyweight edit row for bodyweight sets when editing
               if (editingSetId === set.id && isBodyweightExercise && set.bodyweightData && userBodyweightKg) {
                 return (
                   <BodyweightSetEditRow
@@ -1180,6 +1177,29 @@ export const ExerciseCard = memo(function ExerciseCard({
                 );
               }
               
+              // Use compact row for completed sets (when not editing)
+              if (editingSetId !== set.id) {
+                return (
+                  <CompactSetRow
+                    key={set.id}
+                    setNumber={set.setNumber}
+                    userBodyweightKg={userBodyweightKg}
+                    weightMode={weightMode}
+                    isBodyweight={isBodyweightExercise}
+                    canAddWeight={canAddWeight}
+                    canUseAssistance={canUseAssistance}
+                    isPureBodyweight={isPureBodyweight}
+                    targetRepRange={block.targetRepRange}
+                    targetRir={block.targetRir}
+                    isCompleted={true}
+                    completedSet={set}
+                    onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
+                    unit={unit}
+                  />
+                );
+              }
+              
+              // Legacy edit mode (fallback)
               return editingSetId === set.id ? (
                 <tr key={set.id} className="bg-primary-500/10">
                   <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
@@ -1470,140 +1490,95 @@ export const ExerciseCard = memo(function ExerciseCard({
               </tr>
             )}
             
-            {/* Pending sets - use BodyweightSetInputRow for bodyweight exercises, table inputs for others */}
-            {isActive && pendingInputs.map((input, index) => {
+            {/* Pending sets - NEW COMPACT DESIGN */}
+            {isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
               const setNumber = completedSets.length + index + 1;
-              const pendingId = `pending-set-${setNumber}`;
               const previousSet = completedSets[completedSets.length - 1] || previousSets[completedSets.length + index - 1];
-
-              // Use BodyweightSetInputRow for bodyweight exercises
-              if (isBodyweightExercise && userBodyweightKg) {
-                return (
-                  <tr key={pendingId} className="bg-surface-800/30">
-                    <td colSpan={6} className="px-3 py-3">
-                      <BodyweightSetInputRow
-                        setNumber={setNumber}
-                        userBodyweightKg={userBodyweightKg}
-                        targetRepRange={block.targetRepRange}
-                        targetRir={block.targetRir}
-                        previousSet={previousSet}
-                        isLastSet={index === pendingInputs.length - 1}
-                        onSubmit={async (data) => {
-                          if (onSetComplete) {
-                            const result = await onSetComplete({
-                              weightKg: data.weightKg,
-                              reps: data.reps,
-                              rpe: data.rpe,
-                              note: data.note,
-                              feedback: data.feedback,
-                              bodyweightData: data.bodyweightData,
-                            });
-                            // Remove this pending input after completion
-                            setPendingInputs(prev => prev.filter((_, i) => i !== index));
-                            return result;
-                          }
-                        }}
-                        canAddWeight={canAddWeight}
-                        canUseAssistance={canUseAssistance}
-                        isPureBodyweight={isPureBodyweight}
-                        disabled={isCompletingSet}
-                        unit={unit}
-                      />
-                    </td>
-                  </tr>
-                );
-              }
-
-              // Regular table input for non-bodyweight exercises
+              
               return (
-                <tr
-                  key={pendingId}
-                  className="bg-surface-800/30"
-                  onTouchStart={(e) => handleTouchStart(pendingId, e)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={() => handleTouchEnd(pendingId, false)}
-                  style={getSwipeTransform(pendingId)}
-                >
-                  <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={input.weight}
-                      onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      step="0.5"
-                      min="0"
-                      placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—'}
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={input.reps}
-                      onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      min="0"
-                      max="100"
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    <span className="text-surface-600 text-xs">—</span>
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    <span className="text-surface-600">—</span>
-                  </td>
-                  <td className="px-2 py-1.5 relative">
-                    {/* Delete reveal background for swipe */}
-                    {swipeState.setId === pendingId && swipeState.isSwiping && (
-                      <div
-                        className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => completeSetImmediately(index)}
-                      disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
-                      className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
-                      title="Complete set"
-                    >
-                      {isCompletingSet ? (
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                    </button>
-                  </td>
-                </tr>
+                <CompactSetRow
+                  key={`pending-${setNumber}`}
+                  setNumber={setNumber}
+                  userBodyweightKg={userBodyweightKg}
+                  weightMode={weightMode}
+                  isBodyweight={isBodyweightExercise}
+                  canAddWeight={canAddWeight}
+                  canUseAssistance={canUseAssistance}
+                  isPureBodyweight={isPureBodyweight}
+                  previousSet={previousSet}
+                  targetRepRange={block.targetRepRange}
+                  targetRir={block.targetRir}
+                  isActive={index === 0}
+                  suggestedWeight={suggestedWeight}
+                  onSubmit={async (data) => {
+                    if (onSetComplete) {
+                      const result = await onSetComplete({
+                        weightKg: data.weightKg,
+                        reps: data.reps,
+                        rpe: data.rpe,
+                        note: data.note,
+                        feedback: data.feedback,
+                        bodyweightData: data.bodyweightData,
+                      });
+                      return result;
+                    }
+                  }}
+                  unit={unit}
+                  disabled={isCompletingSet}
+                />
               );
             })}
-            
-            {/* Show placeholder rows when not active */}
-            {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
-              const inactiveSetNumber = completedSets.length + i + 1;
+
+            {/* Inactive placeholder sets */}
+            {!isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
+              const setNumber = completedSets.length + index + 1;
               return (
-              <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
-                <td className="px-3 py-2.5 text-surface-500">{inactiveSetNumber}</td>
-                <td className="px-2 py-2.5 text-center text-surface-600">—</td>
-                <td className="px-2 py-2.5 text-center text-surface-600">—</td>
-                <td className="px-2 py-2.5 text-center text-surface-600">—</td>
-                <td className="px-3 py-2.5 text-center text-surface-600">—</td>
-                <td className="px-2 py-2.5"></td>
-              </tr>
-            );
+                <div
+                  key={`inactive-${setNumber}`}
+                  className="flex items-center gap-2 px-3 py-2 h-14 bg-surface-800/20 opacity-40"
+                >
+                  <div className="w-8 text-xs text-surface-500">{setNumber}</div>
+                  <div className="flex-1 text-xs text-surface-600">—</div>
+                  <div className="w-20 text-center text-sm text-surface-600">—</div>
+                  <div className="w-10"></div>
+                </div>
+              );
             })}
-          </tbody>
-        </table>
       </div>
+
+      {/* Footer actions - NEW COMPACT DESIGN */}
+      {isActive && (
+        <div className="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs">
+          {onTargetSetsChange && (
+            <button
+              onClick={() => onTargetSetsChange(block.targetSets + 1)}
+              disabled={block.targetSets >= 10}
+              className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+            >
+              + Add Set
+            </button>
+          )}
+          <a
+            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-surface-400 hover:text-surface-200 transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3 h-3 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+            </svg>
+            Watch Form
+          </a>
+          {onBlockNoteUpdate && (
+            <button
+              onClick={() => setIsEditingNote(true)}
+              className="text-surface-400 hover:text-surface-200 transition-colors"
+            >
+              Notes
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Form cues accordion */}
       {exercise.formCues.length > 0 && (

@@ -14,4 +14,6 @@ export { BodyweightInput } from './BodyweightInput';
 export { BodyweightDisplay, BodyweightDisplayInline, BodyweightPRBadge } from './BodyweightDisplay';
 export { BodyweightSetInputRow } from './BodyweightSetInputRow';
 export { BodyweightSetEditRow } from './BodyweightSetEditRow';
+export { CompactSetRow } from './CompactSetRow';
+export { SegmentedControl } from './SegmentedControl';
 

@@ -164,12 +164,12 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
 
   // Weight and reps input phase
   return (
-    <div className="bg-surface-800/50 rounded-lg p-3 space-y-3">
-      {/* Set header */}
+    <div className="bg-surface-800/50 rounded-lg p-2 space-y-2">
+      {/* Set header - more compact */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-surface-300">Set {setNumber}</span>
+        <span className="text-xs font-medium text-surface-300">Set {setNumber}</span>
         <span className="text-xs text-surface-500">
-          Target: {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
+          {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
         </span>
       </div>
 
@@ -185,10 +185,10 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
         disabled={disabled}
       />
 
-      {/* Reps input row */}
+      {/* Reps input row - more compact */}
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label className="block text-xs text-surface-500 mb-1">Reps</label>
+          <label className="block text-xs text-surface-500 mb-0.5">Reps</label>
           <input
             type="number"
             value={reps}
@@ -196,22 +196,22 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
             disabled={disabled}
             min="0"
             max="100"
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+            className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-surface-100 text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
         <Button
           onClick={handleProceedToFeedback}
           disabled={disabled || !reps || parseInt(reps) < 1}
-          size="md"
+          size="sm"
           className="shrink-0"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </Button>
       </div>
 
-      {/* Note toggle and input */}
+      {/* Note toggle and input - more compact */}
       {!showNote ? (
         <button
           onClick={() => setShowNote(true)}
@@ -228,7 +228,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Set note (optional)"
-          className="w-full px-3 py-1.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-300 placeholder:text-surface-600 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          className="w-full px-2 py-1 bg-surface-900 border border-surface-700 rounded text-xs text-surface-300 placeholder:text-surface-600 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
       )}
     </div>

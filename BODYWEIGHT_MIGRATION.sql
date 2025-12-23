@@ -1,5 +1,6 @@
 -- Bodyweight Exercise Tracking Migration
 -- Adds support for bodyweight exercises with weight modifications (added weight, assistance)
+-- Run this in your Supabase SQL Editor
 
 -- ============================================
 -- ADD BODYWEIGHT COLUMNS TO EXERCISES TABLE
@@ -30,17 +31,6 @@ ADD COLUMN IF NOT EXISTS assistance_type TEXT CHECK (
 -- ============================================
 
 -- Add bodyweight_data JSONB column for storing bodyweight-specific set data
--- Structure:
--- {
---   "userBodyweightKg": number,
---   "modification": "none" | "weighted" | "assisted",
---   "addedWeightKg": number | null,
---   "assistanceWeightKg": number | null,
---   "assistanceType": "machine" | "band" | "partner" | null,
---   "bandColor": "yellow" | "red" | "black" | "purple" | "green" | null,
---   "effectiveLoadKg": number,
---   "_needsReview": boolean | null
--- }
 ALTER TABLE set_logs
 ADD COLUMN IF NOT EXISTS bodyweight_data JSONB;
 
@@ -120,3 +110,4 @@ COMMENT ON COLUMN exercises.is_bodyweight IS 'Whether this exercise uses bodywei
 COMMENT ON COLUMN exercises.bodyweight_type IS 'Type of bodyweight exercise: pure (no modifications), weighted_possible, assisted_possible, or both';
 COMMENT ON COLUMN exercises.assistance_type IS 'Default assistance type for assisted bodyweight exercises: machine, band, or partner';
 COMMENT ON COLUMN set_logs.bodyweight_data IS 'Bodyweight-specific data including user weight, modification type, added/assistance weight, and effective load';
+
