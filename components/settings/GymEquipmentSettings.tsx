@@ -253,7 +253,8 @@ export function GymEquipmentSettings() {
     setIsSaving(false);
   }
 
-  async function handleCreateLocation() {
+  function handleCreateLocation() {
+    console.log('handleCreateLocation called');
     setEditingLocation(null);
     setLocationName('');
     setShowLocationModal(true);
@@ -416,10 +417,16 @@ export function GymEquipmentSettings() {
                 Gym Location
               </label>
               <Button
-                onClick={handleCreateLocation}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Add Location button clicked', { selectedLocationId, locations });
+                  handleCreateLocation();
+                }}
                 variant="outline"
                 size="sm"
-                disabled={selectedLocationId === 'fallback'}
+                disabled={selectedLocationId === 'fallback' || locations.length === 0}
+                className="relative z-30"
               >
                 <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
