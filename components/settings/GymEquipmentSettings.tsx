@@ -415,18 +415,17 @@ export function GymEquipmentSettings() {
               <label className="block text-sm font-medium text-surface-200">
                 Gym Location
               </label>
-              {selectedLocationId !== 'fallback' && (
-                <Button
-                  onClick={handleCreateLocation}
-                  variant="outline"
-                  size="sm"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Location
-                </Button>
-              )}
+              <Button
+                onClick={handleCreateLocation}
+                variant="outline"
+                size="sm"
+                disabled={selectedLocationId === 'fallback'}
+              >
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Location
+              </Button>
             </div>
             
             <div className="flex gap-2 flex-wrap">
