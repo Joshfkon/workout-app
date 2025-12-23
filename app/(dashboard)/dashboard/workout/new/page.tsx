@@ -407,13 +407,14 @@ function NewWorkoutContent() {
             .in('id', Array.from(unavailableIds));
           
           if (equipmentTypes) {
-            const unavailableNames = new Set(equipmentTypes.map((et: any) => et.name.toLowerCase()));
+            const unavailableNames = new Set<string>(equipmentTypes.map((et: any) => String(et.name).toLowerCase()));
             
             // Filter out exercises that require unavailable equipment
             candidateExercises = candidateExercises.filter((e: any) => {
               // Check if exercise name or equipment_required mentions unavailable equipment
-              const exerciseNameLower = e.name.toLowerCase();
-              const hasUnavailable = Array.from(unavailableNames).some(name => 
+              const exerciseNameLower = String(e.name).toLowerCase();
+              const unavailableNamesArray = Array.from(unavailableNames);
+              const hasUnavailable = unavailableNamesArray.some((name: string) => 
                 exerciseNameLower.includes(name)
               );
               
@@ -422,7 +423,7 @@ function NewWorkoutContent() {
               // Also check equipment_required array
               if (e.equipment_required) {
                 const hasUnavailableInRequired = e.equipment_required.some((req: string) => 
-                  Array.from(unavailableNames).some(name => req.toLowerCase().includes(name))
+                  unavailableNamesArray.some((name: string) => String(req).toLowerCase().includes(name))
                 );
                 if (hasUnavailableInRequired) return false;
               }
@@ -729,7 +730,7 @@ function NewWorkoutContent() {
         if (!error && locations && locations.length > 0) {
           setGymLocations(locations);
           // Select default location or first location
-          const defaultLocation = locations.find(l => l.is_default) || locations[0];
+          const defaultLocation = locations.find((l: { id: string; name: string; is_default: boolean }) => l.is_default) || locations[0];
           setSelectedLocationId(defaultLocation.id);
         } else {
           // Fallback: create virtual location
@@ -1140,7 +1141,7 @@ function NewWorkoutContent() {
                 <div className="flex-1 text-center sm:text-left">
                   <h3 className="font-semibold text-surface-100">Not sure what to train?</h3>
                   <p className="text-sm text-surface-400 mt-0.5">
-                    We&apos;ll suggest muscles and exercises based on your recent history, goals, and {selectedLocationId && gymLocations.find(l => l.id === selectedLocationId) ? `equipment at ${gymLocations.find(l => l.id === selectedLocationId)?.name}` : 'available equipment'}
+                    We&apos;ll suggest muscles and exercises based on your recent history, goals, and {selectedLocationId && gymLocations.find((l: { id: string; name: string; is_default: boolean }) => l.id === selectedLocationId) ? `equipment at ${gymLocations.find((l: { id: string; name: string; is_default: boolean }) => l.id === selectedLocationId)?.name}` : 'available equipment'}
                   </p>
                 </div>
                 <Button 
