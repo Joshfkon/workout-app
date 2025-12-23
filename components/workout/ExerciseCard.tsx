@@ -1143,408 +1143,566 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Compact set rows - new streamlined design */}
-      <div className="divide-y divide-surface-800">
-            {/* Completed working sets - NEW COMPACT DESIGN */}
-            {completedSets.map((set, setIndex) => {
-              const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
-              const isLastCompletedSet = setIndex === completedSets.length - 1;
-              
-              // Use bodyweight edit row for bodyweight sets when editing
-              if (editingSetId === set.id && isBodyweightExercise && set.bodyweightData && userBodyweightKg) {
-                return (
-                  <BodyweightSetEditRow
-                    key={set.id}
-                    set={set}
-                    userBodyweightKg={userBodyweightKg}
-                    canAddWeight={canAddWeight}
-                    canUseAssistance={canUseAssistance}
-                    isPureBodyweight={isPureBodyweight}
-                    unit={unit}
-                    onSave={(data) => {
-                      if (onSetEdit) {
-                        onSetEdit(set.id, {
-                          weightKg: data.weightKg,
-                          reps: data.reps,
-                          rpe: data.rpe,
-                          bodyweightData: data.bodyweightData,
-                        });
-                      }
-                      cancelEditing();
-                    }}
-                    onCancel={cancelEditing}
-                  />
-                );
-              }
-              
-              // Use compact row for completed sets (when not editing)
-              if (editingSetId !== set.id) {
-                return (
-                  <CompactSetRow
-                    key={set.id}
-                    setNumber={set.setNumber}
-                    userBodyweightKg={userBodyweightKg}
-                    weightMode={weightMode}
-                    isBodyweight={isBodyweightExercise}
-                    canAddWeight={canAddWeight}
-                    canUseAssistance={canUseAssistance}
-                    isPureBodyweight={isPureBodyweight}
-                    targetRepRange={block.targetRepRange}
-                    targetRir={block.targetRir}
-                    isCompleted={true}
-                    completedSet={set}
-                    onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
-                    unit={unit}
-                  />
-                );
-              }
-              
-              // Legacy edit mode (fallback)
-              return editingSetId === set.id ? (
-                <tr key={set.id} className="bg-primary-500/10">
-                  <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={editWeight}
-                      onChange={(e) => setEditWeight(e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={handleEditKeyDown}
-                      step="0.5"
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                      autoFocus
-                    />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={editReps}
-                      onChange={(e) => setEditReps(e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={handleEditKeyDown}
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                    />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      value={editRpe}
-                      onChange={(e) => setEditRpe(e.target.value)}
-                      onFocus={(e) => e.target.select()}
-                      onKeyDown={handleEditKeyDown}
-                      step="0.5"
-                      className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                    />
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    <SetQualityBadge quality={set.quality} />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex gap-1 justify-center">
-                      <button
-                        onClick={saveEdit}
-                        className="p-1.5 text-success-400 hover:bg-success-500/20 rounded"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={cancelEditing}
-                        className="p-1.5 text-surface-400 hover:bg-surface-700 rounded"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                <React.Fragment key={set.id}>
-                  <tr
-                    className={`hover:bg-surface-800/30 group ${
-                      isDropset ? 'bg-purple-500/10' : 'bg-success-500/5'
-                    }`}
-                    onTouchStart={(e) => handleTouchStart(set.id, e)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={() => handleTouchEnd(set.id, true)}
-                    style={getSwipeTransform(set.id)}
-                  >
-                    <td className="px-3 py-2.5 text-surface-300 font-medium">
-                      <div className="flex items-center gap-1">
-                        {isDropset && <span className="text-purple-400 text-xs">↓</span>}
-                        {set.setNumber}
-                      </div>
-                    </td>
-                  <td 
-                    className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                    onClick={() => onSetEdit && startEditing(set)}
-                  >
-                    {set.bodyweightData ? (
-                      <BodyweightDisplay data={set.bodyweightData} mode="compact" unit={unit} />
-                    ) : (
-                      displayWeight(set.weightKg)
-                    )}
-                  </td>
-                  <td 
-                    className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                    onClick={() => onSetEdit && startEditing(set)}
-                  >
-                    {set.reps}
-                  </td>
-                  <td
-                    className={`px-2 py-2.5 text-center text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                    onClick={() => onSetEdit && startEditing(set)}
-                  >
-                    {set.feedback?.form === 'clean' ? (
-                      <span className="text-success-400 text-xs">Clean</span>
-                    ) : set.feedback?.form === 'some_breakdown' ? (
-                      <span className="text-warning-400 text-xs">~Form</span>
-                    ) : set.feedback?.form === 'ugly' ? (
-                      <span className="text-danger-400 text-xs">Ugly</span>
-                    ) : (
-                      <span className="text-surface-500 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
-                    <SetQualityBadge quality={set.quality} />
-                  </td>
-                  <td className="px-2 py-2.5 relative">
-                    {/* Delete reveal background for swipe - positioned relative to this cell */}
-                    {swipeState.setId === set.id && swipeState.isSwiping && (
-                      <div
-                        className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </div>
-                    )}
-                    {onSetDelete ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSetDelete(set.id);
-                        }}
-                        className="p-2 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
-                        title="Uncheck set"
-                      >
-                        <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <svg className="w-4 h-4 text-surface-400 hidden group-active/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    ) : (
-                      <div className="p-2 rounded-lg bg-success-500">
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-                
-                {/* Add Dropset button - only show for last completed set when active
-                    AND when block does NOT have auto-dropsets configured (manual mode only) */}
-                {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
-                 pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
-                  <tr className="bg-surface-800/20">
-                    <td colSpan={6} className="px-3 py-2">
-                      <button
-                        onClick={() => startDropset(set)}
-                        className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                        </svg>
-                        Add Dropset (reduce weight, continue to failure)
-                      </button>
-                    </td>
-                  </tr>
-                )}
-                </React.Fragment>
-              );
-            })}
-
-            {/* Auto-triggered Dropset Prompt - appears immediately after main set when block has dropsets configured */}
-            {isActive && pendingDropset && (
-              <DropsetPrompt
-                parentWeight={pendingDropset.parentWeight}
-                dropNumber={pendingDropset.dropNumber}
-                totalDrops={pendingDropset.totalDrops}
-                dropPercentage={block.dropPercentage ?? 0.25}
-                unit={unit}
-                exerciseEquipment={exercise.equipmentRequired}
-                onComplete={(data) => {
-                  if (onSetComplete) {
-                    onSetComplete({
-                      weightKg: data.weightKg,
-                      reps: data.reps,
-                      rpe: data.rpe,
-                      setType: 'dropset',
-                      parentSetId: pendingDropset.parentSetId,
-                    });
-                  }
-                }}
-                onCancel={() => onDropsetCancel?.()}
-              />
-            )}
-
-            {/* Inline Rest Timer - appears after completing a set or warmup (NOT during dropset) */}
-            {/* Show when timer is active OR when skipped (to show "Rested for X" message) */}
-            {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
-              <InlineRestTimerBar
-                seconds={timerSeconds}
-                initialSeconds={timerInitialSeconds}
-                isRunning={timerIsRunning}
-                isFinished={timerIsFinished}
-                isSkipped={timerIsSkipped}
-                restedSeconds={timerRestedSeconds}
-                onShowControls={onShowTimerControls}
-              />
-            )}
-
-            {/* Manual Dropset input row - for blocks WITHOUT configured dropsets (legacy/manual mode) */}
-            {isActive && dropsetMode && !pendingDropset && (
-              <tr className="bg-purple-500/20 border-l-2 border-purple-500">
-                <td className="px-3 py-2 text-purple-400 font-medium">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs">↓</span>
-                    D
-                  </div>
-                </td>
-                <td className="px-1 py-1.5">
-                  <input
-                    type="number"
-                    defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
-                    id="dropset-weight-input"
-                    step="0.5"
-                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
-                    autoFocus
-                  />
-                </td>
-                <td className="px-1 py-1.5">
-                  <input
-                    type="number"
-                    defaultValue=""
-                    id="dropset-reps-input"
-                    placeholder="?"
-                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm placeholder-surface-500"
-                  />
-                </td>
-                <td className="px-1 py-1.5">
-                  <input
-                    type="number"
-                    defaultValue="10"
-                    id="dropset-rpe-input"
-                    step="0.5"
-                    className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
-                  />
-                </td>
-                <td className="px-3 py-1.5 text-center">
-                  <span className="text-xs text-purple-400 font-medium">DROPSET</span>
-                </td>
-                <td className="px-2 py-1.5">
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
-                        const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
-                        const rpeEl = document.getElementById('dropset-rpe-input') as HTMLInputElement;
-
-                        const weight = parseFloat(weightEl?.value || '0');
-                        const reps = parseInt(repsEl?.value || '0');
-                        const rpe = parseFloat(rpeEl?.value || '10');
-
-                        if (weight > 0 && reps > 0 && onSetComplete) {
-                          const weightKg = inputWeightToKg(weight, unit);
-                          onSetComplete({
-                            weightKg,
-                            reps,
-                            rpe,
-                            setType: 'dropset',
-                            parentSetId: dropsetMode.parentSetId,
-                          });
-                          setDropsetMode(null);
-                        }
-                      }}
-                      className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors"
-                    >
-                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={cancelDropset}
-                      className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
-                    >
-                      <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )}
+      {/* Bodyweight exercises: Compact design | Non-bodyweight: Table design */}
+      {isBodyweightExercise ? (
+        // Compact set rows for bodyweight exercises
+        <div className="divide-y divide-surface-800">
+          {/* Completed working sets */}
+          {completedSets.map((set, setIndex) => {
+            const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
+            const isLastCompletedSet = setIndex === completedSets.length - 1;
             
-            {/* Pending sets - NEW COMPACT DESIGN */}
-            {isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
-              const setNumber = completedSets.length + index + 1;
-              const previousSet = completedSets[completedSets.length - 1] || previousSets[completedSets.length + index - 1];
-              
+            // Use bodyweight edit row for bodyweight sets when editing
+            if (editingSetId === set.id && set.bodyweightData && userBodyweightKg) {
+              return (
+                <BodyweightSetEditRow
+                  key={set.id}
+                  set={set}
+                  userBodyweightKg={userBodyweightKg}
+                  canAddWeight={canAddWeight}
+                  canUseAssistance={canUseAssistance}
+                  isPureBodyweight={isPureBodyweight}
+                  unit={unit}
+                  onSave={(data) => {
+                    if (onSetEdit) {
+                      onSetEdit(set.id, {
+                        weightKg: data.weightKg,
+                        reps: data.reps,
+                        rpe: data.rpe,
+                        bodyweightData: data.bodyweightData,
+                      });
+                    }
+                    cancelEditing();
+                  }}
+                  onCancel={cancelEditing}
+                />
+              );
+            }
+            
+            // Use compact row for completed sets (when not editing)
+            if (editingSetId !== set.id) {
               return (
                 <CompactSetRow
-                  key={`pending-${setNumber}`}
-                  setNumber={setNumber}
+                  key={set.id}
+                  setNumber={set.setNumber}
                   userBodyweightKg={userBodyweightKg}
                   weightMode={weightMode}
                   isBodyweight={isBodyweightExercise}
                   canAddWeight={canAddWeight}
                   canUseAssistance={canUseAssistance}
                   isPureBodyweight={isPureBodyweight}
-                  previousSet={previousSet}
                   targetRepRange={block.targetRepRange}
                   targetRir={block.targetRir}
-                  isActive={index === 0}
-                  suggestedWeight={suggestedWeight}
-                  onSubmit={async (data) => {
-                    if (onSetComplete) {
-                      const result = await onSetComplete({
-                        weightKg: data.weightKg,
-                        reps: data.reps,
-                        rpe: data.rpe,
-                        note: data.note,
-                        feedback: data.feedback,
-                        bodyweightData: data.bodyweightData,
-                      });
-                      return result;
-                    }
-                  }}
+                  isCompleted={true}
+                  completedSet={set}
+                  onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
                   unit={unit}
-                  disabled={isCompletingSet}
                 />
               );
-            })}
+            }
+            
+            return null;
+          })}
 
-            {/* Inactive placeholder sets */}
-            {!isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
-              const setNumber = completedSets.length + index + 1;
-              return (
-                <div
-                  key={`inactive-${setNumber}`}
-                  className="flex items-center gap-2 px-3 py-2 h-14 bg-surface-800/20 opacity-40"
-                >
-                  <div className="w-8 text-xs text-surface-500">{setNumber}</div>
-                  <div className="flex-1 text-xs text-surface-600">—</div>
-                  <div className="w-20 text-center text-sm text-surface-600">—</div>
-                  <div className="w-10"></div>
-                </div>
-              );
-            })}
-      </div>
+          {/* Auto-triggered Dropset Prompt */}
+          {isActive && pendingDropset && (
+            <DropsetPrompt
+              parentWeight={pendingDropset.parentWeight}
+              dropNumber={pendingDropset.dropNumber}
+              totalDrops={pendingDropset.totalDrops}
+              dropPercentage={block.dropPercentage ?? 0.25}
+              unit={unit}
+              exerciseEquipment={exercise.equipmentRequired}
+              onComplete={(data) => {
+                if (onSetComplete) {
+                  onSetComplete({
+                    weightKg: data.weightKg,
+                    reps: data.reps,
+                    rpe: data.rpe,
+                    setType: 'dropset',
+                    parentSetId: pendingDropset.parentSetId,
+                  });
+                }
+              }}
+              onCancel={() => onDropsetCancel?.()}
+            />
+          )}
+
+          {/* Inline Rest Timer */}
+          {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
+            <InlineRestTimerBar
+              seconds={timerSeconds}
+              initialSeconds={timerInitialSeconds}
+              isRunning={timerIsRunning}
+              isFinished={timerIsFinished}
+              isSkipped={timerIsSkipped}
+              restedSeconds={timerRestedSeconds}
+              onShowControls={onShowTimerControls}
+            />
+          )}
+
+          {/* Pending sets */}
+          {isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
+            const setNumber = completedSets.length + index + 1;
+            const previousSet = completedSets[completedSets.length - 1] || previousSets[completedSets.length + index - 1];
+            
+            return (
+              <CompactSetRow
+                key={`pending-${setNumber}`}
+                setNumber={setNumber}
+                userBodyweightKg={userBodyweightKg}
+                weightMode={weightMode}
+                isBodyweight={isBodyweightExercise}
+                canAddWeight={canAddWeight}
+                canUseAssistance={canUseAssistance}
+                isPureBodyweight={isPureBodyweight}
+                previousSet={previousSet}
+                targetRepRange={block.targetRepRange}
+                targetRir={block.targetRir}
+                isActive={index === 0}
+                suggestedWeight={suggestedWeight}
+                onSubmit={async (data) => {
+                  if (onSetComplete) {
+                    const result = await onSetComplete({
+                      weightKg: data.weightKg,
+                      reps: data.reps,
+                      rpe: data.rpe,
+                      note: data.note,
+                      feedback: data.feedback,
+                      bodyweightData: data.bodyweightData,
+                    });
+                    return result;
+                  }
+                }}
+                unit={unit}
+                disabled={isCompletingSet}
+              />
+            );
+          })}
+
+          {/* Inactive placeholder sets */}
+          {!isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
+            const setNumber = completedSets.length + index + 1;
+            return (
+              <div
+                key={`inactive-${setNumber}`}
+                className="flex items-center gap-2 px-3 py-2 h-14 bg-surface-800/20 opacity-40"
+              >
+                <div className="w-8 text-xs text-surface-500">{setNumber}</div>
+                <div className="flex-1 text-xs text-surface-600">—</div>
+                <div className="w-20 text-center text-sm text-surface-600">—</div>
+                <div className="w-10"></div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        // Table design for non-bodyweight exercises
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-surface-800/50">
+              <tr>
+                <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Form</th>
+                <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
+                <th className="px-2 py-2 w-12"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-surface-800">
+              {/* Completed working sets */}
+              {completedSets.map((set, setIndex) => {
+                const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
+                const isLastCompletedSet = setIndex === completedSets.length - 1;
+                
+                return editingSetId === set.id ? (
+                  <tr key={set.id} className="bg-primary-500/10">
+                    <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={editWeight}
+                        onChange={(e) => setEditWeight(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={handleEditKeyDown}
+                        step="0.5"
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                        autoFocus
+                      />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={editReps}
+                        onChange={(e) => setEditReps(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={handleEditKeyDown}
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                      />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={editRpe}
+                        onChange={(e) => setEditRpe(e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        onKeyDown={handleEditKeyDown}
+                        step="0.5"
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <SetQualityBadge quality={set.quality} />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex gap-1 justify-center">
+                        <button
+                          onClick={saveEdit}
+                          className="p-1.5 text-success-400 hover:bg-success-500/20 rounded"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="p-1.5 text-surface-400 hover:bg-surface-700 rounded"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <React.Fragment key={set.id}>
+                    <tr
+                      className={`hover:bg-surface-800/30 group ${
+                        isDropset ? 'bg-purple-500/10' : 'bg-success-500/5'
+                      }`}
+                      onTouchStart={(e) => handleTouchStart(set.id, e)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={() => handleTouchEnd(set.id, true)}
+                      style={getSwipeTransform(set.id)}
+                    >
+                      <td className="px-3 py-2.5 text-surface-300 font-medium">
+                        <div className="flex items-center gap-1">
+                          {isDropset && <span className="text-purple-400 text-xs">↓</span>}
+                          {set.setNumber}
+                        </div>
+                      </td>
+                      <td 
+                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        onClick={() => onSetEdit && startEditing(set)}
+                      >
+                        {displayWeight(set.weightKg)}
+                      </td>
+                      <td 
+                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        onClick={() => onSetEdit && startEditing(set)}
+                      >
+                        {set.reps}
+                      </td>
+                      <td
+                        className={`px-2 py-2.5 text-center text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        onClick={() => onSetEdit && startEditing(set)}
+                      >
+                        {set.feedback?.form === 'clean' ? (
+                          <span className="text-success-400 text-xs">Clean</span>
+                        ) : set.feedback?.form === 'some_breakdown' ? (
+                          <span className="text-warning-400 text-xs">~Form</span>
+                        ) : set.feedback?.form === 'ugly' ? (
+                          <span className="text-danger-400 text-xs">Ugly</span>
+                        ) : (
+                          <span className="text-surface-500 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <SetQualityBadge quality={set.quality} />
+                      </td>
+                      <td className="px-2 py-2.5 relative">
+                        {/* Delete reveal background for swipe */}
+                        {swipeState.setId === set.id && swipeState.isSwiping && (
+                          <div
+                            className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
+                          >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </div>
+                        )}
+                        {onSetDelete ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSetDelete(set.id);
+                            }}
+                            className="p-2 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
+                            title="Uncheck set"
+                          >
+                            <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <svg className="w-4 h-4 text-surface-400 hidden group-active/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <div className="p-2 rounded-lg bg-success-500">
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                    
+                    {/* Add Dropset button */}
+                    {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
+                     pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
+                      <tr className="bg-surface-800/20">
+                        <td colSpan={6} className="px-3 py-2">
+                          <button
+                            onClick={() => startDropset(set)}
+                            className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                            </svg>
+                            Add Dropset (reduce weight, continue to failure)
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+
+              {/* Auto-triggered Dropset Prompt */}
+              {isActive && pendingDropset && (
+                <tr>
+                  <td colSpan={6} className="p-0">
+                    <DropsetPrompt
+                      parentWeight={pendingDropset.parentWeight}
+                      dropNumber={pendingDropset.dropNumber}
+                      totalDrops={pendingDropset.totalDrops}
+                      dropPercentage={block.dropPercentage ?? 0.25}
+                      unit={unit}
+                      exerciseEquipment={exercise.equipmentRequired}
+                      onComplete={(data) => {
+                        if (onSetComplete) {
+                          onSetComplete({
+                            weightKg: data.weightKg,
+                            reps: data.reps,
+                            rpe: data.rpe,
+                            setType: 'dropset',
+                            parentSetId: pendingDropset.parentSetId,
+                          });
+                        }
+                      }}
+                      onCancel={() => onDropsetCancel?.()}
+                    />
+                  </td>
+                </tr>
+              )}
+
+              {/* Inline Rest Timer */}
+              {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
+                <tr>
+                  <td colSpan={6} className="p-0">
+                    <InlineRestTimerBar
+                      seconds={timerSeconds}
+                      initialSeconds={timerInitialSeconds}
+                      isRunning={timerIsRunning}
+                      isFinished={timerIsFinished}
+                      isSkipped={timerIsSkipped}
+                      restedSeconds={timerRestedSeconds}
+                      onShowControls={onShowTimerControls}
+                    />
+                  </td>
+                </tr>
+              )}
+
+              {/* Manual Dropset input row */}
+              {isActive && dropsetMode && !pendingDropset && (
+                <tr className="bg-purple-500/20 border-l-2 border-purple-500">
+                  <td className="px-3 py-2 text-purple-400 font-medium">
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs">↓</span>
+                      D
+                    </div>
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <input
+                      type="number"
+                      defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
+                      id="dropset-weight-input"
+                      step="0.5"
+                      className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+                      autoFocus
+                    />
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <input
+                      type="number"
+                      defaultValue=""
+                      id="dropset-reps-input"
+                      placeholder="?"
+                      className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm placeholder-surface-500"
+                    />
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <input
+                      type="number"
+                      defaultValue="10"
+                      id="dropset-rpe-input"
+                      step="0.5"
+                      className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+                    />
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    <span className="text-xs text-purple-400 font-medium">DROPSET</span>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
+                          const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
+                          const rpeEl = document.getElementById('dropset-rpe-input') as HTMLInputElement;
+
+                          const weight = parseFloat(weightEl?.value || '0');
+                          const reps = parseInt(repsEl?.value || '0');
+                          const rpe = parseFloat(rpeEl?.value || '10');
+
+                          if (weight > 0 && reps > 0 && onSetComplete) {
+                            const weightKg = inputWeightToKg(weight, unit);
+                            onSetComplete({
+                              weightKg,
+                              reps,
+                              rpe,
+                              setType: 'dropset',
+                              parentSetId: dropsetMode.parentSetId,
+                            });
+                            setDropsetMode(null);
+                          }
+                        }}
+                        className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={cancelDropset}
+                        className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
+                      >
+                        <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              
+              {/* Pending sets */}
+              {isActive && pendingInputs.map((input, index) => {
+                const setNumber = completedSets.length + index + 1;
+                const pendingId = `pending-set-${setNumber}`;
+
+                return (
+                  <tr
+                    key={pendingId}
+                    className="bg-surface-800/30"
+                    onTouchStart={(e) => handleTouchStart(pendingId, e)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={() => handleTouchEnd(pendingId, false)}
+                    style={getSwipeTransform(pendingId)}
+                  >
+                    <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={input.weight}
+                        onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        step="0.5"
+                        min="0"
+                        placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '???'}
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={input.reps}
+                        onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        min="0"
+                        max="100"
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <span className="text-surface-600 text-xs">???</span>
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <span className="text-surface-600">???</span>
+                    </td>
+                    <td className="px-2 py-1.5 relative">
+                      {/* Delete reveal background for swipe */}
+                      {swipeState.setId === pendingId && swipeState.isSwiping && (
+                        <div
+                          className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => completeSetImmediately(index)}
+                        disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
+                        className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
+                        title="Complete set"
+                      >
+                        {isCompletingSet ? (
+                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              
+              {/* Show placeholder rows when not active */}
+              {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
+                const inactiveSetNumber = completedSets.length + i + 1;
+                return (
+                  <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
+                    <td className="px-3 py-2.5 text-surface-500">{inactiveSetNumber}</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600">???</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600">???</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600">???</td>
+                    <td className="px-3 py-2.5 text-center text-surface-600">???</td>
+                    <td className="px-2 py-2.5"></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Footer actions - NEW COMPACT DESIGN */}
       {isActive && (
