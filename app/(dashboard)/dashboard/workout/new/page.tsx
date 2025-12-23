@@ -819,8 +819,8 @@ function NewWorkoutContent() {
       
       setSelectedMuscles(suggestedMuscles);
       
-      // Don't auto-advance - let user review suggestions first
-      // User can click "Next: Choose Exercises" button to proceed
+      // Auto-advance to review page after generating suggestions
+      setStep(2);
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
