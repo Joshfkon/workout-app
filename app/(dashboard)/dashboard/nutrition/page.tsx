@@ -310,7 +310,7 @@ export default function NutritionPage() {
           .from('users')
           .select('height_cm, date_of_birth, sex')
           .eq('id', user.id)
-          .single(),
+          .maybeSingle(),
         // DEXA scan data
         supabase
           .from('dexa_scans')
