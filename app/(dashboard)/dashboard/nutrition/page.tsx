@@ -175,6 +175,7 @@ export default function NutritionPage() {
   const [avgDailyProteinGrams, setAvgDailyProteinGrams] = useState<number | undefined>(undefined);
   const [avgWeeklyTrainingSets, setAvgWeeklyTrainingSets] = useState<number | undefined>(undefined);
   const [userAge, setUserAge] = useState<number | undefined>(undefined);
+  const [heightCm, setHeightCm] = useState<number | null>(null);
   const [latestDexaScan, setLatestDexaScan] = useState<{
     body_fat_percent: number;
     weight_kg: number;
