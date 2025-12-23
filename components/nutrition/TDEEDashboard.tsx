@@ -20,6 +20,13 @@ import type {
   DataQualityCheck,
   BurnRateHistoryPoint,
 } from '@/lib/nutrition/adaptive-tdee';
+import { calculateFFMI } from '@/services/bodyCompEngine';
+import {
+  calculatePRatio,
+  predictWeightGainComposition,
+  type PRatioInputs,
+  type BodyCompProjection,
+} from '@/lib/body-composition/p-ratio';
 
 interface TDEEDashboardProps {
   estimate: TDEEEstimate | null;
@@ -29,6 +36,20 @@ interface TDEEDashboardProps {
   currentWeight: number | null;
   targetWeight?: number | null;
   targetCalories?: number | null;
+  heightCm?: number | null;
+  bodyFatPercent?: number | null;
+  avgDailyProteinGrams?: number;
+  avgWeeklyTrainingSets?: number;
+  trainingAge?: 'beginner' | 'intermediate' | 'advanced';
+  isEnhanced?: boolean;
+  biologicalSex?: 'male' | 'female';
+  chronologicalAge?: number;
+  latestDexaScan?: {
+    body_fat_percent: number;
+    weight_kg: number;
+    lean_mass_kg: number;
+    fat_mass_kg: number;
+  } | null;
   onRefresh?: () => void;
   onSetTarget?: () => void;
 }
@@ -41,6 +62,15 @@ export function TDEEDashboard({
   currentWeight,
   targetWeight,
   targetCalories,
+  heightCm,
+  bodyFatPercent,
+  avgDailyProteinGrams,
+  avgWeeklyTrainingSets,
+  trainingAge,
+  isEnhanced,
+  biologicalSex,
+  chronologicalAge,
+  latestDexaScan,
   onRefresh,
   onSetTarget,
 }: TDEEDashboardProps) {
@@ -309,53 +339,214 @@ export function TDEEDashboard({
       )}
 
       {/* Weight Predictions */}
-      {predictions.length > 0 && currentWeight && (
-        <Card className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-base font-semibold text-surface-100">Weight Projection</h3>
-              <p className="text-xs text-surface-500">
-                At {targetCalories?.toLocaleString() || predictions[0]?.assumedDailyCalories.toLocaleString()} cal/day
-              </p>
-            </div>
-            {onSetTarget && (
-              <Button variant="ghost" size="sm" onClick={onSetTarget}>
-                Adjust
-              </Button>
-            )}
-          </div>
+      {predictions.length > 0 && currentWeight && (() => {
+        // Calculate current body composition
+        const currentWeightKg = currentWeight / 2.20462;
+        const currentBodyFatPercent = bodyFatPercent || (heightCm ? 15 : null); // Default estimate if not available
+        const currentLeanMassKg = currentBodyFatPercent 
+          ? currentWeightKg * (1 - currentBodyFatPercent / 100)
+          : null;
+        const currentFFMI = heightCm && currentLeanMassKg
+          ? calculateFFMI(currentLeanMassKg, heightCm)
+          : null;
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 border-b border-surface-800">
-              <span className="text-sm text-surface-400">Current</span>
-              <span className="text-sm font-semibold text-surface-100">
-                {currentWeight.toFixed(1)} lbs
-              </span>
+        // Helper function to project body composition using P-ratio
+        const projectBodyComposition = (prediction: WeightPrediction): BodyCompProjection | null => {
+          // Need minimum data
+          if (!heightCm || !currentWeight) return null;
+          
+          const currentWeightKg = currentWeight / 2.20462;
+          const predictedWeightKg = prediction.predictedWeight / 2.20462;
+          const weightChangeKg = predictedWeightKg - currentWeightKg;
+          
+          // Can't predict composition without baseline
+          const currentBodyFat = bodyFatPercent || 
+            (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null);
+          
+          if (!currentBodyFat) return null;
+          
+          const currentLeanMassKg = currentWeightKg * (1 - currentBodyFat / 100);
+          
+          // Calculate energy balance for P-ratio
+          if (!activeEstimate) return null;
+          
+          const dailyDeficit = activeEstimate.estimatedTDEE - (targetCalories || prediction.assumedDailyCalories);
+          // Energy balance: negative = deficit, positive = surplus
+          const energyBalancePercent = (dailyDeficit / activeEstimate.estimatedTDEE) * 100;
+          
+          // Build P-ratio inputs from available data
+          const pRatioInputs: PRatioInputs = {
+            avgDailyProteinGrams: avgDailyProteinGrams || 150, // Fallback
+            avgDailyProteinPerKgBW: (avgDailyProteinGrams || 150) / currentWeightKg,
+            avgWeeklyTrainingSets: avgWeeklyTrainingSets || 10, // Fallback
+            avgDailyDeficitCals: dailyDeficit,
+            energyBalancePercent, // Negative = deficit, positive = surplus
+            currentBodyFatPercent: currentBodyFat,
+            currentLeanMassKg,
+            trainingAge: trainingAge || 'intermediate',
+            isEnhanced: isEnhanced || false,
+            biologicalSex: biologicalSex || 'male',
+            chronologicalAge,
+            personalPRatioHistory: undefined, // TODO: Calculate from DEXA scan history if available
+          };
+          
+          // Handle weight gain differently
+          if (weightChangeKg > 0) {
+            return predictWeightGainComposition(
+              currentWeightKg,
+              predictedWeightKg,
+              currentBodyFat,
+              heightCm,
+              pRatioInputs
+            );
+          }
+          
+          // Weight loss projection
+          const pRatioResult = calculatePRatio(pRatioInputs);
+          const [pRatioLow, pRatioHigh] = pRatioResult.confidenceRange;
+          const pRatioMid = pRatioResult.finalPRatio;
+          
+          const currentFatMassKg = currentWeightKg * (currentBodyFat / 100);
+          
+          // Pessimistic (low P-ratio = more muscle loss)
+          const pessimisticFatLoss = weightChangeKg * pRatioLow;
+          const pessimisticLeanLoss = weightChangeKg * (1 - pRatioLow);
+          const pessimisticFatMass = currentFatMassKg + pessimisticFatLoss;
+          const pessimisticLeanMass = currentLeanMassKg + pessimisticLeanLoss;
+          const pessimisticBF = (pessimisticFatMass / predictedWeightKg) * 100;
+          const pessimisticFFMI = calculateFFMI(pessimisticLeanMass, heightCm);
+          
+          // Expected (mid P-ratio)
+          const expectedFatLoss = weightChangeKg * pRatioMid;
+          const expectedLeanLoss = weightChangeKg * (1 - pRatioMid);
+          const expectedFatMass = currentFatMassKg + expectedFatLoss;
+          const expectedLeanMass = currentLeanMassKg + expectedLeanLoss;
+          const expectedBF = (expectedFatMass / predictedWeightKg) * 100;
+          const expectedFFMI = calculateFFMI(expectedLeanMass, heightCm);
+          
+          // Optimistic (high P-ratio = mostly fat loss)
+          const optimisticFatLoss = weightChangeKg * pRatioHigh;
+          const optimisticLeanLoss = weightChangeKg * (1 - pRatioHigh);
+          const optimisticFatMass = currentFatMassKg + optimisticFatLoss;
+          const optimisticLeanMass = currentLeanMassKg + optimisticLeanLoss;
+          const optimisticBF = (optimisticFatMass / predictedWeightKg) * 100;
+          const optimisticFFMI = calculateFFMI(optimisticLeanMass, heightCm);
+          
+          const confidenceLevel = pRatioResult.confidenceRange[1] - pRatioResult.confidenceRange[0] < 0.15
+            ? 'reasonable'
+            : 'low';
+          
+          return {
+            ffmi: {
+              pessimistic: pessimisticFFMI.normalizedFfmi,
+              expected: expectedFFMI.normalizedFfmi,
+              optimistic: optimisticFFMI.normalizedFfmi,
+            },
+            bodyFatPercent: {
+              pessimistic: pessimisticBF,
+              expected: expectedBF,
+              optimistic: optimisticBF,
+            },
+            pRatioUsed: pRatioMid,
+            confidenceLevel,
+            factors: pRatioResult.factors,
+          };
+        };
+
+        return (
+          <Card className="p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-base font-semibold text-surface-100">Weight Projection</h3>
+                <p className="text-xs text-surface-500">
+                  At {targetCalories?.toLocaleString() || predictions[0]?.assumedDailyCalories.toLocaleString()} cal/day
+                </p>
+              </div>
+              {onSetTarget && (
+                <Button variant="ghost" size="sm" onClick={onSetTarget}>
+                  Adjust
+                </Button>
+              )}
             </div>
-            {predictions.slice(0, 4).map((prediction, idx) => (
-              <div
-                key={prediction.targetDate}
-                className="flex items-center justify-between py-2 border-b border-surface-800 last:border-0"
-              >
-                <span className="text-sm text-surface-400">
-                  In {prediction.daysFromNow} days
-                  <span className="text-xs text-surface-500 ml-1">
-                    ({new Date(prediction.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
-                  </span>
-                </span>
-                <div className="text-right">
+
+            <div className="space-y-3">
+              {/* Current */}
+              <div className="py-2 border-b border-surface-800">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-surface-400">Current</span>
                   <span className="text-sm font-semibold text-surface-100">
-                    {prediction.predictedWeight} lbs
-                  </span>
-                  <span className="text-xs text-surface-500 ml-1">
-                    (±{((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
+                    {currentWeight.toFixed(1)} lbs
                   </span>
                 </div>
+                {currentFFMI && currentBodyFatPercent && (
+                  <div className="flex items-center justify-between mt-2 text-xs">
+                    <span className="text-surface-500">FFMI:</span>
+                    <span className="text-surface-300">{currentFFMI.normalizedFfmi.toFixed(1)}</span>
+                    <span className="text-surface-500 ml-3">BF%:</span>
+                    <span className="text-surface-300">{currentBodyFatPercent.toFixed(1)}%</span>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
 
-          {targetWeight && activeEstimate.confidence !== 'unstable' && (
+              {/* Projections */}
+              {predictions.slice(0, 4).map((prediction) => {
+                const bodyComp = projectBodyComposition(prediction);
+                return (
+                  <div
+                    key={prediction.targetDate}
+                    className="py-2 border-b border-surface-800 last:border-0"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-surface-400">
+                        In {prediction.daysFromNow} days
+                        <span className="text-xs text-surface-500 ml-1">
+                          ({new Date(prediction.targetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                        </span>
+                      </span>
+                      <div className="text-right">
+                        <span className="text-sm font-semibold text-surface-100">
+                          {prediction.predictedWeight} lbs
+                        </span>
+                        <span className="text-xs text-surface-500 ml-1">
+                          (±{((prediction.confidenceRange[1] - prediction.confidenceRange[0]) / 2).toFixed(1)})
+                        </span>
+                      </div>
+                    </div>
+                    {bodyComp && (
+                      <div className="mt-2 p-2 bg-surface-800/30 rounded text-xs">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-surface-500">Body Fat %</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-surface-500">{bodyComp.bodyFatPercent.pessimistic.toFixed(0)}%</span>
+                            <span className="text-surface-400">→</span>
+                            <span className="text-surface-200 font-medium">{bodyComp.bodyFatPercent.expected.toFixed(0)}%</span>
+                            <span className="text-surface-400">→</span>
+                            <span className="text-success-400">{bodyComp.bodyFatPercent.optimistic.toFixed(0)}%</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-surface-500">FFMI</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-surface-500">{bodyComp.ffmi.pessimistic.toFixed(1)}</span>
+                            <span className="text-surface-400">→</span>
+                            <span className="text-surface-200 font-medium">{bodyComp.ffmi.expected.toFixed(1)}</span>
+                            <span className="text-surface-400">→</span>
+                            <span className="text-success-400">{bodyComp.ffmi.optimistic.toFixed(1)}</span>
+                          </div>
+                        </div>
+                        {bodyComp.confidenceLevel === 'low' && (
+                          <p className="text-surface-500 mt-1 text-[10px]">
+                            ⚠️ Wide uncertainty range - log DEXA scans to improve
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {targetWeight && activeEstimate.confidence !== 'unstable' && (
             <div className="mt-4 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
               <p className="text-xs text-primary-300">
                 <span className="font-semibold">Target {targetWeight} lbs:</span>{' '}
@@ -373,14 +564,15 @@ export function TDEEDashboard({
             </div>
           )}
 
-          <Link
-            href="/dashboard/learn/adaptive-tdee"
-            className="block mt-4 text-center text-xs text-surface-500 hover:text-surface-400 transition-colors"
-          >
-            How accurate is this? →
-          </Link>
-        </Card>
-      )}
+            <Link
+              href="/dashboard/learn/adaptive-tdee"
+              className="block mt-4 text-center text-xs text-surface-500 hover:text-surface-400 transition-colors"
+            >
+              How accurate is this? →
+            </Link>
+          </Card>
+        );
+      })()}
 
       {/* Data Collection Progress (when not enough data) */}
       {!isAdaptive && (

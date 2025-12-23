@@ -172,6 +172,15 @@ export default function NutritionPage() {
   const [userProfile, setUserProfile] = useState<UserProfileData>({});
   const [tdeeData, setTdeeData] = useState<TDEEData | null>(null);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [avgDailyProteinGrams, setAvgDailyProteinGrams] = useState<number | undefined>(undefined);
+  const [avgWeeklyTrainingSets, setAvgWeeklyTrainingSets] = useState<number | undefined>(undefined);
+  const [userAge, setUserAge] = useState<number | undefined>(undefined);
+  const [latestDexaScan, setLatestDexaScan] = useState<{
+    body_fat_percent: number;
+    weight_kg: number;
+    lean_mass_kg: number;
+    fat_mass_kg: number;
+  } | null>(null);
 
   // Convert weight to preferred unit with validation
   const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
@@ -239,6 +248,7 @@ export default function NutritionPage() {
 
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoStr = getLocalDateString(thirtyDaysAgo);
 
       // Run all queries in parallel for faster loading
       const [
@@ -252,6 +262,8 @@ export default function NutritionPage() {
         dexaResult,
         mesocycleResult,
         prefsResult,
+        proteinResult,
+        trainingSetsResult,
       ] = await Promise.all([
         // Food log entries for selected date
         supabase
@@ -319,6 +331,23 @@ export default function NutritionPage() {
           .select('weight_unit')
           .eq('user_id', user.id)
           .single(),
+        // Average daily protein (last 30 days)
+        supabase
+          .from('food_log')
+          .select('protein, logged_at')
+          .eq('user_id', user.id)
+          .gte('logged_at', thirtyDaysAgoStr)
+          .order('logged_at', { ascending: false }),
+        // Weekly training sets (last 30 days)
+        supabase
+          .from('exercise_blocks')
+          .select(`
+            set_logs!inner (id, is_warmup),
+            workout_sessions!inner (completed_at, state)
+          `)
+          .eq('workout_sessions.user_id', user.id)
+          .eq('workout_sessions.state', 'completed')
+          .gte('workout_sessions.completed_at', thirtyDaysAgo.toISOString()),
       ]);
 
       // Process results
@@ -406,6 +435,7 @@ export default function NutritionPage() {
             age--;
           }
           profileData.age = age;
+          setUserAge(age);
         }
         if (userData.sex) {
           profileData.sex = userData.sex as 'male' | 'female';
@@ -420,6 +450,57 @@ export default function NutritionPage() {
         if (dexaData.weight_kg && !profileData.weightLbs) {
           profileData.weightLbs = Math.round(dexaData.weight_kg * 2.20462);
         }
+        // Store full DEXA scan data for P-ratio calculation
+        if (dexaData.body_fat_percent && dexaData.weight_kg) {
+          const fatMassKg = dexaData.weight_kg * (dexaData.body_fat_percent / 100);
+          const leanMassKg = dexaData.weight_kg - fatMassKg;
+          setLatestDexaScan({
+            body_fat_percent: dexaData.body_fat_percent,
+            weight_kg: dexaData.weight_kg,
+            lean_mass_kg: leanMassKg,
+            fat_mass_kg: fatMassKg,
+          });
+        }
+      } else {
+        setLatestDexaScan(null);
+      }
+
+      // Calculate average daily protein (last 30 days)
+      const proteinData = proteinResult.data || [];
+      if (proteinData.length > 0) {
+        // Group by date and sum protein per day
+        const proteinByDate = new Map<string, number>();
+        proteinData.forEach((entry: { protein?: number; logged_at: string }) => {
+          const date = entry.logged_at;
+          const protein = entry.protein || 0;
+          proteinByDate.set(date, (proteinByDate.get(date) || 0) + protein);
+        });
+        
+        // Calculate average
+        const totalProtein = Array.from(proteinByDate.values()).reduce((a, b) => a + b, 0);
+        const avgProtein = totalProtein / proteinByDate.size;
+        setAvgDailyProteinGrams(avgProtein);
+      } else {
+        setAvgDailyProteinGrams(undefined);
+      }
+
+      // Calculate average weekly training sets (last 30 days)
+      const trainingData = trainingSetsResult.data || [];
+      if (trainingData.length > 0) {
+        // Count working sets (non-warmup)
+        let totalWorkingSets = 0;
+        trainingData.forEach((block: any) => {
+          if (block.set_logs && Array.isArray(block.set_logs)) {
+            const workingSets = block.set_logs.filter((set: any) => !set.is_warmup);
+            totalWorkingSets += workingSets.length;
+          }
+        });
+        
+        // Average over 30 days = ~4.3 weeks
+        const avgWeeklySets = (totalWorkingSets / 30) * 7;
+        setAvgWeeklyTrainingSets(Math.round(avgWeeklySets));
+      } else {
+        setAvgWeeklyTrainingSets(undefined);
       }
 
       const mesocycleData = mesocycleResult.data;
@@ -1371,6 +1452,15 @@ export default function NutritionPage() {
           predictions={tdeeData.predictions}
           dataQuality={tdeeData.dataQuality}
           currentWeight={tdeeData.currentWeight}
+          heightCm={userProfile.heightInches ? userProfile.heightInches * 2.54 : null}
+          bodyFatPercent={userProfile.bodyFatPercent || null}
+          avgDailyProteinGrams={avgDailyProteinGrams}
+          avgWeeklyTrainingSets={avgWeeklyTrainingSets}
+          trainingAge="intermediate" // TODO: Get from user profile
+          isEnhanced={false} // TODO: Get from user profile
+          biologicalSex={userProfile.sex || 'male'}
+          chronologicalAge={userAge}
+          latestDexaScan={latestDexaScan}
           targetCalories={nutritionTargets?.calories}
           onRefresh={loadData}
           onSetTarget={() => setShowMacroCalculator(true)}

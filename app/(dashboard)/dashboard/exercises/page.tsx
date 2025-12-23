@@ -39,6 +39,7 @@ interface Exercise {
   is_bodyweight?: boolean;
   bodyweight_type?: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
   assistance_type?: 'machine' | 'band' | 'partner' | null;
+  is_custom?: boolean;
   // Hypertrophy scoring (Nippard methodology)
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
   stretch_under_load?: number;
@@ -144,6 +145,9 @@ export default function ExercisesPage() {
   } = useExercisePreferences();
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'muted' | 'archived'>('all');
   const [statusModalExercise, setStatusModalExercise] = useState<{ id: string; name: string; action: 'mute' | 'archive' } | null>(null);
+  const [deletingExercise, setDeletingExercise] = useState<{ id: string; name: string; isCustom: boolean } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   
   // Batch completion state
   const [isBatchCompleting, setIsBatchCompleting] = useState(false);
@@ -160,7 +164,7 @@ export default function ExercisesPage() {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
         .order('name');
 
       if (data && !error) {
@@ -413,6 +417,57 @@ export default function ExercisesPage() {
       setSaveResult({ success: false, message: `❌ Failed to update exercise: ${error?.message || 'Please try again.'}` });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteExercise = async () => {
+    if (!deletingExercise) return;
+    
+    setIsDeleting(true);
+    setDeleteError(null);
+    
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setDeleteError('You must be logged in to delete exercises');
+        return;
+      }
+      
+      // For custom exercises, use the existing service function
+      if (deletingExercise.isCustom) {
+        const { deleteCustomExercise } = await import('@/services/exerciseService');
+        const success = await deleteCustomExercise(deletingExercise.id, user.id);
+        if (!success) {
+          setDeleteError('Failed to delete exercise. It may not be a custom exercise or you may not have permission.');
+          return;
+        }
+      } else {
+        // For non-custom exercises, delete directly (with warning)
+        // Note: This will only work if RLS allows it
+        const { error } = await supabase
+          .from('exercises')
+          .delete()
+          .eq('id', deletingExercise.id);
+        
+        if (error) {
+          console.error('Failed to delete exercise:', error);
+          setDeleteError(error.message || 'Failed to delete exercise. You may only be able to delete custom exercises.');
+          return;
+        }
+      }
+      
+      // Remove from local state
+      setExercises(prev => prev.filter(ex => ex.id !== deletingExercise.id));
+      
+      // Close modal
+      setDeletingExercise(null);
+      setDeleteError(null);
+    } catch (err: any) {
+      console.error('Error deleting exercise:', err);
+      setDeleteError(err?.message || 'An error occurred while deleting the exercise');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -739,6 +794,7 @@ export default function ExercisesPage() {
                       onMute={() => setStatusModalExercise({ id: exercise.id, name: exercise.name, action: 'mute' })}
                       onArchive={() => setStatusModalExercise({ id: exercise.id, name: exercise.name, action: 'archive' })}
                       onRestore={() => restoreExercise(exercise.id)}
+                      onDelete={() => setDeletingExercise({ id: exercise.id, name: exercise.name, isCustom: exercise.is_custom || false })}
                     />
                     <button
                       onClick={(e) => {
@@ -1408,6 +1464,82 @@ export default function ExercisesPage() {
             }
           }}
         />
+      )}
+
+      {/* Delete Exercise Confirmation Modal */}
+      {deletingExercise && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <Card className="w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-surface-100">Delete Exercise</h3>
+                <button
+                  onClick={() => {
+                    setDeletingExercise(null);
+                    setDeleteError(null);
+                  }}
+                  className="p-1 text-surface-400 hover:text-surface-200 transition-colors"
+                  disabled={isDeleting}
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-surface-200 mb-2">
+                    Are you sure you want to delete <span className="font-semibold">{deletingExercise.name}</span>?
+                  </p>
+                  {!deletingExercise.isCustom && (
+                    <p className="text-sm text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                      ⚠️ This is not a custom exercise. Deleting it may affect other users or system functionality.
+                    </p>
+                  )}
+                  <p className="text-sm text-surface-400 mt-2">
+                    This action cannot be undone. All exercise data, including workout history, will be permanently deleted.
+                  </p>
+                </div>
+
+                {deleteError && (
+                  <div className="p-3 bg-danger-500/10 text-danger-400 border border-danger-500/20 rounded-lg text-sm">
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setDeletingExercise(null);
+                      setDeleteError(null);
+                    }}
+                    className="flex-1"
+                    disabled={isDeleting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={handleDeleteExercise}
+                    className="flex-1"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Exercise'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
