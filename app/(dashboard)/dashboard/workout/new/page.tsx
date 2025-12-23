@@ -222,7 +222,23 @@ function NewWorkoutContent() {
             // Fall through to use general equipment
             availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
           } else if (locationEquipment && locationEquipment.length > 0) {
-            availableEquipment = locationEquipment.map((eq: any) => eq.equipment_id);
+            // Get equipment type names from equipment_types table
+            const equipmentIds = locationEquipment.map((eq: any) => eq.equipment_id);
+            const { data: equipmentTypes, error: typesError } = await supabase
+              .from('equipment_types')
+              .select('id, name')
+              .in('id', equipmentIds);
+            
+            if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
+              // Map equipment IDs to names for filtering
+              availableEquipment = equipmentTypes.map((et: any) => et.name.toLowerCase());
+              console.log('Available equipment for location:', availableEquipment);
+            } else {
+              // If equipment_types lookup fails, try using equipment_id directly
+              // (assuming equipment_id might already be the name)
+              availableEquipment = equipmentIds.map((id: string) => id.toLowerCase());
+              console.warn('Could not map equipment types, using IDs directly:', availableEquipment);
+            }
           } else {
             // No equipment found for location, use general preference
             availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
@@ -236,6 +252,8 @@ function NewWorkoutContent() {
         // Fallback to user's general equipment preference
         availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
       }
+      
+      console.log('Final availableEquipment for filtering:', availableEquipment);
       
       // Get active injuries from multiple sources
       const activeInjuries: UserInjury[] = [];
@@ -435,10 +453,28 @@ function NewWorkoutContent() {
       let candidateExercises = exercisesData.filter((e: any) => !excludedExerciseIds.has(e.id));
       
       // Filter by equipment availability (basic equipment types)
+      // Normalize equipment names for comparison (case-insensitive, handle variations)
+      const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
+      
       candidateExercises = candidateExercises.filter((e: any) => {
         if (!e.equipment_required || e.equipment_required.length === 0) return true;
-        return e.equipment_required.every((eq: string) => availableEquipment.includes(eq));
+        
+        // Check if all required equipment is available
+        const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
+        const allAvailable = requiredEquipment.every((reqEq: string) => {
+          // Direct match
+          if (normalizedAvailable.includes(reqEq)) return true;
+          
+          // Partial match (e.g., "cable" matches "cable machine")
+          if (normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq))) return true;
+          
+          return false;
+        });
+        
+        return allAvailable;
       });
+      
+      console.log(`Filtered ${candidateExercises.length} exercises based on available equipment (from ${exercisesData.length} total)`);
       
       // Additional filtering by equipment_types (if location is selected and not fallback)
       if (selectedLocationId && selectedLocationId !== 'fallback') {
