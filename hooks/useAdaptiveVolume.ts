@@ -423,7 +423,13 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       } else {
         console.log(`[useAdaptiveVolume] No existing profile, creating initial profile`);
         // Create initial profile based on user's experience level
-        const trainingAge = user.experience || 'intermediate';
+        // Map 'novice' to 'beginner' for compatibility with adaptive volume system
+        const experienceMap: Record<string, 'beginner' | 'intermediate' | 'advanced'> = {
+          'novice': 'beginner',
+          'intermediate': 'intermediate',
+          'advanced': 'advanced',
+        };
+        const trainingAge = experienceMap[user.experience || 'intermediate'] || 'intermediate';
         const initialProfile = createInitialVolumeProfile(user.id, trainingAge, false);
         console.log(`[useAdaptiveVolume] Created initial profile:`, initialProfile);
         setVolumeProfile(initialProfile);
