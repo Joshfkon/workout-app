@@ -65,11 +65,11 @@ export async function getAdaptiveTDEE(
 
   const { data: weightLogs } = await supabase
     .from('weight_log')
-    .select('logged_at, weight')
+    .select('logged_at, weight, unit')
     .eq('user_id', user.id)
     .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
     .order('logged_at', { ascending: true }) as {
-      data: Array<{ logged_at: string; weight: number }> | null;
+      data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
     };
 
   // Get food log entries (daily totals)
@@ -105,8 +105,18 @@ export async function getAdaptiveTDEE(
   const dataPoints: DailyDataPoint[] = [];
   const weightByDate: Record<string, number> = {};
 
+  // Get user's preferred weight unit (default to lbs)
+  // Note: userPrefs doesn't include weight_unit in the type, so we'll fetch it separately or use 'lb' as default
+  const preferredUnit = 'lb'; // Default - weights will be converted based on their stored unit
+
   for (const wl of weightLogs || []) {
-    weightByDate[wl.logged_at] = wl.weight;
+    // Convert weight to lbs for TDEE calculations (which use CALORIES_PER_LB)
+    let weightInLbs = wl.weight;
+    const weightUnit = wl.unit || preferredUnit;
+    if (weightUnit === 'kg') {
+      weightInLbs = wl.weight * 2.20462;
+    }
+    weightByDate[wl.logged_at] = weightInLbs;
   }
 
   // Create data points for days where we have both weight and calories
@@ -133,8 +143,13 @@ export async function getAdaptiveTDEE(
   // Sort by date
   dataPoints.sort((a, b) => a.date.localeCompare(b.date));
 
-  // Get current weight (most recent)
-  const currentWeight = weightLogs?.length ? weightLogs[weightLogs.length - 1].weight : null;
+  // Get current weight (most recent) - convert to lbs if needed
+  let currentWeight: number | null = null;
+  if (weightLogs && weightLogs.length > 0) {
+    const latest = weightLogs[weightLogs.length - 1];
+    const weightUnit = latest.unit || preferredUnit;
+    currentWeight = weightUnit === 'kg' ? latest.weight * 2.20462 : latest.weight;
+  }
 
   // Check data quality
   const dataQuality = checkDataQuality(dataPoints);

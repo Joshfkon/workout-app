@@ -355,13 +355,15 @@ export function TDEEDashboard({
           // Need minimum data
           if (!heightCm || !currentWeight) return null;
           
+          // Both currentWeight and prediction.predictedWeight are in lbs
           const currentWeightKg = currentWeight / 2.20462;
-          const predictedWeightKg = prediction.predictedWeight / 2.20462;
+          const predictedWeightKg = prediction.predictedWeight / 2.20462; // prediction.predictedWeight is already in lbs
           const weightChangeKg = predictedWeightKg - currentWeightKg;
           
-          // Can't predict composition without baseline
+          // Can't predict composition without baseline - use fallback if height is available
           const currentBodyFat = bodyFatPercent || 
-            (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null);
+            (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null) ||
+            (heightCm ? 15 : null); // Default 15% if we have height but no body fat data
           
           if (!currentBodyFat) return null;
           
@@ -432,7 +434,10 @@ export function TDEEDashboard({
           const optimisticBF = (optimisticFatMass / predictedWeightKg) * 100;
           const optimisticFFMI = calculateFFMI(optimisticLeanMass, heightCm);
           
-          const confidenceLevel = pRatioResult.confidenceRange[1] - pRatioResult.confidenceRange[0] < 0.15
+          const rangeSpread = pRatioResult.confidenceRange[1] - pRatioResult.confidenceRange[0];
+          const confidenceLevel = rangeSpread < 0.12
+            ? 'high'      // Very narrow range, have DEXA calibration
+            : rangeSpread < 0.18
             ? 'reasonable'
             : 'low';
           
