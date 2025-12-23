@@ -308,7 +308,7 @@ export default function NutritionPage() {
         // User profile data - use .single() and handle error
         supabase
           .from('users')
-          .select('height_cm, date_of_birth, sex')
+          .select('height_cm, age, sex')
           .eq('id', user.id)
           .single(),
         // DEXA scan data
@@ -445,16 +445,9 @@ export default function NutritionPage() {
           console.log('[Nutrition Page] No height_cm in userData (value:', userData.height_cm, '), setting to null');
           setHeightCm(null);
         }
-        if (userData.date_of_birth) {
-          const birthDate = new Date(userData.date_of_birth);
-          const today = new Date();
-          let age = today.getFullYear() - birthDate.getFullYear();
-          const monthDiff = today.getMonth() - birthDate.getMonth();
-          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-          }
-          profileData.age = age;
-          setUserAge(age);
+        if (userData.age) {
+          profileData.age = userData.age;
+          setUserAge(userData.age);
         }
         if (userData.sex) {
           profileData.sex = userData.sex as 'male' | 'female';
