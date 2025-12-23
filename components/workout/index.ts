@@ -13,4 +13,5 @@ export { SessionSummary } from './SessionSummary';
 export { BodyweightInput } from './BodyweightInput';
 export { BodyweightDisplay, BodyweightDisplayInline, BodyweightPRBadge } from './BodyweightDisplay';
 export { BodyweightSetInputRow } from './BodyweightSetInputRow';
+export { BodyweightSetEditRow } from './BodyweightSetEditRow';
 

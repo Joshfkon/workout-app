@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, memo, useRef } from 'react';
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -11,6 +11,9 @@ import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { SetFeedbackCard } from './SetFeedbackCard';
+import { BodyweightSetInputRow } from './BodyweightSetInputRow';
+import { BodyweightDisplay } from './BodyweightDisplay';
+import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -115,6 +118,7 @@ interface SetCompleteData {
   setType?: SetType;
   parentSetId?: string;  // For dropsets: the ID of the parent set
   feedback?: SetFeedback;  // New feedback data
+  bodyweightData?: BodyweightData;  // Bodyweight-specific data for bodyweight exercises
 }
 
 interface ExerciseCardProps {
@@ -122,7 +126,7 @@ interface ExerciseCardProps {
   block: ExerciseBlock;
   sets: SetLog[];
   onSetComplete?: (setData: SetCompleteData) => Promise<string | null> | void;  // Returns set ID for feedback
-  onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number }) => void;
+  onSetEdit?: (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => void;
   onSetDelete?: (setId: string) => void;
   onSetFeedbackUpdate?: (setId: string, feedback: SetFeedback) => void;  // Update feedback on existing set
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
@@ -161,6 +165,8 @@ interface ExerciseCardProps {
     totalDrops: number;
   } | null;
   onDropsetCancel?: () => void;
+  // Bodyweight exercise support
+  userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -200,6 +206,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onShowTimerControls,
   pendingDropset = null,
   onDropsetCancel,
+  userBodyweightKg,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
@@ -304,6 +311,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   const completedSets = sets.filter((s) => !s.isWarmup);
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
+
+  // Check if this is a bodyweight exercise
+  // Use type assertion to access bodyweight properties that may exist on the exercise
+  const exerciseWithBodyweight = exercise as any;
+  const isBodyweightExercise = exerciseWithBodyweight.isBodyweight || exerciseWithBodyweight.equipment === 'bodyweight' || (exerciseWithBodyweight.equipmentRequired && exerciseWithBodyweight.equipmentRequired.includes('bodyweight'));
+  const canAddWeight = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'weighted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
+  const canUseAssistance = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'assisted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
+  const isPureBodyweight = isBodyweightExercise && exerciseWithBodyweight.bodyweightType === 'pure';
 
   // Determine suggested weight
   const suggestedWeight = block.targetWeightKg > 0 
@@ -1138,6 +1153,33 @@ export const ExerciseCard = memo(function ExerciseCard({
               const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
               const isLastCompletedSet = setIndex === completedSets.length - 1;
               
+              // Use bodyweight edit row for bodyweight sets
+              if (editingSetId === set.id && isBodyweightExercise && set.bodyweightData && userBodyweightKg) {
+                return (
+                  <BodyweightSetEditRow
+                    key={set.id}
+                    set={set}
+                    userBodyweightKg={userBodyweightKg}
+                    canAddWeight={canAddWeight}
+                    canUseAssistance={canUseAssistance}
+                    isPureBodyweight={isPureBodyweight}
+                    unit={unit}
+                    onSave={(data) => {
+                      if (onSetEdit) {
+                        onSetEdit(set.id, {
+                          weightKg: data.weightKg,
+                          reps: data.reps,
+                          rpe: data.rpe,
+                          bodyweightData: data.bodyweightData,
+                        });
+                      }
+                      cancelEditing();
+                    }}
+                    onCancel={cancelEditing}
+                  />
+                );
+              }
+              
               return editingSetId === set.id ? (
                 <tr key={set.id} className="bg-primary-500/10">
                   <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
@@ -1219,7 +1261,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                     onClick={() => onSetEdit && startEditing(set)}
                   >
-                    {displayWeight(set.weightKg)}
+                    {set.bodyweightData ? (
+                      <BodyweightDisplay data={set.bodyweightData} mode="compact" unit={unit} />
+                    ) : (
+                      displayWeight(set.weightKg)
+                    )}
                   </td>
                   <td 
                     className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
@@ -1424,11 +1470,51 @@ export const ExerciseCard = memo(function ExerciseCard({
               </tr>
             )}
             
-            {/* Pending sets - editable with pre-filled values */}
+            {/* Pending sets - use BodyweightSetInputRow for bodyweight exercises, table inputs for others */}
             {isActive && pendingInputs.map((input, index) => {
               const setNumber = completedSets.length + index + 1;
               const pendingId = `pending-set-${setNumber}`;
+              const previousSet = completedSets[completedSets.length - 1] || previousSets[completedSets.length + index - 1];
 
+              // Use BodyweightSetInputRow for bodyweight exercises
+              if (isBodyweightExercise && userBodyweightKg) {
+                return (
+                  <tr key={pendingId} className="bg-surface-800/30">
+                    <td colSpan={6} className="px-3 py-3">
+                      <BodyweightSetInputRow
+                        setNumber={setNumber}
+                        userBodyweightKg={userBodyweightKg}
+                        targetRepRange={block.targetRepRange}
+                        targetRir={block.targetRir}
+                        previousSet={previousSet}
+                        isLastSet={index === pendingInputs.length - 1}
+                        onSubmit={async (data) => {
+                          if (onSetComplete) {
+                            const result = await onSetComplete({
+                              weightKg: data.weightKg,
+                              reps: data.reps,
+                              rpe: data.rpe,
+                              note: data.note,
+                              feedback: data.feedback,
+                              bodyweightData: data.bodyweightData,
+                            });
+                            // Remove this pending input after completion
+                            setPendingInputs(prev => prev.filter((_, i) => i !== index));
+                            return result;
+                          }
+                        }}
+                        canAddWeight={canAddWeight}
+                        canUseAssistance={canUseAssistance}
+                        isPureBodyweight={isPureBodyweight}
+                        disabled={isCompletingSet}
+                        unit={unit}
+                      />
+                    </td>
+                  </tr>
+                );
+              }
+
+              // Regular table input for non-bodyweight exercises
               return (
                 <tr
                   key={pendingId}

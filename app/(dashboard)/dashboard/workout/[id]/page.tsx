@@ -6,7 +6,7 @@ import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
 import { ExerciseCard, RestTimerControlPanel, WarmupProtocol, ReadinessCheckIn, SessionSummary, ExerciseDetailsModal } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -594,6 +594,10 @@ export default function WorkoutPage() {
                 resistanceProfile: block.exercises.resistance_profile || 3,
                 progressionEase: block.exercises.progression_ease || 3,
               } : undefined,
+              // Bodyweight exercise metadata
+              isBodyweight: (block.exercises.is_bodyweight as boolean) ?? (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight')),
+              bodyweightType: block.exercises.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
+              assistanceType: block.exercises.assistance_type as 'machine' | 'band' | 'partner' | undefined,
             },
           }));
 
@@ -610,20 +614,47 @@ export default function WorkoutPage() {
             .order('set_number');
           
           if (existingSets && existingSets.length > 0) {
-            const transformedSets: SetLog[] = existingSets.map((set: any) => ({
-              id: set.id,
-              exerciseBlockId: set.exercise_block_id,
-              setNumber: set.set_number,
-              weightKg: set.weight_kg,
-              reps: set.reps,
-              rpe: set.rpe,
-              restSeconds: set.rest_seconds,
-              isWarmup: set.is_warmup,
-              quality: set.quality,
-              qualityReason: set.quality_reason || '',
-              note: set.note,
-              loggedAt: set.logged_at,
-            }));
+            const transformedSets: SetLog[] = existingSets.map((set: any) => {
+              // Parse JSON fields
+              let feedback: SetFeedback | undefined;
+              if (set.feedback) {
+                try {
+                  feedback = typeof set.feedback === 'string' ? JSON.parse(set.feedback) : set.feedback;
+                } catch (e) {
+                  console.error('Failed to parse feedback JSON:', e);
+                }
+              }
+
+              let bodyweightData: BodyweightData | undefined;
+              if (set.bodyweight_data) {
+                try {
+                  bodyweightData = typeof set.bodyweight_data === 'string' 
+                    ? JSON.parse(set.bodyweight_data) 
+                    : set.bodyweight_data;
+                } catch (e) {
+                  console.error('Failed to parse bodyweight_data JSON:', e);
+                }
+              }
+
+              return {
+                id: set.id,
+                exerciseBlockId: set.exercise_block_id,
+                setNumber: set.set_number,
+                weightKg: set.weight_kg,
+                reps: set.reps,
+                rpe: set.rpe,
+                restSeconds: set.rest_seconds,
+                isWarmup: set.is_warmup,
+                setType: (set.set_type as SetType) || (set.is_warmup ? 'warmup' : 'normal'),
+                parentSetId: set.parent_set_id || null,
+                quality: set.quality,
+                qualityReason: set.quality_reason || '',
+                note: set.note,
+                loggedAt: set.logged_at,
+                feedback,
+                bodyweightData,
+              };
+            });
             setCompletedSets(transformedSets);
             
             // Set current set number based on existing sets for the first incomplete block
@@ -1171,6 +1202,7 @@ export default function WorkoutPage() {
     setType?: 'normal' | 'warmup' | 'dropset' | 'myorep' | 'rest_pause';
     parentSetId?: string;
     feedback?: SetFeedback;
+    bodyweightData?: BodyweightData;
   }) => {
     if (!currentBlock) return;
 
@@ -1220,6 +1252,7 @@ export default function WorkoutPage() {
           note: data.note || null,
           logged_at: loggedAt,
           feedback: data.feedback ? JSON.stringify(data.feedback) : null,
+          bodyweight_data: data.bodyweightData ? JSON.stringify(data.bodyweightData) : null,
         })
         .select('id')
         .single();
@@ -1247,6 +1280,7 @@ export default function WorkoutPage() {
         note: data.note || null,
         loggedAt: loggedAt,
         feedback: data.feedback,
+        bodyweightData: data.bodyweightData,
       };
       
       // Update local state using functional updates to avoid stale closures
@@ -1357,8 +1391,12 @@ export default function WorkoutPage() {
     );
   };
 
-  const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number }) => {
+  const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => {
     const quality = data.rpe >= 7.5 && data.rpe <= 9.5 ? 'stimulative' : data.rpe <= 5 ? 'junk' : 'effective' as const;
+    
+    // Use provided bodyweightData if available, otherwise preserve existing
+    const existingSet = completedSets.find(s => s.id === setId);
+    const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
     
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set => 
@@ -1369,6 +1407,7 @@ export default function WorkoutPage() {
             reps: data.reps, 
             rpe: data.rpe,
             quality,
+            bodyweightData: updatedBodyweightData,
           }
         : set
     ));
@@ -1376,12 +1415,19 @@ export default function WorkoutPage() {
     // Update in database
     try {
       const supabase = createUntypedClient();
-      const { error: updateError } = await supabase.from('set_logs').update({
+      const updateData: any = {
         weight_kg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
         quality,
-      }).eq('id', setId);
+      };
+      
+      // Update bodyweight_data if provided or if it exists
+      if (updatedBodyweightData) {
+        updateData.bodyweight_data = updatedBodyweightData;
+      }
+      
+      const { error: updateError } = await supabase.from('set_logs').update(updateData).eq('id', setId);
       
       if (updateError) {
         console.error('Failed to update set:', updateError);
@@ -3348,6 +3394,7 @@ export default function WorkoutPage() {
                     isActive={isCurrent}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeight}
+                    userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     warmupSets={(() => {
                       if (!isCurrent) return undefined;

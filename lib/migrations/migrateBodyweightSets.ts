@@ -215,6 +215,7 @@ export async function migrateUserBodyweightSets(
         userBodyweightKg,
         modification: inference.modification,
         addedWeightKg: inference.addedWeightKg,
+        assistanceWeightKg: inference.assistanceWeightKg,
         effectiveLoadKg: calculateEffectiveLoad(
           userBodyweightKg,
           inference.modification,
@@ -224,10 +225,10 @@ export async function migrateUserBodyweightSets(
         _needsReview: inference.needsReview || undefined,
       };
 
-      // Update the set
+      // Update the set (JSONB column accepts JSON objects directly)
       const { error: updateError } = await supabase
         .from('set_logs')
-        .update({ bodyweight_data: bodyweightData })
+        .update({ bodyweight_data: bodyweightData as any })
         .eq('id', set.id);
 
       if (!updateError) {
