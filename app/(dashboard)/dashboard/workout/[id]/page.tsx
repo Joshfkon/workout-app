@@ -3227,7 +3227,15 @@ export default function WorkoutPage() {
                       <>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setSelectedExerciseForDetails(block.exercise)}
+                            onClick={() => {
+                              if (isCurrent) {
+                                // Only open details if this is the active exercise
+                                setSelectedExerciseForDetails(block.exercise);
+                              } else {
+                                // Switch to this exercise if it's not active
+                                setCurrentBlockIndex(index);
+                              }
+                            }}
                             className={`font-medium text-left hover:text-primary-400 transition-colors ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}
                           >
                             {block.exercise.name}
