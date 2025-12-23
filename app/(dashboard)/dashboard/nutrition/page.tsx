@@ -305,12 +305,12 @@ export default function NutritionPage() {
           .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
           .eq('is_active', true)
           .order('name'),
-        // User profile data
+        // User profile data - use .single() and handle error
         supabase
           .from('users')
           .select('height_cm, date_of_birth, sex')
           .eq('id', user.id)
-          .maybeSingle(),
+          .single(),
         // DEXA scan data
         supabase
           .from('dexa_scans')
@@ -423,14 +423,26 @@ export default function NutritionPage() {
       }
 
       const userData = userResult.data;
-      console.log('[Nutrition Page] User data from database:', userData);
-      if (userData) {
-        if (userData.height_cm) {
-          profileData.heightInches = Math.round(userData.height_cm / 2.54);
-          console.log('[Nutrition Page] Setting heightCm to:', userData.height_cm);
-          setHeightCm(userData.height_cm);
+      const userError = userResult.error;
+      console.log('[Nutrition Page] User query result:', { data: userData, error: userError });
+      
+      if (userError) {
+        console.error('[Nutrition Page] Error fetching user data:', userError);
+        setHeightCm(null);
+      } else if (userData) {
+        console.log('[Nutrition Page] userData.height_cm:', userData.height_cm, 'type:', typeof userData.height_cm, 'isNull:', userData.height_cm === null, 'isUndefined:', userData.height_cm === undefined);
+        if (userData.height_cm != null && userData.height_cm !== undefined && userData.height_cm !== '') {
+          const heightValue = typeof userData.height_cm === 'string' ? parseFloat(userData.height_cm) : Number(userData.height_cm);
+          if (!isNaN(heightValue) && heightValue > 0) {
+            profileData.heightInches = Math.round(heightValue / 2.54);
+            console.log('[Nutrition Page] Setting heightCm to:', heightValue);
+            setHeightCm(heightValue);
+          } else {
+            console.log('[Nutrition Page] height_cm is invalid number:', userData.height_cm, 'parsed as:', heightValue);
+            setHeightCm(null);
+          }
         } else {
-          console.log('[Nutrition Page] No height_cm in userData, setting to null');
+          console.log('[Nutrition Page] No height_cm in userData (value:', userData.height_cm, '), setting to null');
           setHeightCm(null);
         }
         if (userData.date_of_birth) {
