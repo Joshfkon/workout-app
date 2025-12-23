@@ -820,6 +820,7 @@ function NewWorkoutContent() {
       setSelectedMuscles(suggestedMuscles);
       
       // Auto-advance to review page after generating suggestions
+      // The exercises will load via the useEffect that watches step === 2 && selectedMuscles
       setStep(2);
       
     } catch (err) {
