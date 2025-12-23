@@ -819,9 +819,11 @@ function NewWorkoutContent() {
       
       setSelectedMuscles(suggestedMuscles);
       
-      // Auto-advance to review page after generating suggestions
-      // The exercises will load via the useEffect that watches step === 2 && selectedMuscles
-      setStep(2);
+      // Auto-advance to review page after a brief delay to show suggestions
+      // This gives the user a moment to see the suggestions before advancing
+      setTimeout(() => {
+        setStep(2);
+      }, 500);
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
