@@ -1305,6 +1305,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <th className="px-3 py-2 text-left text-surface-400 font-medium w-12">Set</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">RPE</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Form</th>
                 <th className="px-3 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
                 <th className="px-2 py-2 w-12"></th>
@@ -1351,6 +1352,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                         step="0.5"
                         className="w-full px-2 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <span className="text-surface-500 text-xs">—</span>
                     </td>
                     <td className="px-3 py-1.5 text-center">
                       <SetQualityBadge quality={set.quality} />
@@ -1404,6 +1408,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onClick={() => onSetEdit && startEditing(set)}
                       >
                         {set.reps}
+                      </td>
+                      <td
+                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        onClick={() => onSetEdit && startEditing(set)}
+                      >
+                        {set.rpe ? set.rpe.toFixed(1) : '—'}
                       </td>
                       <td
                         className={`px-2 py-2.5 text-center text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
@@ -1463,7 +1473,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
                      pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                       <tr className="bg-surface-800/20">
-                        <td colSpan={6} className="px-3 py-2">
+                        <td colSpan={7} className="px-3 py-2">
                           <button
                             onClick={() => startDropset(set)}
                             className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
@@ -1483,7 +1493,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {/* Auto-triggered Dropset Prompt */}
               {isActive && pendingDropset && (
                 <tr>
-                  <td colSpan={6} className="p-0">
+                  <td colSpan={7} className="p-0">
                     <DropsetPrompt
                       parentWeight={pendingDropset.parentWeight}
                       dropNumber={pendingDropset.dropNumber}
@@ -1511,7 +1521,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {/* Inline Rest Timer */}
               {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
                 <tr>
-                  <td colSpan={6} className="p-0">
+                  <td colSpan={7} className="p-0">
                     <InlineRestTimerBar
                       seconds={timerSeconds}
                       initialSeconds={timerInitialSeconds}
@@ -1562,10 +1572,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                       className="w-full px-2 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
                     />
                   </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <span className="text-surface-600 text-xs">—</span>
+                  </td>
                   <td className="px-3 py-1.5 text-center">
                     <span className="text-xs text-purple-400 font-medium">DROPSET</span>
                   </td>
-                  <td className="px-2 py-1.5">
+                    <td className="px-2 py-1.5">
                     <div className="flex gap-1">
                       <button
                         onClick={() => {
@@ -1626,12 +1639,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
-                        value={input.weight}
+                        value={input.weight || ''}
                         onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
                         onFocus={(e) => e.target.select()}
                         step="0.5"
                         min="0"
-                        placeholder={suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '???'}
+                        placeholder={(() => {
+                          // Try to get suggested weight from various sources
+                          const prevSet = previousSets?.[completedSets.length + index];
+                          const lastCompleted = completedSets[completedSets.length - 1];
+                          if (lastCompleted) return String(displayWeight(lastCompleted.weightKg));
+                          if (prevSet) return String(displayWeight(prevSet.weightKg));
+                          if (suggestedWeight > 0) return String(displayWeight(suggestedWeight));
+                          return '???';
+                        })()}
                         className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
@@ -1646,7 +1667,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
-                    <td className="px-3 py-1.5 text-center">
+                    <td className="px-1 py-1.5">
+                      <input
+                        type="number"
+                        value={input.rpe}
+                        onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
+                        onFocus={(e) => e.target.select()}
+                        step="0.5"
+                        min="0"
+                        max="10"
+                        className="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
                       <span className="text-surface-600 text-xs">???</span>
                     </td>
                     <td className="px-3 py-1.5 text-center">
@@ -1691,6 +1724,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 return (
                   <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
                     <td className="px-3 py-2.5 text-surface-500">{inactiveSetNumber}</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600">???</td>
                     <td className="px-2 py-2.5 text-center text-surface-600">???</td>
                     <td className="px-2 py-2.5 text-center text-surface-600">???</td>
                     <td className="px-2 py-2.5 text-center text-surface-600">???</td>
