@@ -63,25 +63,40 @@ export function GymEquipmentSettings() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Load gym locations (with error handling for missing table)
+    // Load gym locations (with error handling for missing table or columns)
     let locationsData: GymLocation[] | null = null;
     try {
-      const { data, error } = await supabase
+      // Load without ordering first (in case column doesn't exist)
+      let { data, error } = await supabase
         .from('gym_locations')
         .select('*')
-        .eq('user_id', user.id)
-        .order('is_default DESC, created_at ASC');
+        .eq('user_id', user.id);
       
       if (error) {
-        // Check if it's a table not found error (PGRST205) or other error
-        if (error.code === 'PGRST205' || error.message?.includes('does not exist')) {
+        // Check if it's a column error (42703) - column doesn't exist
+        if (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column')) {
+          console.warn('gym_locations table or column not found, using fallback mode:', error);
+          locationsData = null;
+        } else if (error.code === 'PGRST205') {
           console.warn('gym_locations table not found, using fallback mode:', error);
+          locationsData = null;
         } else {
-          // Other errors (like 409 conflict) - might be constraint issue, try to continue
           console.warn('Error loading gym locations:', error);
+          locationsData = null;
         }
-        locationsData = null;
-      } else {
+      } else if (data) {
+        // Success - sort manually to ensure correct order (handles missing is_default gracefully)
+        data = data.sort((a: any, b: any) => {
+          // Handle missing is_default column
+          const aDefault = a.is_default ?? false;
+          const bDefault = b.is_default ?? false;
+          if (aDefault !== bDefault) {
+            return aDefault ? -1 : 1;
+          }
+          const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return aDate - bDate;
+        });
         locationsData = data;
       }
     } catch (err) {
@@ -97,24 +112,62 @@ export function GymEquipmentSettings() {
     } else {
       // Try to create default location if table exists, otherwise use fallback
       try {
-        const { data: newLocation, error } = await supabase
+        // First check if a default already exists (might have been created by migration or another request)
+        const { data: existingDefault } = await supabase
           .from('gym_locations')
-          .insert({ user_id: user.id, name: 'Home Gym', is_default: true })
-          .select()
-          .single();
-        
-        if (newLocation && !error) {
-          setLocations([newLocation]);
-          setSelectedLocationId(newLocation.id);
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_default', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (existingDefault) {
+          setLocations([existingDefault]);
+          setSelectedLocationId(existingDefault.id);
         } else {
-          // Table doesn't exist - use fallback: create a virtual default location
-          const fallbackLocation: GymLocation = {
-            id: 'fallback',
-            name: 'Home Gym',
-            is_default: true,
-          };
-          setLocations([fallbackLocation]);
-          setSelectedLocationId('fallback');
+          // Try to create default location
+          const { data: newLocation, error: insertError } = await supabase
+            .from('gym_locations')
+            .insert({ user_id: user.id, name: 'Home Gym', is_default: true })
+            .select()
+            .single();
+          
+          if (newLocation && !insertError) {
+            setLocations([newLocation]);
+            setSelectedLocationId(newLocation.id);
+          } else if (insertError?.code === '23505' || insertError?.code === 'PGRST116' || insertError?.status === 409) {
+            // Unique constraint violation - default already exists, fetch it
+            const { data: fetchedDefault } = await supabase
+              .from('gym_locations')
+              .select('*')
+              .eq('user_id', user.id)
+              .eq('is_default', true)
+              .limit(1)
+              .maybeSingle();
+            
+            if (fetchedDefault) {
+              setLocations([fetchedDefault]);
+              setSelectedLocationId(fetchedDefault.id);
+            } else {
+              // Use fallback
+              const fallbackLocation: GymLocation = {
+                id: 'fallback',
+                name: 'Home Gym',
+                is_default: true,
+              };
+              setLocations([fallbackLocation]);
+              setSelectedLocationId('fallback');
+            }
+          } else {
+            // Table doesn't exist or other error - use fallback
+            const fallbackLocation: GymLocation = {
+              id: 'fallback',
+              name: 'Home Gym',
+              is_default: true,
+            };
+            setLocations([fallbackLocation]);
+            setSelectedLocationId('fallback');
+          }
         }
       } catch (err) {
         // Table doesn't exist - use fallback
