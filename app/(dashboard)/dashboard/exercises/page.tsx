@@ -34,6 +34,11 @@ interface Exercise {
   form_cues: string[];
   common_mistakes: string[];
   equipment_required: string[];
+  equipment?: string;
+  movement_pattern?: string;
+  is_bodyweight?: boolean;
+  bodyweight_type?: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
+  assistance_type?: 'machine' | 'band' | 'partner' | null;
   // Hypertrophy scoring (Nippard methodology)
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
   stretch_under_load?: number;
@@ -117,7 +122,14 @@ export default function ExercisesPage() {
 
   // Edit exercise state
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
-  const [editMuscle, setEditMuscle] = useState<string>('');
+  const [editData, setEditData] = useState<{
+    primaryMuscle: string;
+    isBodyweight: boolean;
+    bodyweightType: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
+    assistanceType: 'machine' | 'band' | 'partner' | null;
+    equipment: string;
+    movementPattern: string;
+  } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -148,7 +160,7 @@ export default function ExercisesPage() {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
         .order('name');
 
       if (data && !error) {
@@ -324,22 +336,51 @@ export default function ExercisesPage() {
 
   const handleEditExercise = (exercise: Exercise) => {
     setEditingExercise(exercise);
-    setEditMuscle(exercise.primary_muscle);
+    setEditData({
+      primaryMuscle: exercise.primary_muscle,
+      isBodyweight: exercise.is_bodyweight || false,
+      bodyweightType: exercise.bodyweight_type || null,
+      assistanceType: exercise.assistance_type || null,
+      equipment: exercise.equipment || 'barbell',
+      movementPattern: exercise.movement_pattern || 'compound',
+    });
     setSaveResult(null);
   };
 
   const handleSaveExercise = async () => {
-    if (!editingExercise || !editMuscle) return;
+    if (!editingExercise || !editData) return;
     
     setIsSaving(true);
     setSaveResult(null);
     
     try {
       const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setSaveResult({ success: false, message: '❌ You must be logged in to edit exercises' });
+        return;
+      }
+      
+      // Build update payload
+      const updatePayload: any = {
+        primary_muscle: editData.primaryMuscle,
+        is_bodyweight: editData.isBodyweight,
+        bodyweight_type: editData.bodyweightType,
+        assistance_type: editData.assistanceType,
+        equipment: editData.equipment,
+        movement_pattern: editData.movementPattern,
+      };
+      
+      // Remove null values
+      Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === null) {
+          delete updatePayload[key];
+        }
+      });
       
       const { error } = await supabase
         .from('exercises')
-        .update({ primary_muscle: editMuscle })
+        .update(updatePayload)
         .eq('id', editingExercise.id);
       
       if (error) throw error;
@@ -347,7 +388,15 @@ export default function ExercisesPage() {
       // Update local state
       setExercises(prev => prev.map(ex => 
         ex.id === editingExercise.id 
-          ? { ...ex, primary_muscle: editMuscle }
+          ? { 
+              ...ex, 
+              primary_muscle: editData.primaryMuscle,
+              is_bodyweight: editData.isBodyweight,
+              bodyweight_type: editData.bodyweightType,
+              assistance_type: editData.assistanceType,
+              equipment: editData.equipment,
+              movement_pattern: editData.movementPattern,
+            }
           : ex
       ));
       
@@ -356,11 +405,12 @@ export default function ExercisesPage() {
       // Close modal after a short delay
       setTimeout(() => {
         setEditingExercise(null);
+        setEditData(null);
         setSaveResult(null);
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update exercise:', error);
-      setSaveResult({ success: false, message: '❌ Failed to update exercise. Please try again.' });
+      setSaveResult({ success: false, message: `❌ Failed to update exercise: ${error?.message || 'Please try again.'}` });
     } finally {
       setIsSaving(false);
     }
@@ -1184,24 +1234,123 @@ export default function ExercisesPage() {
                   <p className="text-surface-100 font-medium">{editingExercise.name}</p>
                 </div>
 
-                <div>
-                  <label className="block text-sm text-surface-400 mb-2">Primary Muscle Group</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {MUSCLE_GROUPS.map((muscle) => (
-                      <button
-                        key={muscle}
-                        onClick={() => setEditMuscle(muscle)}
-                        className={`px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
-                          editMuscle === muscle
-                            ? 'bg-primary-500 text-white'
-                            : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-                        }`}
+                {editData && (
+                  <>
+                    {/* Primary Muscle Group */}
+                    <div>
+                      <label className="block text-sm text-surface-400 mb-2">Primary Muscle Group</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {MUSCLE_GROUPS.map((muscle) => (
+                          <button
+                            key={muscle}
+                            onClick={() => setEditData({ ...editData, primaryMuscle: muscle })}
+                            className={`px-3 py-2 rounded-lg text-sm capitalize transition-colors ${
+                              editData.primaryMuscle === muscle
+                                ? 'bg-primary-500 text-white'
+                                : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                            }`}
+                          >
+                            {muscle}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Bodyweight Settings */}
+                    <div className="space-y-3">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editData.isBodyweight}
+                          onChange={(e) => setEditData({ ...editData, isBodyweight: e.target.checked })}
+                          className="w-4 h-4 rounded border-surface-600 bg-surface-900 text-primary-500 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-surface-200">Bodyweight Exercise</span>
+                      </label>
+                      
+                      {editData.isBodyweight && (
+                        <div className="ml-6 space-y-3">
+                          <div>
+                            <label className="block text-xs font-medium text-surface-400 mb-1">Bodyweight Type</label>
+                            <select
+                              value={editData.bodyweightType || ''}
+                              onChange={(e) => setEditData({ ...editData, bodyweightType: e.target.value as any || null })}
+                              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                            >
+                              <option value="">Not specified</option>
+                              <option value="pure">Pure (always bodyweight)</option>
+                              <option value="weighted_possible">Can add weight</option>
+                              <option value="assisted_possible">Can use assistance</option>
+                              <option value="both">Can be weighted OR assisted</option>
+                            </select>
+                          </div>
+                          
+                          {(editData.bodyweightType === 'assisted_possible' || editData.bodyweightType === 'both') && (
+                            <div>
+                              <label className="block text-xs font-medium text-surface-400 mb-1">Assistance Type</label>
+                              <select
+                                value={editData.assistanceType || ''}
+                                onChange={(e) => setEditData({ ...editData, assistanceType: e.target.value as any || null })}
+                                className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                              >
+                                <option value="">Not specified</option>
+                                <option value="machine">Machine</option>
+                                <option value="band">Band</option>
+                                <option value="partner">Partner</option>
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Equipment */}
+                    <div>
+                      <label className="block text-sm text-surface-400 mb-1">Equipment</label>
+                      <select
+                        value={editData.equipment}
+                        onChange={(e) => setEditData({ ...editData, equipment: e.target.value })}
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
                       >
-                        {muscle}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                        <option value="barbell">Barbell</option>
+                        <option value="dumbbell">Dumbbell</option>
+                        <option value="machine">Machine</option>
+                        <option value="cable">Cable</option>
+                        <option value="bodyweight">Bodyweight</option>
+                        <option value="kettlebell">Kettlebell</option>
+                        <option value="band">Band</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* Movement Pattern */}
+                    <div>
+                      <label className="block text-sm text-surface-400 mb-1">Movement Pattern</label>
+                      <select
+                        value={editData.movementPattern}
+                        onChange={(e) => setEditData({ ...editData, movementPattern: e.target.value })}
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                      >
+                        <option value="horizontal_push">Horizontal Push</option>
+                        <option value="horizontal_pull">Horizontal Pull</option>
+                        <option value="vertical_push">Vertical Push</option>
+                        <option value="vertical_pull">Vertical Pull</option>
+                        <option value="hip_hinge">Hip Hinge</option>
+                        <option value="squat">Squat</option>
+                        <option value="lunge">Lunge</option>
+                        <option value="knee_flexion">Knee Flexion</option>
+                        <option value="elbow_flexion">Elbow Flexion</option>
+                        <option value="elbow_extension">Elbow Extension</option>
+                        <option value="shoulder_isolation">Shoulder Isolation</option>
+                        <option value="calf_raise">Calf Raise</option>
+                        <option value="core">Core</option>
+                        <option value="isolation">Isolation</option>
+                        <option value="carry">Carry</option>
+                        <option value="compound">Compound</option>
+                      </select>
+                    </div>
+                  </>
+                )}
 
                 {saveResult && (
                   <div className={`p-3 rounded-lg text-sm ${
@@ -1226,7 +1375,7 @@ export default function ExercisesPage() {
                     variant="primary"
                     onClick={handleSaveExercise}
                     className="flex-1"
-                    disabled={isSaving || editMuscle === editingExercise.primary_muscle}
+                    disabled={isSaving || !editData}
                   >
                     {isSaving ? (
                       <>
