@@ -425,6 +425,9 @@ export default function NutritionPage() {
       if (userData) {
         if (userData.height_cm) {
           profileData.heightInches = Math.round(userData.height_cm / 2.54);
+          setHeightCm(userData.height_cm);
+        } else {
+          setHeightCm(null);
         }
         if (userData.date_of_birth) {
           const birthDate = new Date(userData.date_of_birth);
@@ -1452,7 +1455,7 @@ export default function NutritionPage() {
           predictions={tdeeData.predictions}
           dataQuality={tdeeData.dataQuality}
           currentWeight={tdeeData.currentWeight}
-          heightCm={userProfile.heightInches ? userProfile.heightInches * 2.54 : null}
+          heightCm={heightCm}
           bodyFatPercent={userProfile.bodyFatPercent || null}
           avgDailyProteinGrams={avgDailyProteinGrams}
           avgWeeklyTrainingSets={avgWeeklyTrainingSets}
