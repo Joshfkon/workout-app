@@ -433,10 +433,6 @@ export default function NutritionPage() {
           console.log('[Nutrition Page] No height_cm in userData, setting to null');
           setHeightCm(null);
         }
-      } else {
-        console.log('[Nutrition Page] No userData, setting heightCm to null');
-        setHeightCm(null);
-      }
         if (userData.date_of_birth) {
           const birthDate = new Date(userData.date_of_birth);
           const today = new Date();
@@ -451,6 +447,9 @@ export default function NutritionPage() {
         if (userData.sex) {
           profileData.sex = userData.sex as 'male' | 'female';
         }
+      } else {
+        console.log('[Nutrition Page] No userData, setting heightCm to null');
+        setHeightCm(null);
       }
 
       const dexaData = dexaResult.data;
