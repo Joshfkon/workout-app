@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -9,12 +9,41 @@ import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
+import { DashboardCard } from '@/components/dashboard/DashboardCard';
 import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
+
+// Card identifiers for reordering
+type DashboardCardId =
+  | 'quick-actions'
+  | 'todays-workout'
+  | 'daily-checkin'
+  | 'muscle-recovery'
+  | 'nutrition'
+  | 'weight'
+  | 'hydration'
+  | 'activity'
+  | 'atrophy-alert'
+  | 'weekly-volume';
+
+const DEFAULT_CARD_ORDER: DashboardCardId[] = [
+  'quick-actions',
+  'todays-workout',
+  'daily-checkin',
+  'muscle-recovery',
+  'nutrition',
+  'weight',
+  'hydration',
+  'activity',
+  'atrophy-alert',
+  'weekly-volume',
+];
+
+const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
 
 interface NutritionTotals {
   calories: number;
@@ -135,6 +164,56 @@ export default function DashboardPage() {
   const [debugError, setDebugError] = useState<string | null>(null);
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
+
+  // Edit mode state for rearranging dashboard cards
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [cardOrder, setCardOrder] = useState<DashboardCardId[]>(DEFAULT_CARD_ORDER);
+
+  // Load card order from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as DashboardCardId[];
+        // Validate that all cards are present (in case we add new cards in the future)
+        const validOrder = DEFAULT_CARD_ORDER.filter(id => parsed.includes(id));
+        const newCards = DEFAULT_CARD_ORDER.filter(id => !parsed.includes(id));
+        setCardOrder([...parsed.filter(id => DEFAULT_CARD_ORDER.includes(id)), ...newCards]);
+      }
+    } catch (e) {
+      console.error('Failed to load card order:', e);
+    }
+  }, []);
+
+  // Save card order to localStorage
+  const saveCardOrder = useCallback((newOrder: DashboardCardId[]) => {
+    setCardOrder(newOrder);
+    try {
+      localStorage.setItem(CARD_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    } catch (e) {
+      console.error('Failed to save card order:', e);
+    }
+  }, []);
+
+  // Move card up in order
+  const moveCardUp = useCallback((cardId: DashboardCardId) => {
+    const index = cardOrder.indexOf(cardId);
+    if (index > 0) {
+      const newOrder = [...cardOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      saveCardOrder(newOrder);
+    }
+  }, [cardOrder, saveCardOrder]);
+
+  // Move card down in order
+  const moveCardDown = useCallback((cardId: DashboardCardId) => {
+    const index = cardOrder.indexOf(cardId);
+    if (index < cardOrder.length - 1) {
+      const newOrder = [...cardOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      saveCardOrder(newOrder);
+    }
+  }, [cardOrder, saveCardOrder]);
 
   // Get volume data for atrophy risk alert - use the same data source as Weekly Volume box
   // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
@@ -728,614 +807,625 @@ export default function DashboardPage() {
     );
   }
 
-  return (
-    <div className="space-y-6 max-w-3xl mx-auto">
-      {/* Quick Actions Bar */}
-      <div className="flex gap-3">
-        <Link href="/dashboard/workout/quick" className="flex-1">
-          <button className="w-full p-3 bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 rounded-xl transition-all shadow-lg shadow-accent-500/20 hover:shadow-accent-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span className="font-semibold text-white">Quick Workout</span>
-          </button>
-        </Link>
-        <Link href="/dashboard/workout/new" className="flex-1">
-          <button className="w-full p-3 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span className="font-semibold text-white">Create Workout</span>
-          </button>
-        </Link>
-      </div>
+  // Render a card by its ID
+  const renderCard = (cardId: DashboardCardId, index: number) => {
+    const isFirst = index === 0;
+    const isLast = index === cardOrder.length - 1;
 
-      {/* Debug Error Display */}
-      {debugError && (
-        <div className="p-3 bg-red-900/50 border border-red-500 rounded-lg">
-          <p className="text-xs text-red-300 font-mono break-all">{debugError}</p>
-          <button 
-            onClick={() => setDebugError(null)} 
-            className="mt-2 text-xs text-red-400 underline"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* ===== TODAY'S WORKOUT ===== */}
-      {todaysWorkout ? (
-        <Card className={`overflow-hidden border-2 relative ${
-          todaysWorkout.state === 'completed'
-            ? 'border-success-500/50 bg-success-500/5'
-            : todaysWorkout.state === 'in_progress'
-            ? 'border-warning-500/50 bg-warning-500/5'
-            : 'border-primary-500/50 bg-primary-500/5'
-        }`}>
-          {/* Info icon in top right corner */}
-          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-            <button
-              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
-              title="Learn about mesocycle science"
-            >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          </Link>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                  todaysWorkout.state === 'completed' ? 'bg-success-500/20' :
-                  todaysWorkout.state === 'in_progress' ? 'bg-warning-500/20' : 'bg-primary-500/20'
-                }`}>
-                  {todaysWorkout.state === 'completed' ? (
-                    <svg className="w-6 h-6 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  )}
-                </div>
-                <div>
-                  <Badge variant={todaysWorkout.state === 'completed' ? 'success' : todaysWorkout.state === 'in_progress' ? 'warning' : 'default'} size="sm">
-                    {todaysWorkout.state === 'completed' ? 'Done' : todaysWorkout.state === 'in_progress' ? 'In Progress' : 'Ready'}
-                  </Badge>
-                  <h2 className="text-lg font-bold text-surface-100 mt-1">Today&apos;s Workout</h2>
-                  <p className="text-sm text-surface-400">
-                    {todaysWorkout.exercises} exercises · {todaysWorkout.completedSets}/{todaysWorkout.totalSets} sets
-                  </p>
-                </div>
-              </div>
-              {todaysWorkout.state !== 'completed' && (
-                <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
-                  <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
-                </Link>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ) : scheduledWorkout ? (
-        <Card className="overflow-hidden border-2 border-primary-500/50 bg-primary-500/5 relative">
-          {/* Info icon in top right corner */}
-          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-            <button
-              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
-              title="Learn about mesocycle science"
-            >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          </Link>
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-primary-500/20 flex items-center justify-center">
-                  <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    const cardContent = (() => {
+      switch (cardId) {
+        case 'quick-actions':
+          return (
+            <div className="flex gap-3">
+              <Link href="/dashboard/workout/quick" className="flex-1">
+                <button className="w-full p-3 bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 rounded-xl transition-all shadow-lg shadow-accent-500/20 hover:shadow-accent-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                </div>
-                <div>
-                  <Badge variant="info" size="sm">Scheduled</Badge>
-                  <h2 className="text-lg font-bold text-surface-100 mt-1">{scheduledWorkout.dayName}</h2>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {scheduledWorkout.muscles.slice(0, 3).map((m) => (
-                      <span key={m} className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400 capitalize">{m}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <Link href="/dashboard/mesocycle">
-                <Button>Start Workout</Button>
+                  <span className="font-semibold text-white">Quick Workout</span>
+                </button>
               </Link>
-            </div>
-          </CardContent>
-        </Card>
-      ) : activeMesocycle ? (
-        <Card className="overflow-hidden border border-surface-700 bg-surface-800/30 relative">
-          {/* Info icon in top right corner */}
-          <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-            <button
-              className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors"
-              title="Learn about mesocycle science"
-            >
-              <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-          </Link>
-          <CardContent className="p-5">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
-                <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
-                <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
-              </div>
-              <Link href="/dashboard/workout/quick">
-                <Button variant="outline" size="sm">Quick Workout</Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="overflow-hidden border-2 border-dashed border-primary-500/40 bg-gradient-to-r from-primary-500/10 to-accent-500/10">
-          <CardContent className="p-6 text-center">
-            <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-primary-500/20 flex items-center justify-center">
-              <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h2 className="text-xl font-bold text-surface-100">Create Your Training Plan</h2>
-            <p className="text-surface-400 mt-2 max-w-md mx-auto">
-              Set up an AI-powered mesocycle for smart progression, volume tracking, and personalized recommendations.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center mt-5">
-              <Link href="/dashboard/mesocycle/new">
-                <Button size="lg">Create Mesocycle</Button>
-              </Link>
-              <Link href="/dashboard/workout/quick">
-                <Button size="lg" variant="outline">Quick Workout</Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ===== DAILY CHECK-IN ===== */}
-      {userId && (
-        <DailyCheckIn
-          userId={userId}
-          userGoal={userGoal}
-        />
-      )}
-
-      {/* ===== MUSCLE RECOVERY COUNTDOWN ===== */}
-      <MuscleRecoveryCard limit={6} />
-
-      {/* ===== TODAY'S NUTRITION ===== */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <span>🍎</span> Today&apos;s Nutrition
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowQuickLogger(!showQuickLogger)}
-                className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                title="Quick log"
-              >
-                <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </button>
-              <Link href="/dashboard/nutrition">
-                <Button variant="ghost" size="sm">View All →</Button>
-              </Link>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {showQuickLogger && (
-            <div className="mb-4">
-              <QuickFoodLogger 
-                onAdd={handleAddFood} 
-                onClose={() => setShowQuickLogger(false)} 
-                frequentFoods={frequentFoods}
-                systemFoods={systemFoods}
-              />
-            </div>
-          )}
-          
-          {nutritionTargets ? (
-            <div className="space-y-3">
-              {/* Calories */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-surface-300">Calories</span>
-                  <span className="text-sm text-surface-400">
-                    <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
-                    {' / '}{nutritionTargets.calories}
-                  </span>
-                </div>
-                <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      nutritionTotals.calories > nutritionTargets.calories
-                        ? 'bg-danger-500'
-                        : nutritionTotals.calories > nutritionTargets.calories * 0.9
-                        ? 'bg-success-500'
-                        : 'bg-primary-500'
-                    }`}
-                    style={{ width: `${Math.min(100, (nutritionTotals.calories / nutritionTargets.calories) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Macros */}
-              {(() => {
-                // Calculate expected progress based on time of day
-                // Assume eating window is 7am-9pm (14 hours)
-                const now = new Date();
-                const hours = now.getHours();
-                const minutes = now.getMinutes();
-                const currentTimeInHours = hours + minutes / 60;
-                
-                // Calculate expected % (7am = 0%, 9pm = 100%)
-                const startHour = 7;  // 7am
-                const endHour = 21;   // 9pm
-                const totalWindow = endHour - startHour; // 14 hours
-                
-                let expectedPercent: number;
-                if (currentTimeInHours <= startHour) {
-                  expectedPercent = 0;
-                } else if (currentTimeInHours >= endHour) {
-                  expectedPercent = 100;
-                } else {
-                  expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
-                }
-                
-                // Helper to get pace status
-                const getPaceStatus = (actual: number, target: number) => {
-                  const actualPercent = (actual / target) * 100;
-                  const diff = actualPercent - expectedPercent;
-                  
-                  if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
-                  if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
-                  return { status: 'on-track', color: 'text-success-400', icon: '✓' };
-                };
-                
-                const proteinPace = getPaceStatus(nutritionTotals.protein, nutritionTargets.protein);
-                const carbsPace = getPaceStatus(nutritionTotals.carbs, nutritionTargets.carbs);
-                const fatPace = getPaceStatus(nutritionTotals.fat, nutritionTargets.fat);
-                
-                return (
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-surface-500">Protein</span>
-                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
-                      </div>
-                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs text-surface-600">/ {nutritionTargets.protein}g</p>
-                        <span className={`text-[10px] ${proteinPace.color}`}>{proteinPace.icon}</span>
-                      </div>
-                      {/* Pace indicator bar */}
-                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                        <div 
-                          className={`absolute h-full rounded-full ${
-                            proteinPace.status === 'ahead' ? 'bg-amber-500/60' : 
-                            proteinPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                          }`} 
-                          style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} 
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-surface-500">Carbs</span>
-                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
-                      </div>
-                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs text-surface-600">/ {nutritionTargets.carbs}g</p>
-                        <span className={`text-[10px] ${carbsPace.color}`}>{carbsPace.icon}</span>
-                      </div>
-                      {/* Pace indicator bar */}
-                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                        <div 
-                          className={`absolute h-full rounded-full ${
-                            carbsPace.status === 'ahead' ? 'bg-amber-500/60' : 
-                            carbsPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                          }`} 
-                          style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} 
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-surface-500">Fat</span>
-                        <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
-                      </div>
-                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-pink-500" style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} />
-                      </div>
-                      <div className="flex items-center justify-between mt-0.5">
-                        <p className="text-xs text-surface-600">/ {nutritionTargets.fat}g</p>
-                        <span className={`text-[10px] ${fatPace.color}`}>{fatPace.icon}</span>
-                      </div>
-                      {/* Pace indicator bar */}
-                      <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                        <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                        <div 
-                          className={`absolute h-full rounded-full ${
-                            fatPace.status === 'ahead' ? 'bg-amber-500/60' : 
-                            fatPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                          }`} 
-                          style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} 
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-surface-400 text-sm mb-3">No nutrition targets set</p>
-              <Link href="/dashboard/nutrition">
-                <Button variant="outline" size="sm">Set Up Targets</Button>
-              </Link>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== TODAY'S WEIGHT ===== */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <span>⚖️</span> Today&apos;s Weight
-            </CardTitle>
-            {!showWeightLogger && todaysWeight && (
-              <button
-                onClick={() => setShowWeightLogger(true)}
-                className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                title="Update weight"
-              >
-                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-2">
-          {showWeightLogger ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                step="0.1"
-                placeholder={`Weight (${weightUnit})`}
-                value={weightInput}
-                onChange={(e) => setWeightInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveWeight()}
-                className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                autoFocus
-              />
-              <select
-                value={weightUnit}
-                onChange={(e) => setWeightUnit(e.target.value as 'lb' | 'kg')}
-                className="px-2 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="lb">lbs</option>
-                <option value="kg">kg</option>
-              </select>
-              <Button
-                size="sm"
-                onClick={handleSaveWeight}
-                disabled={!weightInput || isLoggingWeight}
-              >
-                {isLoggingWeight ? '...' : 'Save'}
-              </Button>
-              <button
-                onClick={() => {
-                  setShowWeightLogger(false);
-                  setWeightInput('');
-                }}
-                className="p-2 text-surface-400 hover:text-surface-300 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ) : todaysWeight ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-surface-100">
-                      {(() => {
-                        // Convert to user's preferred unit if needed, with validation
-                        let displayWeight = todaysWeight.weight;
-                        const storedUnit = todaysWeight.unit || weightUnit;
-                        
-                        // Validate: if unit says 'lb' but weight > 500, it's probably in kg
-                        // If unit says 'kg' but weight > 250, it's probably in lb
-                        let actualStoredUnit = storedUnit;
-                        if (storedUnit === 'lb' && todaysWeight.weight > 500) {
-                          actualStoredUnit = 'kg'; // Correct the unit
-                        } else if (storedUnit === 'kg' && todaysWeight.weight > 250) {
-                          actualStoredUnit = 'lb'; // Correct the unit
-                        }
-                        
-                        // Convert if units differ
-                        if (actualStoredUnit !== weightUnit) {
-                          if (actualStoredUnit === 'kg' && weightUnit === 'lb') {
-                            displayWeight = todaysWeight.weight * 2.20462;
-                          } else if (actualStoredUnit === 'lb' && weightUnit === 'kg') {
-                            displayWeight = todaysWeight.weight / 2.20462;
-                          }
-                        }
-                        return displayWeight.toFixed(1);
-                      })()} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
-                    </p>
-                    <p className="text-xs text-surface-500">Logged today</p>
-                  </div>
-                </div>
-                <Link href="/dashboard/nutrition">
-                  <Button variant="ghost" size="sm">History →</Button>
-                </Link>
-              </div>
-              
-              {/* Weight Trend Graph */}
-              {weightHistory.length >= 2 && (
-                <div className="pt-2 border-t border-surface-800">
-                  <WeightGraph
-                    key={`weight-graph-${weightHistory.length}-${weightUnit}`}
-                    weightHistory={weightHistory}
-                    preferredUnit={weightUnit}
-                  />
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowWeightLogger(true)}
-              className="w-full py-4 border-2 border-dashed border-surface-700 rounded-lg text-surface-400 hover:border-primary-500 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Log your weight
-            </button>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== HYDRATION ===== */}
-      {userId && (
-        <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} />
-      )}
-
-      {/* ===== ACTIVITY / STEPS ===== */}
-      {userId && (
-        <ActivityCard userId={userId} />
-      )}
-
-      {/* ===== WEEKLY VOLUME ===== */}
-      {/* Atrophy Risk Alert - shows prominently if muscles are below MEV */}
-      {musclesBelowMev.length > 0 && (
-        <AtrophyRiskAlert
-          musclesBelowMev={musclesBelowMev}
-          userGoal={normalizedGoal}
-        />
-      )}
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <span>📊</span> Weekly Volume
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-normal text-surface-500">sets per muscle</span>
-              <Link href="/dashboard/learn/adaptive-volume">
-                <button
-                  className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                  title="Learn about adaptive volume"
-                >
-                  <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <Link href="/dashboard/workout/new" className="flex-1">
+                <button className="w-full p-3 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
+                  <span className="font-semibold text-white">Create Workout</span>
                 </button>
               </Link>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {muscleVolume.length > 0 ? (
-            <div className="space-y-2">
-              {muscleVolume.slice(0, 8).map((mv) => (
-                <details key={mv.muscle} className="group">
-                  <summary className="cursor-pointer list-none">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <svg 
-                            className="w-3 h-3 text-surface-500 transition-transform group-open:rotate-90" 
-                            fill="none" 
-                            viewBox="0 0 24 24" 
-                            stroke="currentColor"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          );
+
+        case 'todays-workout':
+          if (todaysWorkout) {
+            return (
+              <Card className={`overflow-hidden border-2 relative ${
+                todaysWorkout.state === 'completed'
+                  ? 'border-success-500/50 bg-success-500/5'
+                  : todaysWorkout.state === 'in_progress'
+                  ? 'border-warning-500/50 bg-warning-500/5'
+                  : 'border-primary-500/50 bg-primary-500/5'
+              }`}>
+                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </Link>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                        todaysWorkout.state === 'completed' ? 'bg-success-500/20' :
+                        todaysWorkout.state === 'in_progress' ? 'bg-warning-500/20' : 'bg-primary-500/20'
+                      }`}>
+                        {todaysWorkout.state === 'completed' ? (
+                          <svg className="w-6 h-6 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          <span className="text-surface-300 capitalize">{mv.muscle}</span>
+                        ) : (
+                          <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div>
+                        <Badge variant={todaysWorkout.state === 'completed' ? 'success' : todaysWorkout.state === 'in_progress' ? 'warning' : 'default'} size="sm">
+                          {todaysWorkout.state === 'completed' ? 'Done' : todaysWorkout.state === 'in_progress' ? 'In Progress' : 'Ready'}
+                        </Badge>
+                        <h2 className="text-lg font-bold text-surface-100 mt-1">Today&apos;s Workout</h2>
+                        <p className="text-sm text-surface-400">
+                          {todaysWorkout.exercises} exercises · {todaysWorkout.completedSets}/{todaysWorkout.totalSets} sets
+                        </p>
+                      </div>
+                    </div>
+                    {todaysWorkout.state !== 'completed' && (
+                      <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
+                        <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
+                      </Link>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          } else if (scheduledWorkout) {
+            return (
+              <Card className="overflow-hidden border-2 border-primary-500/50 bg-primary-500/5 relative">
+                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </Link>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-primary-500/20 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <Badge variant="info" size="sm">Scheduled</Badge>
+                        <h2 className="text-lg font-bold text-surface-100 mt-1">{scheduledWorkout.dayName}</h2>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {scheduledWorkout.muscles.slice(0, 3).map((m) => (
+                            <span key={m} className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400 capitalize">{m}</span>
+                          ))}
                         </div>
-                        <span className={`font-medium ${
-                          mv.status === 'optimal' ? 'text-success-400' :
-                          mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
-                        }`}>
-                          {mv.sets}/{mv.target}
-                          <span className="text-xs text-surface-500 ml-1">
-                            {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
-                          </span>
+                      </div>
+                    </div>
+                    <Link href="/dashboard/mesocycle">
+                      <Button>Start Workout</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          } else if (activeMesocycle) {
+            return (
+              <Card className="overflow-hidden border border-surface-700 bg-surface-800/30 relative">
+                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
+                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
+                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </button>
+                </Link>
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
+                      <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
+                      <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
+                    </div>
+                    <Link href="/dashboard/workout/quick">
+                      <Button variant="outline" size="sm">Quick Workout</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          } else {
+            return (
+              <Card className="overflow-hidden border-2 border-dashed border-primary-500/40 bg-gradient-to-r from-primary-500/10 to-accent-500/10">
+                <CardContent className="p-6 text-center">
+                  <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-primary-500/20 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-xl font-bold text-surface-100">Create Your Training Plan</h2>
+                  <p className="text-surface-400 mt-2 max-w-md mx-auto">
+                    Set up an AI-powered mesocycle for smart progression, volume tracking, and personalized recommendations.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center mt-5">
+                    <Link href="/dashboard/mesocycle/new">
+                      <Button size="lg">Create Mesocycle</Button>
+                    </Link>
+                    <Link href="/dashboard/workout/quick">
+                      <Button size="lg" variant="outline">Quick Workout</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          }
+
+        case 'daily-checkin':
+          return userId ? <DailyCheckIn userId={userId} userGoal={userGoal} /> : null;
+
+        case 'muscle-recovery':
+          return <MuscleRecoveryCard limit={6} />;
+
+        case 'nutrition':
+          return (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span>🍎</span> Today&apos;s Nutrition
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowQuickLogger(!showQuickLogger)}
+                      className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                      title="Quick log"
+                    >
+                      <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                    <Link href="/dashboard/nutrition">
+                      <Button variant="ghost" size="sm">View All →</Button>
+                    </Link>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {showQuickLogger && (
+                  <div className="mb-4">
+                    <QuickFoodLogger
+                      onAdd={handleAddFood}
+                      onClose={() => setShowQuickLogger(false)}
+                      frequentFoods={frequentFoods}
+                      systemFoods={systemFoods}
+                    />
+                  </div>
+                )}
+
+                {nutritionTargets ? (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-surface-300">Calories</span>
+                        <span className="text-sm text-surface-400">
+                          <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
+                          {' / '}{nutritionTargets.calories}
                         </span>
                       </div>
-                      <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
-                        <div 
+                      <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                        <div
                           className={`h-full transition-all duration-500 ${
-                            mv.status === 'optimal' ? 'bg-success-500' :
-                            mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
+                            nutritionTotals.calories > nutritionTargets.calories
+                              ? 'bg-danger-500'
+                              : nutritionTotals.calories > nutritionTargets.calories * 0.9
+                              ? 'bg-success-500'
+                              : 'bg-primary-500'
                           }`}
-                          style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
+                          style={{ width: `${Math.min(100, (nutritionTotals.calories / nutritionTargets.calories) * 100)}%` }}
                         />
                       </div>
                     </div>
-                  </summary>
-                  {/* Expanded exercises */}
-                  {mv.exercises && mv.exercises.length > 0 && (
-                    <div className="ml-5 mt-2 pl-3 border-l-2 border-surface-700 space-y-1.5">
-                      {mv.exercises.map((ex) => (
-                        <div key={ex.id} className="flex items-center justify-between text-xs">
-                          <span className="text-surface-400 truncate">{ex.name}</span>
-                          <span className="text-surface-500 flex-shrink-0 ml-2">{ex.sets} sets</span>
+
+                    {(() => {
+                      const now = new Date();
+                      const hours = now.getHours();
+                      const minutes = now.getMinutes();
+                      const currentTimeInHours = hours + minutes / 60;
+                      const startHour = 7;
+                      const endHour = 21;
+                      const totalWindow = endHour - startHour;
+
+                      let expectedPercent: number;
+                      if (currentTimeInHours <= startHour) {
+                        expectedPercent = 0;
+                      } else if (currentTimeInHours >= endHour) {
+                        expectedPercent = 100;
+                      } else {
+                        expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
+                      }
+
+                      const getPaceStatus = (actual: number, target: number) => {
+                        const actualPercent = (actual / target) * 100;
+                        const diff = actualPercent - expectedPercent;
+                        if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
+                        if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
+                        return { status: 'on-track', color: 'text-success-400', icon: '✓' };
+                      };
+
+                      const proteinPace = getPaceStatus(nutritionTotals.protein, nutritionTargets.protein);
+                      const carbsPace = getPaceStatus(nutritionTotals.carbs, nutritionTargets.carbs);
+                      const fatPace = getPaceStatus(nutritionTotals.fat, nutritionTargets.fat);
+
+                      return (
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-surface-500">Protein</span>
+                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }} />
+                            </div>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <p className="text-xs text-surface-600">/ {nutritionTargets.protein}g</p>
+                              <span className={`text-[10px] ${proteinPace.color}`}>{proteinPace.icon}</span>
+                            </div>
+                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                              <div
+                                className={`absolute h-full rounded-full ${
+                                  proteinPace.status === 'ahead' ? 'bg-amber-500/60' :
+                                  proteinPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                                }`}
+                                style={{ width: `${Math.min(100, (nutritionTotals.protein / nutritionTargets.protein) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-surface-500">Carbs</span>
+                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }} />
+                            </div>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <p className="text-xs text-surface-600">/ {nutritionTargets.carbs}g</p>
+                              <span className={`text-[10px] ${carbsPace.color}`}>{carbsPace.icon}</span>
+                            </div>
+                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                              <div
+                                className={`absolute h-full rounded-full ${
+                                  carbsPace.status === 'ahead' ? 'bg-amber-500/60' :
+                                  carbsPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                                }`}
+                                style={{ width: `${Math.min(100, (nutritionTotals.carbs / nutritionTargets.carbs) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs text-surface-500">Fat</span>
+                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-pink-500" style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }} />
+                            </div>
+                            <div className="flex items-center justify-between mt-0.5">
+                              <p className="text-xs text-surface-600">/ {nutritionTargets.fat}g</p>
+                              <span className={`text-[10px] ${fatPace.color}`}>{fatPace.icon}</span>
+                            </div>
+                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
+                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
+                              <div
+                                className={`absolute h-full rounded-full ${
+                                  fatPace.status === 'ahead' ? 'bg-amber-500/60' :
+                                  fatPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
+                                }`}
+                                style={{ width: `${Math.min(100, (nutritionTotals.fat / nutritionTargets.fat) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-surface-400 text-sm mb-3">No nutrition targets set</p>
+                    <Link href="/dashboard/nutrition">
+                      <Button variant="outline" size="sm">Set Up Targets</Button>
+                    </Link>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+
+        case 'weight':
+          return (
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span>⚖️</span> Today&apos;s Weight
+                  </CardTitle>
+                  {!showWeightLogger && todaysWeight && (
+                    <button
+                      onClick={() => setShowWeightLogger(true)}
+                      className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
+                      title="Update weight"
+                    >
+                      <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
                   )}
-                </details>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-6">
-              <p className="text-surface-400 text-sm">Complete workouts to track volume</p>
-            </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-2">
+                {showWeightLogger ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder={`Weight (${weightUnit})`}
+                      value={weightInput}
+                      onChange={(e) => setWeightInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveWeight()}
+                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      autoFocus
+                    />
+                    <select
+                      value={weightUnit}
+                      onChange={(e) => setWeightUnit(e.target.value as 'lb' | 'kg')}
+                      className="px-2 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="lb">lbs</option>
+                      <option value="kg">kg</option>
+                    </select>
+                    <Button size="sm" onClick={handleSaveWeight} disabled={!weightInput || isLoggingWeight}>
+                      {isLoggingWeight ? '...' : 'Save'}
+                    </Button>
+                    <button
+                      onClick={() => { setShowWeightLogger(false); setWeightInput(''); }}
+                      className="p-2 text-surface-400 hover:text-surface-300 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : todaysWeight ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-surface-100">
+                            {(() => {
+                              let displayWeight = todaysWeight.weight;
+                              const storedUnit = todaysWeight.unit || weightUnit;
+                              let actualStoredUnit = storedUnit;
+                              if (storedUnit === 'lb' && todaysWeight.weight > 500) {
+                                actualStoredUnit = 'kg';
+                              } else if (storedUnit === 'kg' && todaysWeight.weight > 250) {
+                                actualStoredUnit = 'lb';
+                              }
+                              if (actualStoredUnit !== weightUnit) {
+                                if (actualStoredUnit === 'kg' && weightUnit === 'lb') {
+                                  displayWeight = todaysWeight.weight * 2.20462;
+                                } else if (actualStoredUnit === 'lb' && weightUnit === 'kg') {
+                                  displayWeight = todaysWeight.weight / 2.20462;
+                                }
+                              }
+                              return displayWeight.toFixed(1);
+                            })()} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
+                          </p>
+                          <p className="text-xs text-surface-500">Logged today</p>
+                        </div>
+                      </div>
+                      <Link href="/dashboard/nutrition">
+                        <Button variant="ghost" size="sm">History →</Button>
+                      </Link>
+                    </div>
+                    {weightHistory.length >= 2 && (
+                      <div className="pt-2 border-t border-surface-800">
+                        <WeightGraph
+                          key={`weight-graph-${weightHistory.length}-${weightUnit}`}
+                          weightHistory={weightHistory}
+                          preferredUnit={weightUnit}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowWeightLogger(true)}
+                    className="w-full py-4 border-2 border-dashed border-surface-700 rounded-lg text-surface-400 hover:border-primary-500 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Log your weight
+                  </button>
+                )}
+              </CardContent>
+            </Card>
+          );
+
+        case 'hydration':
+          return userId ? <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} /> : null;
+
+        case 'activity':
+          return userId ? <ActivityCard userId={userId} /> : null;
+
+        case 'atrophy-alert':
+          return musclesBelowMev.length > 0 ? (
+            <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
+          ) : null;
+
+        case 'weekly-volume':
+          return (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <span>📊</span> Weekly Volume
+                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-normal text-surface-500">sets per muscle</span>
+                    <Link href="/dashboard/learn/adaptive-volume">
+                      <button className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors" title="Learn about adaptive volume">
+                        <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </button>
+                    </Link>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {muscleVolume.length > 0 ? (
+                  <div className="space-y-2">
+                    {muscleVolume.slice(0, 8).map((mv) => (
+                      <details key={mv.muscle} className="group">
+                        <summary className="cursor-pointer list-none">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-3 h-3 text-surface-500 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                                <span className="text-surface-300 capitalize">{mv.muscle}</span>
+                              </div>
+                              <span className={`font-medium ${
+                                mv.status === 'optimal' ? 'text-success-400' :
+                                mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
+                              }`}>
+                                {mv.sets}/{mv.target}
+                                <span className="text-xs text-surface-500 ml-1">
+                                  {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
+                                </span>
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
+                              <div
+                                className={`h-full transition-all duration-500 ${
+                                  mv.status === 'optimal' ? 'bg-success-500' :
+                                  mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </summary>
+                        {mv.exercises && mv.exercises.length > 0 && (
+                          <div className="ml-5 mt-2 pl-3 border-l-2 border-surface-700 space-y-1.5">
+                            {mv.exercises.map((ex) => (
+                              <div key={ex.id} className="flex items-center justify-between text-xs">
+                                <span className="text-surface-400 truncate">{ex.name}</span>
+                                <span className="text-surface-500 flex-shrink-0 ml-2">{ex.sets} sets</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </details>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-surface-400 text-sm">Complete workouts to track volume</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          );
+
+        default:
+          return null;
+      }
+    })();
+
+    if (!cardContent) return null;
+
+    return (
+      <DashboardCard
+        key={cardId}
+        id={cardId}
+        isEditMode={isEditMode}
+        isFirst={isFirst}
+        isLast={isLast}
+        onMoveUp={() => moveCardUp(cardId)}
+        onMoveDown={() => moveCardDown(cardId)}
+      >
+        {cardContent}
+      </DashboardCard>
+    );
+  };
+
+  return (
+    <div className={`space-y-6 max-w-3xl mx-auto ${isEditMode ? 'pl-14' : ''}`}>
+      {/* Edit Mode Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {isEditMode && (
+            <span className="text-sm text-primary-400 font-medium">
+              Editing Layout
+            </span>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <button
+          onClick={() => setIsEditMode(!isEditMode)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
+            isEditMode
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700'
+          }`}
+        >
+          {isEditMode ? (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-sm font-medium">Done</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+              <span className="text-sm font-medium">Edit</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Render cards in order */}
+      {cardOrder.map((cardId, index) => renderCard(cardId, index))}
     </div>
   );
 }
