@@ -140,7 +140,7 @@ export function TDEEDashboard({
           <div>
             <p className="text-xs text-surface-500 uppercase tracking-wide mb-1">Burn Rate</p>
             <p className="text-2xl font-bold text-surface-100">
-              {activeEstimate.burnRatePerLb}
+              {activeEstimate.burnRatePerLb.toFixed(1)}
               <span className="text-sm font-normal text-surface-400 ml-1">cal/lb</span>
             </p>
           </div>
