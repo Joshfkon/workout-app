@@ -167,10 +167,15 @@ function NewWorkoutContent() {
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
   const suggestExercises = async () => {
     setIsSuggesting(true);
+    setError(null); // Clear any previous errors
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setError('You must be logged in to get workout suggestions.');
+        setIsSuggesting(false);
+        return;
+      }
       
       // ============================================
       // STEP 1: FETCH ALL REQUIRED DATA
@@ -195,16 +200,29 @@ function NewWorkoutContent() {
       let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
       
       if (selectedLocationId && selectedLocationId !== 'fallback') {
-        // Load equipment for the selected location
-        const { data: locationEquipment } = await supabase
-          .from('user_equipment')
-          .select('equipment_id, is_available')
-          .eq('user_id', user.id)
-          .eq('location_id', selectedLocationId)
-          .eq('is_available', true);
-        
-        if (locationEquipment && locationEquipment.length > 0) {
-          availableEquipment = locationEquipment.map((eq: any) => eq.equipment_id);
+        try {
+          // Load equipment for the selected location
+          const { data: locationEquipment, error: equipmentError } = await supabase
+            .from('user_equipment')
+            .select('equipment_id, is_available')
+            .eq('user_id', user.id)
+            .eq('location_id', selectedLocationId)
+            .eq('is_available', true);
+          
+          if (equipmentError) {
+            console.warn('Error loading location equipment:', equipmentError);
+            // Fall through to use general equipment
+            availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+          } else if (locationEquipment && locationEquipment.length > 0) {
+            availableEquipment = locationEquipment.map((eq: any) => eq.equipment_id);
+          } else {
+            // No equipment found for location, use general preference
+            availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+          }
+        } catch (err) {
+          console.warn('Error processing location equipment:', err);
+          // Fall through to use general equipment
+          availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
         }
       } else {
         // Fallback to user's general equipment preference
@@ -687,7 +705,8 @@ function NewWorkoutContent() {
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
-      setError('Failed to generate workout suggestions. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate workout suggestions. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsSuggesting(false);
     }
@@ -1145,8 +1164,14 @@ function NewWorkoutContent() {
                   </p>
                 </div>
                 <Button 
-                  onClick={suggestExercises}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('Suggest Workout button clicked');
+                    suggestExercises();
+                  }}
                   isLoading={isSuggesting}
+                  disabled={isSuggesting}
                   className="whitespace-nowrap"
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
