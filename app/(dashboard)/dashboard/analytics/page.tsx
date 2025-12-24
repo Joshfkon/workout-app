@@ -270,6 +270,21 @@ export default function AnalyticsPage() {
   const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
   const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
 
+  // Wellness state
+  const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
+  const [checkInData, setCheckInData] = useState<Array<{
+    date: string;
+    sleepHours: number | null;
+    sleepQuality: number | null;
+    energyLevel: number | null;
+    moodRating: number | null;
+    focusRating: number | null;
+    libidoRating: number | null;
+    stressLevel: number | null;
+    sorenessLevel: number | null;
+    hungerLevel: number | null;
+  }>>([]);
+
   // Unit display helpers
   const units = preferences?.units || 'lb';
   const displayWeight = (kg: number) => {
