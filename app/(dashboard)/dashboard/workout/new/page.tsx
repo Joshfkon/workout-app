@@ -2057,6 +2057,193 @@ function NewWorkoutContent() {
                 </div>
               </div>
 
+              {/* Advanced Fields Toggle */}
+              <div className="pt-2 border-t border-surface-700">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                  className="flex items-center justify-between w-full text-sm text-surface-400 hover:text-surface-200 transition-colors"
+                >
+                  <span>Advanced Fields</span>
+                  <svg 
+                    className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Advanced Fields */}
+              {showAdvancedFields && (
+                <div className="space-y-4 pt-2 border-t border-surface-700">
+                  {/* Equipment Required (Multi-select) */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-2">
+                      Equipment Required (select all that apply)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                      {equipmentTypes.map((eq) => (
+                        <label
+                          key={eq.id}
+                          className="flex items-center gap-2 p-2 rounded hover:bg-surface-700/50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={customExerciseForm.equipmentRequired.includes(eq.name.toLowerCase())}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setCustomExerciseForm(prev => ({
+                                  ...prev,
+                                  equipmentRequired: [...prev.equipmentRequired, eq.name.toLowerCase()]
+                                }));
+                              } else {
+                                setCustomExerciseForm(prev => ({
+                                  ...prev,
+                                  equipmentRequired: prev.equipmentRequired.filter(e => e !== eq.name.toLowerCase())
+                                }));
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-surface-300">{eq.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {customExerciseForm.equipmentRequired.length > 0 && (
+                      <p className="text-xs text-surface-500 mt-1">
+                        Selected: {customExerciseForm.equipmentRequired.join(', ')}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Secondary Muscles */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-2">
+                      Secondary Muscles
+                    </label>
+                    <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                      {MUSCLE_GROUPS.filter(m => m !== customExerciseForm.muscle).map((muscle) => (
+                        <label
+                          key={muscle}
+                          className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={customExerciseForm.secondaryMuscles.includes(muscle)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setCustomExerciseForm(prev => ({
+                                  ...prev,
+                                  secondaryMuscles: [...prev.secondaryMuscles, muscle]
+                                }));
+                              } else {
+                                setCustomExerciseForm(prev => ({
+                                  ...prev,
+                                  secondaryMuscles: prev.secondaryMuscles.filter(m => m !== muscle)
+                                }));
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Movement Pattern */}
+                  <div>
+                    <Select
+                      label="Movement Pattern"
+                      value={customExerciseForm.movementPattern || ''}
+                      onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, movementPattern: e.target.value }))}
+                      options={[
+                        { value: 'horizontal_push', label: 'Horizontal Push' },
+                        { value: 'horizontal_pull', label: 'Horizontal Pull' },
+                        { value: 'vertical_push', label: 'Vertical Push' },
+                        { value: 'vertical_pull', label: 'Vertical Pull' },
+                        { value: 'squat', label: 'Squat' },
+                        { value: 'hip_hinge', label: 'Hip Hinge' },
+                        { value: 'lunge', label: 'Lunge' },
+                        { value: 'isolation', label: 'Isolation' },
+                      ]}
+                      placeholder="Select movement pattern (optional)"
+                    />
+                  </div>
+
+                  {/* Hypertrophy Tier */}
+                  <div>
+                    <Select
+                      label="Hypertrophy Tier"
+                      value={customExerciseForm.hypertrophyTier || ''}
+                      onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, hypertrophyTier: e.target.value as any }))}
+                      options={[
+                        { value: 'S', label: 'S (Best)' },
+                        { value: 'A', label: 'A' },
+                        { value: 'B', label: 'B' },
+                        { value: 'C', label: 'C' },
+                        { value: 'D', label: 'D' },
+                        { value: 'F', label: 'F (Worst)' },
+                      ]}
+                      placeholder="Select tier (optional)"
+                    />
+                  </div>
+
+                  {/* Rep Range */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="Default Rep Range (Min)"
+                      type="number"
+                      value={customExerciseForm.defaultRepRangeMin?.toString() || ''}
+                      onChange={(e) => setCustomExerciseForm(prev => ({ 
+                        ...prev, 
+                        defaultRepRangeMin: e.target.value ? parseInt(e.target.value) : undefined 
+                      }))}
+                      placeholder="8"
+                    />
+                    <Input
+                      label="Default Rep Range (Max)"
+                      type="number"
+                      value={customExerciseForm.defaultRepRangeMax?.toString() || ''}
+                      onChange={(e) => setCustomExerciseForm(prev => ({ 
+                        ...prev, 
+                        defaultRepRangeMax: e.target.value ? parseInt(e.target.value) : undefined 
+                      }))}
+                      placeholder="12"
+                    />
+                  </div>
+
+                  {/* Default RIR */}
+                  <Input
+                    label="Default RIR (Reps In Reserve)"
+                    type="number"
+                    value={customExerciseForm.defaultRir?.toString() || ''}
+                    onChange={(e) => setCustomExerciseForm(prev => ({ 
+                      ...prev, 
+                      defaultRir: e.target.value ? parseInt(e.target.value) : undefined 
+                    }))}
+                    placeholder="2"
+                  />
+
+                  {/* Setup Note */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                      Setup Note
+                    </label>
+                    <textarea
+                      value={customExerciseForm.setupNote || ''}
+                      onChange={(e) => setCustomExerciseForm(prev => ({ ...prev, setupNote: e.target.value }))}
+                      placeholder="Instructions for setting up the exercise..."
+                      className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              )}
+
               {customExerciseError && (
                 <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-sm">
                   {customExerciseError}
