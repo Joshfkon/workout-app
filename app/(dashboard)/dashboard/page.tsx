@@ -498,10 +498,29 @@ export default function DashboardPage() {
         });
         
         if (targetsResult.error) {
-          console.error('[Dashboard] Error fetching nutrition targets:', targetsResult.error);
-        }
-        
-        if (targetsResult.data) {
+          // If error is about missing column, try fetching without cardio_prescription
+          if (targetsResult.error.code === '42703' && targetsResult.error.message?.includes('cardio_prescription')) {
+            console.log('[Dashboard] cardio_prescription column not found, fetching without it');
+            const { data: fallbackData, error: fallbackError } = await supabase
+              .from('nutrition_targets')
+              .select('calories, protein, carbs, fat')
+              .eq('user_id', user.id)
+              .maybeSingle();
+            
+            if (fallbackError) {
+              console.error('[Dashboard] Error fetching nutrition targets (fallback):', fallbackError);
+              setNutritionTargets(null);
+            } else if (fallbackData) {
+              console.log('[Dashboard] Setting nutrition targets (without cardio_prescription):', fallbackData);
+              setNutritionTargets(fallbackData);
+            } else {
+              setNutritionTargets(null);
+            }
+          } else {
+            console.error('[Dashboard] Error fetching nutrition targets:', targetsResult.error);
+            setNutritionTargets(null);
+          }
+        } else if (targetsResult.data) {
           console.log('[Dashboard] Setting nutrition targets:', targetsResult.data);
           setNutritionTargets(targetsResult.data);
         } else {
