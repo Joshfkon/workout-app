@@ -489,13 +489,23 @@ export default function DashboardPage() {
           setNutritionTotals(totals);
         }
 
+        // Debug nutrition targets
+        console.log('[Dashboard] targetsResult:', {
+          hasData: !!targetsResult.data,
+          hasError: !!targetsResult.error,
+          data: targetsResult.data,
+          error: targetsResult.error,
+        });
+        
         if (targetsResult.error) {
           console.error('[Dashboard] Error fetching nutrition targets:', targetsResult.error);
         }
         
         if (targetsResult.data) {
+          console.log('[Dashboard] Setting nutrition targets:', targetsResult.data);
           setNutritionTargets(targetsResult.data);
         } else {
+          console.log('[Dashboard] No nutrition targets found, setting to null');
           // Explicitly set to null if no data (maybeSingle returns null when no row found)
           setNutritionTargets(null);
         }
