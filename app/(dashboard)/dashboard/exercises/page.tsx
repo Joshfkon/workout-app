@@ -385,12 +385,20 @@ export default function ExercisesPage() {
         bodyweight_type: editData.bodyweightType,
         assistance_type: editData.assistanceType,
         equipment: editData.equipment,
+        equipment_required: editData.equipmentRequired.length > 0 ? editData.equipmentRequired : [],
         movement_pattern: editData.movementPattern,
+        secondary_muscles: editData.secondaryMuscles || [],
+        hypertrophy_tier: editData.hypertrophyTier,
+        default_rep_range: editData.defaultRepRangeMin && editData.defaultRepRangeMax
+          ? [editData.defaultRepRangeMin, editData.defaultRepRangeMax]
+          : undefined,
+        default_rir: editData.defaultRir,
+        setup_note: editData.setupNote,
       };
       
-      // Remove null values
+      // Remove null/undefined values
       Object.keys(updatePayload).forEach(key => {
-        if (updatePayload[key] === null) {
+        if (updatePayload[key] === null || updatePayload[key] === undefined) {
           delete updatePayload[key];
         }
       });
@@ -1418,6 +1426,180 @@ export default function ExercisesPage() {
                         <option value="compound">Compound</option>
                       </select>
                     </div>
+
+                    {/* Advanced Fields Toggle */}
+                    <div className="pt-2 border-t border-surface-700">
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                        className="flex items-center justify-between w-full text-sm text-surface-400 hover:text-surface-200 transition-colors"
+                      >
+                        <span>Advanced Fields</span>
+                        <svg 
+                          className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`}
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Advanced Fields */}
+                    {showAdvancedFields && editData && (
+                      <div className="space-y-4 pt-2 border-t border-surface-700">
+                        {/* Equipment Required (Multi-select) */}
+                        <div>
+                          <label className="block text-sm font-medium text-surface-300 mb-2">
+                            Equipment Required (select all that apply)
+                          </label>
+                          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                            {equipmentTypes.map((eq) => (
+                              <label
+                                key={eq.id}
+                                className="flex items-center gap-2 p-2 rounded hover:bg-surface-700/50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={editData.equipmentRequired.includes(eq.name.toLowerCase())}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditData(prev => prev ? ({
+                                        ...prev,
+                                        equipmentRequired: [...prev.equipmentRequired, eq.name.toLowerCase()]
+                                      }) : null);
+                                    } else {
+                                      setEditData(prev => prev ? ({
+                                        ...prev,
+                                        equipmentRequired: prev.equipmentRequired.filter(e => e !== eq.name.toLowerCase())
+                                      }) : null);
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                                />
+                                <span className="text-sm text-surface-300">{eq.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {editData.equipmentRequired.length > 0 && (
+                            <p className="text-xs text-surface-500 mt-1">
+                              Selected: {editData.equipmentRequired.join(', ')}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Secondary Muscles */}
+                        <div>
+                          <label className="block text-sm font-medium text-surface-300 mb-2">
+                            Secondary Muscles
+                          </label>
+                          <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                            {MUSCLE_GROUPS.filter(m => m !== editData.primaryMuscle).map((muscle) => (
+                              <label
+                                key={muscle}
+                                className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={editData.secondaryMuscles.includes(muscle)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setEditData(prev => prev ? ({
+                                        ...prev,
+                                        secondaryMuscles: [...prev.secondaryMuscles, muscle]
+                                      }) : null);
+                                    } else {
+                                      setEditData(prev => prev ? ({
+                                        ...prev,
+                                        secondaryMuscles: prev.secondaryMuscles.filter(m => m !== muscle)
+                                      }) : null);
+                                    }
+                                  }}
+                                  className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                                />
+                                <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Hypertrophy Tier */}
+                        <div>
+                          <label className="block text-sm text-surface-400 mb-1">Hypertrophy Tier</label>
+                          <select
+                            value={editData.hypertrophyTier || ''}
+                            onChange={(e) => setEditData(prev => prev ? ({ ...prev, hypertrophyTier: e.target.value as any || undefined }) : null)}
+                            className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                          >
+                            <option value="">Not set</option>
+                            <option value="S">S (Best)</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                            <option value="F">F (Worst)</option>
+                          </select>
+                        </div>
+
+                        {/* Rep Range */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm text-surface-400 mb-1">Default Rep Range (Min)</label>
+                            <input
+                              type="number"
+                              value={editData.defaultRepRangeMin?.toString() || ''}
+                              onChange={(e) => setEditData(prev => prev ? ({ 
+                                ...prev, 
+                                defaultRepRangeMin: e.target.value ? parseInt(e.target.value) : undefined 
+                              }) : null)}
+                              placeholder="8"
+                              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm text-surface-400 mb-1">Default Rep Range (Max)</label>
+                            <input
+                              type="number"
+                              value={editData.defaultRepRangeMax?.toString() || ''}
+                              onChange={(e) => setEditData(prev => prev ? ({ 
+                                ...prev, 
+                                defaultRepRangeMax: e.target.value ? parseInt(e.target.value) : undefined 
+                              }) : null)}
+                              placeholder="12"
+                              className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Default RIR */}
+                        <div>
+                          <label className="block text-sm text-surface-400 mb-1">Default RIR (Reps In Reserve)</label>
+                          <input
+                            type="number"
+                            value={editData.defaultRir?.toString() || ''}
+                            onChange={(e) => setEditData(prev => prev ? ({ 
+                              ...prev, 
+                              defaultRir: e.target.value ? parseInt(e.target.value) : undefined 
+                            }) : null)}
+                            placeholder="2"
+                            className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                          />
+                        </div>
+
+                        {/* Setup Note */}
+                        <div>
+                          <label className="block text-sm text-surface-400 mb-1">Setup Note</label>
+                          <textarea
+                            value={editData.setupNote || ''}
+                            onChange={(e) => setEditData(prev => prev ? ({ ...prev, setupNote: e.target.value }) : null)}
+                            placeholder="Instructions for setting up the exercise..."
+                            className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                            rows={2}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 

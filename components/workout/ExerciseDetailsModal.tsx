@@ -309,6 +309,11 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
       const bodyweightType = getExerciseProp(exercise, 'bodyweightType', 'bodyweight_type') || null;
       const assistanceType = getExerciseProp(exercise, 'assistanceType', 'assistance_type') || null;
       
+      const hypertrophyTier = getExerciseProp(exercise, 'hypertrophyTier', 'hypertrophy_tier');
+      const defaultRepRange = getExerciseProp(exercise, 'defaultRepRange', 'default_rep_range') || [];
+      const defaultRir = getExerciseProp(exercise, 'defaultRir', 'default_rir');
+      const setupNote = getExerciseProp(exercise, 'setupNote', 'setup_note');
+      
       setEditData({
         isBodyweight,
         bodyweightType,
@@ -318,7 +323,13 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         movementPattern,
         primaryMuscle,
         secondaryMuscles: Array.isArray(secondaryMuscles) ? secondaryMuscles : [],
+        hypertrophyTier,
+        defaultRepRangeMin: Array.isArray(defaultRepRange) && defaultRepRange.length > 0 ? defaultRepRange[0] : undefined,
+        defaultRepRangeMax: Array.isArray(defaultRepRange) && defaultRepRange.length > 1 ? defaultRepRange[1] : undefined,
+        defaultRir,
+        setupNote,
       });
+      setShowAdvancedFields(false);
     }
   }, [isEditing, exercise]);
   
@@ -614,6 +625,168 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   <option value="abs">Abs</option>
                 </select>
               </div>
+
+              {/* Advanced Fields Toggle */}
+              <div className="pt-2 border-t border-surface-700">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFields(!showAdvancedFields)}
+                  className="flex items-center justify-between w-full text-sm text-surface-400 hover:text-surface-200 transition-colors"
+                >
+                  <span>Advanced Fields</span>
+                  <svg 
+                    className={`w-4 h-4 transition-transform ${showAdvancedFields ? 'rotate-180' : ''}`}
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Advanced Fields */}
+              {showAdvancedFields && editData && (
+                <div className="space-y-4 pt-2 border-t border-surface-700">
+                  {/* Equipment Required (Multi-select) */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-2">
+                      Equipment Required (select all that apply)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                      {equipmentTypes.map((eq) => (
+                        <label
+                          key={eq.id}
+                          className="flex items-center gap-2 p-2 rounded hover:bg-surface-700/50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editData.equipmentRequired.includes(eq.name.toLowerCase())}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditData({ ...editData, equipmentRequired: [...editData.equipmentRequired, eq.name.toLowerCase()] });
+                              } else {
+                                setEditData({ ...editData, equipmentRequired: editData.equipmentRequired.filter(e => e !== eq.name.toLowerCase()) });
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-surface-300">{eq.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {editData.equipmentRequired.length > 0 && (
+                      <p className="text-xs text-surface-500 mt-1">
+                        Selected: {editData.equipmentRequired.join(', ')}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Secondary Muscles */}
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-2">
+                      Secondary Muscles
+                    </label>
+                    <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto p-2 bg-surface-800/50 rounded-lg">
+                      {['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs', 'traps', 'forearms'].filter(m => m !== editData.primaryMuscle).map((muscle) => (
+                        <label
+                          key={muscle}
+                          className="flex items-center gap-2 p-1.5 rounded hover:bg-surface-700/50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={editData.secondaryMuscles.includes(muscle)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditData({ ...editData, secondaryMuscles: [...editData.secondaryMuscles, muscle] });
+                              } else {
+                                setEditData({ ...editData, secondaryMuscles: editData.secondaryMuscles.filter(m => m !== muscle) });
+                              }
+                            }}
+                            className="w-4 h-4 text-primary-500 bg-surface-700 border-surface-600 rounded focus:ring-primary-500"
+                          />
+                          <span className="text-xs text-surface-300 capitalize">{muscle}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Hypertrophy Tier */}
+                  <div>
+                    <label className="block text-xs font-medium text-surface-400 mb-1">Hypertrophy Tier</label>
+                    <select
+                      value={editData.hypertrophyTier || ''}
+                      onChange={(e) => setEditData({ ...editData, hypertrophyTier: e.target.value as any || undefined })}
+                      className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                    >
+                      <option value="">Not set</option>
+                      <option value="S">S (Best)</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
+                      <option value="D">D</option>
+                      <option value="F">F (Worst)</option>
+                    </select>
+                  </div>
+
+                  {/* Rep Range */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400 mb-1">Default Rep Range (Min)</label>
+                      <input
+                        type="number"
+                        value={editData.defaultRepRangeMin?.toString() || ''}
+                        onChange={(e) => setEditData({ 
+                          ...editData, 
+                          defaultRepRangeMin: e.target.value ? parseInt(e.target.value) : undefined 
+                        })}
+                        placeholder="8"
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-surface-400 mb-1">Default Rep Range (Max)</label>
+                      <input
+                        type="number"
+                        value={editData.defaultRepRangeMax?.toString() || ''}
+                        onChange={(e) => setEditData({ 
+                          ...editData, 
+                          defaultRepRangeMax: e.target.value ? parseInt(e.target.value) : undefined 
+                        })}
+                        placeholder="12"
+                        className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Default RIR */}
+                  <div>
+                    <label className="block text-xs font-medium text-surface-400 mb-1">Default RIR (Reps In Reserve)</label>
+                    <input
+                      type="number"
+                      value={editData.defaultRir?.toString() || ''}
+                      onChange={(e) => setEditData({ 
+                        ...editData, 
+                        defaultRir: e.target.value ? parseInt(e.target.value) : undefined 
+                      })}
+                      placeholder="2"
+                      className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                    />
+                  </div>
+
+                  {/* Setup Note */}
+                  <div>
+                    <label className="block text-xs font-medium text-surface-400 mb-1">Setup Note</label>
+                    <textarea
+                      value={editData.setupNote || ''}
+                      onChange={(e) => setEditData({ ...editData, setupNote: e.target.value })}
+                      placeholder="Instructions for setting up the exercise..."
+                      className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+              )}
               
               {/* Error/Success Messages */}
               {saveError && (
