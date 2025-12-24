@@ -326,6 +326,7 @@ function NewWorkoutContent() {
       }
       
       console.log('Final availableEquipment for filtering:', availableEquipment);
+      console.log('Selected location ID:', selectedLocationId);
       
       // Get active injuries from multiple sources
       const activeInjuries: UserInjury[] = [];
