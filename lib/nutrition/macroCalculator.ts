@@ -1,5 +1,5 @@
 /**
- * Smart Macro Calculator v3.2 (Josh edition)
+ * Smart Macro Calculator v3.3 (Josh edition)
  *
  * Design goals:
  * - Goals expressed as %BW/week
@@ -8,6 +8,14 @@
  * - Floors: fat + carbs (contextual), clamps: protein (relative to LBM)
  * - Deterministic behavior (no silent calorie creep). If constraints are impossible,
  *   it bumps calories ONLY as a last resort and logs it.
+ *
+ * v3.3 Changes:
+ * - Added aggressive phase duration tracking (2/3/4 week limits)
+ * - Aggressive cuts are now explicitly "borrowed time" - not indefinite
+ * - Phase warnings when selecting aggressive cut
+ * - Cap exhaustion warning when both loss-rate and cardio caps are hit
+ * - Refeed/diet break suggestions after N weeks at aggressive rate
+ * - Integration hooks for existing deload/feedback systems
  *
  * v3.2 Changes:
  * - Added Zone 2 cardio prescription when macro floors block desired cut rate
@@ -86,11 +94,59 @@ export interface GoalConfig {
   goal: Goal;
   targetWeightChangePerWeek?: number; // kg/week override
   peptide?: Peptide;
+  
+  // Required when goal is aggressive_cut
+  aggressivePhase?: AggressivePhaseConfig;
 }
 
 // ---------------------- Cardio Prescription Types ----------------------
 
 export type CardioModality = "incline_walk" | "bike" | "elliptical" | "rower";
+
+// Aggressive phase duration options (in weeks)
+export type AggressivePhaseDuration = 2 | 3 | 4;
+
+export interface AggressivePhaseConfig {
+  // How long has the user been in an aggressive phase? (weeks)
+  currentWeeksInPhase: number;
+  
+  // User-selected duration for this aggressive phase
+  plannedDurationWeeks: AggressivePhaseDuration;
+  
+  // Date the aggressive phase started (ISO string)
+  phaseStartDate?: string;
+}
+
+export interface AggressivePhaseWarning {
+  level: "info" | "caution" | "warning" | "critical";
+  message: string;
+  recommendation: string;
+  
+  // Suggested actions
+  suggestRefeed: boolean;
+  suggestRateReduction: boolean;
+  suggestDietBreak: boolean;
+  
+  // For integration with existing systems
+  triggerDeloadCheck: boolean;
+}
+
+export interface PhaseStatus {
+  isAggressive: boolean;
+  weeksRemaining: number;
+  weeksCompleted: number;
+  plannedDuration: number;
+  
+  // The core insight: aggressive cuts are borrowed time
+  borrowedTimeWarning: string;
+  
+  // Warnings based on phase progress
+  warnings: AggressivePhaseWarning[];
+  
+  // When caps are exhausted
+  capsExhausted: boolean;
+  capsExhaustedMessage?: string;
+}
 
 export interface CardioConfig {
   enabled: boolean;
@@ -164,6 +220,9 @@ export interface MacroRecommendation {
   
   // Cardio prescription when floors block desired cut rate
   cardioPrescription?: CardioPrescription;
+  
+  // Aggressive phase status and warnings
+  phaseStatus?: PhaseStatus;
 }
 
 // ---------------------- Constants ----------------------
@@ -462,6 +521,156 @@ function allocateMacros(
   return { protein: safeProtein, carbs: safeCarbs, fat: safeFat, finalCalories, guardrails, bumpedCaloriesBy };
 }
 
+// ---------------------- Aggressive Phase Evaluation ----------------------
+
+const AGGRESSIVE_PHASE_LIMITS = {
+  MAX_DURATION_WEEKS: 4,
+  MIN_DURATION_WEEKS: 2,
+  
+  // Warning thresholds (weeks into phase)
+  CAUTION_AT_WEEK: 2,
+  WARNING_AT_WEEK: 3,
+  CRITICAL_AT_WEEK: 4,
+  
+  // Refeed suggestion frequency
+  SUGGEST_REFEED_EVERY_WEEKS: 2,
+};
+
+/**
+ * CORE INSIGHT: Aggressive cuts are borrowed time.
+ * 
+ * Cardio can delay muscle loss, but it cannot eliminate the tradeoff.
+ * At some point:
+ * - Cardio increases cortisol
+ * - Cortisol suppresses muscle protein synthesis  
+ * - Recovery debt accumulates
+ * - Adaptive TDEE drops harder
+ * - Lean mass becomes the buffer
+ * 
+ * This happens BEFORE you hit crazy cardio numbers.
+ * That's why the system must enforce time limits, not just cardio caps.
+ */
+function evaluateAggressivePhase(
+  goal: Goal,
+  aggressivePhase: AggressivePhaseConfig | undefined,
+  cardioPrescription: CardioPrescription | undefined
+): PhaseStatus | undefined {
+  const isAggressive = goal === "aggressive_cut";
+  
+  if (!isAggressive) {
+    return undefined;
+  }
+  
+  // Default phase config if not provided (force user to be explicit)
+  const phase = aggressivePhase ?? {
+    currentWeeksInPhase: 0,
+    plannedDurationWeeks: 2 as AggressivePhaseDuration,
+  };
+  
+  const weeksRemaining = Math.max(0, phase.plannedDurationWeeks - phase.currentWeeksInPhase);
+  const warnings: AggressivePhaseWarning[] = [];
+  
+  // Check if both caps are exhausted
+  const capsExhausted = cardioPrescription?.hitCap ?? false;
+  let capsExhaustedMessage: string | undefined;
+  
+  if (capsExhausted && cardioPrescription?.needed) {
+    capsExhaustedMessage = 
+      "Both your loss-rate cap (based on body fat %) and cardio cap are maxed out. " +
+      "Further deficit would likely come from lean mass, not fat. " +
+      "Options: accept a slower rate, take a diet break, or extend your timeline.";
+  }
+  
+  // Warning: Starting aggressive phase
+  if (phase.currentWeeksInPhase === 0) {
+    warnings.push({
+      level: "info",
+      message: `Aggressive cut selected for ${phase.plannedDurationWeeks} weeks.`,
+      recommendation: 
+        "Aggressive cuts are borrowed time — sustainable for 2-4 weeks max. " +
+        "Plan a refeed or rate reduction at the end of this phase.",
+      suggestRefeed: false,
+      suggestRateReduction: false,
+      suggestDietBreak: false,
+      triggerDeloadCheck: false,
+    });
+  }
+  
+  // Caution: Midway through phase
+  if (phase.currentWeeksInPhase >= AGGRESSIVE_PHASE_LIMITS.CAUTION_AT_WEEK && 
+      phase.currentWeeksInPhase < AGGRESSIVE_PHASE_LIMITS.WARNING_AT_WEEK) {
+    warnings.push({
+      level: "caution",
+      message: `Week ${phase.currentWeeksInPhase} of aggressive cut. ${weeksRemaining} week(s) remaining.`,
+      recommendation: 
+        "Monitor: sleep quality, lifting performance, mood. " +
+        "If any are degrading, consider an early refeed or rate reduction.",
+      suggestRefeed: phase.currentWeeksInPhase % AGGRESSIVE_PHASE_LIMITS.SUGGEST_REFEED_EVERY_WEEKS === 0,
+      suggestRateReduction: false,
+      suggestDietBreak: false,
+      triggerDeloadCheck: true,
+    });
+  }
+  
+  // Warning: Approaching limit
+  if (phase.currentWeeksInPhase >= AGGRESSIVE_PHASE_LIMITS.WARNING_AT_WEEK && 
+      phase.currentWeeksInPhase < AGGRESSIVE_PHASE_LIMITS.CRITICAL_AT_WEEK) {
+    warnings.push({
+      level: "warning",
+      message: `Week ${phase.currentWeeksInPhase} of aggressive cut. Time to plan your exit.`,
+      recommendation: 
+        "You're approaching the sustainable limit for aggressive dieting. " +
+        "Schedule a refeed day or transition to moderate cut within the next week.",
+      suggestRefeed: true,
+      suggestRateReduction: true,
+      suggestDietBreak: false,
+      triggerDeloadCheck: true,
+    });
+  }
+  
+  // Critical: At or past limit
+  if (phase.currentWeeksInPhase >= AGGRESSIVE_PHASE_LIMITS.CRITICAL_AT_WEEK) {
+    warnings.push({
+      level: "critical",
+      message: `Week ${phase.currentWeeksInPhase} of aggressive cut — you've exceeded the safe window.`,
+      recommendation: 
+        "Muscle loss risk is now elevated regardless of macros/cardio. " +
+        "Strongly recommend: 1 week diet break at maintenance, then reassess. " +
+        "Continuing aggressive dieting past 4 weeks typically backfires.",
+      suggestRefeed: true,
+      suggestRateReduction: true,
+      suggestDietBreak: true,
+      triggerDeloadCheck: true,
+    });
+  }
+  
+  // Add cap exhaustion warning if applicable
+  if (capsExhausted) {
+    warnings.push({
+      level: "warning",
+      message: "Rate and cardio caps exhausted.",
+      recommendation: capsExhaustedMessage!,
+      suggestRefeed: false,
+      suggestRateReduction: true,
+      suggestDietBreak: true,
+      triggerDeloadCheck: false,
+    });
+  }
+  
+  return {
+    isAggressive: true,
+    weeksRemaining,
+    weeksCompleted: phase.currentWeeksInPhase,
+    plannedDuration: phase.plannedDurationWeeks,
+    borrowedTimeWarning: 
+      "Aggressive cuts are borrowed time. Cardio lets you borrow more time — not infinite time. " +
+      "Plan your exit strategy before you start.",
+    warnings,
+    capsExhausted,
+    capsExhaustedMessage,
+  };
+}
+
 // ---------------------- Cardio Prescription ----------------------
 
 /**
@@ -731,6 +940,13 @@ export function calculateMacros(
     });
   }
 
+  // Evaluate aggressive phase status and warnings
+  const phaseStatus = evaluateAggressivePhase(
+    goalConfig.goal,
+    goalConfig.aggressivePhase,
+    cardioPrescription
+  );
+
   return {
     calories: finalCalories,
     protein,
@@ -755,6 +971,7 @@ export function calculateMacros(
     peptideNotes: peptide !== "none" ? peptideCfg.notes : undefined,
     guardrailsApplied: guardrailsApplied.length ? guardrailsApplied : undefined,
     cardioPrescription,
+    phaseStatus,
   };
 }
 
@@ -789,4 +1006,135 @@ export function getPeptideOptions(): Array<{ value: Peptide; label: string; desc
     label: p.name,
     description: p.description,
   }));
+}
+
+// ---------------------- Refeed/Deload Integration ----------------------
+
+/**
+ * Integration hook for existing refeed/deload systems.
+ * 
+ * This function checks phase status and returns signals that can be used
+ * to trigger existing refeed logic, deload suggestions, or daily feedback prompts.
+ */
+export interface RefeedIntegrationSignals {
+  // Should the app suggest a refeed day?
+  suggestRefeedDay: boolean;
+  refeedReason?: string;
+  
+  // Should the app trigger a deload check?
+  triggerDeloadCheck: boolean;
+  deloadReason?: string;
+  
+  // Should the app suggest a full diet break?
+  suggestDietBreak: boolean;
+  dietBreakReason?: string;
+  
+  // Should the app prompt for daily feedback (mood, sleep, libido, etc.)?
+  promptDailyFeedback: boolean;
+  feedbackQuestions?: string[];
+  
+  // Overall phase health assessment
+  phaseHealth: "good" | "monitor" | "concerning" | "critical";
+}
+
+export function getRefeedIntegrationSignals(
+  phaseStatus: PhaseStatus | undefined,
+  // Optional: pass in daily feedback data if available
+  dailyFeedback?: {
+    sleepQuality?: 1 | 2 | 3 | 4 | 5;
+    energyLevel?: 1 | 2 | 3 | 4 | 5;
+    moodRating?: 1 | 2 | 3 | 4 | 5;
+    libidoRating?: 1 | 2 | 3 | 4 | 5;
+    liftingPerformance?: "improving" | "stable" | "declining";
+  }
+): RefeedIntegrationSignals {
+  // Default: no signals
+  if (!phaseStatus || !phaseStatus.isAggressive) {
+    return {
+      suggestRefeedDay: false,
+      triggerDeloadCheck: false,
+      suggestDietBreak: false,
+      promptDailyFeedback: false,
+      phaseHealth: "good",
+    };
+  }
+  
+  // Aggregate warning signals
+  const hasRefeedSuggestion = phaseStatus.warnings.some(w => w.suggestRefeed);
+  const hasDeloadTrigger = phaseStatus.warnings.some(w => w.triggerDeloadCheck);
+  const hasDietBreakSuggestion = phaseStatus.warnings.some(w => w.suggestDietBreak);
+  const maxWarningLevel = phaseStatus.warnings.reduce((max, w) => {
+    const levels = { info: 0, caution: 1, warning: 2, critical: 3 };
+    return Math.max(max, levels[w.level]);
+  }, 0);
+  
+  // Check daily feedback for concerning patterns
+  let feedbackConcerns: string[] = [];
+  if (dailyFeedback) {
+    if (dailyFeedback.sleepQuality && dailyFeedback.sleepQuality <= 2) {
+      feedbackConcerns.push("Sleep quality is poor");
+    }
+    if (dailyFeedback.energyLevel && dailyFeedback.energyLevel <= 2) {
+      feedbackConcerns.push("Energy levels are low");
+    }
+    if (dailyFeedback.moodRating && dailyFeedback.moodRating <= 2) {
+      feedbackConcerns.push("Mood is suffering");
+    }
+    if (dailyFeedback.libidoRating && dailyFeedback.libidoRating <= 2) {
+      feedbackConcerns.push("Libido is suppressed");
+    }
+    if (dailyFeedback.liftingPerformance === "declining") {
+      feedbackConcerns.push("Lifting performance is declining");
+    }
+  }
+  
+  // Escalate phase health based on feedback
+  let phaseHealth: RefeedIntegrationSignals["phaseHealth"] = "good";
+  if (maxWarningLevel >= 3 || feedbackConcerns.length >= 3) {
+    phaseHealth = "critical";
+  } else if (maxWarningLevel >= 2 || feedbackConcerns.length >= 2) {
+    phaseHealth = "concerning";
+  } else if (maxWarningLevel >= 1 || feedbackConcerns.length >= 1) {
+    phaseHealth = "monitor";
+  }
+  
+  // Build feedback questions based on phase progress
+  const feedbackQuestions: string[] = [];
+  if (phaseStatus.weeksCompleted >= 1) {
+    feedbackQuestions.push("How's your sleep quality this week? (1-5)");
+    feedbackQuestions.push("Energy levels during workouts? (1-5)");
+    feedbackQuestions.push("Any mood changes? (1-5)");
+  }
+  if (phaseStatus.weeksCompleted >= 2) {
+    feedbackQuestions.push("How's your libido? (1-5)");
+    feedbackQuestions.push("Lifting performance: improving, stable, or declining?");
+  }
+  
+  return {
+    suggestRefeedDay: hasRefeedSuggestion || feedbackConcerns.length >= 2,
+    refeedReason: hasRefeedSuggestion 
+      ? `Week ${phaseStatus.weeksCompleted} of aggressive cut. Refeed helps restore leptin and glycogen.`
+      : feedbackConcerns.length >= 2 
+        ? `Multiple warning signs: ${feedbackConcerns.join(", ")}. Consider a refeed.`
+        : undefined,
+    
+    triggerDeloadCheck: hasDeloadTrigger || dailyFeedback?.liftingPerformance === "declining",
+    deloadReason: hasDeloadTrigger
+      ? "Aggressive dieting taxes recovery. Check if a deload would help."
+      : dailyFeedback?.liftingPerformance === "declining"
+        ? "Lifting performance is declining — recovery may be compromised."
+        : undefined,
+    
+    suggestDietBreak: hasDietBreakSuggestion || phaseHealth === "critical",
+    dietBreakReason: hasDietBreakSuggestion
+      ? "You've exceeded the safe window for aggressive dieting. 1 week at maintenance recommended."
+      : phaseHealth === "critical"
+        ? "Multiple critical signals. Diet break strongly recommended before muscle loss accelerates."
+        : undefined,
+    
+    promptDailyFeedback: phaseStatus.weeksCompleted >= 1,
+    feedbackQuestions: feedbackQuestions.length > 0 ? feedbackQuestions : undefined,
+    
+    phaseHealth,
+  };
 }
