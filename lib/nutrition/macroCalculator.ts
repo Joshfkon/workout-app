@@ -135,7 +135,8 @@ const GUARDRAILS = {
   DEFAULT_LOSS_RATE_CAP: 0.50,
 
   // Protein clamps (g/lb LBM)
-  PROTEIN_MIN_PER_LB_LBM: 0.9,
+  // Floor raised to 1.0 - "don't die" is 0.8, "lifting" floor is 1.0
+  PROTEIN_MIN_PER_LB_LBM: 1.0,
   PROTEIN_MAX_PER_LB_LBM: 1.2,
 
   // Fat floor
@@ -329,8 +330,8 @@ function allocateMacros(
     guardrails.push(`Protein clamped to ${pPerLb.toFixed(2)} g/lb LBM`);
   }
 
-  const proteinFloor = Math.round(lbm * GUARDRAILS.PROTEIN_MIN_PER_LB_LBM);
-  let protein = Math.round(lbm * pPerLb);
+  // Protein is set and protected - no reduction allowed
+  const protein = Math.round(lbm * pPerLb);
 
   const fatFloor = Math.round(bwLbs * GUARDRAILS.MIN_FAT_PER_LB_BW);
   const { grams: carbFloor, tag: carbTag } = getCarbFloor(activity);
@@ -341,27 +342,13 @@ function allocateMacros(
   let fat = fatFloor;
   let carbs = Math.floor((budgetCalories - protein * 4 - fat * 9) / 4);
 
-  // If carbs too low, try lowering protein to protein floor
+  // If carbs too low, bump calories (protein is protected, don't steal from it)
   if (carbs < carbFloor) {
-    const neededCarbCals = (carbFloor - carbs) * 4;
-    const reducibleProteinGrams = Math.max(0, protein - proteinFloor);
-    const reducibleProteinCals = reducibleProteinGrams * 4;
-
-    if (reducibleProteinCals > 0) {
-      const reduceBy = Math.min(reducibleProteinGrams, Math.ceil(neededCarbCals / 4));
-      protein -= reduceBy;
-      guardrails.push(`Protein reduced by ${reduceBy}g to support carb floor`);
-      carbs = Math.floor((budgetCalories - protein * 4 - fat * 9) / 4);
-    }
-
-    // Still low? last resort: bump calories to hit carb floor
-    if (carbs < carbFloor) {
-      const bump = (carbFloor - carbs) * 4;
-      budgetCalories += bump;
-      bumpedCaloriesBy += bump;
-      carbs = carbFloor;
-      guardrails.push(`Calories bumped +${bump} to meet carb floor (${carbFloor}g, ${carbTag})`);
-    }
+    const bump = (carbFloor - carbs) * 4;
+    budgetCalories += bump;
+    bumpedCaloriesBy += bump;
+    carbs = carbFloor;
+    guardrails.push(`Calories +${bump} to meet carb floor (${carbFloor}g, ${carbTag}) while protecting protein`);
   }
 
   // Recompute fat as remainder after protein + carbs, but not below floor
@@ -388,21 +375,20 @@ function allocateMacros(
       finalCalories = protein * 4 + carbs * 4 + fat * 9;
     }
 
-    // If still over (carbs at floor + fat at floor), bump calories as last resort
+    // If still over (carbs at floor + fat at floor), bump calories
     if (finalCalories > budgetCalories) {
       const bump = finalCalories - budgetCalories;
-      budgetCalories += bump;
       bumpedCaloriesBy += bump;
-      guardrails.push(`Calories bumped +${bump} to satisfy fat+carb floors simultaneously`);
+      guardrails.push(`Calories +${bump} to satisfy fat+carb floors`);
     }
   }
 
   finalCalories = protein * 4 + carbs * 4 + fat * 9;
 
   // Defensive: never negative
-  carbs = Math.max(0, carbs);
-  protein = Math.max(0, protein);
-  fat = Math.max(0, fat);
+  const safeCarbs = Math.max(0, carbs);
+  const safeProtein = Math.max(0, protein);
+  const safeFat = Math.max(0, fat);
 
   return { protein, carbs, fat, finalCalories, guardrails, bumpedCaloriesBy };
 }
