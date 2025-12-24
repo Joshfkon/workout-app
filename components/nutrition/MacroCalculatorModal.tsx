@@ -17,6 +17,8 @@ import {
   type Sex,
   type Peptide,
   type MacroRecommendation,
+  type CardioConfig,
+  type CardioModality,
 } from '@/lib/nutrition/macroCalculator';
 import { saveMacroSettings } from '@/lib/actions/nutrition';
 
@@ -29,6 +31,7 @@ interface MacroCalculatorModalProps {
     carbs: number;
     fat: number;
     meals_per_day?: number;
+    cardio_prescription?: any;
   }) => Promise<void>;
   existingTargets?: {
     calories?: number;
@@ -73,6 +76,12 @@ export function MacroCalculatorModal({
   
   // Peptides/Medications
   const [peptide, setPeptide] = useState<Peptide>('none');
+
+  // Cardio Configuration
+  const [cardioEnabled, setCardioEnabled] = useState(true);
+  const [cardioMode, setCardioMode] = useState<'lifestyle' | 'prep'>('lifestyle');
+  const [cardioModality, setCardioModality] = useState<CardioModality>('incline_walk');
+  const [cardioNetEfficiency, setCardioNetEfficiency] = useState('0.65');
 
   // Results
   const [recommendation, setRecommendation] = useState<MacroRecommendation | null>(null);
@@ -134,6 +143,14 @@ export function MacroCalculatorModal({
     const heightCm = inchesToCm(totalInches);
     const bodyFatPercent = bodyFat ? parseFloat(bodyFat) : undefined;
 
+    // Build cardio config
+    const cardioConfig: CardioConfig | undefined = cardioEnabled ? {
+      enabled: true,
+      mode: cardioMode,
+      modality: cardioModality,
+      netEfficiency: parseFloat(cardioNetEfficiency) || 0.65,
+    } : undefined;
+
     const result = calculateMacros(
       {
         weightKg,
@@ -148,7 +165,9 @@ export function MacroCalculatorModal({
         avgWorkoutMinutes: parseInt(workoutDuration) || 60,
         workoutIntensity,
       },
-      { goal, peptide }
+      { goal, peptide },
+      undefined, // overrideTDEE
+      cardioConfig
     );
 
     setRecommendation(result);
@@ -159,12 +178,13 @@ export function MacroCalculatorModal({
 
     setIsApplying(true);
     try {
-      // Save macro targets
+      // Save macro targets (include cardio prescription if present)
       await onApply({
         calories: recommendation.calories,
         protein: recommendation.protein,
         carbs: recommendation.carbs,
         fat: recommendation.fat,
+        cardio_prescription: recommendation.cardioPrescription || null,
       });
       
       // Save macro settings for auto-recalculation when weight changes
@@ -408,6 +428,83 @@ export function MacroCalculatorModal({
           )}
         </div>
 
+        {/* Step 5: Cardio Configuration (only show when cutting) */}
+        {(goal.includes('cut')) && (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
+              Zone 2 Cardio (Optional)
+            </h3>
+            <p className="text-xs text-surface-400">
+              When macro floors block your desired cut rate, cardio can help you reach your goal by burning stored body fat without reducing essential dietary nutrients.
+            </p>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="cardio-enabled"
+                checked={cardioEnabled}
+                onChange={(e) => setCardioEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-surface-700 bg-surface-800 text-primary-500 focus:ring-primary-500"
+              />
+              <label htmlFor="cardio-enabled" className="text-sm text-surface-300">
+                Enable cardio prescription
+              </label>
+            </div>
+
+            {cardioEnabled && (
+              <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                      Mode
+                    </label>
+                    <Select
+                      value={cardioMode}
+                      onChange={(e) => setCardioMode(e.target.value as 'lifestyle' | 'prep')}
+                      options={[
+                        { value: 'lifestyle', label: 'Lifestyle (45 min/day cap)' },
+                        { value: 'prep', label: 'Prep (90 min/day cap)' },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                      Modality
+                    </label>
+                    <Select
+                      value={cardioModality}
+                      onChange={(e) => setCardioModality(e.target.value as CardioModality)}
+                      options={[
+                        { value: 'incline_walk', label: 'Incline Walk' },
+                        { value: 'bike', label: 'Bike' },
+                        { value: 'elliptical', label: 'Elliptical' },
+                        { value: 'rower', label: 'Rower' },
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                    Net Efficiency ({cardioNetEfficiency})
+                  </label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="0.8"
+                    step="0.05"
+                    value={cardioNetEfficiency}
+                    onChange={(e) => setCardioNetEfficiency(e.target.value)}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-surface-500 mt-1">
+                    Accounts for NEAT drop and metabolic efficiency (0.6-0.75 typical)
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Calculate Button */}
         <Button onClick={calculateRecommendation} variant="primary" className="w-full">
           Calculate My Macros
@@ -512,6 +609,57 @@ export function MacroCalculatorModal({
                 <p className="text-sm text-accent-300">
                   💡 <strong>Peptide Tip:</strong> {recommendation.peptideNotes}
                 </p>
+              </div>
+            )}
+
+            {/* Cardio Prescription */}
+            {recommendation.cardioPrescription && recommendation.cardioPrescription.needed && (
+              <div className="p-4 bg-primary-500/10 border border-primary-500/20 rounded-lg space-y-3">
+                <div className="flex items-start gap-2">
+                  <span className="text-xl">🏃</span>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-primary-300 mb-1">
+                      Zone 2 Cardio Prescription
+                    </h4>
+                    <p className="text-xs text-primary-400 mb-2">
+                      {recommendation.cardioPrescription.summary}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                      <div>
+                        <span className="text-surface-400">Minutes/Day:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {recommendation.cardioPrescription.prescribedMinutesPerDay}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Minutes/Week:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {recommendation.cardioPrescription.prescribedMinutesPerWeek}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Kcal/Day:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          ~{recommendation.cardioPrescription.shortfallKcalPerDay}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Loss Rate:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {recommendation.cardioPrescription.withCardioWeeklyLossLbs} lb/wk
+                        </span>
+                      </div>
+                    </div>
+                    {recommendation.cardioPrescription.hitCap && (
+                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
+                        ⚠️ Cardio capped at {recommendation.cardioPrescription.capMinutesPerDay} min/day
+                      </div>
+                    )}
+                    <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">
+                      <strong className="text-surface-300">Why cardio ≠ eating less:</strong> {recommendation.cardioPrescription.whyCardioNotDiet}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 

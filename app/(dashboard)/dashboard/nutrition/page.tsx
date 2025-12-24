@@ -852,6 +852,7 @@ export default function NutritionPage() {
     fat: number;
     meals_per_day?: number;
     meal_names?: MealNames;
+    cardio_prescription?: any;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -875,6 +876,7 @@ export default function NutritionPage() {
           fat: targets.fat,
           meals_per_day: targets.meals_per_day || 3,
           meal_names: targets.meal_names || null,
+          cardio_prescription: targets.cardio_prescription || null,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
@@ -889,6 +891,7 @@ export default function NutritionPage() {
         fat: targets.fat,
         meals_per_day: targets.meals_per_day || 3,
         meal_names: targets.meal_names || null,
+        cardio_prescription: targets.cardio_prescription || null,
       });
       error = result.error;
     }

@@ -28,7 +28,8 @@ type DashboardCardId =
   | 'hydration'
   | 'activity'
   | 'atrophy-alert'
-  | 'weekly-volume';
+  | 'weekly-volume'
+  | 'cardio';
 
 const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   'quick-actions',
@@ -57,6 +58,7 @@ interface NutritionTargets {
   protein: number;
   carbs: number;
   fat: number;
+  cardio_prescription?: any;
 }
 
 interface ExerciseVolume {
@@ -353,7 +355,7 @@ export default function DashboardPage() {
           
           // Nutrition targets
           supabase.from('nutrition_targets')
-            .select('calories, protein, carbs, fat')
+            .select('calories, protein, carbs, fat, cardio_prescription')
             .eq('user_id', user.id)
             .single(),
           
@@ -1276,6 +1278,61 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           );
+
+        case 'cardio':
+          return nutritionTargets?.cardio_prescription?.needed ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span>🏃</span> Zone 2 Cardio
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                    <p className="text-sm text-primary-300 mb-3">
+                      {nutritionTargets.cardio_prescription.summary}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-surface-400">Minutes/Day:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {nutritionTargets.cardio_prescription.prescribedMinutesPerDay}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Minutes/Week:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {nutritionTargets.cardio_prescription.prescribedMinutesPerWeek}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Kcal/Day:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          ~{nutritionTargets.cardio_prescription.shortfallKcalPerDay}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-surface-400">Loss Rate:</span>
+                        <span className="ml-2 font-semibold text-surface-200">
+                          {nutritionTargets.cardio_prescription.withCardioWeeklyLossLbs} lb/wk
+                        </span>
+                      </div>
+                    </div>
+                    {nutritionTargets.cardio_prescription.hitCap && (
+                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
+                        ⚠️ Cardio capped at {nutritionTargets.cardio_prescription.capMinutesPerDay} min/day
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-2 bg-surface-900/50 rounded text-xs text-surface-400">
+                    <strong className="text-surface-300">Why cardio ≠ eating less:</strong>{' '}
+                    {nutritionTargets.cardio_prescription.whyCardioNotDiet}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null;
 
         case 'hydration':
           return userId ? <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} /> : null;

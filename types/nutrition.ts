@@ -96,6 +96,7 @@ export interface NutritionTargets {
   fat: number | null;
   meals_per_day: number | null;
   meal_names: MealNames | null;
+  cardio_prescription?: any | null;
   created_at: string;
   updated_at: string;
 }
