@@ -10,6 +10,7 @@ import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { DashboardCard } from '@/components/dashboard/DashboardCard';
+import { CardioTracker } from '@/components/dashboard/CardioTracker';
 import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
@@ -1356,48 +1357,17 @@ export default function DashboardPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                    <p className="text-sm text-primary-300 mb-3">
-                      {nutritionTargets.cardio_prescription.summary}
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-surface-400">Minutes/Day:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
-                          {nutritionTargets.cardio_prescription.prescribedMinutesPerDay}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-surface-400">Minutes/Week:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
-                          {nutritionTargets.cardio_prescription.prescribedMinutesPerWeek}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-surface-400">Kcal/Day:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
-                          ~{nutritionTargets.cardio_prescription.shortfallKcalPerDay}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-surface-400">Loss Rate:</span>
-                        <span className="ml-2 font-semibold text-surface-200">
-                          {nutritionTargets.cardio_prescription.withCardioWeeklyLossLbs} lb/wk
-                        </span>
-                      </div>
-                    </div>
-                    {nutritionTargets.cardio_prescription.hitCap && (
-                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
-                        ⚠️ Cardio capped at {nutritionTargets.cardio_prescription.capMinutesPerDay} min/day
-                      </div>
-                    )}
+                {userId && (
+                  <CardioTracker
+                    userId={userId}
+                    prescription={nutritionTargets.cardio_prescription}
+                  />
+                )}
+                {!userId && (
+                  <div className="text-center py-4 text-surface-400 text-sm">
+                    Loading...
                   </div>
-                  <div className="p-2 bg-surface-900/50 rounded text-xs text-surface-400">
-                    <strong className="text-surface-300">Why cardio ≠ eating less:</strong>{' '}
-                    {nutritionTargets.cardio_prescription.whyCardioNotDiet}
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           );

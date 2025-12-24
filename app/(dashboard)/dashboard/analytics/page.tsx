@@ -272,6 +272,7 @@ export default function AnalyticsPage() {
 
   // Wellness state
   const [hydrationData, setHydrationData] = useState<Array<{ date: string; totalMl: number }>>([]);
+  const [cardioData, setCardioData] = useState<Array<{ date: string; totalMinutes: number; modality: string }>>([]);
   const [checkInData, setCheckInData] = useState<Array<{
     date: string;
     sleepHours: number | null;
@@ -512,6 +513,40 @@ export default function AnalyticsPage() {
           })).sort((a, b) => a.date.localeCompare(b.date));
 
           setHydrationData(hydrationArray);
+        }
+
+        // Fetch cardio data
+        const { data: cardioLogs } = await supabase
+          .from('cardio_log')
+          .select('logged_at, minutes, modality')
+          .eq('user_id', userId)
+          .gte('logged_at', startDateStr)
+          .order('logged_at', { ascending: true });
+
+        if (cardioLogs) {
+          // Group by date and sum minutes, also track modality breakdown
+          const grouped = cardioLogs.reduce((acc: Record<string, { totalMinutes: number; modalities: Record<string, number> }>, entry: any) => {
+            const date = entry.logged_at;
+            if (!acc[date]) {
+              acc[date] = { totalMinutes: 0, modalities: {} };
+            }
+            acc[date].totalMinutes += entry.minutes || 0;
+            const mod = entry.modality || 'other';
+            acc[date].modalities[mod] = (acc[date].modalities[mod] || 0) + (entry.minutes || 0);
+            return acc;
+          }, {});
+
+          const cardioArray = Object.entries(grouped).map(([date, data]) => {
+            // Get the most common modality for that day
+            const topModality = Object.entries(data.modalities).sort((a, b) => b[1] - a[1])[0]?.[0] || 'other';
+            return {
+              date,
+              totalMinutes: data.totalMinutes,
+              modality: topModality,
+            };
+          }).sort((a, b) => a.date.localeCompare(b.date));
+
+          setCardioData(cardioArray);
         }
 
         // Fetch daily check-in data
@@ -1651,6 +1686,66 @@ export default function AnalyticsPage() {
                 <div className="text-center py-12">
                   <p className="text-surface-400">No hydration data for this period</p>
                   <p className="text-sm text-surface-500 mt-1">Start logging your water intake to see trends</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Cardio Graph */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Cardio</CardTitle>
+              <p className="text-xs text-surface-500 mt-1">Daily cardio minutes</p>
+            </CardHeader>
+            <CardContent>
+              {cardioData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={cardioData}>
+                    <defs>
+                      <linearGradient id="cardioGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#9ca3af"
+                      tick={{ fill: '#9ca3af', fontSize: 12 }}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                      }}
+                    />
+                    <YAxis
+                      stroke="#9ca3af"
+                      tick={{ fill: '#9ca3af', fontSize: 12 }}
+                      label={{ value: 'minutes', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                      labelFormatter={(value) => {
+                        const date = new Date(value);
+                        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                      }}
+                      formatter={(value: number, payload: any) => {
+                        const modality = payload?.modality || 'unknown';
+                        return [`${value} min (${modality.replace('_', ' ')})`, 'Cardio'];
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="totalMinutes"
+                      stroke="#10b981"
+                      strokeWidth={2}
+                      fill="url(#cardioGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-surface-400">No cardio data for this period</p>
+                  <p className="text-sm text-surface-500 mt-1">Start logging your cardio sessions to see trends</p>
                 </div>
               )}
             </CardContent>
