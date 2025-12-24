@@ -72,6 +72,16 @@ interface CustomExerciseForm {
   name: string;
   muscle: string;
   mechanic: 'compound' | 'isolation';
+  equipmentRequired: string[];
+  movementPattern?: string;
+  secondaryMuscles: string[];
+  hypertrophyTier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+  defaultRepRangeMin?: number;
+  defaultRepRangeMax?: number;
+  defaultRir?: number;
+  formCues: string[];
+  commonMistakes: string[];
+  setupNote?: string;
 }
 
 type Goal = 'bulk' | 'cut' | 'maintain';
@@ -1328,7 +1338,16 @@ function NewWorkoutContent() {
         setSelectedExercises(prev => [...prev, newExercise.id]);
         // Close modal
         setShowCustomExerciseModal(false);
-        setCustomExerciseForm({ name: '', muscle: '', mechanic: 'compound' });
+        setCustomExerciseForm({ 
+          name: '', 
+          muscle: '', 
+          mechanic: 'compound',
+          equipmentRequired: [],
+          secondaryMuscles: [],
+          formCues: [],
+          commonMistakes: [],
+        });
+        setShowAdvancedFields(false);
       }
     } catch (err) {
       setCustomExerciseError('An error occurred. Please try again.');
