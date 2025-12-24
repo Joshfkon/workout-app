@@ -442,6 +442,94 @@ export default function AnalyticsPage() {
     fetchData();
   }, [router]);
 
+  // Fetch wellness data (hydration and daily check-ins)
+  useEffect(() => {
+    async function fetchWellnessData() {
+      if (!userId) return;
+
+      const supabase = createUntypedClient();
+      
+      // Calculate date range based on timeRange
+      const now = new Date();
+      let startDate: Date;
+      switch (timeRange) {
+        case '7d':
+          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case '60d':
+          startDate = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+          break;
+        case '6m':
+          startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+          break;
+        case '1y':
+          startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+          break;
+        default:
+          startDate = new Date(0); // All time
+      }
+
+      const startDateStr = startDate.toISOString().split('T')[0];
+
+      try {
+        // Fetch hydration data
+        const { data: hydrationLogs } = await supabase
+          .from('hydration_log')
+          .select('logged_at, amount_ml')
+          .eq('user_id', userId)
+          .gte('logged_at', startDateStr)
+          .order('logged_at', { ascending: true });
+
+        if (hydrationLogs) {
+          // Group by date and sum amounts
+          const grouped = hydrationLogs.reduce((acc: Record<string, number>, entry: any) => {
+            const date = entry.logged_at;
+            acc[date] = (acc[date] || 0) + (entry.amount_ml || 0);
+            return acc;
+          }, {});
+
+          const hydrationArray = Object.entries(grouped).map(([date, totalMl]) => ({
+            date,
+            totalMl: totalMl as number,
+          })).sort((a, b) => a.date.localeCompare(b.date));
+
+          setHydrationData(hydrationArray);
+        }
+
+        // Fetch daily check-in data
+        const { data: checkIns } = await supabase
+          .from('daily_check_ins')
+          .select('date, sleep_hours, sleep_quality, energy_level, mood_rating, focus_rating, libido_rating, stress_level, soreness_level, hunger_level')
+          .eq('user_id', userId)
+          .gte('date', startDateStr)
+          .order('date', { ascending: true });
+
+        if (checkIns) {
+          const transformed = checkIns.map((ci: any) => ({
+            date: ci.date,
+            sleepHours: ci.sleep_hours,
+            sleepQuality: ci.sleep_quality,
+            energyLevel: ci.energy_level,
+            moodRating: ci.mood_rating,
+            focusRating: ci.focus_rating,
+            libidoRating: ci.libido_rating,
+            stressLevel: ci.stress_level,
+            sorenessLevel: ci.soreness_level,
+            hungerLevel: ci.hunger_level,
+          }));
+          setCheckInData(transformed);
+        }
+      } catch (error) {
+        console.error('Failed to fetch wellness data:', error);
+      }
+    }
+
+    fetchWellnessData();
+  }, [userId, timeRange]);
+
   // Fetch workout analytics data
   useEffect(() => {
     async function fetchAnalytics() {
