@@ -925,16 +925,125 @@ function NewWorkoutContent() {
       const fetchExercises = async () => {
         setIsLoading(true);
         const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Get available equipment for selected location
+        let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+        
+        if (selectedLocationId && selectedLocationId !== 'fallback') {
+          try {
+            // Load equipment for the selected location
+            const { data: locationEquipment, error: equipmentError } = await supabase
+              .from('user_equipment')
+              .select('equipment_id, is_available')
+              .eq('user_id', user.id)
+              .eq('location_id', selectedLocationId)
+              .eq('is_available', true);
+            
+            if (!equipmentError && locationEquipment && locationEquipment.length > 0) {
+              // Get equipment type names from equipment_types table
+              const equipmentIds = locationEquipment.map((eq: any) => eq.equipment_id);
+              const { data: equipmentTypes, error: typesError } = await supabase
+                .from('equipment_types')
+                .select('id, name')
+                .in('id', equipmentIds);
+              
+              if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
+                // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
+                const equipmentNames = new Set<string>();
+                equipmentTypes.forEach((et: any) => {
+                  const name = et.name.toLowerCase();
+                  equipmentNames.add(name);
+                  
+                  // Also add mapped variations (e.g., 'dumbbells' -> ['dumbbell', 'db'])
+                  const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
+                  if (mapping) {
+                    mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+                  }
+                });
+                
+                availableEquipment = Array.from(equipmentNames);
+              } else {
+                // If equipment_types lookup fails, try using equipment_id directly
+                const equipmentNames = new Set<string>();
+                equipmentIds.forEach((id: string) => {
+                  const idLower = id.toLowerCase();
+                  equipmentNames.add(idLower);
+                  
+                  // Expand using mapping
+                  const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
+                  if (mapping) {
+                    mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+                  }
+                });
+                
+                availableEquipment = Array.from(equipmentNames);
+              }
+            } else {
+              // Fallback to user's general equipment preference
+              const { data: userData } = await supabase
+                .from('users')
+                .select('available_equipment')
+                .eq('id', user.id)
+                .single();
+              
+              if (userData?.available_equipment) {
+                availableEquipment = (userData.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+              }
+            }
+          } catch (err) {
+            console.warn('Error loading location equipment:', err);
+            // Fall through to default equipment
+          }
+        } else {
+          // Fallback to user's general equipment preference
+          const { data: userData } = await supabase
+            .from('users')
+            .select('available_equipment')
+            .eq('id', user.id)
+            .single();
+          
+          if (userData?.available_equipment) {
+            availableEquipment = (userData.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+          }
+        }
+
+        // Fetch exercises
         const { data, error } = await supabase
           .from('exercises')
-          .select('id, name, primary_muscle, mechanic, hypertrophy_tier')
+          .select('id, name, primary_muscle, mechanic, hypertrophy_tier, equipment_required')
           .in('primary_muscle', selectedMuscles)
           .order('name');
 
         if (data && !error) {
+          // Filter by equipment availability
+          const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
+          
+          let filteredExercises = data.filter((e: any) => {
+            if (!e.equipment_required || e.equipment_required.length === 0) return true;
+            
+            // Check if all required equipment is available
+            const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
+            const allAvailable = requiredEquipment.every((reqEq: string) => {
+              // Direct match
+              if (normalizedAvailable.includes(reqEq)) return true;
+              
+              // Partial match (e.g., "cable" matches "cable machine")
+              if (normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq))) return true;
+              
+              return false;
+            });
+            
+            return allAvailable;
+          });
+
           // Sort: frequently used first, then by hypertrophy tier, then alphabetically
           const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
-          const sorted = [...data].sort((a: any, b: any) => {
+          const sorted = [...filteredExercises].sort((a: any, b: any) => {
             const freqA = frequentExerciseIds.get(a.id) || 0;
             const freqB = frequentExerciseIds.get(b.id) || 0;
             
@@ -955,7 +1064,7 @@ function NewWorkoutContent() {
       };
       fetchExercises();
     }
-  }, [step, selectedMuscles, frequentExerciseIds]);
+  }, [step, selectedMuscles, frequentExerciseIds, selectedLocationId]);
 
   const toggleMuscle = (muscle: string) => {
     setSelectedMuscles((prev) =>
