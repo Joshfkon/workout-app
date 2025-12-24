@@ -1344,7 +1344,7 @@ export default function DashboardPage() {
                 </div>
               </CardContent>
             </Card>
-          ) : null;
+          );
 
         case 'hydration':
           return userId ? <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} /> : null;
