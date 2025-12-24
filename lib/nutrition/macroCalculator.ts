@@ -1,30 +1,50 @@
 /**
- * Smart Macro Calculator
- * 
- * Calculates TDEE (Total Daily Energy Expenditure) and recommended macros
- * based on user stats, goals, and activity level.
+ * Smart Macro Calculator v3.1 (Josh edition)
+ *
+ * Design goals:
+ * - Goals expressed as %BW/week
+ * - Tiered loss-rate caps by BF% (leaner = slower)
+ * - Calories are a hard budget (guardrails reallocate macros inside budget)
+ * - Floors: fat + carbs (contextual), clamps: protein (relative to LBM)
+ * - Deterministic behavior (no silent calorie creep). If constraints are impossible,
+ *   it bumps calories ONLY as a last resort and logs it.
  */
 
-export type Goal = 'aggressive_cut' | 'moderate_cut' | 'slow_cut' | 'maintain' | 'slow_bulk' | 'moderate_bulk' | 'aggressive_bulk';
-export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active' | 'athlete';
-export type Sex = 'male' | 'female';
+export type Goal =
+  | "aggressive_cut"
+  | "moderate_cut"
+  | "slow_cut"
+  | "maintain"
+  | "slow_bulk"
+  | "moderate_bulk"
+  | "aggressive_bulk";
 
-// GLP-1 and weight loss peptides
-export type Peptide = 
-  | 'none'
-  | 'semaglutide'      // Ozempic, Wegovy
-  | 'tirzepatide'      // Mounjaro, Zepbound
-  | 'retatrutide'      // Triple agonist (experimental)
-  | 'liraglutide'      // Saxenda
-  | 'tesofensine'      // Appetite suppressant
-  | 'gh_peptides';     // CJC-1295, Ipamorelin, etc.
+export type ActivityLevel =
+  | "sedentary"
+  | "light"
+  | "moderate"
+  | "active"
+  | "very_active"
+  | "athlete";
+
+export type Sex = "male" | "female";
+
+export type Peptide =
+  | "none"
+  | "semaglutide"
+  | "tirzepatide"
+  | "retatrutide"
+  | "liraglutide"
+  | "tesofensine"
+  | "gh_peptides";
 
 export interface PeptideInfo {
   id: Peptide;
   name: string;
   description: string;
-  proteinMultiplier: number;  // Increase protein needs
-  deficitTolerance: number;   // Can handle larger deficit
+  // Modest bump (1.05-1.10) to offset documented lean mass loss risk
+  // Still bounded by protein clamp (0.9-1.2 g/lb LBM)
+  proteinMultiplier: number;
   notes: string;
 }
 
@@ -33,244 +53,362 @@ export interface UserStats {
   heightCm: number;
   age: number;
   sex: Sex;
-  bodyFatPercent?: number; // Optional - for more accurate calculations
+  bodyFatPercent?: number;
 }
 
 export interface ActivityConfig {
   activityLevel: ActivityLevel;
   workoutsPerWeek: number;
   avgWorkoutMinutes: number;
-  workoutIntensity: 'light' | 'moderate' | 'intense';
+  workoutIntensity: "light" | "moderate" | "intense";
 }
 
 export interface GoalConfig {
   goal: Goal;
-  targetWeightChangePerWeek?: number; // in kg, negative for loss, positive for gain
+  targetWeightChangePerWeek?: number; // kg/week override
   peptide?: Peptide;
 }
 
 export interface MacroRecommendation {
+  // Final macros
   calories: number;
-  protein: number; // grams
-  carbs: number; // grams
-  fat: number; // grams
+  protein: number;
+  carbs: number;
+  fat: number;
+
+  // Requested target (pre-guardrail allocation)
+  requestedCalories: number;
+  requestedWeeklyChangeKg: number;
+
+  // Estimated energy numbers
+  tdee: number;
+  bmr: number;
+
+  // Final implied deficit/surplus + rate
+  deficit: number; // finalCalories - tdee
+  weeklyChangeKg: number;
+  weeklyChangeLbs: number;
+
+  // Percent splits (final)
   proteinPercent: number;
   carbsPercent: number;
   fatPercent: number;
-  tdee: number;
-  bmr: number;
-  deficit: number; // negative = deficit, positive = surplus
-  weeklyChange: number; // estimated kg change per week
+
   explanation: string;
-  peptideNotes?: string; // Special notes for peptide users
+  peptideNotes?: string;
+  guardrailsApplied?: string[];
 }
 
-// Activity multipliers for TDEE calculation
+// ---------------------- Constants ----------------------
+
 const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
-  sedentary: 1.2,      // Little or no exercise
-  light: 1.375,        // Light exercise 1-3 days/week
-  moderate: 1.55,      // Moderate exercise 3-5 days/week
-  active: 1.725,       // Hard exercise 6-7 days/week
-  very_active: 1.9,    // Very hard exercise, physical job
-  athlete: 2.1,        // Professional athlete level
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
+  very_active: 1.9,
+  athlete: 2.1,
 };
 
-// Goal calorie adjustments
-const GOAL_ADJUSTMENTS: Record<Goal, { weeklyKg: number; description: string }> = {
-  aggressive_cut: { weeklyKg: -1.0, description: 'Aggressive fat loss (-1kg/week)' },
-  moderate_cut: { weeklyKg: -0.5, description: 'Moderate fat loss (-0.5kg/week)' },
-  slow_cut: { weeklyKg: -0.25, description: 'Slow fat loss (-0.25kg/week)' },
-  maintain: { weeklyKg: 0, description: 'Maintain current weight' },
-  slow_bulk: { weeklyKg: 0.25, description: 'Lean bulk (+0.25kg/week)' },
-  moderate_bulk: { weeklyKg: 0.5, description: 'Moderate bulk (+0.5kg/week)' },
-  aggressive_bulk: { weeklyKg: 0.75, description: 'Aggressive bulk (+0.75kg/week)' },
+// %BW/week goals
+const GOAL_PERCENT_BW: Record<Goal, { percentBW: number; description: string }> = {
+  aggressive_cut: { percentBW: -0.75, description: "Aggressive cut (~0.75% BW/week)" },
+  moderate_cut: { percentBW: -0.5, description: "Moderate cut (~0.5% BW/week)" },
+  slow_cut: { percentBW: -0.25, description: "Slow cut (~0.25% BW/week)" },
+  maintain: { percentBW: 0, description: "Maintain weight" },
+  slow_bulk: { percentBW: 0.25, description: "Lean bulk (~0.25% BW/week)" },
+  moderate_bulk: { percentBW: 0.5, description: "Moderate bulk (~0.5% BW/week)" },
+  aggressive_bulk: { percentBW: 0.75, description: "Aggressive bulk (~0.75% BW/week)" },
 };
 
-// 1 kg of body weight ≈ 7700 calories
 const CALORIES_PER_KG = 7700;
 
-// Peptide configurations
+const GUARDRAILS = {
+  // Tiered max loss (%BW/week)
+  LOSS_RATE_BY_BF: [
+    { maxBF: 12, maxLossPercent: 0.30 },
+    { maxBF: 15, maxLossPercent: 0.35 },
+    { maxBF: 20, maxLossPercent: 0.50 },
+    { maxBF: 25, maxLossPercent: 0.60 },
+    { maxBF: 100, maxLossPercent: 0.75 },
+  ],
+  DEFAULT_LOSS_RATE_CAP: 0.50,
+
+  // Protein clamps (g/lb LBM)
+  PROTEIN_MIN_PER_LB_LBM: 0.9,
+  PROTEIN_MAX_PER_LB_LBM: 1.2,
+
+  // Fat floor
+  MIN_FAT_PER_LB_BW: 0.35,
+
+  // Carb floors (scale with resistance training workload)
+  MIN_CARBS_LIGHT: 80,
+  MIN_CARBS_LIFT_2_3: 110,
+  MIN_CARBS_LIFT_4_5: 130,
+  MIN_CARBS_LIFT_6P: 150,
+
+  // Calorie floors
+  MIN_CALORIES_MALE: 1500,
+  MIN_CALORIES_FEMALE: 1200,
+};
+
+// Peptide multipliers adjusted to 1.05-1.10 range
+// Evidence supports elevated protein needs on GLP-1s due to accelerated lean mass loss
+// Clamp still prevents runaway values
 const PEPTIDE_CONFIG: Record<Peptide, PeptideInfo> = {
   none: {
-    id: 'none',
-    name: 'None',
-    description: 'Not using any peptides',
+    id: "none",
+    name: "None",
+    description: "Not using peptides",
     proteinMultiplier: 1.0,
-    deficitTolerance: 1.0,
-    notes: '',
+    notes: "",
   },
   semaglutide: {
-    id: 'semaglutide',
-    name: 'Semaglutide (Ozempic/Wegovy)',
-    description: 'GLP-1 agonist for weight loss',
-    proteinMultiplier: 1.25, // 25% more protein
-    deficitTolerance: 1.3,   // Can handle 30% larger deficit
-    notes: 'Prioritize protein at every meal to prevent muscle loss. Eat protein first.',
+    id: "semaglutide",
+    name: "Semaglutide",
+    description: "GLP-1 agonist",
+    proteinMultiplier: 1.08,
+    notes: "Hit protein reliably; don't chase suppression with deeper deficits.",
   },
   tirzepatide: {
-    id: 'tirzepatide',
-    name: 'Tirzepatide (Mounjaro/Zepbound)',
-    description: 'GLP-1/GIP dual agonist',
-    proteinMultiplier: 1.25,
-    deficitTolerance: 1.35,
-    notes: 'Even stronger appetite suppression. Focus heavily on protein and nutrient density.',
+    id: "tirzepatide",
+    name: "Tirzepatide",
+    description: "GLP-1/GIP dual agonist",
+    proteinMultiplier: 1.08,
+    notes: "Keep deficits moderate; appetite suppression ≠ CNS tolerance.",
   },
   retatrutide: {
-    id: 'retatrutide',
-    name: 'Retatrutide',
-    description: 'Triple agonist (GLP-1/GIP/Glucagon)',
-    proteinMultiplier: 1.3, // 30% more protein
-    deficitTolerance: 1.4,
-    notes: 'Most potent option. Prioritize 40-50g protein per meal. Consider resistance training.',
+    id: "retatrutide",
+    name: "Retatrutide",
+    description: "GLP-1/GIP/Glucagon triple agonist",
+    proteinMultiplier: 1.10,
+    notes: "Most potent suppression; keep deficit sane and carbs non-trivial.",
   },
   liraglutide: {
-    id: 'liraglutide',
-    name: 'Liraglutide (Saxenda)',
-    description: 'GLP-1 agonist (daily injection)',
-    proteinMultiplier: 1.2,
-    deficitTolerance: 1.2,
-    notes: 'Moderate appetite suppression. Keep protein high to preserve muscle.',
+    id: "liraglutide",
+    name: "Liraglutide",
+    description: "GLP-1 agonist (daily)",
+    proteinMultiplier: 1.07,
+    notes: "Keep protein consistent; avoid very low carbs for long stretches.",
   },
   tesofensine: {
-    id: 'tesofensine',
-    name: 'Tesofensine',
-    description: 'Appetite suppressant (research peptide)',
-    proteinMultiplier: 1.15,
-    deficitTolerance: 1.25,
-    notes: 'Focus on nutrient-dense foods when eating.',
+    id: "tesofensine",
+    name: "Tesofensine",
+    description: "Appetite suppressant",
+    proteinMultiplier: 1.05,
+    notes: "Nutrient density matters; don't let calories drift too low.",
   },
   gh_peptides: {
-    id: 'gh_peptides',
-    name: 'GH Peptides (CJC-1295, Ipamorelin, etc.)',
-    description: 'Growth hormone secretagogues',
-    proteinMultiplier: 1.1,
-    deficitTolerance: 1.0, // No extra deficit tolerance
-    notes: 'Supports muscle retention. Maintain high protein for muscle growth benefits.',
+    id: "gh_peptides",
+    name: "GH Peptides",
+    description: "Secretagogues",
+    proteinMultiplier: 1.05,
+    notes: "No special deficit tolerance; keep protein adequate.",
   },
 };
 
-/**
- * Calculate BMR using Mifflin-St Jeor equation (most accurate for most people)
- * If body fat is known, uses Katch-McArdle (more accurate for athletes)
- */
+// ---------------------- Helpers ----------------------
+
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+export function kgToLbs(kg: number): number {
+  return kg * 2.20462;
+}
+export function lbsToKg(lbs: number): number {
+  return lbs / 2.20462;
+}
+export function cmToInches(cm: number): number {
+  return cm / 2.54;
+}
+export function inchesToCm(inches: number): number {
+  return inches * 2.54;
+}
+
 export function calculateBMR(stats: UserStats): number {
   if (stats.bodyFatPercent && stats.bodyFatPercent > 0) {
-    // Katch-McArdle formula (uses lean body mass)
     const leanMassKg = stats.weightKg * (1 - stats.bodyFatPercent / 100);
-    return 370 + (21.6 * leanMassKg);
+    return 370 + 21.6 * leanMassKg; // Katch-McArdle
   }
-
-  // Mifflin-St Jeor formula
-  if (stats.sex === 'male') {
-    return (10 * stats.weightKg) + (6.25 * stats.heightCm) - (5 * stats.age) + 5;
-  } else {
-    return (10 * stats.weightKg) + (6.25 * stats.heightCm) - (5 * stats.age) - 161;
+  // Mifflin-St Jeor
+  if (stats.sex === "male") {
+    return 10 * stats.weightKg + 6.25 * stats.heightCm - 5 * stats.age + 5;
   }
+  return 10 * stats.weightKg + 6.25 * stats.heightCm - 5 * stats.age - 161;
 }
 
-/**
- * Calculate additional calories burned from workouts
- */
-function calculateWorkoutCalories(activity: ActivityConfig, weightKg: number): number {
-  // MET values by intensity
-  const metValues = {
-    light: 3.5,    // Light weight training
-    moderate: 5.0, // Moderate weight training
-    intense: 8.0,  // Intense weight training/HIIT
-  };
-
-  const met = metValues[activity.workoutIntensity];
-  const hoursPerWeek = (activity.workoutsPerWeek * activity.avgWorkoutMinutes) / 60;
-  const weeklyCalories = met * weightKg * hoursPerWeek;
-  
-  return Math.round(weeklyCalories / 7); // Daily average
-}
-
-/**
- * Calculate TDEE (Total Daily Energy Expenditure)
- */
 export function calculateTDEE(stats: UserStats, activity: ActivityConfig): number {
   const bmr = calculateBMR(stats);
-  
-  // Base TDEE from activity level
   let tdee = bmr * ACTIVITY_MULTIPLIERS[activity.activityLevel];
-  
-  // Add extra workout calories if activity level doesn't fully account for them
-  if (activity.workoutsPerWeek >= 4 && activity.workoutIntensity === 'intense') {
-    tdee += calculateWorkoutCalories(activity, stats.weightKg) * 0.5; // Partial addition to avoid double-counting
+
+  // Small "intense" bump to avoid double counting
+  if (activity.workoutsPerWeek >= 4 && activity.workoutIntensity === "intense") {
+    const met = 8.0;
+    const hoursPerWeek = (activity.workoutsPerWeek * activity.avgWorkoutMinutes) / 60;
+    const weeklyCalories = met * stats.weightKg * hoursPerWeek;
+    tdee += (weeklyCalories / 7) * 0.5;
   }
-  
+
   return Math.round(tdee);
 }
 
-/**
- * Calculate protein needs based on goals, body composition, and peptide use
- * Target: ~1g per lb of body weight (2.2g/kg) for most lifters
- * Higher during cuts and when using GLP-1s to preserve muscle
- */
-function calculateProtein(stats: UserStats, goal: Goal, peptide: Peptide = 'none'): number {
-  const weightKg = stats.weightKg;
-  const weightLbs = weightKg * 2.20462;
-  const peptideConfig = PEPTIDE_CONFIG[peptide];
-  
-  // For lifters, use ~1g per lb as baseline (industry standard)
-  // Adjust based on goal and body composition
-  let proteinPerLb: number;
-  
-  switch (goal) {
-    case 'aggressive_cut':
-      // Higher protein during aggressive cut to maximize muscle retention
-      proteinPerLb = 1.2; // 1.2g per lb
-      break;
-    case 'moderate_cut':
-      proteinPerLb = 1.1; // 1.1g per lb
-      break;
-    case 'slow_cut':
-    case 'maintain':
-      proteinPerLb = 1.0; // 1g per lb (standard recommendation)
-      break;
-    case 'slow_bulk':
-    case 'moderate_bulk':
-      proteinPerLb = 1.0; // 1g per lb
-      break;
-    case 'aggressive_bulk':
-      // Slightly less needed when in large surplus
-      proteinPerLb = 0.9; // 0.9g per lb
-      break;
-    default:
-      proteinPerLb = 1.0;
+function getLossRateCap(bodyFatPercent?: number): number {
+  if (!bodyFatPercent || bodyFatPercent <= 0) return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
+  for (const tier of GUARDRAILS.LOSS_RATE_BY_BF) {
+    if (bodyFatPercent <= tier.maxBF) return tier.maxLossPercent;
   }
+  return GUARDRAILS.DEFAULT_LOSS_RATE_CAP;
+}
 
-  // Apply peptide multiplier (GLP-1s increase protein needs due to muscle loss risk)
-  proteinPerLb *= peptideConfig.proteinMultiplier;
-
-  // If body fat is known and high (>25%), base protein on estimated lean mass
-  if (stats.bodyFatPercent && stats.bodyFatPercent > 25) {
-    const leanMassLbs = weightLbs * (1 - stats.bodyFatPercent / 100);
-    // Use 1.2-1.3g per lb of lean mass for higher body fat individuals
-    return Math.round(leanMassLbs * 1.25 * peptideConfig.proteinMultiplier);
+function getLeanMassLbs(stats: UserStats): number {
+  const bw = kgToLbs(stats.weightKg);
+  if (stats.bodyFatPercent && stats.bodyFatPercent > 0) {
+    return bw * (1 - stats.bodyFatPercent / 100);
   }
+  // fallback estimate (kept simple)
+  const est = stats.sex === "male" ? 0.20 : 0.28;
+  return bw * (1 - est);
+}
 
-  return Math.round(weightLbs * proteinPerLb);
+function getCarbFloor(activity: ActivityConfig): { grams: number; tag: string } {
+  const weeklyMinutes = activity.workoutsPerWeek * activity.avgWorkoutMinutes;
+  const isLiftingish = activity.workoutIntensity !== "light" && weeklyMinutes >= 120; // 2h+ /wk at least moderate
+  if (!isLiftingish) return { grams: GUARDRAILS.MIN_CARBS_LIGHT, tag: "light activity" };
+
+  const w = activity.workoutsPerWeek;
+  if (w >= 6) return { grams: GUARDRAILS.MIN_CARBS_LIFT_6P, tag: "lifting 6+ days/wk" };
+  if (w >= 4) return { grams: GUARDRAILS.MIN_CARBS_LIFT_4_5, tag: "lifting 4–5 days/wk" };
+  return { grams: GUARDRAILS.MIN_CARBS_LIFT_2_3, tag: "lifting 2–3 days/wk" };
 }
 
 /**
- * Calculate fat needs (minimum for hormonal health)
+ * Allocate macros inside a calorie budget with deterministic reconciliation.
+ *
+ * Policy:
+ * 1) Set protein (clamped by LBM range)
+ * 2) Set fat to floor
+ * 3) Put the rest into carbs
+ * 4) If carbs < carb floor:
+ *    - reduce protein down to protein floor
+ *    - then (only if still short) bump calories to satisfy carb floor
+ * 5) Recompute fat as remaining calories after P+C, but never below fat floor.
+ *    If fat floor causes calories to exceed budget, trim carbs down to carb floor.
+ *    If still over, bump calories (last resort).
  */
-function calculateFat(calories: number, stats: UserStats): number {
-  // Fat should be 20-35% of calories, minimum 0.5g per kg body weight
-  const minFat = stats.weightKg * 0.5;
-  const percentFat = 0.25; // 25% of calories
-  
-  const fatFromCalories = (calories * percentFat) / 9; // 9 calories per gram
-  
-  return Math.round(Math.max(minFat, fatFromCalories));
+function allocateMacros(
+  budgetCalories: number,
+  stats: UserStats,
+  goal: Goal,
+  peptide: Peptide,
+  activity: ActivityConfig
+): {
+  protein: number;
+  carbs: number;
+  fat: number;
+  finalCalories: number;
+  guardrails: string[];
+  bumpedCaloriesBy: number;
+} {
+  const guardrails: string[] = [];
+  const peptideCfg = PEPTIDE_CONFIG[peptide];
+  const bwLbs = kgToLbs(stats.weightKg);
+  const lbm = getLeanMassLbs(stats);
+
+  const isCut = goal.includes("cut");
+
+  // Protein target (then clamp)
+  const base = isCut ? 1.1 : 1.0;
+  const requestedPPerLb = base * peptideCfg.proteinMultiplier;
+
+  const pPerLb = clamp(
+    requestedPPerLb,
+    GUARDRAILS.PROTEIN_MIN_PER_LB_LBM,
+    GUARDRAILS.PROTEIN_MAX_PER_LB_LBM
+  );
+
+  if (pPerLb !== requestedPPerLb) {
+    guardrails.push(`Protein clamped to ${pPerLb.toFixed(2)} g/lb LBM`);
+  }
+
+  const proteinFloor = Math.round(lbm * GUARDRAILS.PROTEIN_MIN_PER_LB_LBM);
+  let protein = Math.round(lbm * pPerLb);
+
+  const fatFloor = Math.round(bwLbs * GUARDRAILS.MIN_FAT_PER_LB_BW);
+  const { grams: carbFloor, tag: carbTag } = getCarbFloor(activity);
+
+  let bumpedCaloriesBy = 0;
+
+  // First pass: fat at floor, carbs are remainder
+  let fat = fatFloor;
+  let carbs = Math.floor((budgetCalories - protein * 4 - fat * 9) / 4);
+
+  // If carbs too low, try lowering protein to protein floor
+  if (carbs < carbFloor) {
+    const neededCarbCals = (carbFloor - carbs) * 4;
+    const reducibleProteinGrams = Math.max(0, protein - proteinFloor);
+    const reducibleProteinCals = reducibleProteinGrams * 4;
+
+    if (reducibleProteinCals > 0) {
+      const reduceBy = Math.min(reducibleProteinGrams, Math.ceil(neededCarbCals / 4));
+      protein -= reduceBy;
+      guardrails.push(`Protein reduced by ${reduceBy}g to support carb floor`);
+      carbs = Math.floor((budgetCalories - protein * 4 - fat * 9) / 4);
+    }
+
+    // Still low? last resort: bump calories to hit carb floor
+    if (carbs < carbFloor) {
+      const bump = (carbFloor - carbs) * 4;
+      budgetCalories += bump;
+      bumpedCaloriesBy += bump;
+      carbs = carbFloor;
+      guardrails.push(`Calories bumped +${bump} to meet carb floor (${carbFloor}g, ${carbTag})`);
+    }
+  }
+
+  // Recompute fat as remainder after protein + carbs, but not below floor
+  const remainingForFat = Math.max(0, budgetCalories - protein * 4 - carbs * 4);
+  fat = Math.floor(remainingForFat / 9);
+
+  if (fat < fatFloor) {
+    fat = fatFloor;
+    guardrails.push(`Fat held at floor (${fatFloor}g)`);
+  }
+
+  // Reconcile if fat floor causes calories to exceed budget: trim carbs down to carbFloor
+  let finalCalories = protein * 4 + carbs * 4 + fat * 9;
+
+  if (finalCalories > budgetCalories) {
+    const over = finalCalories - budgetCalories;
+    const reducibleCarbs = Math.max(0, carbs - carbFloor);
+    const reducibleCarbCals = reducibleCarbs * 4;
+
+    if (reducibleCarbCals > 0) {
+      const reduceBy = Math.min(reducibleCarbs, Math.ceil(over / 4));
+      carbs -= reduceBy;
+      guardrails.push(`Carbs reduced by ${reduceBy}g to stay within calorie budget`);
+      finalCalories = protein * 4 + carbs * 4 + fat * 9;
+    }
+
+    // If still over (carbs at floor + fat at floor), bump calories as last resort
+    if (finalCalories > budgetCalories) {
+      const bump = finalCalories - budgetCalories;
+      budgetCalories += bump;
+      bumpedCaloriesBy += bump;
+      guardrails.push(`Calories bumped +${bump} to satisfy fat+carb floors simultaneously`);
+    }
+  }
+
+  finalCalories = protein * 4 + carbs * 4 + fat * 9;
+
+  // Defensive: never negative
+  carbs = Math.max(0, carbs);
+  protein = Math.max(0, protein);
+  fat = Math.max(0, fat);
+
+  return { protein, carbs, fat, finalCalories, guardrails, bumpedCaloriesBy };
 }
 
-/**
- * Main function: Calculate complete macro recommendations
- * @param overrideTDEE - Optional adaptive TDEE to use instead of formula calculation
- */
+// ---------------------- Main ----------------------
+
 export function calculateMacros(
   stats: UserStats,
   activity: ActivityConfig,
@@ -279,147 +417,129 @@ export function calculateMacros(
 ): MacroRecommendation {
   const bmr = calculateBMR(stats);
   const formulaTDEE = calculateTDEE(stats, activity);
-  const tdee = overrideTDEE || formulaTDEE;
-  const isAdaptive = !!overrideTDEE;
+  const tdee = overrideTDEE ?? formulaTDEE;
 
-  // Get peptide configuration
-  const peptide = goalConfig.peptide || 'none';
-  const peptideConfig = PEPTIDE_CONFIG[peptide];
-  
-  // Determine weekly weight change target
-  const goalAdjustment = GOAL_ADJUSTMENTS[goalConfig.goal];
-  let weeklyChangeKg = goalConfig.targetWeightChangePerWeek ?? goalAdjustment.weeklyKg;
-  
-  // Peptides allow for larger deficits due to appetite suppression
-  if (weeklyChangeKg < 0 && peptide !== 'none') {
-    weeklyChangeKg *= peptideConfig.deficitTolerance;
-    // Cap at -1.5kg/week for safety
-    weeklyChangeKg = Math.max(-1.5, weeklyChangeKg);
+  const guardrailsApplied: string[] = [];
+
+  const peptide = goalConfig.peptide ?? "none";
+  const peptideCfg = PEPTIDE_CONFIG[peptide];
+
+  // Requested weekly change
+  const goalDef = GOAL_PERCENT_BW[goalConfig.goal];
+  let requestedWeeklyChangeKg =
+    goalConfig.targetWeightChangePerWeek !== undefined
+      ? goalConfig.targetWeightChangePerWeek
+      : stats.weightKg * (goalDef.percentBW / 100);
+
+  // Apply tiered loss-rate cap (only for cuts)
+  if (requestedWeeklyChangeKg < 0) {
+    const capPct = getLossRateCap(stats.bodyFatPercent);
+    const maxLossKg = stats.weightKg * (capPct / 100);
+    const reqPct = (Math.abs(requestedWeeklyChangeKg) / stats.weightKg) * 100;
+
+    if (Math.abs(requestedWeeklyChangeKg) > maxLossKg) {
+      requestedWeeklyChangeKg = -maxLossKg;
+      guardrailsApplied.push(
+        `Loss-rate cap applied: ${reqPct.toFixed(2)}% → ${capPct.toFixed(2)}% BW/week` +
+          (stats.bodyFatPercent ? ` (BF ${stats.bodyFatPercent}%)` : "")
+      );
+    }
   }
-  
-  // Calculate calorie adjustment
-  const dailyCalorieAdjustment = (weeklyChangeKg * CALORIES_PER_KG) / 7;
-  const targetCalories = Math.round(tdee + dailyCalorieAdjustment);
-  
-  // Minimum calories for safety
-  const minCalories = stats.sex === 'male' ? 1500 : 1200;
-  const safeCalories = Math.max(minCalories, targetCalories);
-  
-  // Calculate macros (with peptide adjustments)
-  const protein = calculateProtein(stats, goalConfig.goal, peptide);
-  const fat = calculateFat(safeCalories, stats);
-  
-  // Remaining calories go to carbs
-  const proteinCalories = protein * 4;
-  const fatCalories = fat * 9;
-  const carbCalories = safeCalories - proteinCalories - fatCalories;
-  const carbs = Math.max(50, Math.round(carbCalories / 4)); // Minimum 50g carbs
-  
-  // Recalculate total to account for rounding
-  const actualCalories = (protein * 4) + (carbs * 4) + (fat * 9);
-  
-  // Calculate percentages
-  const proteinPercent = Math.round((protein * 4 / actualCalories) * 100);
-  const carbsPercent = Math.round((carbs * 4 / actualCalories) * 100);
-  const fatPercent = Math.round((fat * 9 / actualCalories) * 100);
-  
-  // Generate explanation
-  let explanation = isAdaptive
-    ? `Based on your tracked data, your personalized TDEE is ${tdee} cal/day. `
-    : `Based on your stats, your estimated TDEE is ${tdee} cal/day. `;
 
-  if (weeklyChangeKg < 0) {
-    const weeklyLbs = Math.abs(weeklyChangeKg * 2.20462).toFixed(1);
-    explanation += `To lose ~${weeklyLbs} lbs per week, you need a ${Math.abs(Math.round(dailyCalorieAdjustment))} calorie daily deficit. `;
-    explanation += `Protein is set high (${protein}g) to preserve muscle during your cut.`;
-  } else if (weeklyChangeKg > 0) {
-    const weeklyLbs = (weeklyChangeKg * 2.20462).toFixed(1);
-    explanation += `To gain ~${weeklyLbs} lbs per week, you need a ${Math.round(dailyCalorieAdjustment)} calorie daily surplus. `;
-    explanation += `Protein is set to ${protein}g to support muscle growth.`;
+  // Calories from requested weekly change
+  const dailyAdj = (requestedWeeklyChangeKg * CALORIES_PER_KG) / 7;
+  let requestedCalories = Math.round(tdee + dailyAdj);
+
+  // Apply calorie floor
+  const calFloor = stats.sex === "male" ? GUARDRAILS.MIN_CALORIES_MALE : GUARDRAILS.MIN_CALORIES_FEMALE;
+  if (requestedCalories < calFloor) {
+    requestedCalories = calFloor;
+    guardrailsApplied.push(`Calorie floor applied (${calFloor})`);
+  }
+
+  // Allocate macros inside budget
+  const alloc = allocateMacros(requestedCalories, stats, goalConfig.goal, peptide, activity);
+  guardrailsApplied.push(...alloc.guardrails);
+
+  const { protein, carbs, fat, finalCalories } = alloc;
+
+  // Compute final deficit and implied weekly change
+  const deficit = Math.round(finalCalories - tdee);
+  const weeklyChangeKg = deficit / (CALORIES_PER_KG / 7);
+  const weeklyChangeLbs = weeklyChangeKg * 2.20462;
+
+  const proteinPercent = Math.round(((protein * 4) / finalCalories) * 100);
+  const carbsPercent = Math.round(((carbs * 4) / finalCalories) * 100);
+  const fatPercent = Math.round(((fat * 9) / finalCalories) * 100);
+
+  const lbm = getLeanMassLbs(stats);
+  const pctBW = ((Math.abs(weeklyChangeKg) / stats.weightKg) * 100).toFixed(2);
+
+  let explanation = `TDEE: ${tdee} kcal/day. `;
+  if (weeklyChangeKg < -0.05) {
+    explanation += `Target loss: ${Math.abs(weeklyChangeLbs).toFixed(2)} lb/wk (${pctBW}% BW). `;
+  } else if (weeklyChangeKg > 0.05) {
+    explanation += `Target gain: ${weeklyChangeLbs.toFixed(2)} lb/wk. `;
   } else {
-    explanation += `These macros will help you maintain your current weight while supporting your training.`;
+    explanation += `Near maintenance. `;
   }
+  explanation += `Protein: ${protein}g (${(protein / lbm).toFixed(2)} g/lb LBM).`;
 
-  // Add peptide-specific notes
-  let peptideNotes: string | undefined;
-  if (peptide !== 'none') {
-    peptideNotes = peptideConfig.notes;
-    explanation += ` Adjusted for ${peptideConfig.name}.`;
-  }
-  
   return {
-    calories: actualCalories,
+    calories: finalCalories,
     protein,
     carbs,
     fat,
+
+    requestedCalories,
+    requestedWeeklyChangeKg,
+
+    tdee,
+    bmr,
+
+    deficit,
+    weeklyChangeKg,
+    weeklyChangeLbs,
+
     proteinPercent,
     carbsPercent,
     fatPercent,
-    tdee,
-    bmr,
-    deficit: Math.round(dailyCalorieAdjustment),
-    weeklyChange: weeklyChangeKg,
+
     explanation,
-    peptideNotes,
+    peptideNotes: peptide !== "none" ? peptideCfg.notes : undefined,
+    guardrailsApplied: guardrailsApplied.length ? guardrailsApplied : undefined,
   };
 }
 
-/**
- * Convert weight between units
- */
-export function kgToLbs(kg: number): number {
-  return kg * 2.20462;
-}
+// ---------------------- UI helpers ----------------------
 
-export function lbsToKg(lbs: number): number {
-  return lbs / 2.20462;
-}
-
-export function cmToInches(cm: number): number {
-  return cm / 2.54;
-}
-
-export function inchesToCm(inches: number): number {
-  return inches * 2.54;
-}
-
-/**
- * Get goal options for UI
- */
 export function getGoalOptions(): Array<{ value: Goal; label: string; description: string }> {
   return [
-    { value: 'aggressive_cut', label: 'Aggressive Cut', description: 'Lose ~2 lbs/week' },
-    { value: 'moderate_cut', label: 'Moderate Cut', description: 'Lose ~1 lb/week' },
-    { value: 'slow_cut', label: 'Slow Cut', description: 'Lose ~0.5 lbs/week' },
-    { value: 'maintain', label: 'Maintain', description: 'Stay at current weight' },
-    { value: 'slow_bulk', label: 'Lean Bulk', description: 'Gain ~0.5 lbs/week' },
-    { value: 'moderate_bulk', label: 'Moderate Bulk', description: 'Gain ~1 lb/week' },
-    { value: 'aggressive_bulk', label: 'Aggressive Bulk', description: 'Gain ~1.5 lbs/week' },
+    { value: "aggressive_cut", label: "Aggressive Cut", description: "~0.75% BW/week (capped by leanness)" },
+    { value: "moderate_cut", label: "Moderate Cut", description: "~0.5% BW/week" },
+    { value: "slow_cut", label: "Slow Cut", description: "~0.25% BW/week" },
+    { value: "maintain", label: "Maintain", description: "Stay at current weight" },
+    { value: "slow_bulk", label: "Lean Bulk", description: "~0.25% BW/week" },
+    { value: "moderate_bulk", label: "Moderate Bulk", description: "~0.5% BW/week" },
+    { value: "aggressive_bulk", label: "Aggressive Bulk", description: "~0.75% BW/week" },
   ];
 }
 
-/**
- * Get activity level options for UI
- */
 export function getActivityOptions(): Array<{ value: ActivityLevel; label: string; description: string }> {
   return [
-    { value: 'sedentary', label: 'Sedentary', description: 'Desk job, little exercise' },
-    { value: 'light', label: 'Lightly Active', description: 'Light exercise 1-3 days/week' },
-    { value: 'moderate', label: 'Moderately Active', description: 'Moderate exercise 3-5 days/week' },
-    { value: 'active', label: 'Very Active', description: 'Hard exercise 6-7 days/week' },
-    { value: 'very_active', label: 'Extremely Active', description: 'Very hard exercise + physical job' },
-    { value: 'athlete', label: 'Athlete', description: 'Professional/competitive athlete' },
+    { value: "sedentary", label: "Sedentary", description: "Desk job, little exercise" },
+    { value: "light", label: "Lightly Active", description: "Light exercise 1–3 days/week" },
+    { value: "moderate", label: "Moderately Active", description: "Moderate exercise 3–5 days/week" },
+    { value: "active", label: "Very Active", description: "Hard exercise 6–7 days/week" },
+    { value: "very_active", label: "Extremely Active", description: "Very hard exercise + physical job" },
+    { value: "athlete", label: "Athlete", description: "Professional/competitive athlete" },
   ];
 }
 
-/**
- * Get peptide options for UI
- */
 export function getPeptideOptions(): Array<{ value: Peptide; label: string; description: string }> {
-  return Object.values(PEPTIDE_CONFIG).map(p => ({
+  return Object.values(PEPTIDE_CONFIG).map((p) => ({
     value: p.id,
     label: p.name,
     description: p.description,
   }));
 }
-
