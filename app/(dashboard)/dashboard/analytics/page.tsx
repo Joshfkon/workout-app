@@ -525,7 +525,8 @@ export default function AnalyticsPage() {
 
         if (cardioLogs) {
           // Group by date and sum minutes, also track modality breakdown
-          const grouped = cardioLogs.reduce((acc: Record<string, { totalMinutes: number; modalities: Record<string, number> }>, entry: any) => {
+          type CardioGroupData = { totalMinutes: number; modalities: Record<string, number> };
+          const grouped: Record<string, CardioGroupData> = cardioLogs.reduce((acc: Record<string, CardioGroupData>, entry: any) => {
             const date = entry.logged_at;
             if (!acc[date]) {
               acc[date] = { totalMinutes: 0, modalities: {} };
