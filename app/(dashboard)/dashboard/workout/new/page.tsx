@@ -217,9 +217,15 @@ function NewWorkoutContent() {
     name: '',
     muscle: '',
     mechanic: 'compound',
+    equipmentRequired: [],
+    secondaryMuscles: [],
+    formCues: [],
+    commonMistakes: [],
   });
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [customExerciseError, setCustomExerciseError] = useState<string | null>(null);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
@@ -1008,6 +1014,22 @@ function NewWorkoutContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiMode]);
 
+  // Load equipment types on mount
+  useEffect(() => {
+    const loadEquipmentTypes = async () => {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('equipment_types')
+        .select('id, name')
+        .order('name');
+      
+      if (data) {
+        setEquipmentTypes(data);
+      }
+    };
+    loadEquipmentTypes();
+  }, []);
+
   // Load gym locations on mount
   useEffect(() => {
     const loadGymLocations = async () => {
@@ -1285,8 +1307,17 @@ function NewWorkoutContent() {
   };
 
   const openCustomExerciseModal = (muscle: string) => {
-    setCustomExerciseForm({ name: '', muscle, mechanic: 'compound' });
+    setCustomExerciseForm({ 
+      name: '', 
+      muscle, 
+      mechanic: 'compound',
+      equipmentRequired: [],
+      secondaryMuscles: [],
+      formCues: [],
+      commonMistakes: [],
+    });
     setCustomExerciseError(null);
+    setShowAdvancedFields(false);
     setShowCustomExerciseModal(true);
   };
 
