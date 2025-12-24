@@ -354,9 +354,9 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .eq('logged_at', todayStr),
           
-          // Nutrition targets (try with cardio_prescription, fallback to without if column doesn't exist)
+          // Nutrition targets - try with cardio_prescription first
           supabase.from('nutrition_targets')
-            .select('calories, protein, carbs, fat')
+            .select('calories, protein, carbs, fat, cardio_prescription')
             .eq('user_id', user.id)
             .maybeSingle(),
           
@@ -522,6 +522,11 @@ export default function DashboardPage() {
           }
         } else if (targetsResult.data) {
           console.log('[Dashboard] Setting nutrition targets:', targetsResult.data);
+          console.log('[Dashboard] Cardio prescription in data:', {
+            hasCardioPrescription: !!targetsResult.data.cardio_prescription,
+            cardioPrescription: targetsResult.data.cardio_prescription,
+            needed: targetsResult.data.cardio_prescription?.needed,
+          });
           setNutritionTargets(targetsResult.data);
         } else {
           console.log('[Dashboard] No nutrition targets found, setting to null');
