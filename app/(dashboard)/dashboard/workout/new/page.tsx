@@ -1176,15 +1176,41 @@ function NewWorkoutContent() {
           const filteredIn: Array<{ name: string; equipment: string[] }> = [];
           
           let filteredExercises = data.filter((e: any) => {
+            // If exercise has no equipment_required, check the name for equipment hints
             if (!e.equipment_required || e.equipment_required.length === 0) {
+              const exerciseNameLower = e.name.toLowerCase();
+              
+              // Check if exercise name indicates it requires specific equipment
+              const requiresCable = exerciseNameLower.includes('cable') || exerciseNameLower.includes('pully') || exerciseNameLower.includes('pushdown');
+              const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+              const requiresMachine = exerciseNameLower.includes('machine') && !exerciseNameLower.includes('smith machine');
+              const requiresDipBars = exerciseNameLower.includes('dip') && !exerciseNameLower.includes('assisted');
+              
+              // If name indicates equipment but it's not available, filter it out
+              if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) {
+                filteredOut.push({ name: e.name, equipment: [] });
+                return false;
+              }
+              if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell'))) {
+                filteredOut.push({ name: e.name, equipment: [] });
+                return false;
+              }
+              if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) {
+                filteredOut.push({ name: e.name, equipment: [] });
+                return false;
+              }
+              if (requiresDipBars && !normalizedAvailable.some(a => a.includes('dip'))) {
+                filteredOut.push({ name: e.name, equipment: [] });
+                return false;
+              }
+              
               filteredIn.push({ name: e.name, equipment: [] });
               return true;
             }
             
-            // Check if ANY required equipment is available (OR logic)
-            // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
+            // For exercises with equipment_required, check if ALL required equipment is available
             const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
-            const anyAvailable = requiredEquipment.some((reqEq: string) => {
+            const allAvailable = requiredEquipment.every((reqEq: string) => {
               // Direct match
               if (normalizedAvailable.includes(reqEq)) return true;
               
@@ -1194,13 +1220,13 @@ function NewWorkoutContent() {
               return false;
             });
             
-            if (anyAvailable) {
+            if (allAvailable) {
               filteredIn.push({ name: e.name, equipment: requiredEquipment });
             } else {
               filteredOut.push({ name: e.name, equipment: requiredEquipment });
             }
             
-            return anyAvailable;
+            return allAvailable;
           });
           
           console.log(`[STEP 2 FILTER DEBUG] Filtered ${filteredExercises.length} exercises (from ${data.length} total)`);
