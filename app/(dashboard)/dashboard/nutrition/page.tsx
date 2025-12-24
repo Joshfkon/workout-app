@@ -419,7 +419,17 @@ export default function NutritionPage() {
       const weightData = weightResult.data;
 
       if (weightData && weightData.length > 0) {
-        profileData.weightLbs = weightData[0].weight;
+        // Convert weight to lbs for macro calculator
+        const weightEntry = weightData[0] as any;
+        const weightValue = weightEntry.weight || weightEntry.raw_weight || 0;
+        const weightEntryUnit = weightEntry.unit || weightEntry.raw_unit || weightUnit;
+        
+        // Convert to lbs if needed
+        if (weightEntryUnit === 'kg') {
+          profileData.weightLbs = weightValue * 2.20462;
+        } else {
+          profileData.weightLbs = weightValue;
+        }
       }
 
       const userData = userResult.data;
