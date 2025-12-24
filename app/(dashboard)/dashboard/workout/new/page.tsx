@@ -233,11 +233,11 @@ function NewWorkoutContent() {
       let userGoal: Goal = 'maintain';
       try {
         const { data: userProfile, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('goal')
-          .eq('user_id', user.id)
-          .single();
-        
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+      
         if (!profileError && userProfile?.goal) {
           userGoal = userProfile.goal as Goal;
         }
@@ -551,50 +551,91 @@ function NewWorkoutContent() {
       const filteredIn: Array<{ name: string; equipment: string[]; matchedWith: string }> = [];
       
       candidateExercises = candidateExercises.filter((e: any) => {
+        // If exercise has no equipment_required, check the name for equipment hints
         if (!e.equipment_required || e.equipment_required.length === 0) {
+          const exerciseNameLower = e.name.toLowerCase();
+          
+          // Check if exercise name indicates it requires specific equipment
+          const requiresCable = exerciseNameLower.includes('cable') || exerciseNameLower.includes('pully') || exerciseNameLower.includes('pushdown');
+          const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+          const requiresMachine = exerciseNameLower.includes('machine') && !exerciseNameLower.includes('smith machine');
+          const requiresDipBars = exerciseNameLower.includes('dip') && !exerciseNameLower.includes('assisted');
+          
+          // If name indicates equipment but it's not available, filter it out
+          if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) {
+            filteredOut.push({ 
+              name: e.name, 
+              equipment: [], 
+              reason: `Exercise name suggests cable equipment but cable not available` 
+            });
+            return false;
+          }
+          if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell'))) {
+            filteredOut.push({ 
+              name: e.name, 
+              equipment: [], 
+              reason: `Exercise name suggests barbell equipment but barbell not available` 
+            });
+            return false;
+          }
+          if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) {
+            filteredOut.push({ 
+              name: e.name, 
+              equipment: [], 
+              reason: `Exercise name suggests machine equipment but machine not available` 
+            });
+            return false;
+          }
+          if (requiresDipBars && !normalizedAvailable.some(a => a.includes('dip'))) {
+            filteredOut.push({ 
+              name: e.name, 
+              equipment: [], 
+              reason: `Exercise name suggests dip bars but dip bars not available` 
+            });
+            return false;
+          }
+          
+          // If no equipment hints or equipment is available, allow it
           filteredIn.push({ name: e.name, equipment: [], matchedWith: 'no equipment required' });
           return true;
         }
         
-        // Check if ANY required equipment is available (OR logic)
-        // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
+        // For exercises with equipment_required, check if ALL required equipment is available
+        // (Changed from OR to AND logic - if exercise requires [barbell, bench], need both)
         const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
-        let matchedEquipment: string | null = null;
+        const matchedEquipment: string[] = [];
         
-        const anyAvailable = requiredEquipment.some((reqEq: string) => {
+        const allAvailable = requiredEquipment.every((reqEq: string) => {
           // Direct match
           if (normalizedAvailable.includes(reqEq)) {
-            matchedEquipment = reqEq;
+            matchedEquipment.push(reqEq);
             return true;
           }
           
           // Partial match (e.g., "cable" matches "cable machine")
-          // But be more strict - only match if the available equipment contains the required term
           const partialMatch = normalizedAvailable.find((avail: string) => {
-            // Check if available equipment name contains the required equipment name
-            // OR if required equipment name contains available equipment name (for cases like "bench" matching "flat bench")
             return avail.includes(reqEq) || reqEq.includes(avail);
           });
           
           if (partialMatch) {
-            matchedEquipment = `${reqEq} (matched with ${partialMatch})`;
+            matchedEquipment.push(`${reqEq} (matched with ${partialMatch})`);
             return true;
           }
           
           return false;
         });
         
-        if (anyAvailable) {
-          filteredIn.push({ name: e.name, equipment: requiredEquipment, matchedWith: matchedEquipment || 'unknown' });
+        if (allAvailable) {
+          filteredIn.push({ name: e.name, equipment: requiredEquipment, matchedWith: matchedEquipment.join(', ') });
         } else {
           filteredOut.push({ 
             name: e.name, 
             equipment: requiredEquipment, 
-            reason: `None of [${requiredEquipment.join(', ')}] matches available [${normalizedAvailable.join(', ')}]` 
+            reason: `Missing required equipment. Need: [${requiredEquipment.join(', ')}], Have: [${normalizedAvailable.join(', ')}]` 
           });
         }
         
-        return anyAvailable;
+        return allAvailable;
       });
       
       console.log(`[EQUIPMENT FILTER DEBUG] Filtered ${candidateExercises.length} exercises (from ${exercisesData.length} total)`);
@@ -1443,29 +1484,29 @@ function NewWorkoutContent() {
                 <label className="block text-sm font-medium text-surface-200 mb-3">
                   How much time do you have?
                 </label>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {[20, 30, 45, 60, 75, 90].map((mins) => (
-                    <button
-                      key={mins}
-                      onClick={() => setWorkoutDuration(mins)}
-                      className={`p-3 rounded-lg text-center transition-all ${
-                        workoutDuration === mins
-                          ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
-                          : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
-                      }`}
-                    >
-                      <div className="font-semibold">{mins}</div>
-                      <div className="text-xs text-surface-500">min</div>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-surface-500 mt-2 text-center">
-                  {workoutDuration <= 25 
-                    ? '⚡ Quick mode: Only S & A-tier exercises'
-                    : workoutDuration <= 45 
-                    ? '⏱️ Time-efficient: Focused on key compounds'
-                    : '💪 Full workout: Complete volume for optimal growth'}
-                </p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {[20, 30, 45, 60, 75, 90].map((mins) => (
+                  <button
+                    key={mins}
+                    onClick={() => setWorkoutDuration(mins)}
+                    className={`p-3 rounded-lg text-center transition-all ${
+                      workoutDuration === mins
+                        ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                        : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
+                    }`}
+                  >
+                    <div className="font-semibold">{mins}</div>
+                    <div className="text-xs text-surface-500">min</div>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-surface-500 mt-2 text-center">
+                {workoutDuration <= 25 
+                  ? '⚡ Quick mode: Only S & A-tier exercises'
+                  : workoutDuration <= 45 
+                  ? '⏱️ Time-efficient: Focused on key compounds'
+                  : '💪 Full workout: Complete volume for optimal growth'}
+              </p>
               </div>
 
               {/* Location Selection */}
@@ -1672,7 +1713,7 @@ function NewWorkoutContent() {
                           <div key={item.exerciseId} className="bg-surface-800/50 rounded-lg p-3">
                             <p className="font-medium text-surface-200 mb-1">{exercise.name}</p>
                             <p className="text-sm text-surface-400">{item.explanation}</p>
-                          </div>
+                </div>
                         );
                       })}
                       
