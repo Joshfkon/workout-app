@@ -42,7 +42,7 @@ import {
 } from 'recharts';
 
 // Tab types
-type TabType = 'body-composition' | 'strength' | 'volume';
+type TabType = 'body-composition' | 'strength' | 'volume' | 'wellness';
 
 interface UserProfile {
   heightCm: number | null;
@@ -709,6 +709,7 @@ export default function AnalyticsPage() {
     { id: 'body-composition' as TabType, label: 'Body Composition', icon: '📊' },
     { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
     { id: 'volume' as TabType, label: 'Volume & Trends', icon: '📈' },
+    { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
   ];
 
   return (
@@ -1489,6 +1490,480 @@ export default function AnalyticsPage() {
               </Link>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Wellness Tab */}
+      {activeTab === 'wellness' && (
+        <div className="space-y-6">
+          {/* Hydration Graph */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Hydration</CardTitle>
+              <p className="text-xs text-surface-500 mt-1">Daily water intake (ml)</p>
+            </CardHeader>
+            <CardContent>
+              {hydrationData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={hydrationData}>
+                    <defs>
+                      <linearGradient id="hydrationGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#9ca3af"
+                      tick={{ fill: '#9ca3af', fontSize: 12 }}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                      }}
+                    />
+                    <YAxis
+                      stroke="#9ca3af"
+                      tick={{ fill: '#9ca3af', fontSize: 12 }}
+                      label={{ value: 'ml', angle: -90, position: 'insideLeft', fill: '#9ca3af' }}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                      labelFormatter={(value) => {
+                        const date = new Date(value);
+                        return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                      }}
+                      formatter={(value: number) => [`${value.toFixed(0)} ml`, 'Water Intake']}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="totalMl"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      fill="url(#hydrationGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-surface-400">No hydration data for this period</p>
+                  <p className="text-sm text-surface-500 mt-1">Start logging your water intake to see trends</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Daily Check-In Metrics */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sleep Hours */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Sleep Hours</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Hours of sleep per night</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.sleepHours !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.sleepHours !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[0, 12]}
+                        label={{ value: 'hours', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value.toFixed(1)} hours`, 'Sleep']}
+                      />
+                      <ReferenceLine y={7} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'Target', position: 'right', fill: '#10b981' }} />
+                      <Line type="monotone" dataKey="sleepHours" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No sleep data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Sleep Quality */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Sleep Quality</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.sleepQuality !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.sleepQuality !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Quality']}
+                      />
+                      <Line type="monotone" dataKey="sleepQuality" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No sleep quality data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Energy Level */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Energy Level</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.energyLevel !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.energyLevel !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Energy']}
+                      />
+                      <Line type="monotone" dataKey="energyLevel" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No energy data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Mood Rating */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Mood</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.moodRating !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.moodRating !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Mood']}
+                      />
+                      <Line type="monotone" dataKey="moodRating" stroke="#ec4899" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No mood data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Focus Rating */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Focus</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.focusRating !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.focusRating !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Focus']}
+                      />
+                      <Line type="monotone" dataKey="focusRating" stroke="#06b6d4" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No focus data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Libido Rating */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Libido</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.libidoRating !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.libidoRating !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Libido']}
+                      />
+                      <Line type="monotone" dataKey="libidoRating" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No libido data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Stress Level */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Stress Level</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.stressLevel !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.stressLevel !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        reversed
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Stress']}
+                      />
+                      <Line type="monotone" dataKey="stressLevel" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No stress data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Soreness Level */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Muscle Soreness</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.sorenessLevel !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.sorenessLevel !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        reversed
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Soreness']}
+                      />
+                      <Line type="monotone" dataKey="sorenessLevel" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No soreness data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Hunger Level */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Hunger Level</CardTitle>
+                <p className="text-xs text-surface-500 mt-1">Rating (1-5, lower is better)</p>
+              </CardHeader>
+              <CardContent>
+                {checkInData.filter(d => d.hungerLevel !== null).length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={checkInData.filter(d => d.hungerLevel !== null)}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
+                      <YAxis
+                        stroke="#9ca3af"
+                        tick={{ fill: '#9ca3af', fontSize: 10 }}
+                        domain={[1, 5]}
+                        reversed
+                        label={{ value: 'rating', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10 }}
+                      />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                        labelFormatter={(value) => {
+                          const date = new Date(value);
+                          return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                        }}
+                        formatter={(value: number) => [`${value}/5`, 'Hunger']}
+                      />
+                      <Line type="monotone" dataKey="hungerLevel" stroke="#14b8a6" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-sm text-surface-500">No hunger data</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
     </div>
