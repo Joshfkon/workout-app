@@ -255,9 +255,12 @@ function NewWorkoutContent() {
       // Get equipment availability from selected location
       let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
       
+      console.log('[EQUIPMENT FILTER DEBUG] Starting equipment load for location:', selectedLocationId);
+      
       if (selectedLocationId && selectedLocationId !== 'fallback') {
         try {
           // Load equipment for the selected location
+          console.log('[EQUIPMENT FILTER DEBUG] Fetching equipment for location_id:', selectedLocationId, 'user_id:', user.id);
           const { data: locationEquipment, error: equipmentError } = await supabase
             .from('user_equipment')
             .select('equipment_id, is_available')
@@ -265,17 +268,26 @@ function NewWorkoutContent() {
             .eq('location_id', selectedLocationId)
             .eq('is_available', true);
           
+          console.log('[EQUIPMENT FILTER DEBUG] Raw location equipment from DB:', locationEquipment);
+          console.log('[EQUIPMENT FILTER DEBUG] Equipment error:', equipmentError);
+          
           if (equipmentError) {
-            console.warn('Error loading location equipment:', equipmentError);
+            console.warn('[EQUIPMENT FILTER DEBUG] Error loading location equipment:', equipmentError);
             // Fall through to use general equipment
             availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+            console.log('[EQUIPMENT FILTER DEBUG] Using fallback equipment:', availableEquipment);
           } else if (locationEquipment && locationEquipment.length > 0) {
             // Get equipment type names from equipment_types table
             const equipmentIds = locationEquipment.map((eq: any) => eq.equipment_id);
+            console.log('[EQUIPMENT FILTER DEBUG] Equipment IDs from user_equipment:', equipmentIds);
+            
             const { data: equipmentTypes, error: typesError } = await supabase
               .from('equipment_types')
               .select('id, name')
               .in('id', equipmentIds);
+            
+            console.log('[EQUIPMENT FILTER DEBUG] Equipment types from DB:', equipmentTypes);
+            console.log('[EQUIPMENT FILTER DEBUG] Types error:', typesError);
             
             if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
               // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
@@ -283,16 +295,20 @@ function NewWorkoutContent() {
               equipmentTypes.forEach((et: any) => {
                 const name = et.name.toLowerCase();
                 equipmentNames.add(name);
+                console.log('[EQUIPMENT FILTER DEBUG] Processing equipment:', et.id, '->', name);
                 
                 // Also add mapped variations (e.g., 'dumbbells' -> ['dumbbell', 'db'])
                 const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
                 if (mapping) {
+                  console.log('[EQUIPMENT FILTER DEBUG] Found mapping for', name, ':', mapping);
                   mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+                } else {
+                  console.log('[EQUIPMENT FILTER DEBUG] No mapping found for', et.id, 'or', name);
                 }
               });
               
               availableEquipment = Array.from(equipmentNames);
-              console.log('Available equipment for location (expanded):', availableEquipment);
+              console.log('[EQUIPMENT FILTER DEBUG] Final available equipment (expanded):', availableEquipment);
             } else {
               // If equipment_types lookup fails, try using equipment_id directly
               // and expand using EQUIPMENT_MAPPING
@@ -528,27 +544,51 @@ function NewWorkoutContent() {
       // Filter by equipment availability (basic equipment types)
       // Normalize equipment names for comparison (case-insensitive, handle variations)
       const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
+      console.log('[EQUIPMENT FILTER DEBUG] Normalized available equipment for filtering:', normalizedAvailable);
+      console.log('[EQUIPMENT FILTER DEBUG] Total exercises before filtering:', candidateExercises.length);
+      
+      const filteredOut: Array<{ name: string; equipment: string[]; reason: string }> = [];
+      const filteredIn: Array<{ name: string; equipment: string[] }> = [];
       
       candidateExercises = candidateExercises.filter((e: any) => {
-        if (!e.equipment_required || e.equipment_required.length === 0) return true;
+        if (!e.equipment_required || e.equipment_required.length === 0) {
+          filteredIn.push({ name: e.name, equipment: [] });
+          return true;
+        }
         
         // Check if ANY required equipment is available (OR logic)
         // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
         const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
         const anyAvailable = requiredEquipment.some((reqEq: string) => {
           // Direct match
-          if (normalizedAvailable.includes(reqEq)) return true;
+          if (normalizedAvailable.includes(reqEq)) {
+            return true;
+          }
           
           // Partial match (e.g., "cable" matches "cable machine")
-          if (normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq))) return true;
+          if (normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq))) {
+            return true;
+          }
           
           return false;
         });
         
+        if (anyAvailable) {
+          filteredIn.push({ name: e.name, equipment: requiredEquipment });
+        } else {
+          filteredOut.push({ 
+            name: e.name, 
+            equipment: requiredEquipment, 
+            reason: `None of [${requiredEquipment.join(', ')}] matches available [${normalizedAvailable.join(', ')}]` 
+          });
+        }
+        
         return anyAvailable;
       });
       
-      console.log(`Filtered ${candidateExercises.length} exercises based on available equipment (from ${exercisesData.length} total)`);
+      console.log(`[EQUIPMENT FILTER DEBUG] Filtered ${candidateExercises.length} exercises (from ${exercisesData.length} total)`);
+      console.log('[EQUIPMENT FILTER DEBUG] Sample exercises that PASSED filter:', filteredIn.slice(0, 5));
+      console.log('[EQUIPMENT FILTER DEBUG] Sample exercises that FAILED filter:', filteredOut.slice(0, 5));
       
       // Additional filtering by equipment_types (if location is selected and not fallback)
       if (selectedLocationId && selectedLocationId !== 'fallback') {
@@ -1048,9 +1088,17 @@ function NewWorkoutContent() {
         if (data && !error) {
           // Filter by equipment availability
           const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
+          console.log('[STEP 2 FILTER DEBUG] Available equipment:', normalizedAvailable);
+          console.log('[STEP 2 FILTER DEBUG] Total exercises before filtering:', data.length);
+          
+          const filteredOut: Array<{ name: string; equipment: string[] }> = [];
+          const filteredIn: Array<{ name: string; equipment: string[] }> = [];
           
           let filteredExercises = data.filter((e: any) => {
-            if (!e.equipment_required || e.equipment_required.length === 0) return true;
+            if (!e.equipment_required || e.equipment_required.length === 0) {
+              filteredIn.push({ name: e.name, equipment: [] });
+              return true;
+            }
             
             // Check if ANY required equipment is available (OR logic)
             // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
@@ -1065,8 +1113,18 @@ function NewWorkoutContent() {
               return false;
             });
             
+            if (anyAvailable) {
+              filteredIn.push({ name: e.name, equipment: requiredEquipment });
+            } else {
+              filteredOut.push({ name: e.name, equipment: requiredEquipment });
+            }
+            
             return anyAvailable;
           });
+          
+          console.log(`[STEP 2 FILTER DEBUG] Filtered ${filteredExercises.length} exercises (from ${data.length} total)`);
+          console.log('[STEP 2 FILTER DEBUG] Sample exercises that PASSED:', filteredIn.slice(0, 5));
+          console.log('[STEP 2 FILTER DEBUG] Sample exercises that FAILED:', filteredOut.slice(0, 5));
 
           // Sort: frequently used first, then by hypertrophy tier, then alphabetically
           const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };
