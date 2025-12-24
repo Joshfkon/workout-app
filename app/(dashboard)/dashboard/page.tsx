@@ -1040,7 +1040,15 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {nutritionTargets ? (
+                {(() => {
+                  console.log('[Dashboard] Nutrition card render check:', {
+                    hasNutritionTargets: !!nutritionTargets,
+                    nutritionTargets,
+                    calories: nutritionTargets?.calories,
+                    protein: nutritionTargets?.protein,
+                  });
+                  return nutritionTargets;
+                })() ? (
                   <div className="space-y-3">
                     <div>
                       <div className="flex items-center justify-between mb-1">
