@@ -598,16 +598,36 @@ function NewWorkoutContent() {
       });
       
       console.log(`[EQUIPMENT FILTER DEBUG] Filtered ${candidateExercises.length} exercises (from ${exercisesData.length} total)`);
-      console.log('[EQUIPMENT FILTER DEBUG] ALL exercises that PASSED filter:', filteredIn);
-      console.log('[EQUIPMENT FILTER DEBUG] ALL exercises that FAILED filter:', filteredOut);
       
-      // Specifically check for cable exercises that shouldn't pass
-      const cableExercises = filteredIn.filter(f => 
-        f.equipment.some(eq => eq.includes('cable')) && 
-        !f.matchedWith.includes('cable')
-      );
-      if (cableExercises.length > 0) {
-        console.warn('[EQUIPMENT FILTER DEBUG] ⚠️ WARNING: Cable exercises incorrectly passed filter:', cableExercises);
+      // Log exercise names explicitly for easier debugging
+      console.log('[EQUIPMENT FILTER DEBUG] Exercises that PASSED (name + equipment + matched):');
+      filteredIn.forEach(f => {
+        console.log(`  ✓ ${f.name} | requires: [${f.equipment.join(', ')}] | matched: ${f.matchedWith}`);
+      });
+      
+      console.log('[EQUIPMENT FILTER DEBUG] Exercises that FAILED (name + equipment + reason):');
+      filteredOut.forEach(f => {
+        console.log(`  ✗ ${f.name} | requires: [${f.equipment.join(', ')}] | ${f.reason}`);
+      });
+      
+      // Specifically check for cable/barbell/machine exercises that shouldn't pass
+      const problematicExercises = filteredIn.filter(f => {
+        const requiresCable = f.equipment.some(eq => eq.includes('cable'));
+        const requiresBarbell = f.equipment.some(eq => eq.includes('barbell') && !eq.includes('dumbbell'));
+        const requiresMachine = f.equipment.some(eq => eq.includes('machine') && !f.matchedWith.includes('machine'));
+        
+        if (requiresCable && !f.matchedWith.includes('cable')) return true;
+        if (requiresBarbell && !f.matchedWith.includes('barbell') && !f.matchedWith.includes('dumbbell')) return true;
+        if (requiresMachine && !f.matchedWith.includes('machine')) return true;
+        
+        return false;
+      });
+      
+      if (problematicExercises.length > 0) {
+        console.warn('[EQUIPMENT FILTER DEBUG] ⚠️ WARNING: Exercises requiring unavailable equipment incorrectly passed:');
+        problematicExercises.forEach(p => {
+          console.warn(`  ⚠️ ${p.name} requires [${p.equipment.join(', ')}] but matched with: ${p.matchedWith}`);
+        });
       }
       
       // Additional filtering by equipment_types (if location is selected and not fallback)
