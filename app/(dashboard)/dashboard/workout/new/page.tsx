@@ -278,14 +278,38 @@ function NewWorkoutContent() {
               .in('id', equipmentIds);
             
             if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
-              // Map equipment IDs to names for filtering
-              availableEquipment = equipmentTypes.map((et: any) => et.name.toLowerCase());
-              console.log('Available equipment for location:', availableEquipment);
+              // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
+              const equipmentNames = new Set<string>();
+              equipmentTypes.forEach((et: any) => {
+                const name = et.name.toLowerCase();
+                equipmentNames.add(name);
+                
+                // Also add mapped variations (e.g., 'dumbbells' -> ['dumbbell', 'db'])
+                const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
+                if (mapping) {
+                  mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+                }
+              });
+              
+              availableEquipment = Array.from(equipmentNames);
+              console.log('Available equipment for location (expanded):', availableEquipment);
             } else {
               // If equipment_types lookup fails, try using equipment_id directly
-              // (assuming equipment_id might already be the name)
-              availableEquipment = equipmentIds.map((id: string) => id.toLowerCase());
-              console.warn('Could not map equipment types, using IDs directly:', availableEquipment);
+              // and expand using EQUIPMENT_MAPPING
+              const equipmentNames = new Set<string>();
+              equipmentIds.forEach((id: string) => {
+                const idLower = id.toLowerCase();
+                equipmentNames.add(idLower);
+                
+                // Expand using mapping
+                const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
+                if (mapping) {
+                  mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+                }
+              });
+              
+              availableEquipment = Array.from(equipmentNames);
+              console.warn('Could not map equipment types, using IDs with mapping:', availableEquipment);
             }
           } else {
             // No equipment found for location, use general preference
