@@ -129,10 +129,19 @@ export default function ExercisesPage() {
     bodyweightType: 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | null;
     assistanceType: 'machine' | 'band' | 'partner' | null;
     equipment: string;
+    equipmentRequired: string[];
     movementPattern: string;
+    secondaryMuscles: string[];
+    hypertrophyTier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+    defaultRepRangeMin?: number;
+    defaultRepRangeMax?: number;
+    defaultRir?: number;
+    setupNote?: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
 
   // Exercise preferences
   const {
@@ -346,8 +355,12 @@ export default function ExercisesPage() {
       bodyweightType: exercise.bodyweight_type || null,
       assistanceType: exercise.assistance_type || null,
       equipment: exercise.equipment || 'barbell',
+      equipmentRequired: Array.isArray(exercise.equipment_required) ? exercise.equipment_required : [],
       movementPattern: exercise.movement_pattern || 'compound',
+      secondaryMuscles: Array.isArray(exercise.secondary_muscles) ? exercise.secondary_muscles : [],
+      hypertrophyTier: exercise.hypertrophy_tier,
     });
+    setShowAdvancedFields(false);
     setSaveResult(null);
   };
 

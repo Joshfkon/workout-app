@@ -94,7 +94,14 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
     movementPattern: string;
     primaryMuscle: string;
     secondaryMuscles: string[];
+    hypertrophyTier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+    defaultRepRangeMin?: number;
+    defaultRepRangeMax?: number;
+    defaultRir?: number;
+    setupNote?: string;
   } | null>(null);
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
 
   // Fetch exercise history when modal opens
   useEffect(() => {
@@ -336,15 +343,21 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         bodyweight_type: editData.bodyweightType,
         assistance_type: editData.assistanceType,
         equipment: editData.equipment,
-        equipment_required: editData.equipmentRequired,
+        equipment_required: editData.equipmentRequired.length > 0 ? editData.equipmentRequired : [],
         movement_pattern: editData.movementPattern,
         primary_muscle: editData.primaryMuscle,
-        secondary_muscles: editData.secondaryMuscles,
+        secondary_muscles: editData.secondaryMuscles || [],
+        hypertrophy_tier: editData.hypertrophyTier,
+        default_rep_range: editData.defaultRepRangeMin && editData.defaultRepRangeMax
+          ? [editData.defaultRepRangeMin, editData.defaultRepRangeMax]
+          : undefined,
+        default_rir: editData.defaultRir,
+        setup_note: editData.setupNote,
       };
       
-      // Remove null values
+      // Remove null/undefined values
       Object.keys(updatePayload).forEach(key => {
-        if (updatePayload[key] === null) {
+        if (updatePayload[key] === null || updatePayload[key] === undefined) {
           delete updatePayload[key];
         }
       });
