@@ -358,7 +358,7 @@ export default function DashboardPage() {
           supabase.from('nutrition_targets')
             .select('calories, protein, carbs, fat, cardio_prescription')
             .eq('user_id', user.id)
-            .single(),
+            .maybeSingle(),
           
           // User preferences
           supabase.from('user_preferences')
@@ -489,8 +489,15 @@ export default function DashboardPage() {
           setNutritionTotals(totals);
         }
 
+        if (targetsResult.error) {
+          console.error('[Dashboard] Error fetching nutrition targets:', targetsResult.error);
+        }
+        
         if (targetsResult.data) {
           setNutritionTargets(targetsResult.data);
+        } else {
+          // Explicitly set to null if no data (maybeSingle returns null when no row found)
+          setNutritionTargets(null);
         }
 
         // Set user's preferred unit first (needed for weight processing)
