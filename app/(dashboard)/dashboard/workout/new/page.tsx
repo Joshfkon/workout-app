@@ -531,9 +531,10 @@ function NewWorkoutContent() {
       candidateExercises = candidateExercises.filter((e: any) => {
         if (!e.equipment_required || e.equipment_required.length === 0) return true;
         
-        // Check if all required equipment is available
+        // Check if ANY required equipment is available (OR logic)
+        // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
         const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
-        const allAvailable = requiredEquipment.every((reqEq: string) => {
+        const anyAvailable = requiredEquipment.some((reqEq: string) => {
           // Direct match
           if (normalizedAvailable.includes(reqEq)) return true;
           
@@ -543,7 +544,7 @@ function NewWorkoutContent() {
           return false;
         });
         
-        return allAvailable;
+        return anyAvailable;
       });
       
       console.log(`Filtered ${candidateExercises.length} exercises based on available equipment (from ${exercisesData.length} total)`);
