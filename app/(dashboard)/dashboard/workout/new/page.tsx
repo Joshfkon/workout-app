@@ -548,25 +548,36 @@ function NewWorkoutContent() {
       console.log('[EQUIPMENT FILTER DEBUG] Total exercises before filtering:', candidateExercises.length);
       
       const filteredOut: Array<{ name: string; equipment: string[]; reason: string }> = [];
-      const filteredIn: Array<{ name: string; equipment: string[] }> = [];
+      const filteredIn: Array<{ name: string; equipment: string[]; matchedWith: string }> = [];
       
       candidateExercises = candidateExercises.filter((e: any) => {
         if (!e.equipment_required || e.equipment_required.length === 0) {
-          filteredIn.push({ name: e.name, equipment: [] });
+          filteredIn.push({ name: e.name, equipment: [], matchedWith: 'no equipment required' });
           return true;
         }
         
         // Check if ANY required equipment is available (OR logic)
         // Most exercises can be done with alternative equipment (e.g., dumbbell OR barbell)
         const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
+        let matchedEquipment: string | null = null;
+        
         const anyAvailable = requiredEquipment.some((reqEq: string) => {
           // Direct match
           if (normalizedAvailable.includes(reqEq)) {
+            matchedEquipment = reqEq;
             return true;
           }
           
           // Partial match (e.g., "cable" matches "cable machine")
-          if (normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq))) {
+          // But be more strict - only match if the available equipment contains the required term
+          const partialMatch = normalizedAvailable.find((avail: string) => {
+            // Check if available equipment name contains the required equipment name
+            // OR if required equipment name contains available equipment name (for cases like "bench" matching "flat bench")
+            return avail.includes(reqEq) || reqEq.includes(avail);
+          });
+          
+          if (partialMatch) {
+            matchedEquipment = `${reqEq} (matched with ${partialMatch})`;
             return true;
           }
           
@@ -574,7 +585,7 @@ function NewWorkoutContent() {
         });
         
         if (anyAvailable) {
-          filteredIn.push({ name: e.name, equipment: requiredEquipment });
+          filteredIn.push({ name: e.name, equipment: requiredEquipment, matchedWith: matchedEquipment || 'unknown' });
         } else {
           filteredOut.push({ 
             name: e.name, 
@@ -587,8 +598,17 @@ function NewWorkoutContent() {
       });
       
       console.log(`[EQUIPMENT FILTER DEBUG] Filtered ${candidateExercises.length} exercises (from ${exercisesData.length} total)`);
-      console.log('[EQUIPMENT FILTER DEBUG] Sample exercises that PASSED filter:', filteredIn.slice(0, 5));
-      console.log('[EQUIPMENT FILTER DEBUG] Sample exercises that FAILED filter:', filteredOut.slice(0, 5));
+      console.log('[EQUIPMENT FILTER DEBUG] ALL exercises that PASSED filter:', filteredIn);
+      console.log('[EQUIPMENT FILTER DEBUG] ALL exercises that FAILED filter:', filteredOut);
+      
+      // Specifically check for cable exercises that shouldn't pass
+      const cableExercises = filteredIn.filter(f => 
+        f.equipment.some(eq => eq.includes('cable')) && 
+        !f.matchedWith.includes('cable')
+      );
+      if (cableExercises.length > 0) {
+        console.warn('[EQUIPMENT FILTER DEBUG] ⚠️ WARNING: Cable exercises incorrectly passed filter:', cableExercises);
+      }
       
       // Additional filtering by equipment_types (if location is selected and not fallback)
       if (selectedLocationId && selectedLocationId !== 'fallback') {
