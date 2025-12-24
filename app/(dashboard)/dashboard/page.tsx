@@ -354,9 +354,9 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .eq('logged_at', todayStr),
           
-          // Nutrition targets
+          // Nutrition targets (try with cardio_prescription, fallback to without if column doesn't exist)
           supabase.from('nutrition_targets')
-            .select('calories, protein, carbs, fat, cardio_prescription')
+            .select('calories, protein, carbs, fat')
             .eq('user_id', user.id)
             .maybeSingle(),
           
