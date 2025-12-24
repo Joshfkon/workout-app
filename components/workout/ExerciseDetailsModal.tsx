@@ -103,6 +103,22 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
 
+  // Load equipment types on mount
+  useEffect(() => {
+    const loadEquipmentTypes = async () => {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('equipment_types')
+        .select('id, name')
+        .order('name');
+      
+      if (data) {
+        setEquipmentTypes(data);
+      }
+    };
+    loadEquipmentTypes();
+  }, []);
+
   // Fetch exercise history when modal opens
   useEffect(() => {
     if (!isOpen || !exercise?.id) {
