@@ -37,6 +37,7 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   'daily-checkin',
   'muscle-recovery',
   'nutrition',
+  'cardio',
   'weight',
   'hydration',
   'activity',
@@ -1280,7 +1281,11 @@ export default function DashboardPage() {
           );
 
         case 'cardio':
-          return nutritionTargets?.cardio_prescription?.needed ? (
+          // Only show card if cardio prescription exists and is needed
+          if (!nutritionTargets?.cardio_prescription?.needed) {
+            return null;
+          }
+          return (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
