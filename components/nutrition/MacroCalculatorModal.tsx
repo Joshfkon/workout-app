@@ -450,9 +450,11 @@ export function MacroCalculatorModal({
               </div>
             </div>
 
-            <div className="text-sm text-surface-300 bg-surface-900/50 p-3 rounded-lg">
+            <div className="text-sm text-surface-300 bg-surface-900/50 p-3 rounded-lg space-y-2">
               <p className="mb-2">{recommendation.explanation}</p>
-              <div className="flex flex-wrap gap-4 text-xs text-surface-400">
+              
+              {/* Energy Metrics */}
+              <div className="flex flex-wrap gap-4 text-xs text-surface-400 pt-2 border-t border-surface-800">
                 <span>BMR: {recommendation.bmr} cal</span>
                 <span>TDEE: {recommendation.tdee} cal</span>
                 {recommendation.deficit !== 0 && (
@@ -460,9 +462,51 @@ export function MacroCalculatorModal({
                     {recommendation.deficit < 0 ? 'Deficit' : 'Surplus'}: {Math.abs(recommendation.deficit)} cal/day
                   </span>
                 )}
+                {Math.abs(recommendation.weeklyChangeKg) > 0.01 && (
+                  <span>
+                    {recommendation.weeklyChangeKg < 0 ? 'Loss' : 'Gain'}: {Math.abs(recommendation.weeklyChangeLbs).toFixed(2)} lb/week
+                  </span>
+                )}
               </div>
+
+              {/* Show requested vs final if they differ */}
+              {(recommendation.requestedCalories !== recommendation.calories || 
+                Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) > 0.01) && (
+                <div className="pt-2 border-t border-surface-800">
+                  <p className="text-xs font-medium text-surface-400 mb-1">Adjustments Applied:</p>
+                  {recommendation.requestedCalories !== recommendation.calories && (
+                    <p className="text-xs text-surface-500">
+                      Calories: {recommendation.requestedCalories} → {recommendation.calories} 
+                      ({recommendation.calories - recommendation.requestedCalories > 0 ? '+' : ''}
+                      {recommendation.calories - recommendation.requestedCalories} cal)
+                    </p>
+                  )}
+                  {Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) > 0.01 && (
+                    <p className="text-xs text-surface-500">
+                      Weekly change: {recommendation.requestedWeeklyChangeKg.toFixed(3)} kg → {recommendation.weeklyChangeKg.toFixed(3)} kg
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
+            {/* Guardrails Applied */}
+            {recommendation.guardrailsApplied && recommendation.guardrailsApplied.length > 0 && (
+              <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                <p className="text-xs font-medium text-primary-300 mb-2">
+                  ⚙️ Guardrails Applied:
+                </p>
+                <ul className="space-y-1">
+                  {recommendation.guardrailsApplied.map((guardrail, index) => (
+                    <li key={index} className="text-xs text-primary-400">
+                      • {guardrail}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Peptide Notes */}
             {recommendation.peptideNotes && (
               <div className="p-3 bg-accent-500/10 border border-accent-500/20 rounded-lg">
                 <p className="text-sm text-accent-300">
