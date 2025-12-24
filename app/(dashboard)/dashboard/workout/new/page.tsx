@@ -819,11 +819,7 @@ function NewWorkoutContent() {
       
       setSelectedMuscles(suggestedMuscles);
       
-      // Auto-advance to review page after a brief delay to show suggestions
-      // This gives the user a moment to see the suggestions before advancing
-      setTimeout(() => {
-        setStep(2);
-      }, 500);
+      // Don't auto-advance - user must click "Review & Choose Exercises" button
       
     } catch (err) {
       console.error('Failed to suggest exercises:', err);
