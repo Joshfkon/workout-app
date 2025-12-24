@@ -1307,9 +1307,17 @@ export default function DashboardPage() {
 
         case 'cardio':
           // Only show card if cardio prescription exists and is needed
+          console.log('[Dashboard] Cardio card check:', {
+            hasNutritionTargets: !!nutritionTargets,
+            hasCardioPrescription: !!nutritionTargets?.cardio_prescription,
+            cardioPrescription: nutritionTargets?.cardio_prescription,
+            needed: nutritionTargets?.cardio_prescription?.needed,
+          });
           if (!nutritionTargets?.cardio_prescription?.needed) {
+            console.log('[Dashboard] Cardio card not needed, returning null');
             return null;
           }
+          console.log('[Dashboard] Rendering cardio card');
           return (
             <Card>
               <CardHeader>
