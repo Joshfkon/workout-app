@@ -128,9 +128,14 @@ export function getEffectiveTier(
  * Uses service role to bypass RLS
  */
 export async function getSubscriptionData(userId: string): Promise<SubscriptionData | null> {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    console.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+    return null;
+  }
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    serviceRoleKey
   );
   
   // Get subscription
@@ -189,11 +194,15 @@ export async function upsertSubscription(
     cancel_at_period_end?: boolean;
   }
 ) {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+  }
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    serviceRoleKey
   );
-  
+
   const { error } = await supabase
     .from('subscriptions')
     .upsert({

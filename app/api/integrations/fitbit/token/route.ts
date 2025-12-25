@@ -27,7 +27,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const redirectUri = `${request.headers.get('origin')}/integrations/fitbit/callback`;
+    // Use configured app URL instead of user-controlled Origin header to prevent OAuth token hijacking
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      return NextResponse.json(
+        { error: 'Application URL not configured' },
+        { status: 500 }
+      );
+    }
+    const redirectUri = `${appUrl}/integrations/fitbit/callback`;
 
     // Exchange code for tokens
     const tokenResponse = await fetch('https://api.fitbit.com/oauth2/token', {
@@ -54,6 +62,15 @@ export async function POST(request: NextRequest) {
 
     const tokens = await tokenResponse.json();
 
+    // Validate required fields in response
+    if (!tokens.access_token || !tokens.refresh_token || !tokens.expires_in) {
+      console.error('Fitbit token response missing required fields');
+      return NextResponse.json(
+        { error: 'Invalid token response from Fitbit' },
+        { status: 502 }
+      );
+    }
+
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
@@ -63,7 +80,7 @@ export async function POST(request: NextRequest) {
       refreshToken: tokens.refresh_token,
       expiresAt: expiresAt.toISOString(),
       userId: tokens.user_id,
-      scope: tokens.scope.split(' '),
+      scope: tokens.scope ? tokens.scope.split(' ') : [],
     });
   } catch (error) {
     console.error('Fitbit token exchange error:', error);
