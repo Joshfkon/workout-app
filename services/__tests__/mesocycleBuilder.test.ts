@@ -19,11 +19,8 @@ function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUs
     sleepQuality: 3 as Rating,
     stressLevel: 3 as Rating,
     trainingAge: 2,
-    daysAvailable: 4,
-    sessionMinutes: 60,
-    equipment: [],
-    injuries: [],
-    weakPoints: [],
+    availableEquipment: [],
+    injuryHistory: [],
     ...overrides,
   };
 }

@@ -50,6 +50,15 @@ export async function POST(request: NextRequest) {
 
     const tokens = await tokenResponse.json();
 
+    // Validate required fields in response
+    if (!tokens.access_token || !tokens.refresh_token || !tokens.expires_in) {
+      console.error('Fitbit token refresh response missing required fields');
+      return NextResponse.json(
+        { error: 'Invalid token response from Fitbit' },
+        { status: 502 }
+      );
+    }
+
     // Calculate expiration time
     const expiresAt = new Date();
     expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expires_in);
@@ -59,7 +68,7 @@ export async function POST(request: NextRequest) {
       refreshToken: tokens.refresh_token,
       expiresAt: expiresAt.toISOString(),
       userId: tokens.user_id,
-      scope: tokens.scope.split(' '),
+      scope: tokens.scope ? tokens.scope.split(' ') : [],
     });
   } catch (error) {
     console.error('Fitbit token refresh error:', error);

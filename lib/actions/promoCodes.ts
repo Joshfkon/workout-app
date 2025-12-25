@@ -49,7 +49,6 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
 
   // Normalize the code (uppercase, trim)
   const normalizedCode = code.trim().toUpperCase();
-  console.log('Looking up promo code:', normalizedCode);
 
   // Find the promo code
   const { data: promoCode, error: codeError } = await serviceSupabase
@@ -75,8 +74,6 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
   if (!promoCode) {
     return { success: false, message: 'Invalid promo code. Please check and try again.' };
   }
-  
-  console.log('Found promo code:', promoCode.id, promoCode.code);
 
   // Check if code has expired
   if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date()) {
@@ -146,11 +143,21 @@ export async function redeemPromoCode(code: string): Promise<RedeemResult> {
     return { success: false, message: `Failed to redeem code: ${redemptionError.message}` };
   }
 
-  // Increment usage count
-  await serviceSupabase
-    .from('promo_codes')
-    .update({ current_uses: promoCode.current_uses + 1 })
-    .eq('id', promoCode.id);
+  // Atomically increment usage count using RPC to prevent race conditions
+  // This uses a PostgreSQL atomic increment instead of read-then-write
+  const { error: incrementError } = await serviceSupabase.rpc('increment_promo_code_uses', {
+    code_id: promoCode.id
+  });
+
+  // Fallback to regular update if RPC doesn't exist (will be created in migration)
+  if (incrementError?.code === '42883') { // function does not exist
+    await serviceSupabase
+      .from('promo_codes')
+      .update({ current_uses: promoCode.current_uses + 1 })
+      .eq('id', promoCode.id);
+  } else if (incrementError) {
+    console.error('Error incrementing promo code uses:', incrementError);
+  }
 
   // Update subscription
   const { error: subError } = await serviceSupabase
@@ -207,9 +214,14 @@ export async function getUserPromoRedemptions() {
     return [];
   }
 
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    console.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+    return [];
+  }
   const serviceSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    serviceRoleKey
   );
 
   const { data: redemptions } = await serviceSupabase

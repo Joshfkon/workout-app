@@ -25,13 +25,13 @@ function createExercise(overrides: Partial<Exercise> = {}): Exercise {
     secondaryMuscles: ['triceps', 'shoulders'],
     movementPattern: 'horizontal_push',
     mechanic: 'compound',
-    forceType: 'push',
     equipmentRequired: ['barbell', 'bench'],
     defaultRepRange: [6, 10] as [number, number],
-    instructions: [],
-    tips: [],
+    defaultRir: 2,
+    minWeightIncrementKg: 2.5,
+    formCues: [],
     commonMistakes: [],
-    hypertrophyTier: 'A',
+    setupNote: '',
     ...overrides,
   };
 }
