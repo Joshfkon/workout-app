@@ -36,7 +36,7 @@ const CARDIO_OPTIONS = [
   { value: 'elliptical', label: 'Elliptical' },
   { value: 'rower', label: 'Rower' },
   { value: 'other', label: 'Other' },
-] as const;
+];
 
 export const CardioTracker = memo(function CardioTracker({ userId, prescription }: CardioTrackerProps) {
   const [todayTotal, setTodayTotal] = useState(0);
