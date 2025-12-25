@@ -74,10 +74,6 @@ export async function sendCoachingMessage(
       console.error('[AI Coach] ANTHROPIC_API_KEY is not set');
       throw new Error('AI coaching is not configured. Please contact support.');
     }
-    
-    // Debug: Log key info (first 20 chars only for security)
-    console.log('[AI Coach] API key starts with:', apiKey.substring(0, 20) + '...');
-    console.log('[AI Coach] API key length:', apiKey.length);
 
     // Build coaching context
     let context;
