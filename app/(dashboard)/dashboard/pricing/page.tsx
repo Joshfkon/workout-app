@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
 import { PricingCard } from '@/components/subscription';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -11,6 +11,7 @@ import { redeemPromoCode } from '@/lib/actions/promoCodes';
 // Wrapper component that uses useSearchParams
 function PricingContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -74,7 +75,7 @@ function PricingContent() {
         setPromoCode('');
         // Refresh the page after a short delay to show updated subscription
         setTimeout(() => {
-          window.location.reload();
+          router.refresh();
         }, 2000);
       }
     } catch {

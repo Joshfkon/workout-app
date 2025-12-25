@@ -12,6 +12,7 @@ import type {
   PermissionResult,
   WearablePermission,
 } from '@/types/wearable';
+import { openExternalUrl } from './capacitor-stub';
 
 // === TYPES ===
 
@@ -97,8 +98,9 @@ class FitbitService {
 
   /**
    * Initiate OAuth flow - redirects to Fitbit authorization page
+   * Uses openExternalUrl for Capacitor compatibility
    */
-  initiateOAuth(): void {
+  async initiateOAuth(): Promise<void> {
     const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
     if (!clientId) {
       console.error('Fitbit client ID not configured');
@@ -119,7 +121,7 @@ class FitbitService {
     authUrl.searchParams.set('scope', scope);
     authUrl.searchParams.set('state', state);
 
-    window.location.href = authUrl.toString();
+    await openExternalUrl(authUrl.toString());
   }
 
   /**
@@ -463,8 +465,8 @@ function formatDate(date: Date): string {
 export const fitbitService = new FitbitService();
 
 // Export utility functions
-export function initiateFitbitOAuth(): void {
-  fitbitService.initiateOAuth();
+export async function initiateFitbitOAuth(): Promise<void> {
+  await fitbitService.initiateOAuth();
 }
 
 export async function handleFitbitCallback(

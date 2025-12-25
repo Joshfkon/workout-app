@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -125,14 +125,16 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { effectiveTier, needsUpgrade, isTrialing, trialDaysRemaining } = useSubscription();
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
     await supabase.auth.signOut();
-    // Force a hard refresh to clear any cached state
-    window.location.href = '/login';
+    // Navigate to login and refresh to clear cached state
+    router.push('/login');
+    router.refresh();
   };
 
   return (
