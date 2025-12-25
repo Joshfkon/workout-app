@@ -15,6 +15,18 @@ import {
 import { Card } from '@/components/ui';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import type { VolumeStatus } from '@/types/schema';
+import type { RechartsTooltipProps } from '@/types/database-queries';
+
+interface VolumeChartDataPoint {
+  name: string;
+  sets: number;
+  direct: number;
+  indirect: number;
+  mev: number;
+  mav: number;
+  mrv: number;
+  status: VolumeStatus;
+}
 
 interface VolumeChartProps {
   data: MuscleVolumeData[];
@@ -50,10 +62,10 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
     }
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps<VolumeChartDataPoint>) => {
     if (!active || !payload || !payload.length) return null;
 
-    const data = payload[0].payload;
+    const data = payload[0].payload as VolumeChartDataPoint;
 
     return (
       <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">

@@ -87,6 +87,16 @@ export interface MealNames {
   snack?: string;
 }
 
+/**
+ * Cardio prescription structure for nutrition targets
+ */
+export interface CardioPrescription {
+  type?: 'liss' | 'hiit' | 'mixed';
+  frequency_per_week?: number;
+  duration_minutes?: number;
+  notes?: string;
+}
+
 export interface NutritionTargets {
   id: string;
   user_id: string;
@@ -96,7 +106,7 @@ export interface NutritionTargets {
   fat: number | null;
   meals_per_day: number | null;
   meal_names: MealNames | null;
-  cardio_prescription?: any | null;
+  cardio_prescription?: CardioPrescription | null;
   created_at: string;
   updated_at: string;
 }

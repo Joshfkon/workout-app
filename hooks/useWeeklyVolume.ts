@@ -5,6 +5,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from '@/services/volumeTracker';
 import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
+import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
 import { MUSCLE_GROUPS } from '@/types/schema';
 
 interface UseWeeklyVolumeOptions {
@@ -43,7 +44,7 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
       if (storedVolume && storedVolume.length > 0) {
         // Use stored volume data
-        const mapped: MuscleVolumeData[] = storedVolume.map((row: any) => {
+        const mapped: MuscleVolumeData[] = storedVolume.map((row: WeeklyMuscleVolumeRow) => {
           const landmarks = getVolumeLandmarks(row.muscle_group);
           return {
             muscleGroup: row.muscle_group,

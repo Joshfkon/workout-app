@@ -12,8 +12,17 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { formatDate } from '@/lib/utils';
+import type { RechartsTooltipProps } from '@/types/database-queries';
 
 type Timeframe = '7d' | '30d' | '90d';
+
+interface WeightChartDataPoint {
+  date: string;
+  displayDate: string;
+  weight: number;
+  originalWeight: number;
+  originalUnit: string;
+}
 
 // Define outside component for stable reference
 const TIMEFRAME_DAYS: Record<Timeframe, number> = {
@@ -150,10 +159,10 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     return { current, max, min, avg };
   }, [chartData]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: RechartsTooltipProps<WeightChartDataPoint>) => {
     if (!active || !payload || !payload.length) return null;
 
-    const data = payload[0].payload;
+    const data = payload[0].payload as WeightChartDataPoint;
 
     return (
       <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">

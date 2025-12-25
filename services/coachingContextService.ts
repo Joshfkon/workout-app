@@ -7,6 +7,33 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { CoachingContext, RecentLift } from '@/types/coaching';
+import type {
+  UserRow,
+  TrainingPhaseRow,
+  BodyweightEntryRow,
+  DexaScanRow,
+  MesocycleRow,
+  CalibratedLiftRow,
+  SetLogRow,
+} from '@/types/database-queries';
+
+/** User preferences row from database */
+interface UserPreferencesRow {
+  user_id: string;
+  coaching?: {
+    primaryGoal?: string;
+  };
+}
+
+/** Workout session with exercise blocks for coaching context */
+interface WorkoutSessionWithBlocks {
+  id: string;
+  planned_date: string;
+  exercise_blocks: Array<{
+    exercise_name: string;
+    set_logs: Array<Pick<SetLogRow, 'weight_kg' | 'reps' | 'rpe' | 'is_warmup'>>;
+  }>;
+}
 
 /**
  * Builds a complete coaching context for the current user
@@ -47,7 +74,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       console.log('[CoachingContext] No user data found');
       return null;
     }
-    const user = userData as any;
+    const user = userData as UserRow;
 
   // Calculate age from birth_date
   const age = user.birth_date
@@ -62,7 +89,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('is_active', true)
     .single();
 
-  const phase = phaseData as any;
+  const phase = phaseData as TrainingPhaseRow | null;
 
   // Get most recent bodyweight
   const { data: recentWeight } = await supabase
@@ -73,7 +100,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .limit(1)
     .single();
 
-  const latestWeight = recentWeight as any;
+  const latestWeight = recentWeight as Pick<BodyweightEntryRow, 'weight_kg' | 'date'> | null;
 
   // Get bodyweight trend (last 2 weeks)
   const twoWeeksAgo = new Date();
@@ -85,7 +112,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .gte('date', twoWeeksAgo.toISOString().split('T')[0])
     .order('date', { ascending: true });
 
-  const weights = recentWeights as any[];
+  const weights = recentWeights as Pick<BodyweightEntryRow, 'weight_kg' | 'date'>[] | null;
 
   // Calculate weight trend
   let weightTrend: 'increasing' | 'stable' | 'decreasing' | undefined;
@@ -109,7 +136,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .limit(1)
     .single();
 
-  const dexa = dexaData as any;
+  const dexa = dexaData as DexaScanRow | null;
 
   // Get active mesocycle
   const { data: mesocycleData } = await supabase
@@ -119,7 +146,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('state', 'active')
     .single();
 
-  const mesocycle = mesocycleData as any;
+  const mesocycle = mesocycleData as MesocycleRow | null;
 
   // Get strength calibrations (from coaching system)
   const { data: calibrationsData } = await supabase
@@ -128,7 +155,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('user_id', authUser.id)
     .order('tested_at', { ascending: false });
 
-  const calibrations = calibrationsData as any[] || [];
+  const calibrations = (calibrationsData as CalibratedLiftRow[] | null) || [];
 
   // Get user preferences/goals
   const { data: prefsData } = await supabase
@@ -137,7 +164,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .eq('user_id', authUser.id)
     .single();
 
-  const prefs = prefsData as any;
+  const prefs = prefsData as UserPreferencesRow | null;
 
   // Get recent lift performance (last 30 days, top sets only)
   const thirtyDaysAgo = new Date();
@@ -164,7 +191,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .order('planned_date', { ascending: false })
     .limit(20);
 
-  const sessions = recentSessions as any[];
+  const sessions = recentSessions as WorkoutSessionWithBlocks[] | null;
 
   // Process recent lifts to get top sets per exercise
   const recentLifts: RecentLift[] = [];
@@ -178,17 +205,18 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
         if (!block.set_logs || block.set_logs.length === 0) continue;
 
         // Get top working set (non-warmup, highest weight, valid data)
+        type SetLogSubset = Pick<SetLogRow, 'weight_kg' | 'reps' | 'rpe' | 'is_warmup'>;
         const workingSets = block.set_logs.filter(
-          (set: any) => !set.is_warmup && 
-                        set.weight_kg != null && 
-                        set.weight_kg > 0 && 
-                        set.reps != null && 
+          (set: SetLogSubset) => !set.is_warmup &&
+                        set.weight_kg != null &&
+                        set.weight_kg > 0 &&
+                        set.reps != null &&
                         set.reps > 0
         );
 
         if (workingSets.length === 0) continue;
 
-        const topSet = workingSets.reduce((best: any, current: any) => {
+        const topSet = workingSets.reduce((best: SetLogSubset, current: SetLogSubset) => {
           const currentWeight = current.weight_kg || 0;
           const currentReps = current.reps || 0;
           const bestWeight = best.weight_kg || 0;
@@ -225,7 +253,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
   }
 
   // Process calibrated lifts
-  const calibratedLifts = calibrations.map((cal: any) => ({
+  const calibratedLifts = calibrations.map((cal: CalibratedLiftRow) => ({
     liftName: cal.lift_name,
     estimated1RM: cal.estimated_1rm,
     testedWeight: cal.tested_weight_kg,
@@ -284,8 +312,9 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
   };
 
   return context;
-  } catch (error: any) {
-    console.error('[CoachingContext] Error building context:', error?.message || error);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[CoachingContext] Error building context:', message);
     return null;
   }
 }

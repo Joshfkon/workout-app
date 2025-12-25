@@ -18,6 +18,12 @@ import {
 } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import type {
+  ExerciseBlockFull,
+  WeeklyMuscleVolumeRow,
+  SetLogRow,
+  MinimalUser,
+} from '@/types/database-queries';
 
 interface UseAdaptiveVolumeResult {
   // Profile data
@@ -67,7 +73,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
           console.log(`[useAdaptiveVolume] Got user from Supabase auth:`, authUser.id);
-          setUser({ id: authUser.id } as any);
+          setUser({ id: authUser.id } as MinimalUser);
         }
       } catch (err) {
         console.error(`[useAdaptiveVolume] Error getting user from auth:`, err);
@@ -175,7 +181,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         
         console.log(`[useAdaptiveVolume] Query result:`, {
           blocksCount: blocks?.length || 0,
-          blocks: blocks?.slice(0, 3).map((b: any) => ({
+          blocks: blocks?.slice(0, 3).map((b: ExerciseBlockFull) => ({
             id: b.id,
             exercise_name: b.exercises?.name,
             primary_muscle: b.exercises?.primary_muscle,
@@ -195,7 +201,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           let processedBlocks = 0;
           let skippedBlocks = 0;
           
-          blocks.forEach((block: any, index: number) => {
+          blocks.forEach((block: ExerciseBlockFull, index: number) => {
             if (index < 5) {
               console.log(`[useAdaptiveVolume] Block ${index + 1}/${blocks.length}:`, {
                 block_id: block.id,
@@ -212,7 +218,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
                   user_id: block.workout_sessions.user_id
                 } : null,
                 set_logs_count: block.set_logs?.length || 0,
-                set_logs: block.set_logs?.slice(0, 2).map((s: any) => ({
+                set_logs: block.set_logs?.slice(0, 2).map((s: SetLogRow) => ({
                   id: s.id,
                   is_warmup: s.is_warmup,
                   weight_kg: s.weight_kg,
@@ -229,11 +235,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             }
             
             const allSets = block.set_logs || [];
-            const workingSets = allSets.filter((s: any) => !s.is_warmup);
-            
+            const workingSets = allSets.filter((s: SetLogRow) => !s.is_warmup);
+
             if (workingSets.length === 0) {
               if (index < 5) {
-                console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets (total sets: ${allSets.length}, warmups: ${allSets.filter((s: any) => s.is_warmup).length})`);
+                console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets (total sets: ${allSets.length}, warmups: ${allSets.filter((s: SetLogRow) => s.is_warmup).length})`);
               }
               skippedBlocks++;
               return;
@@ -257,15 +263,16 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             data.totalSets += workingSets.length;
             
             // Count effective sets (RPE 7+ or RIR 0-3 with clean/some_breakdown form)
-            const effective = workingSets.filter((s: any) => {
-              const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
-              const form = s.feedback?.form ?? 'clean';
+            const effective = workingSets.filter((s: SetLogRow) => {
+              const feedback = s.feedback as { repsInTank?: number; form?: string } | undefined;
+              const rir = feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 3);
+              const form = feedback?.form ?? 'clean';
               return rir <= 3 && (form === 'clean' || form === 'some_breakdown');
             });
             data.effectiveSets += effective.length;
-            
+
             // Calculate average RIR
-            workingSets.forEach((s: any) => {
+            workingSets.forEach((s: SetLogRow) => {
               const rir = s.feedback?.repsInTank ?? (s.rpe ? 10 - s.rpe : 2);
               data.totalRIR += rir;
               data.rirCount += 1;
@@ -310,7 +317,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         }
       } else {
         // Use pre-computed data
-        const mapped: MuscleVolumeData[] = currentData.map((row: any) => ({
+        const mapped: MuscleVolumeData[] = currentData.map((row: WeeklyMuscleVolumeRow) => ({
           id: row.id || `${row.muscle_group}-${weekStartStr}`,
           muscle: row.muscle_group as MuscleGroup,
           weekNumber: 1,
@@ -327,7 +334,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       }
 
       if (prevData && prevData.length > 0) {
-        const mapped: MuscleVolumeData[] = prevData.map((row: any) => ({
+        const mapped: MuscleVolumeData[] = prevData.map((row: WeeklyMuscleVolumeRow) => ({
           id: row.id || `${row.muscle_group}-${prevWeekStartStr}`,
           muscle: row.muscle_group as MuscleGroup,
           weekNumber: 0,

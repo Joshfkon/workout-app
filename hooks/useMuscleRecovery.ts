@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
 import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
+import type { ExerciseBlockFull, SetLogRow, MinimalUser } from '@/types/database-queries';
 
 /**
  * Recovery time recommendations in hours based on muscle group size
@@ -111,7 +112,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         const supabase = createUntypedClient();
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          setUser({ id: authUser.id } as any);
+          setUser({ id: authUser.id } as MinimalUser);
         }
       } catch (err) {
         console.error('[useMuscleRecovery] Error getting user from auth:', err);
@@ -169,14 +170,14 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
       const muscleLastTrained = new Map<string, Date>();
 
       if (blocks && blocks.length > 0) {
-        blocks.forEach((block: any) => {
+        blocks.forEach((block: ExerciseBlockFull) => {
           const exercise = block.exercises;
           const session = block.workout_sessions;
 
           if (!exercise || !session?.completed_at) return;
 
           // Only count if there were working sets
-          const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+          const workingSets = (block.set_logs || []).filter((s: SetLogRow) => !s.is_warmup);
           if (workingSets.length === 0) return;
 
           const completedAt = new Date(session.completed_at);

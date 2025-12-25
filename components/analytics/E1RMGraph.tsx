@@ -13,7 +13,17 @@ import {
 } from 'recharts';
 import { Card, Badge } from '@/components/ui';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
+import type { RechartsTooltipProps } from '@/types/database-queries';
 import { formatDate } from '@/lib/utils';
+
+interface E1RMDataPoint {
+  date: string;
+  displayDate: string;
+  e1rm: number;
+  weight: number;
+  reps: number;
+  rpe: number;
+}
 
 interface E1RMGraphProps {
   exerciseName: string;
@@ -62,10 +72,10 @@ export function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGra
     return { current, max, min };
   }, [chartData]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: RechartsTooltipProps<E1RMDataPoint>) => {
     if (!active || !payload || !payload.length) return null;
 
-    const data = payload[0].payload;
+    const data = payload[0].payload as E1RMDataPoint;
 
     return (
       <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
