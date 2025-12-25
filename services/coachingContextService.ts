@@ -258,14 +258,14 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     recentLifts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }
 
-  // Process calibrated lifts
+  // Process calibrated lifts (convert null to undefined for type compatibility)
   const calibratedLifts = calibrations.map((cal: CalibratedLiftRow) => ({
     liftName: cal.lift_name,
     estimated1RM: cal.estimated_1rm,
     testedWeight: cal.tested_weight_kg,
     testedReps: cal.tested_reps,
-    percentileVsTrained: cal.percentile_vs_trained,
-    strengthLevel: cal.strength_level,
+    percentileVsTrained: cal.percentile_vs_trained ?? undefined,
+    strengthLevel: cal.strength_level ?? undefined,
     testedAt: cal.tested_at,
   }));
 
@@ -309,10 +309,10 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       daysPerWeek: mesocycle?.days_per_week,
       recentLifts: recentLifts.slice(0, 15), // Limit to 15 most relevant lifts
     },
-    strength: calibratedLifts.length > 0 
+    strength: calibratedLifts.length > 0
       ? {
           calibratedLifts: calibratedLifts.slice(0, 6), // Top 6 lifts
-          overallLevel: calibrations[0]?.strength_level,
+          overallLevel: calibrations[0]?.strength_level ?? undefined,
         }
       : undefined,
   };
