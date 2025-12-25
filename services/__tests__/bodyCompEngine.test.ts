@@ -27,10 +27,14 @@ const createMockDexaScan = (overrides: Partial<DexaScan> = {}): DexaScan => ({
   id: 'scan-1',
   userId: 'user-1',
   scanDate: '2024-01-15',
-  bodyFatPercent: 15,
+  weightKg: 82.35,
   leanMassKg: 70,
   fatMassKg: 12.35,
-  totalWeightKg: 82.35,
+  bodyFatPercent: 15,
+  boneMassKg: null,
+  regionalData: null,
+  notes: null,
+  createdAt: new Date().toISOString(),
   ...overrides,
 });
 

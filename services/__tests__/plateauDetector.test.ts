@@ -506,10 +506,12 @@ describe('calculateProgressScore', () => {
 
 function createSnapshot(date: string, e1rm: number): ExercisePerformanceSnapshot {
   return {
+    id: `snapshot-${date}`,
+    userId: 'user-1',
     exerciseId: 'test-exercise',
     sessionDate: date,
     estimatedE1RM: e1rm,
-    topSetWeight: e1rm * 0.75,
+    topSetWeightKg: e1rm * 0.75,
     topSetReps: 8,
     topSetRpe: 8,
     totalWorkingSets: 3,
@@ -524,10 +526,12 @@ function createSnapshotWithDetails(
   sets: number
 ): ExercisePerformanceSnapshot {
   return {
+    id: `snapshot-${date}`,
+    userId: 'user-1',
     exerciseId: 'test-exercise',
     sessionDate: date,
     estimatedE1RM: e1rm,
-    topSetWeight: e1rm * 0.75,
+    topSetWeightKg: e1rm * 0.75,
     topSetReps: reps,
     topSetRpe: rpe,
     totalWorkingSets: sets,
