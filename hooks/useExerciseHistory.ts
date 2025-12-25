@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
+import type { ExercisePerformanceSnapshotRow } from '@/types/database-queries';
 import { calculateE1RM } from '@/services/plateauDetector';
 
 interface UseExerciseHistoryOptions {
@@ -31,7 +32,7 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
       if (fetchError) throw fetchError;
 
       // Map database fields to TypeScript interface
-      const mappedData: ExercisePerformanceSnapshot[] = (data || []).map((row: any) => ({
+      const mappedData: ExercisePerformanceSnapshot[] = (data || []).map((row: ExercisePerformanceSnapshotRow) => ({
         id: row.id,
         userId: row.user_id,
         exerciseId: row.exercise_id,
