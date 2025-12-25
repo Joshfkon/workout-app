@@ -62,8 +62,13 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, 
   // Initialize volume map for all muscle groups
   const volumeMap = new Map<string, MuscleVolumeData>();
   
+  // Default landmarks for muscle groups not explicitly defined
+  const DEFAULT_FALLBACK_LANDMARKS: VolumeLandmarks = { mev: 4, mav: 10, mrv: 16 };
+
   MUSCLE_GROUPS.forEach((muscle) => {
-    const landmarks = userLandmarks[muscle] ?? DEFAULT_VOLUME_LANDMARKS.intermediate[muscle];
+    const landmarks = userLandmarks[muscle]
+      ?? DEFAULT_VOLUME_LANDMARKS.intermediate[muscle as keyof typeof DEFAULT_VOLUME_LANDMARKS.intermediate]
+      ?? DEFAULT_FALLBACK_LANDMARKS;
     volumeMap.set(muscle, {
       muscleGroup: muscle,
       totalSets: 0,

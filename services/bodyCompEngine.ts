@@ -137,8 +137,11 @@ export function analyzeBodyCompTrend(
   let trend: BodyCompTrend['trend'];
   const muscleThreshold = 0.1; // kg/month
   const fatThreshold = 0.2; // kg/month
-  
-  if (leanMassChangeRate > muscleThreshold && fatMassChangeRate > fatThreshold) {
+
+  // Check recomping first since it's the most specific (both conditions must be true)
+  if (leanMassChangeRate > muscleThreshold && fatMassChangeRate < -fatThreshold) {
+    trend = 'recomping';
+  } else if (leanMassChangeRate > muscleThreshold && fatMassChangeRate > fatThreshold) {
     trend = 'gaining_muscle'; // Bulk (gaining both but emphasize muscle)
   } else if (leanMassChangeRate < -muscleThreshold) {
     trend = 'losing_muscle';
@@ -146,8 +149,6 @@ export function analyzeBodyCompTrend(
     trend = 'gaining_fat';
   } else if (fatMassChangeRate < -fatThreshold) {
     trend = 'losing_fat';
-  } else if (leanMassChangeRate > muscleThreshold && fatMassChangeRate < -fatThreshold) {
-    trend = 'recomping';
   } else {
     trend = 'stable';
   }
