@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface RestTimerControlPanelProps {
   isRunning: boolean;
@@ -27,13 +27,13 @@ export function RestTimerControlPanel({
   const [internalIsVisible, setInternalIsVisible] = useState(true);
   const isVisible = externalIsVisible !== undefined ? externalIsVisible : internalIsVisible;
   
-  const setIsVisible = (visible: boolean) => {
+  const setIsVisible = useCallback((visible: boolean) => {
     if (onVisibilityChange) {
       onVisibilityChange(visible);
     } else {
       setInternalIsVisible(visible);
     }
-  };
+  }, [onVisibilityChange]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartY, setDragStartY] = useState(0);
   const [currentY, setCurrentY] = useState(0);
@@ -46,10 +46,10 @@ export function RestTimerControlPanel({
     setCurrentY(clientY);
   };
 
-  const updateDrag = (clientY: number) => {
+  const updateDrag = useCallback((clientY: number) => {
     if (!isDragging) return;
     setCurrentY(clientY);
-    
+
     // Only allow dragging down
     if (clientY > dragStartY) {
       const deltaY = clientY - dragStartY;
@@ -58,15 +58,15 @@ export function RestTimerControlPanel({
         panelRef.current.style.opacity = `${Math.max(0, 1 - deltaY / 200)}`;
       }
     }
-  };
+  }, [isDragging, dragStartY]);
 
-  const endDrag = () => {
+  const endDrag = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(false);
-    
+
     const deltaY = currentY - dragStartY;
     const threshold = 50; // Minimum drag distance to hide
-    
+
     if (deltaY > threshold) {
       setIsVisible(false);
       if (panelRef.current) {
@@ -80,7 +80,7 @@ export function RestTimerControlPanel({
         panelRef.current.style.opacity = '1';
       }
     }
-  };
+  }, [isDragging, currentY, dragStartY, setIsVisible]);
 
   const handlePanelTouchStart = (e: React.TouchEvent) => {
     // Don't start drag if touching a button or interactive element
@@ -143,7 +143,7 @@ export function RestTimerControlPanel({
       document.removeEventListener('touchmove', handleGlobalTouchMove);
       document.removeEventListener('touchend', handleGlobalTouchEnd);
     };
-  }, [isDragging, dragStartY, currentY]);
+  }, [isDragging, updateDrag, endDrag]);
 
   const handleToggleVisibility = () => {
     setIsVisible(!isVisible);

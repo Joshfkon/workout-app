@@ -15,6 +15,13 @@ import { formatDate } from '@/lib/utils';
 
 type Timeframe = '7d' | '30d' | '90d';
 
+// Define outside component for stable reference
+const TIMEFRAME_DAYS: Record<Timeframe, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+};
+
 interface WeightEntry {
   date: string;
   weight: number;
@@ -36,14 +43,10 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     setIsMounted(true);
   }, []);
 
-  const timeframeDays: Record<Timeframe, number> = {
-    '7d': 7,
-    '30d': 30,
-    '90d': 90,
-  };
+  // Use module-level TIMEFRAME_DAYS constant for stable reference
 
-  // Convert weight to preferred unit with validation
-  const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
+  // Convert weight to preferred unit with validation - wrapped in useCallback for stable reference
+  const convertWeight = useCallback((weight: number, fromUnit: string | null | undefined): number => {
     // If unit is missing, try to infer from weight value
     // If weight > 300 in preferred unit 'lb', it's likely in kg
     // If weight > 150 in preferred unit 'kg', it's likely in lb
@@ -58,7 +61,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
       // Assume already in preferred unit
       return weight;
     }
-    
+
     // Validate: if unit says 'lb' but weight > 500, it's probably in kg
     // If unit says 'kg' but weight > 250 OR in human weight range (150-200), it's probably in lb
     // Common weights 150-200 lbs are often mislabeled as kg
@@ -76,17 +79,17 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
       console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but > 250, treating as lb`);
       return weight / 2.20462;
     }
-    
+
     // Normal conversion
     if (fromUnit === preferredUnit) return weight;
     return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
-  };
+  }, [preferredUnit]);
 
   // Filter and prepare chart data based on timeframe
   const chartData = useMemo(() => {
     const now = new Date();
     const cutoffDate = new Date();
-    cutoffDate.setDate(now.getDate() - timeframeDays[timeframe]);
+    cutoffDate.setDate(now.getDate() - TIMEFRAME_DAYS[timeframe]);
 
     const filtered = weightHistory
       .filter((entry) => new Date(entry.date) >= cutoffDate)
