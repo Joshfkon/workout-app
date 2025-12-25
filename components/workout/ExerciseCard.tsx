@@ -336,8 +336,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     ? block.targetWeightKg 
     : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
 
-  // Format weight for display
-  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  // Format weight for display - wrapped in useCallback for stable reference
+  const displayWeight = useCallback((kg: number) => formatWeightValue(kg, unit), [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
   // Track the last known completed sets count to detect changes

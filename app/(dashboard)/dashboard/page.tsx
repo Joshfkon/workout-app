@@ -48,6 +48,16 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
 
 const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
 
+// MEV targets (minimum effective volume per muscle) - defined outside component for stable reference
+const MEV_TARGETS: Record<string, number> = {
+  chest: 8, back: 8, shoulders: 6, quads: 6, hamstrings: 4,
+  glutes: 4, biceps: 4, triceps: 4, calves: 6, abs: 8,
+  traps: 4, forearms: 4, adductors: 4,
+};
+
+// All muscle groups to check (including those with 0 sets)
+const ALL_MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'biceps', 'triceps', 'calves', 'abs', 'traps', 'forearms', 'adductors'];
+
 interface NutritionTotals {
   calories: number;
   protein: number;
@@ -223,15 +233,7 @@ export default function DashboardPage() {
   // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
   const { volumeSummary } = useAdaptiveVolume();
   
-  // MEV targets (minimum effective volume per muscle)
-  const mevTargets: Record<string, number> = {
-    chest: 8, back: 8, shoulders: 6, quads: 6, hamstrings: 4,
-    glutes: 4, biceps: 4, triceps: 4, calves: 6, abs: 8,
-    traps: 4, forearms: 4, adductors: 4,
-  };
-
-  // All muscle groups to check (including those with 0 sets)
-  const allMuscleGroups = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'biceps', 'triceps', 'calves', 'abs', 'traps', 'forearms', 'adductors'];
+  // Use module-level constants for MEV targets and muscle groups
 
   // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
@@ -251,9 +253,9 @@ export default function DashboardPage() {
     // Check ALL muscle groups, including those with 0 sets
     const result: MuscleVolumeData[] = [];
     
-    allMuscleGroups.forEach(muscle => {
+    ALL_MUSCLE_GROUPS.forEach(muscle => {
       const sets = volumeMap.get(muscle) || 0;
-      const mev = mevTargets[muscle] || 8;
+      const mev = MEV_TARGETS[muscle] || 8;
       const isBelowMev = sets < mev;
       
       console.log(`[Dashboard] Checking ${muscle}: ${sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);

@@ -53,14 +53,7 @@ export default function TemplateDetailPage() {
 
   const supabase = createUntypedClient();
 
-  useEffect(() => {
-    loadTemplate();
-    loadFolders();
-    loadAvailableExercises();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId]);
-
-  async function loadTemplate() {
+  const loadTemplate = useCallback(async () => {
     setIsLoading(true);
     try {
       const [templateResult, exercisesResult] = await Promise.all([
@@ -77,7 +70,7 @@ export default function TemplateDetailPage() {
       ]);
 
       if (templateResult.error) throw templateResult.error;
-      
+
       setTemplate(templateResult.data);
       setExercises(exercisesResult.data || []);
       setTemplateName(templateResult.data.name);
@@ -89,7 +82,14 @@ export default function TemplateDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  }
+  }, [supabase, templateId]);
+
+  useEffect(() => {
+    loadTemplate();
+    loadFolders();
+    loadAvailableExercises();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, loadTemplate]);
 
   async function loadFolders() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -302,7 +302,7 @@ export default function TemplateDetailPage() {
       setCollapsedExercises(preCollapseStateRef.current);
       preCollapseStateRef.current = null;
     }
-  }, [draggedIndex, dragOverIndex, exercises, supabase]);
+  }, [draggedIndex, dragOverIndex, exercises, supabase, loadTemplate]);
 
   // Reorder exercises (fallback for non-drag)
   async function moveExercise(index: number, direction: 'up' | 'down') {
