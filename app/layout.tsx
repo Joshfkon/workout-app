@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SplashProvider } from "@/components/providers/SplashProvider";
 import { NativeAppBehavior } from "@/components/providers/NativeAppBehavior";
+import { ServiceWorkerRegistration } from "@/components/providers/ServiceWorkerRegistration";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -76,6 +77,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen font-sans overflow-x-hidden`}
       >
+        <ServiceWorkerRegistration />
         <NativeAppBehavior />
         <SplashProvider>
           {children}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal } from '@/components/ui';
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
@@ -24,6 +25,7 @@ const kgToLbs = (kg: number) => kg * 2.20462;
 const lbsToKg = (lbs: number) => lbs / 2.20462;
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
@@ -272,7 +274,7 @@ export default function SettingsPage() {
         setPromoCode('');
         // Refresh the page after a short delay to show updated subscription
         setTimeout(() => {
-          window.location.reload();
+          router.refresh();
         }, 2000);
       }
     } catch {
