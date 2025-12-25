@@ -98,13 +98,13 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const [error, setError] = useState<string | null>(null);
 
   const { user: storeUser } = useUserStore();
-  const [user, setUser] = useState(storeUser);
+  const [user, setUser] = useState<MinimalUser | null>(storeUser ? { id: storeUser.id } : null);
 
   // Get user from Supabase auth as fallback
   useEffect(() => {
     async function loadUser() {
       if (storeUser?.id) {
-        setUser(storeUser);
+        setUser({ id: storeUser.id });
         return;
       }
 
@@ -112,7 +112,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         const supabase = createUntypedClient();
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          setUser({ id: authUser.id } as MinimalUser);
+          setUser({ id: authUser.id });
         }
       } catch (err) {
         console.error('[useMuscleRecovery] Error getting user from auth:', err);
