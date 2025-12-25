@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import { formatWeight, convertWeight } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useExercisePreferences } from '@/hooks/useExercisePreferences';
@@ -114,6 +115,7 @@ export default function ExercisesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
+  const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
   const [expandedExercise, setExpandedExercise] = useState<string | null>(null);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistory>>({});
   const [loadingHistory, setLoadingHistory] = useState<string | null>(null);
@@ -495,6 +497,14 @@ export default function ExercisesPage() {
   const filteredExercises = exercises.filter((ex) => {
     const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
     const matchesMuscle = !selectedMuscle || ex.primary_muscle === selectedMuscle;
+
+    // Equipment filtering - check both equipment field and equipment_required array
+    const matchesEquipment = !selectedEquipment ||
+      ex.equipment === selectedEquipment ||
+      (ex.equipment_required && ex.equipment_required.some(eq =>
+        eq.toLowerCase() === selectedEquipment.toLowerCase()
+      ));
+
     const status = getExerciseStatus ? getExerciseStatus(ex.id) : 'active';
 
     // Status filtering
@@ -511,7 +521,7 @@ export default function ExercisesPage() {
       matchesStatus = status === 'archived';
     }
 
-    return matchesSearch && matchesMuscle && matchesStatus;
+    return matchesSearch && matchesMuscle && matchesEquipment && matchesStatus;
   });
 
   // Transform chart data for display with unit conversion
@@ -695,6 +705,7 @@ export default function ExercisesPage() {
 
       {/* Muscle filter chips */}
       <div className="flex flex-wrap gap-2">
+        <span className="text-xs text-surface-500 uppercase tracking-wide self-center mr-1">Muscle:</span>
         <button
           onClick={() => setSelectedMuscle(null)}
           className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
@@ -703,7 +714,7 @@ export default function ExercisesPage() {
               : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
           }`}
         >
-          All Muscles
+          All
         </button>
         {MUSCLE_GROUPS.map((muscle) => (
           <button
@@ -716,6 +727,34 @@ export default function ExercisesPage() {
             }`}
           >
             {muscle}
+          </button>
+        ))}
+      </div>
+
+      {/* Equipment filter chips */}
+      <div className="flex flex-wrap gap-2">
+        <span className="text-xs text-surface-500 uppercase tracking-wide self-center mr-1">Equipment:</span>
+        <button
+          onClick={() => setSelectedEquipment(null)}
+          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+            !selectedEquipment
+              ? 'bg-primary-500 text-white'
+              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+          }`}
+        >
+          All
+        </button>
+        {EQUIPMENT_OPTIONS.map((eq) => (
+          <button
+            key={eq.value}
+            onClick={() => setSelectedEquipment(eq.value)}
+            className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+              selectedEquipment === eq.value
+                ? 'bg-primary-500 text-white'
+                : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+            }`}
+          >
+            {eq.label}
           </button>
         ))}
       </div>
