@@ -255,6 +255,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
       const html5QrCode = new Html5Qrcode('barcode-reader', {
         formatsToSupport,
+        verbose: false,
         // Use native BarcodeDetector API if available (faster)
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true,
