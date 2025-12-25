@@ -541,8 +541,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         onSetDelete(setId);
       } else if (!isCompleted) {
         // Remove pending set by reducing target sets
-        if (onTargetSetsChange && block.targetSets > completedSets.length) {
-          onTargetSetsChange(block.targetSets - 1);
+        if (onTargetSetsChange && Number(block.targetSets) > completedSets.length) {
+          onTargetSetsChange(Number(block.targetSets) - 1);
         }
       }
     }
@@ -900,8 +900,11 @@ export const ExerciseCard = memo(function ExerciseCard({
             {onTargetSetsChange && isActive && (
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => onTargetSetsChange(Math.max(1, block.targetSets - 1))}
-                  disabled={block.targetSets <= completedSets.length || block.targetSets <= 1}
+                  onClick={() => {
+                    const newSets = Math.max(1, (Number(block.targetSets) || 1) - 1);
+                    onTargetSetsChange(newSets);
+                  }}
+                  disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
                   className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Remove a set"
                 >
@@ -910,8 +913,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </svg>
                 </button>
                 <button
-                  onClick={() => onTargetSetsChange(block.targetSets + 1)}
-                  disabled={block.targetSets >= 10}
+                  onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
+                  disabled={Number(block.targetSets) >= 10}
                   className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Add a set"
                 >
@@ -1934,8 +1937,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         <div className="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs">
           {onTargetSetsChange && (
             <button
-              onClick={() => onTargetSetsChange(block.targetSets + 1)}
-              disabled={block.targetSets >= 10}
+              onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
+              disabled={Number(block.targetSets) >= 10}
               className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
             >
               + Add Set
