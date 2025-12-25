@@ -1723,19 +1723,16 @@ export const ExerciseCard = memo(function ExerciseCard({
 
               {/* Inline Rest Timer */}
               {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
-                <tr>
-                  <td colSpan={7} className="p-0">
-                    <InlineRestTimerBar
-                      seconds={timerSeconds}
-                      initialSeconds={timerInitialSeconds}
-                      isRunning={timerIsRunning}
-                      isFinished={timerIsFinished}
-                      isSkipped={timerIsSkipped}
-                      restedSeconds={timerRestedSeconds}
-                      onShowControls={onShowTimerControls}
-                    />
-                  </td>
-                </tr>
+                <InlineRestTimerBar
+                  seconds={timerSeconds}
+                  initialSeconds={timerInitialSeconds}
+                  isRunning={timerIsRunning}
+                  isFinished={timerIsFinished}
+                  isSkipped={timerIsSkipped}
+                  restedSeconds={timerRestedSeconds}
+                  onShowControls={onShowTimerControls}
+                  colSpan={7}
+                />
               )}
 
               {/* Manual Dropset input row */}

@@ -11,6 +11,7 @@ interface InlineRestTimerBarProps {
   isSkipped?: boolean;
   restedSeconds?: number;
   onShowControls?: () => void;
+  colSpan?: number;
 }
 
 export const InlineRestTimerBar = memo(function InlineRestTimerBar({
@@ -21,6 +22,7 @@ export const InlineRestTimerBar = memo(function InlineRestTimerBar({
   isSkipped = false,
   restedSeconds = 0,
   onShowControls,
+  colSpan = 6,
 }: InlineRestTimerBarProps) {
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
   
@@ -49,7 +51,7 @@ export const InlineRestTimerBar = memo(function InlineRestTimerBar({
 
   return (
     <tr>
-      <td colSpan={6} className="px-3 py-2">
+      <td colSpan={colSpan} className="px-3 py-2">
         <div
           onClick={onShowControls}
           className={`relative h-10 rounded-lg overflow-hidden border-2 cursor-pointer transition-opacity hover:opacity-80 ${borderColor} ${bgColor}`}
