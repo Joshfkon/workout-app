@@ -96,12 +96,14 @@ export function Modal({
               <button
                 onClick={onClose}
                 className="p-1 text-surface-400 hover:text-surface-200 transition-colors rounded-lg hover:bg-surface-800"
+                aria-label="Close modal"
               >
                 <svg
                   className="w-5 h-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
