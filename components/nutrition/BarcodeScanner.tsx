@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { lookupBarcode, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -242,14 +242,32 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     setShowCustomForm(false);
 
     try {
-      const html5QrCode = new Html5Qrcode('barcode-reader');
+      // Only scan barcode formats commonly used on food products
+      // This speeds up detection by not checking for QR codes
+      const formatsToSupport = [
+        Html5QrcodeSupportedFormats.EAN_13,    // Most common for food (13-digit)
+        Html5QrcodeSupportedFormats.EAN_8,     // Short EAN (8-digit)
+        Html5QrcodeSupportedFormats.UPC_A,     // US/Canada products (12-digit)
+        Html5QrcodeSupportedFormats.UPC_E,     // Compressed UPC (6-digit)
+        Html5QrcodeSupportedFormats.CODE_128,  // Versatile barcode format
+        Html5QrcodeSupportedFormats.CODE_39,   // Alphanumeric barcodes
+      ];
+
+      const html5QrCode = new Html5Qrcode('barcode-reader', {
+        formatsToSupport,
+        verbose: false,
+        // Use native BarcodeDetector API if available (faster)
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
       scannerRef.current = html5QrCode;
 
       await html5QrCode.start(
         { facingMode: 'environment' },
         {
-          fps: 10,
-          qrbox: { width: 250, height: 150 },
+          fps: 15,  // Increased from 10 for faster scanning
+          qrbox: { width: 300, height: 180 },  // Larger scan area for easier alignment
           aspectRatio: 1.777778,
         },
         async (decodedText) => {
@@ -563,7 +581,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       <div className="px-4 pb-2">
         <div className="p-2 bg-surface-900/50 rounded-lg">
           <p className="text-xs text-surface-500">
-            💡 Make sure the barcode is well-lit and in focus.
+            💡 Hold steady within the scan area. Works at an angle too!
           </p>
         </div>
       </div>
