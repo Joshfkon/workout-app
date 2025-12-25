@@ -6,7 +6,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
-import type { CoachingContext, RecentLift } from '@/types/coaching';
+import type { CoachingContext, RecentLift, PhaseType } from '@/types/coaching';
 import type {
   UserRow,
   TrainingPhaseRow,
@@ -23,6 +23,12 @@ interface UserPreferencesRow {
   coaching?: {
     primaryGoal?: string;
   };
+}
+
+/** Convert database phase type to PhaseType (maintenance -> maintain) */
+function toPhaseType(dbPhaseType: string): PhaseType {
+  if (dbPhaseType === 'maintenance') return 'maintain';
+  return dbPhaseType as PhaseType;
 }
 
 /** Workout session with exercise blocks for coaching context */
@@ -283,10 +289,10 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     },
     phase: phase
       ? {
-          type: phase.phase_type,
+          type: toPhaseType(phase.phase_type),
           weekNumber: phase.current_week,
           startWeight: phase.start_weight_kg,
-          targetWeight: phase.target_weight_kg,
+          targetWeight: phase.target_weight_kg ?? undefined,
         }
       : undefined,
     currentStats: {
