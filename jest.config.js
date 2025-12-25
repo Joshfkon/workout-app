@@ -18,9 +18,12 @@ const customJestConfig = {
   ],
   collectCoverageFrom: [
     'lib/utils.ts',
+    'lib/nutrition/**/*.ts',
     'hooks/useUserPreferences.ts',
     'components/**/*.tsx',
+    'services/**/*.ts',
     '!components/**/*.test.tsx',
+    '!services/**/*.test.ts',
     '!**/node_modules/**',
   ],
   coverageThreshold: {

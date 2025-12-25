@@ -68,12 +68,17 @@ const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog => ({
   id: 'set-1',
   exerciseBlockId: 'block-1',
   setNumber: 1,
-  targetReps: 8,
   reps: 8,
   weightKg: 100,
   rpe: 8,
+  restSeconds: null,
   isWarmup: false,
-  completedAt: new Date().toISOString(),
+  setType: 'normal',
+  parentSetId: null,
+  quality: 'stimulative',
+  qualityReason: 'Good effort',
+  note: null,
+  loggedAt: new Date().toISOString(),
   ...overrides,
 });
 
@@ -763,7 +768,7 @@ describe('calculateSuggestedWeight', () => {
 describe('checkFormTrend', () => {
   it('returns null with insufficient data', () => {
     const history: SessionFormHistory[] = [
-      { sessionDate: '2024-01-01', sets: [{ reps: 8, rpe: 8, form: 'clean' }] },
+      { sessionDate: '2024-01-01', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 2, form: 'clean' }] },
     ];
 
     expect(checkFormTrend(history)).toBeNull();
@@ -771,10 +776,10 @@ describe('checkFormTrend', () => {
 
   it('detects declining form trend', () => {
     const history: SessionFormHistory[] = [
-      { sessionDate: '2024-01-04', sets: [{ reps: 8, rpe: 8, form: 'some_breakdown' }] },
-      { sessionDate: '2024-01-03', sets: [{ reps: 8, rpe: 8, form: 'some_breakdown' }] },
-      { sessionDate: '2024-01-02', sets: [{ reps: 8, rpe: 8, form: 'clean' }] },
-      { sessionDate: '2024-01-01', sets: [{ reps: 8, rpe: 8, form: 'clean' }] },
+      { sessionDate: '2024-01-04', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 2, form: 'some_breakdown' }] },
+      { sessionDate: '2024-01-03', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 2, form: 'some_breakdown' }] },
+      { sessionDate: '2024-01-02', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 2, form: 'clean' }] },
+      { sessionDate: '2024-01-01', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 2, form: 'clean' }] },
     ];
 
     const result = checkFormTrend(history);
@@ -784,9 +789,9 @@ describe('checkFormTrend', () => {
 
   it('detects persistent breakdown', () => {
     const history: SessionFormHistory[] = [
-      { sessionDate: '2024-01-03', sets: [{ reps: 8, rpe: 9, form: 'ugly' }] },
-      { sessionDate: '2024-01-02', sets: [{ reps: 7, rpe: 9, form: 'ugly' }] },
-      { sessionDate: '2024-01-01', sets: [{ reps: 6, rpe: 10, form: 'ugly' }] },
+      { sessionDate: '2024-01-03', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 8, repsInTank: 1, form: 'ugly' }] },
+      { sessionDate: '2024-01-02', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 7, repsInTank: 1, form: 'ugly' }] },
+      { sessionDate: '2024-01-01', exerciseId: 'bench-press', sets: [{ weight: 100, reps: 6, repsInTank: 0, form: 'ugly' }] },
     ];
 
     const result = checkFormTrend(history);

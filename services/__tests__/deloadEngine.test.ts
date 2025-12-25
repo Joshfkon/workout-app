@@ -67,19 +67,41 @@ const createMockWeek = (): MesocycleWeek => ({
   isDeload: false,
   sessions: [
     {
-      dayOfWeek: 1,
+      day: 'Monday',
       focus: 'Push',
       exercises: [
         {
-          exerciseId: 'bench-press',
-          name: 'Bench Press',
+          exercise: {
+            name: 'Bench Press',
+            primaryMuscle: 'chest',
+            secondaryMuscles: ['triceps', 'shoulders'],
+            pattern: 'horizontal_push',
+            equipment: 'barbell',
+            difficulty: 'intermediate',
+            fatigueRating: 2,
+          },
           sets: 4,
-          reps: { min: 8, max: 12, targetRIR: 2, notes: '' },
+          reps: { min: 8, max: 12, targetRIR: 2, tempoRecommendation: '2-0-1-0', notes: '' },
           loadGuidance: 'Use last week weight',
           restSeconds: 180,
+          notes: '',
+          fatigueProfile: {
+            systemicCost: 0.5,
+            localCost: { chest: 0.8 },
+            sfr: 1.0,
+            efficiency: 'optimal',
+          },
         },
       ],
       totalSets: 4,
+      estimatedMinutes: 30,
+      warmup: ['Light cardio', 'Dynamic stretches'],
+      fatigueSummary: {
+        systemicFatigueGenerated: 0.5,
+        systemicCapacityUsed: 0.3,
+        averageSFR: 1.0,
+        localFatigueByMuscle: { chest: 0.8 },
+      },
     },
   ],
 });

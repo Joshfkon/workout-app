@@ -43,13 +43,22 @@ const createMockExercise = (
 
 const createMockBlock = (exerciseId: string): ExerciseBlock => ({
   id: `block-${exerciseId}`,
+  workoutSessionId: 'session-1',
   exerciseId,
+  order: 1,
+  supersetGroupId: null,
+  supersetOrder: null,
   targetSets: 3,
   targetRepRange: [8, 12],
   targetRir: 2,
-  notes: '',
-  order: 1,
-  sessionId: 'session-1',
+  targetWeightKg: 100,
+  targetRestSeconds: 120,
+  progressionType: null,
+  suggestionReason: '',
+  warmupProtocol: [],
+  note: null,
+  dropsetsPerSet: 0,
+  dropPercentage: 0,
 });
 
 const createMockSetLog = (
@@ -59,12 +68,17 @@ const createMockSetLog = (
   id: `set-${blockId}-${Math.random()}`,
   exerciseBlockId: blockId,
   setNumber: 1,
-  targetReps: 10,
   reps: 10,
   weightKg: 100,
   rpe: 8,
+  restSeconds: null,
   isWarmup,
-  completedAt: new Date().toISOString(),
+  setType: isWarmup ? 'warmup' : 'normal',
+  parentSetId: null,
+  quality: 'stimulative',
+  qualityReason: 'Good effort',
+  note: null,
+  loggedAt: new Date().toISOString(),
 });
 
 const createLandmarks = (mev: number, mav: number, mrv: number): VolumeLandmarks => ({

@@ -114,12 +114,22 @@ export const SetInputRow = memo(function SetInputRow({
   }
 
   // Weight and reps input phase
+  const weightInputId = `set-${setNumber}-weight`;
+  const repsInputId = `set-${setNumber}-reps`;
+  const noteInputId = `set-${setNumber}-note`;
+
   return (
-    <div className="bg-surface-800/50 rounded-lg p-3 space-y-3">
+    <div
+      className="bg-surface-800/50 rounded-lg p-3 space-y-3"
+      role="group"
+      aria-label={`Set ${setNumber} input`}
+    >
       {/* Set header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-surface-300">Set {setNumber}</span>
-        <span className="text-xs text-surface-500">
+        <span className="text-sm font-medium text-surface-300" id={`set-${setNumber}-label`}>
+          Set {setNumber}
+        </span>
+        <span className="text-xs text-surface-500" aria-label="Target">
           Target: {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
         </span>
       </div>
@@ -127,26 +137,34 @@ export const SetInputRow = memo(function SetInputRow({
       {/* Input row */}
       <div className="flex items-end gap-2">
         <div className="flex-1">
-          <label className="block text-xs text-surface-500 mb-1">Weight ({unit})</label>
+          <label htmlFor={weightInputId} className="block text-xs text-surface-500 mb-1">
+            Weight ({unit})
+          </label>
           <input
+            id={weightInputId}
             type="number"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             disabled={disabled}
             step="0.5"
             min="0"
+            aria-describedby={`set-${setNumber}-label`}
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
         <div className="flex-1">
-          <label className="block text-xs text-surface-500 mb-1">Reps</label>
+          <label htmlFor={repsInputId} className="block text-xs text-surface-500 mb-1">
+            Reps
+          </label>
           <input
+            id={repsInputId}
             type="number"
             value={reps}
             onChange={(e) => setReps(e.target.value)}
             disabled={disabled}
             min="0"
             max="100"
+            aria-describedby={`set-${setNumber}-label`}
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
@@ -155,8 +173,9 @@ export const SetInputRow = memo(function SetInputRow({
           disabled={disabled || !weight || !reps || parseInt(reps) < 1}
           size="md"
           className="shrink-0"
+          aria-label={`Log set ${setNumber}`}
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </Button>
@@ -167,18 +186,21 @@ export const SetInputRow = memo(function SetInputRow({
         <button
           onClick={() => setShowNote(true)}
           className="text-xs text-surface-500 hover:text-surface-400 flex items-center gap-1"
+          aria-label={`Add note to set ${setNumber}`}
         >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Add note
         </button>
       ) : (
         <input
+          id={noteInputId}
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="Set note (optional)"
+          aria-label={`Note for set ${setNumber}`}
           className="w-full px-3 py-1.5 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-300 placeholder:text-surface-600 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
         />
       )}
