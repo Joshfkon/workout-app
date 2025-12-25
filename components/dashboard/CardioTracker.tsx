@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
@@ -29,7 +29,16 @@ interface CardioLogEntry {
   notes?: string;
 }
 
-export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
+// Memoized options to prevent re-creation on each render
+const CARDIO_OPTIONS = [
+  { value: 'incline_walk', label: 'Incline Walk' },
+  { value: 'bike', label: 'Bike' },
+  { value: 'elliptical', label: 'Elliptical' },
+  { value: 'rower', label: 'Rower' },
+  { value: 'other', label: 'Other' },
+];
+
+export const CardioTracker = memo(function CardioTracker({ userId, prescription }: CardioTrackerProps) {
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayLogs, setTodayLogs] = useState<CardioLogEntry[]>([]);
   const [isLogging, setIsLogging] = useState(false);
@@ -40,12 +49,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
 
   const supabase = createUntypedClient();
 
-  useEffect(() => {
-    loadTodayData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
-
-  async function loadTodayData() {
+  const loadTodayData = useCallback(async () => {
     const today = getLocalDateString();
 
     const { data: cardioLogs } = await supabase
@@ -60,9 +64,13 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
       const total = cardioLogs.reduce((sum: number, entry: any) => sum + (entry.minutes || 0), 0);
       setTodayTotal(total);
     }
-  }
+  }, [supabase, userId]);
 
-  async function logCardio() {
+  useEffect(() => {
+    loadTodayData();
+  }, [loadTodayData]);
+
+  const logCardio = useCallback(async () => {
     const minutesNum = parseInt(minutes);
     if (!minutesNum || minutesNum <= 0) return;
 
@@ -91,9 +99,9 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
     } finally {
       setIsLogging(false);
     }
-  }
+  }, [minutes, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
 
-  async function deleteLog(id: string) {
+  const deleteLog = useCallback(async (id: string) => {
     const { error } = await supabase
       .from('cardio_log')
       .delete()
@@ -102,11 +110,33 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
     if (!error) {
       await loadTodayData();
     }
-  }
+  }, [supabase, loadTodayData]);
+
+  const handleMinutesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setMinutes(e.target.value);
+  }, []);
+
+  const handleModalityChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setModality(e.target.value as CardioModality);
+  }, []);
+
+  const handleNotesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setNotes(e.target.value);
+  }, []);
+
+  const handleShowLogForm = useCallback(() => setShowLogForm(true), []);
+
+  const handleCancelLogForm = useCallback(() => {
+    setShowLogForm(false);
+    setMinutes('');
+    setNotes('');
+  }, []);
 
   const targetMinutes = prescription?.prescribedMinutesPerDay || 0;
-  const percentage = targetMinutes > 0 ? Math.min(100, Math.round((todayTotal / targetMinutes) * 100)) : 0;
-  const remaining = Math.max(0, targetMinutes - todayTotal);
+  const percentage = useMemo(() =>
+    targetMinutes > 0 ? Math.min(100, Math.round((todayTotal / targetMinutes) * 100)) : 0
+  , [targetMinutes, todayTotal]);
+  const remaining = useMemo(() => Math.max(0, targetMinutes - todayTotal), [targetMinutes, todayTotal]);
 
   return (
     <div className="space-y-3">
@@ -212,7 +242,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
               <button
                 onClick={() => deleteLog(log.id)}
                 className="p-1 text-surface-500 hover:text-danger-400 transition-colors"
-                title="Delete"
+                aria-label="Delete cardio log"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -234,7 +264,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
               <Input
                 type="number"
                 value={minutes}
-                onChange={(e) => setMinutes(e.target.value)}
+                onChange={handleMinutesChange}
                 placeholder="30"
                 min="1"
               />
@@ -245,14 +275,8 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
               </label>
               <Select
                 value={modality}
-                onChange={(e) => setModality(e.target.value as CardioModality)}
-                options={[
-                  { value: 'incline_walk', label: 'Incline Walk' },
-                  { value: 'bike', label: 'Bike' },
-                  { value: 'elliptical', label: 'Elliptical' },
-                  { value: 'rower', label: 'Rower' },
-                  { value: 'other', label: 'Other' },
-                ]}
+                onChange={handleModalityChange}
+                options={CARDIO_OPTIONS}
               />
             </div>
           </div>
@@ -263,7 +287,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
             <Input
               type="text"
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={handleNotesChange}
               placeholder="e.g., Zone 2, felt good"
             />
           </div>
@@ -278,11 +302,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
               {isLogging ? 'Logging...' : 'Log Cardio'}
             </Button>
             <Button
-              onClick={() => {
-                setShowLogForm(false);
-                setMinutes('');
-                setNotes('');
-              }}
+              onClick={handleCancelLogForm}
               variant="ghost"
               size="sm"
             >
@@ -292,7 +312,7 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
         </div>
       ) : (
         <Button
-          onClick={() => setShowLogForm(true)}
+          onClick={handleShowLogForm}
           variant="outline"
           size="sm"
           className="w-full"
@@ -302,5 +322,5 @@ export function CardioTracker({ userId, prescription }: CardioTrackerProps) {
       )}
     </div>
   );
-}
+});
 

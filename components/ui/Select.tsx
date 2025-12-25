@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, type SelectHTMLAttributes } from 'react';
+import { forwardRef, memo, type SelectHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface SelectOption {
@@ -103,5 +103,8 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
 
 Select.displayName = 'Select';
 
-export { Select };
+const MemoizedSelect = memo(Select);
+MemoizedSelect.displayName = 'Select';
+
+export { MemoizedSelect as Select };
 

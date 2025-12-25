@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, memo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ export interface ModalProps {
   showCloseButton?: boolean;
 }
 
-export function Modal({
+export const Modal = memo(function Modal({
   isOpen,
   onClose,
   title,
@@ -43,12 +43,12 @@ export function Modal({
     };
   }, [isOpen, onClose]);
 
-  // Close on overlay click
-  const handleOverlayClick = (e: React.MouseEvent) => {
+  // Close on overlay click - memoized to prevent re-creation
+  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
     if (e.target === overlayRef.current) {
       onClose();
     }
-  };
+  }, [onClose]);
 
   const sizes = {
     sm: 'max-w-sm',
@@ -129,10 +129,10 @@ export function Modal({
   }
 
   return null;
-}
+});
 
 // Modal sub-components for structured content
-export function ModalFooter({
+export const ModalFooter = memo(function ModalFooter({
   children,
   className,
 }: {
@@ -149,5 +149,5 @@ export function ModalFooter({
       {children}
     </div>
   );
-}
+});
 

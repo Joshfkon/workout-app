@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { formatDuration } from '@/lib/utils';
 
 interface InlineRestTimerBarProps {
@@ -12,7 +13,7 @@ interface InlineRestTimerBarProps {
   onShowControls?: () => void;
 }
 
-export function InlineRestTimerBar({
+export const InlineRestTimerBar = memo(function InlineRestTimerBar({
   seconds,
   initialSeconds,
   isRunning,
@@ -71,4 +72,4 @@ export function InlineRestTimerBar({
       </td>
     </tr>
   );
-}
+});
