@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import type { BodyweightData, WeightUnit } from '@/types/schema';
 import { calculatePercentBodyweight } from '@/types/schema';
 import { formatWeightValue } from '@/lib/utils';
@@ -22,7 +23,7 @@ interface BodyweightDisplayProps {
  * Minimal mode: Just the effective load number
  * Full mode: Complete breakdown with BW, modification, and total
  */
-export function BodyweightDisplay({
+export const BodyweightDisplay = memo(function BodyweightDisplay({
   data,
   mode = 'compact',
   unit = 'kg',
@@ -141,12 +142,12 @@ export function BodyweightDisplay({
       )}
     </div>
   );
-}
+});
 
 /**
  * Compact inline display for set history tables
  */
-export function BodyweightDisplayInline({
+export const BodyweightDisplayInline = memo(function BodyweightDisplayInline({
   data,
   unit = 'kg',
   showTotal = false,
@@ -201,12 +202,12 @@ export function BodyweightDisplayInline({
   }
 
   return <span className={`font-mono ${className}`}>{content}</span>;
-}
+});
 
 /**
  * PR Badge display for bodyweight exercises
  */
-export function BodyweightPRBadge({
+export const BodyweightPRBadge = memo(function BodyweightPRBadge({
   prType,
   value,
   unit = 'kg',
@@ -257,4 +258,4 @@ export function BodyweightPRBadge({
       {content}
     </span>
   );
-}
+});

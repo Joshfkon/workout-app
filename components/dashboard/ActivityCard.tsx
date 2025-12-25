@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import Link from 'next/link';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -17,7 +17,7 @@ interface ActivityCardProps {
   userId: string;
 }
 
-export function ActivityCard({ userId }: ActivityCardProps) {
+export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardProps) {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [todayActivity, setTodayActivity] = useState<DailyActivityData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,11 +26,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
   const [manualSteps, setManualSteps] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       const [connectionsData, activityData] = await Promise.all([
         getActiveWearableConnections(),
@@ -43,13 +39,17 @@ export function ActivityCard({ userId }: ActivityCardProps) {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const hasWearable = connections.length > 0;
   const steps = todayActivity?.steps.total || 0;
   const activityLevel = todayActivity?.calculated.activityLevel || 'sedentary';
 
-  const getActivityColor = (level: string) => {
+  const getActivityColor = useCallback((level: string) => {
     switch (level) {
       case 'very_active': return 'text-red-400';
       case 'active': return 'text-orange-400';
@@ -57,9 +57,9 @@ export function ActivityCard({ userId }: ActivityCardProps) {
       case 'light': return 'text-blue-400';
       default: return 'text-surface-400';
     }
-  };
+  }, []);
 
-  const getActivityLabel = (level: string) => {
+  const getActivityLabel = useCallback((level: string) => {
     const labels: Record<string, string> = {
       sedentary: 'Sedentary',
       light: 'Light',
@@ -68,12 +68,22 @@ export function ActivityCard({ userId }: ActivityCardProps) {
       very_active: 'Very Active',
     };
     return labels[level] || 'Sedentary';
-  };
+  }, []);
 
-  const getStepGoalProgress = () => {
+  const stepGoalProgress = useMemo(() => {
     const goal = 10000; // Default step goal
     return Math.min(100, (steps / goal) * 100);
-  };
+  }, [steps]);
+
+  const handleOpenConnectModal = useCallback(() => setShowConnectModal(true), []);
+  const handleCloseConnectModal = useCallback(() => setShowConnectModal(false), []);
+  const handleOpenSettingsModal = useCallback(() => setShowSettingsModal(true), []);
+  const handleCloseSettingsModal = useCallback(() => setShowSettingsModal(false), []);
+  const handleOpenManualInput = useCallback(() => setShowManualInput(true), []);
+  const handleCloseManualInput = useCallback(() => setShowManualInput(false), []);
+  const handleManualStepsChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setManualSteps(e.target.value);
+  }, []);
 
   if (loading) {
     return (
@@ -99,7 +109,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
             <div className="flex items-center gap-1">
               {hasWearable && (
                 <button
-                  onClick={() => setShowSettingsModal(true)}
+                  onClick={handleOpenSettingsModal}
                   className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
                   title="Activity settings"
                 >
@@ -159,7 +169,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
                 <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary-500 transition-all duration-500"
-                    style={{ width: `${getStepGoalProgress()}%` }}
+                    style={{ width: `${stepGoalProgress}%` }}
                   />
                 </div>
               </div>
@@ -195,7 +205,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
                     type="number"
                     placeholder="Enter steps"
                     value={manualSteps}
-                    onChange={(e) => setManualSteps(e.target.value)}
+                    onChange={handleManualStepsChange}
                     className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     autoFocus
                   />
@@ -203,7 +213,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
                     Save
                   </Button>
                   <button
-                    onClick={() => setShowManualInput(false)}
+                    onClick={handleCloseManualInput}
                     className="p-2 text-surface-400 hover:text-surface-300"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -223,12 +233,12 @@ export function ActivityCard({ userId }: ActivityCardProps) {
                         Track steps for activity-adjusted calorie targets
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => setShowConnectModal(true)}>
+                    <Button size="sm" onClick={handleOpenConnectModal}>
                       Connect
                     </Button>
                   </div>
                   <button
-                    onClick={() => setShowManualInput(true)}
+                    onClick={handleOpenManualInput}
                     className="w-full text-center text-xs text-surface-500 hover:text-surface-400 transition-colors py-2"
                   >
                     Or enter steps manually
@@ -243,7 +253,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
       {/* Connect Wearable Modal */}
       <Modal
         isOpen={showConnectModal}
-        onClose={() => setShowConnectModal(false)}
+        onClose={handleCloseConnectModal}
         title="Connect Wearable"
         size="lg"
       >
@@ -253,7 +263,7 @@ export function ActivityCard({ userId }: ActivityCardProps) {
       {/* Settings Modal */}
       <Modal
         isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
+        onClose={handleCloseSettingsModal}
         title="Activity Settings"
         size="lg"
       >
@@ -261,4 +271,4 @@ export function ActivityCard({ userId }: ActivityCardProps) {
       </Modal>
     </>
   );
-}
+});

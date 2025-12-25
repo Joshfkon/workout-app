@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, memo } from 'react';
 
 interface DashboardCardProps {
   id: string;
@@ -12,7 +12,7 @@ interface DashboardCardProps {
   onMoveDown: () => void;
 }
 
-export function DashboardCard({
+export const DashboardCard = memo(function DashboardCard({
   children,
   isEditMode,
   isFirst,
@@ -70,4 +70,4 @@ export function DashboardCard({
       </div>
     </div>
   );
-}
+});

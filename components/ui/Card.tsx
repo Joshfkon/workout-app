@@ -1,6 +1,6 @@
 'use client';
 
-import { type HTMLAttributes, forwardRef } from 'react';
+import { type HTMLAttributes, forwardRef, memo } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
@@ -38,6 +38,9 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
 
 Card.displayName = 'Card';
 
+const MemoizedCard = memo(Card);
+MemoizedCard.displayName = 'Card';
+
 // Card sub-components
 const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -50,6 +53,9 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 );
 CardHeader.displayName = 'CardHeader';
 
+const MemoizedCardHeader = memo(CardHeader);
+MemoizedCardHeader.displayName = 'CardHeader';
+
 const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
     <h3
@@ -60,6 +66,9 @@ const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingEleme
   )
 );
 CardTitle.displayName = 'CardTitle';
+
+const MemoizedCardTitle = memo(CardTitle);
+MemoizedCardTitle.displayName = 'CardTitle';
 
 const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
@@ -72,12 +81,18 @@ const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLPara
 );
 CardDescription.displayName = 'CardDescription';
 
+const MemoizedCardDescription = memo(CardDescription);
+MemoizedCardDescription.displayName = 'CardDescription';
+
 const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={cn('', className)} {...props} />
   )
 );
 CardContent.displayName = 'CardContent';
+
+const MemoizedCardContent = memo(CardContent);
+MemoizedCardContent.displayName = 'CardContent';
 
 const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
@@ -90,5 +105,15 @@ const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 );
 CardFooter.displayName = 'CardFooter';
 
-export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };
+const MemoizedCardFooter = memo(CardFooter);
+MemoizedCardFooter.displayName = 'CardFooter';
+
+export {
+  MemoizedCard as Card,
+  MemoizedCardHeader as CardHeader,
+  MemoizedCardTitle as CardTitle,
+  MemoizedCardDescription as CardDescription,
+  MemoizedCardContent as CardContent,
+  MemoizedCardFooter as CardFooter,
+};
 

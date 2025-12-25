@@ -1,6 +1,6 @@
 'use client';
 
-import { type HTMLAttributes } from 'react';
+import { type HTMLAttributes, memo } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
@@ -8,7 +8,7 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   size?: 'sm' | 'md';
 }
 
-export function Badge({
+export const Badge = memo(function Badge({
   className,
   variant = 'default',
   size = 'md',
@@ -42,10 +42,10 @@ export function Badge({
       {children}
     </span>
   );
-}
+});
 
 // Specific badge variants for common use cases
-export function SetQualityBadge({
+export const SetQualityBadge = memo(function SetQualityBadge({
   quality,
 }: {
   quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
@@ -64,9 +64,9 @@ export function SetQualityBadge({
       {config.label}
     </Badge>
   );
-}
+});
 
-export function VolumeStatusBadge({
+export const VolumeStatusBadge = memo(function VolumeStatusBadge({
   status,
 }: {
   status: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
@@ -86,5 +86,5 @@ export function VolumeStatusBadge({
       {config.label}
     </Badge>
   );
-}
+});
 
