@@ -1,8 +1,8 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 1 In Progress
+> **Status**: Phase 2 Complete - Ready for Phase 3
 > **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 1 - User Profiles Foundation
+> **Current Sprint**: Sprint 2 - Follow System (Complete)
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
 ---
@@ -200,22 +200,26 @@ export interface ProfileStats {
 
 - [x] Create database migration for `user_profiles` table (`20241228000001_add_user_profiles.sql`)
 - [x] Add username validation (alphanumeric, 3-30 chars, no reserved words) (`lib/social.ts`)
-- [ ] Build avatar upload with Supabase Storage
-- [ ] Create profile onboarding flow (username selection)
+- [x] Build avatar upload with Supabase Storage (`components/social/profile/AvatarUpload.tsx`)
+- [x] Create profile onboarding flow (username selection) (`app/(dashboard)/dashboard/profile/setup/page.tsx`)
 - [x] Build ProfileCard component for profile previews (`components/social/profile/ProfileCard.tsx`)
 - [x] Build full profile page with stats (`app/(dashboard)/dashboard/profile/page.tsx`)
 - [ ] Implement privacy settings UI
 - [x] Add profile link sharing (deep links) (`lib/social.ts - getProfileShareUrl`)
-- [ ] Create username search API
+- [x] Create username search API (`app/(dashboard)/dashboard/search/page.tsx`)
 
 **Completed Files:**
 - `types/social.ts` - All social feature types
 - `lib/social.ts` - Username validation, social utilities
 - `supabase/migrations/20241228000001_add_user_profiles.sql` - Database schema
 - `components/social/profile/Avatar.tsx` - Avatar component
+- `components/social/profile/AvatarUpload.tsx` - Avatar upload with Storage
 - `components/social/profile/ProfileCard.tsx` - Profile card (compact/full)
+- `components/social/UserSearch.tsx` - User search component
 - `app/(dashboard)/dashboard/profile/page.tsx` - Own profile page
 - `app/(dashboard)/dashboard/profile/[username]/page.tsx` - View other profiles
+- `app/(dashboard)/dashboard/profile/setup/page.tsx` - Profile setup flow
+- `app/(dashboard)/dashboard/search/page.tsx` - User search page
 
 ---
 
@@ -347,16 +351,22 @@ export interface FollowStats {
 
 ### 2.4 Implementation Tasks
 
-- [ ] Create database migration for `follows` table
-- [ ] Create database migration for `blocked_users` table
-- [ ] Build FollowButton component with optimistic updates
-- [ ] Implement follow/unfollow API endpoints
+- [x] Create database migration for `follows` table (`20241228000002_add_follows.sql`)
+- [x] Create database migration for `blocked_users` table (`20241228000002_add_follows.sql`)
+- [x] Build FollowButton component with optimistic updates (`components/social/follow/FollowButton.tsx`)
+- [x] Implement follow/unfollow logic (`hooks/useFollow.ts`)
 - [ ] Build followers/following list pages
-- [ ] Implement follow request system for private profiles
-- [ ] Add user blocking functionality
-- [ ] Create user search with filters
+- [x] Implement follow request system for private profiles (in useFollow hook)
+- [x] Add user blocking functionality (database triggers)
+- [x] Create user search with filters (`components/social/UserSearch.tsx`)
 - [ ] Build suggested users algorithm (gym, mutual follows)
 - [ ] Add rate limiting for follow actions
+
+**Completed Files:**
+- `supabase/migrations/20241228000002_add_follows.sql` - Follows and blocked_users tables
+- `supabase/migrations/20241228000003_add_avatars_storage.sql` - Storage bucket docs
+- `hooks/useFollow.ts` - Follow state management hook
+- `components/social/follow/FollowButton.tsx` - Follow button with states
 
 ---
 
