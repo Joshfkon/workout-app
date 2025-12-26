@@ -253,7 +253,7 @@ export const RIR_EXPLANATIONS: RIRExplanation[] = [
     shortDesc: 'Warm-up feel',
     longDesc: 'Very controlled, could do many more reps. Good for warm-ups and technique practice.',
     example: 'Feels like a warm-up set. Form is perfect, breathing is easy.',
-    color: 'text-green-400',
+    color: 'text-red-400',
   },
   {
     rir: 2,
@@ -262,7 +262,7 @@ export const RIR_EXPLANATIONS: RIRExplanation[] = [
     shortDesc: 'Working hard',
     longDesc: 'Challenging but sustainable. This is the sweet spot for most training.',
     example: 'Getting tough, but you could definitely get 2-3 more reps with good form.',
-    color: 'text-yellow-400',
+    color: 'text-green-400',
   },
   {
     rir: 1,
@@ -271,7 +271,7 @@ export const RIR_EXPLANATIONS: RIRExplanation[] = [
     shortDesc: 'Near limit',
     longDesc: 'Very challenging. Maybe one more rep possible. Use sparingly.',
     example: 'That was hard. You might get one more rep, but it would be ugly.',
-    color: 'text-orange-400',
+    color: 'text-yellow-400',
   },
   {
     rir: 0,
@@ -280,6 +280,6 @@ export const RIR_EXPLANATIONS: RIRExplanation[] = [
     shortDesc: 'True failure',
     longDesc: 'Complete muscular failure. Nothing left. Only for testing, not regular training.',
     example: 'Couldn\'t complete another rep even if someone paid you.',
-    color: 'text-red-400',
+    color: 'text-orange-400',
   },
 ];

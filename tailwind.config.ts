@@ -64,6 +64,11 @@ const config: Config = {
           500: '#ef4444',
           600: '#dc2626',
         },
+        orange: {
+          400: '#fb923c',
+          500: '#f97316',
+          600: '#ea580c',
+        },
       },
       fontFamily: {
         sans: ['var(--font-inter)', 'system-ui', 'sans-serif'],

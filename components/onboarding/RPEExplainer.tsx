@@ -117,10 +117,10 @@ export const RPEExplainer = memo(function RPEExplainer({
           <div
             className={cn(
               'h-full rounded-full transition-all duration-500',
-              explanation.rir === 4 && 'w-1/4 bg-green-500',
-              explanation.rir === 2 && 'w-2/4 bg-yellow-500',
-              explanation.rir === 1 && 'w-3/4 bg-orange-500',
-              explanation.rir === 0 && 'w-full bg-red-500'
+              explanation.rir === 4 && 'w-1/4 bg-red-500',
+              explanation.rir === 2 && 'w-2/4 bg-green-500',
+              explanation.rir === 1 && 'w-3/4 bg-yellow-500',
+              explanation.rir === 0 && 'w-full bg-orange-500'
             )}
           />
         </div>
