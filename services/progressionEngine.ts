@@ -785,6 +785,8 @@ export interface GenerateWarmupInput {
   workingWeight: number;
   exercise: Exercise;
   isFirstExercise: boolean;
+  /** Barbell type for determining empty bar weight (only used for barbell exercises) */
+  barbellType?: 'olympic' | 'womens' | 'ez_curl' | 'trap';
 }
 
 /**
@@ -801,10 +803,35 @@ function getWarmupRestSeconds(percentOfWorking: number): number {
 }
 
 /**
+ * Get the barbell weight in kg based on barbell type
+ */
+function getBarbellWeightKg(barbellType: 'olympic' | 'womens' | 'ez_curl' | 'trap' = 'olympic'): number {
+  switch (barbellType) {
+    case 'olympic': return 20;
+    case 'womens': return 15;
+    case 'ez_curl': return 10;
+    case 'trap': return 25;
+    default: return 20;
+  }
+}
+
+/**
+ * Check if an exercise uses a barbell based on equipment
+ */
+function isBarbellExercise(exercise: Exercise): boolean {
+  return exercise.equipmentRequired?.some(
+    (eq) => eq.toLowerCase() === 'barbell' || eq.toLowerCase() === 'olympic barbell'
+  ) ?? false;
+}
+
+/**
  * Generate a warmup protocol based on working weight
  */
 export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] {
-  const { workingWeight, exercise, isFirstExercise } = input;
+  const { workingWeight, exercise, isFirstExercise, barbellType = 'olympic' } = input;
+
+  const isBarbell = isBarbellExercise(exercise);
+  const barbellWeightKg = getBarbellWeightKg(barbellType);
 
   // No warmup needed for very light weights
   if (workingWeight < 20) {
@@ -833,6 +860,22 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
     });
   }
 
+  // For barbell exercises with sufficient working weight, add a bar-only warmup set
+  // This helps practice the movement pattern before adding plates
+  if (isBarbell && workingWeight > barbellWeightKg * 1.5) {
+    // Calculate what percentage of working weight the empty bar represents
+    const barPercentOfWorking = Math.round((barbellWeightKg / workingWeight) * 100);
+
+    protocol.push({
+      setNumber: protocol.length + 1,
+      percentOfWorking: barPercentOfWorking,
+      targetReps: 10,
+      purpose: 'Bar only - movement groove practice',
+      restSeconds: 30,
+      isBarOnly: true,
+    } as WarmupSet);
+  }
+
   // Progressive loading warmups
   const warmupPercents = workingWeight >= 100
     ? [30, 50, 70, 85]
@@ -840,15 +883,23 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
     ? [40, 60, 80]
     : [50, 75];
 
-  warmupPercents.forEach((percent, index) => {
+  // Filter out percentages that would be less than or equal to bar weight for barbell exercises
+  const filteredPercents = isBarbell
+    ? warmupPercents.filter((percent) => {
+        const warmupWeight = workingWeight * (percent / 100);
+        return warmupWeight > barbellWeightKg;
+      })
+    : warmupPercents;
+
+  filteredPercents.forEach((percent) => {
     const warmupWeight = roundToIncrement(
       workingWeight * (percent / 100),
       exercise.minWeightIncrementKg
     );
-    
+
     // Reps decrease as weight increases
     const reps = percent <= 50 ? 8 : percent <= 70 ? 5 : 3;
-    
+
     let purpose = 'Progressive loading';
     if (percent <= 50) purpose = 'Movement groove practice';
     else if (percent <= 70) purpose = 'Neuromuscular preparation';

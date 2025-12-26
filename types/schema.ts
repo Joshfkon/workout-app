@@ -516,18 +516,21 @@ export interface ExerciseBlock {
 export interface WarmupSet {
   /** Warmup set number (1-indexed) */
   setNumber: number;
-  
+
   /** Percentage of working weight (e.g., 50, 70, 85) */
   percentOfWorking: number;
-  
+
   /** Suggested reps for this warmup set */
   targetReps: number;
-  
+
   /** Purpose of this warmup set (e.g., 'activation', 'groove practice', 'potentiation') */
   purpose: string;
-  
+
   /** Rest time in seconds after this warmup set (shorter than working sets) */
   restSeconds: number;
+
+  /** Indicates this is a bar-only warmup for barbell exercises (no plates) */
+  isBarOnly?: boolean;
 }
 
 // ============ BODYWEIGHT EXERCISE TYPES ============

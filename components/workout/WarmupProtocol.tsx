@@ -11,6 +11,8 @@ interface WarmupProtocolProps {
   minIncrement: number;
   onComplete?: () => void;
   unit?: WeightUnit;
+  /** Barbell weight in kg for bar-only warmups (defaults to 20kg for Olympic barbell) */
+  barbellWeightKg?: number;
 }
 
 export function WarmupProtocol({
@@ -19,6 +21,7 @@ export function WarmupProtocol({
   minIncrement,
   onComplete,
   unit = 'kg',
+  barbellWeightKg = 20,
 }: WarmupProtocolProps) {
   const [completedSets, setCompletedSets] = useState<Set<number>>(new Set());
   const [isExpanded, setIsExpanded] = useState(true);
@@ -91,10 +94,22 @@ export function WarmupProtocol({
               const roundedWeight = roundToPlateIncrement(warmupWeightKg, unit);
               const displayWeight = formatWeightValue(roundedWeight, unit);
               const unitLabel = unit === 'lb' ? 'lb' : 'kg';
-              const warmupWeight =
-                set.percentOfWorking === 0 || roundedWeight === 0
-                  ? 'Empty bar'
-                  : `${displayWeight} ${unitLabel}`;
+
+              // Determine warmup weight display
+              let warmupWeight: string;
+              if (set.percentOfWorking === 0) {
+                // General warmup with no weight specified
+                warmupWeight = 'Empty bar';
+              } else if (set.isBarOnly) {
+                // Bar-only warmup: show the barbell weight
+                const barDisplay = formatWeightValue(barbellWeightKg, unit);
+                warmupWeight = `Bar only (${barDisplay} ${unitLabel})`;
+              } else if (roundedWeight === 0) {
+                warmupWeight = 'Empty bar';
+              } else {
+                warmupWeight = `${displayWeight} ${unitLabel}`;
+              }
+
               const isCompleted = completedSets.has(set.setNumber);
 
               return (
