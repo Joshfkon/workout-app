@@ -3534,6 +3534,11 @@ export default function WorkoutPage() {
                     // Dropset props
                     pendingDropset={pendingDropset?.blockId === block.id ? pendingDropset : null}
                     onDropsetCancel={() => setPendingDropset(null)}
+                    onDropsetStart={() => {
+                      // Stop timer and mark as complete when manual dropset starts
+                      restTimer.markComplete();
+                      setShowRestTimer(false);
+                    }}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}
