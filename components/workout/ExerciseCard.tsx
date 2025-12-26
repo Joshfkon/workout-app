@@ -430,6 +430,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Full initialization only if:
     // - pendingInputs is empty and we need inputs
     // - OR pendingSetsCount increased (new sets were added to the target)
+    // - OR pendingSetsCount decreased (sets were removed) - trim the inputs
     if (pendingSetsCount > 0 && (pendingInputs.length === 0 || pendingInputs.length < pendingSetsCount)) {
       const newPendingInputs: { weight: string; reps: string; rpe: string }[] = [];
       const targetRpe = 10 - block.targetRir;
@@ -475,6 +476,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
       
       setPendingInputs(newPendingInputs);
+    }
+
+    // Trim pendingInputs if targetSets was decreased (pendingInputs has more than needed)
+    if (pendingInputs.length > pendingSetsCount) {
+      setPendingInputs(pendingInputs.slice(0, pendingSetsCount));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSets.length, pendingSetsCount]);
