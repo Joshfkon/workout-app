@@ -185,6 +185,8 @@ export default function NutritionPage() {
     lean_mass_kg: number;
     fat_mass_kg: number;
   } | null>(null);
+  const [trainingAge, setTrainingAge] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
+  const [isEnhanced, setIsEnhanced] = useState<boolean>(false);
 
   // Convert weight to preferred unit with validation
   const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
@@ -266,6 +268,7 @@ export default function NutritionPage() {
         dexaResult,
         mesocycleResult,
         prefsResult,
+        volumeProfileResult,
         proteinResult,
         trainingSetsResult,
       ] = await Promise.all([
@@ -333,6 +336,12 @@ export default function NutritionPage() {
         supabase
           .from('user_preferences')
           .select('weight_unit')
+          .eq('user_id', user.id)
+          .single(),
+        // User volume profile (for training age and enhanced status)
+        supabase
+          .from('user_volume_profiles')
+          .select('training_age, is_enhanced')
           .eq('user_id', user.id)
           .single(),
         // Average daily protein (last 30 days)
@@ -491,6 +500,21 @@ export default function NutritionPage() {
         }
       } else {
         setLatestDexaScan(null);
+      }
+
+      // Process volume profile for training age and enhanced status
+      const volumeProfileData = volumeProfileResult.data;
+      if (volumeProfileData) {
+        // Map 'novice' to 'beginner' for TDEEDashboard compatibility
+        const dbTrainingAge = volumeProfileData.training_age as 'novice' | 'intermediate' | 'advanced' | null;
+        if (dbTrainingAge === 'novice') {
+          setTrainingAge('beginner');
+        } else if (dbTrainingAge === 'intermediate' || dbTrainingAge === 'advanced') {
+          setTrainingAge(dbTrainingAge);
+        } else {
+          setTrainingAge('intermediate');
+        }
+        setIsEnhanced(volumeProfileData.is_enhanced || false);
       }
 
       // Calculate average daily protein (last 30 days)
@@ -1487,8 +1511,8 @@ export default function NutritionPage() {
           bodyFatPercent={userProfile.bodyFatPercent || null}
           avgDailyProteinGrams={avgDailyProteinGrams}
           avgWeeklyTrainingSets={avgWeeklyTrainingSets}
-          trainingAge="intermediate" // TODO: Get from user profile
-          isEnhanced={false} // TODO: Get from user profile
+          trainingAge={trainingAge}
+          isEnhanced={isEnhanced}
           biologicalSex={userProfile.sex || 'male'}
           chronologicalAge={userAge}
           latestDexaScan={latestDexaScan}
