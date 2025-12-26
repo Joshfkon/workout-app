@@ -54,7 +54,21 @@ function calculateE1RM(weight: number, reps: number): number {
 
 // Helper to get property value from either camelCase or snake_case
 function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): any {
-  return (exercise as any)[camelKey] ?? (exercise as any)[snakeKey];
+  const camelValue = (exercise as any)[camelKey];
+  const snakeValue = (exercise as any)[snakeKey];
+  const result = camelValue ?? snakeValue;
+  
+  // Debug for video fields
+  if ((camelKey === 'demoGifUrl' || camelKey === 'youtubeVideoId') && exercise) {
+    console.log(`[getExerciseProp] ${camelKey}/${snakeKey}:`, {
+      camelValue,
+      snakeValue,
+      result,
+      exerciseKeys: Object.keys(exercise),
+    });
+  }
+  
+  return result;
 }
 
 function getTierBadgeClasses(tier: string): string {
@@ -526,6 +540,17 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
           {!isEditing && (() => {
             const demoGifUrl = getExerciseProp(exercise, 'demoGifUrl', 'demo_gif_url');
             const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
+
+            // Debug logging
+            if (exercise) {
+              console.log('[ExerciseDetailsModal] Exercise video fields:', {
+                demoGifUrl,
+                youtubeVideoId,
+                exerciseKeys: Object.keys(exercise),
+                hasDemoGifUrl: !!(exercise as any).demoGifUrl || !!(exercise as any).demo_gif_url,
+                hasYoutubeVideoId: !!(exercise as any).youtubeVideoId || !!(exercise as any).youtube_video_id,
+              });
+            }
 
             if (!demoGifUrl && !youtubeVideoId) return null;
 
