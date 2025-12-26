@@ -44,6 +44,7 @@ import {
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
+import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -421,6 +422,9 @@ export default function WorkoutPage() {
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  
+  // Share workout modal state
+  const [showShareModal, setShowShareModal] = useState(false);
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
@@ -2578,13 +2582,33 @@ export default function WorkoutPage() {
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
         />
-        {isViewingCompleted && (
-          <div className="mt-6 text-center">
-            <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
-              ← Back to History
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          {isViewingCompleted ? (
+            <>
+              <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
+                ← Back to History
+              </Button>
+              <Button variant="outline" onClick={() => setShowShareModal(true)}>
+                Share Workout
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setShowShareModal(true)}>
+              Share Workout
             </Button>
-          </div>
-        )}
+          )}
+        </div>
+        
+        {/* Share Workout Modal */}
+        <ShareWorkoutModal
+          workoutSessionId={sessionId}
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          onSuccess={() => {
+            setShowShareModal(false);
+            // Optionally show success message or refresh
+          }}
+        />
       </div>
     );
   }
