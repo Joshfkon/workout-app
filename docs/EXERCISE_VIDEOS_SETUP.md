@@ -1,8 +1,10 @@
 # Exercise Videos Setup Guide
 
-The exercise videos feature adds demonstration images and YouTube videos to exercises. This guide will help you set it up.
+The exercise videos feature adds animated GIF demonstrations and YouTube videos to exercises. This guide will help you set it up.
 
-## Required Migration
+## Required Migrations
+
+### 1. Initial Migration (Add Columns)
 
 Run this migration in your Supabase SQL Editor:
 
@@ -10,8 +12,25 @@ Run this migration in your Supabase SQL Editor:
 
 This migration:
 - Adds `demo_gif_url`, `demo_thumbnail_url`, and `youtube_video_id` columns to the `exercises` table
-- Populates demo images for 28 common exercises
 - Creates an index for filtering exercises with demos
+
+### 2. Fetch MuscleWiki GIFs
+
+**Recommended**: Use MuscleWiki for animated GIFs (better quality, animated demonstrations)
+
+1. **Run the fetch script**:
+   ```bash
+   node scripts/fetch-musclewiki-gifs.mjs
+   ```
+
+2. This will:
+   - Download animated GIFs from MuscleWiki API
+   - Save them to `public/exercise-demos/` folder
+   - Generate a SQL file with update statements
+
+3. **Run the generated SQL** (or use the migration):
+   - The script creates `public/exercise-demos/update-urls.sql`
+   - OR run: `supabase/migrations/20251226000002_update_to_musclewiki_gifs.sql`
 
 ## Verification
 
@@ -81,16 +100,28 @@ After running the migration:
    - If you updated exercises after the app loaded, you may need to refresh
    - Or clear the cache programmatically (if you have access)
 
+## Alternative: Using free-exercise-db (Static Images)
+
+If you prefer static images from free-exercise-db instead of MuscleWiki GIFs:
+
+1. **Run the fetch script**:
+   ```bash
+   node scripts/fetch-exercise-videos.mjs
+   ```
+
+2. This downloads static images (JPG/PNG) from free-exercise-db
+
 ## Adding More Videos
 
 To add videos to more exercises:
 
-1. **Add demo images:**
-   - Place images in `public/exercise-demos/` folder
+1. **Add demo GIFs (MuscleWiki):**
+   - Run `node scripts/fetch-musclewiki-gifs.mjs` (it will try to find the exercise)
+   - Or manually add GIFs to `public/exercise-demos/` folder
    - Update the exercise:
      ```sql
      UPDATE exercises 
-     SET demo_gif_url = '/exercise-demos/your-image.jpg' 
+     SET demo_gif_url = '/exercise-demos/your-exercise.gif' 
      WHERE name = 'Exercise Name';
      ```
 
