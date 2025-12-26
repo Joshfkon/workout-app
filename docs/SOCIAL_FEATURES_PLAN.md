@@ -1,8 +1,19 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 2 Complete - Ready for Phase 3
+> **Status**: Phase 3 In Progress - Activity Feed
 > **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 2 - Follow System (Complete)
+> **Current Sprint**: Sprint 3 - Activity Feed (In Progress)
+>
+> ### Phase 3 Progress
+> - [x] Create activities database migration (activity_reactions, activity_comments tables)
+> - [x] Create ActivityCard component with workout/PR/streak content variants
+> - [x] Create ReactionBar component with emoji picker
+> - [x] Create useActivityFeed hook with cursor pagination
+> - [x] Create useReactions hook for reaction management
+> - [x] Build activity feed page with Following/Discover tabs
+> - [x] Add Feed and Profile links to sidebar navigation
+> - [ ] Add comment section component
+> - [ ] Add activity creation triggers on workout completion
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
 ---
