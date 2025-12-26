@@ -76,16 +76,13 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     // Common weights 150-200 lbs are often mislabeled as kg
     if (fromUnit === 'lb' && weight > 500) {
       // Probably stored in kg, convert
-      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'lb' but > 500, treating as kg`);
       return weight * 2.20462;
     } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
       // Common weights 150-200 are human weights in lbs, mislabeled as kg
       // The weight is already in lbs, just mislabeled - don't convert, use as-is
-      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but in human weight range (150-200), treating as already in lbs (no conversion)`);
       return weight; // Already in lbs, just mislabeled
     } else if (fromUnit === 'kg' && weight > 250) {
       // Weight > 250 kg is probably in lbs, convert
-      console.log(`[WeightGraph convertWeight] Correcting: weight ${weight} marked as 'kg' but > 250, treating as lb`);
       return weight / 2.20462;
     }
 
@@ -106,18 +103,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     
     const mapped = filtered.map((entry) => {
       const convertedWeight = convertWeight(entry.weight, entry.unit);
-      
-      // Debug logging for Dec 19 specifically
-      if (entry.date === '2025-12-19' || entry.date?.includes('2025-12-19')) {
-        console.log(`[WeightGraph Debug] Dec 19 conversion:`, {
-          date: entry.date,
-          originalWeight: entry.weight,
-          originalUnit: entry.unit,
-          preferredUnit: preferredUnit,
-          convertedWeight: convertedWeight,
-        });
-      }
-      
+
       return {
         date: entry.date,
         displayDate: formatDate(entry.date, { month: 'short', day: 'numeric' }),
@@ -126,8 +112,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
         originalUnit: entry.unit,
       };
     });
-    
-    console.log(`[WeightGraph Debug] Chart data for ${timeframe}:`, mapped);
+
     return mapped;
   }, [weightHistory, timeframe, preferredUnit, convertWeight]);
 

@@ -515,12 +515,10 @@ export default function WorkoutPage() {
   // Clear timer when session changes or component unmounts
   useEffect(() => {
     // Clear timer when sessionId changes (new workout started)
-    console.log('[WORKOUT] Session changed or component mounted, clearing timer');
     restTimer.dismiss();
-    
+
     return () => {
       // Cleanup: dismiss timer when leaving the workout page
-      console.log('[WORKOUT] Cleaning up rest timer on unmount');
       restTimer.dismiss();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -786,7 +784,6 @@ export default function WorkoutPage() {
         const existingInjuries = existingCheckIn?.temporaryInjuries || [];
         if (existingInjuries.length > 0) {
           setTemporaryInjuries(existingInjuries);
-          console.log('[Workout] Loaded existing injuries from session:', existingInjuries);
         }
         
         // Check if AI coach notes are enabled in user preferences
@@ -1116,17 +1113,15 @@ export default function WorkoutPage() {
   // Function to regenerate AI coach notes with injury context
   const regenerateAiCoachNotes = async (injuries: { area: string; severity: 1 | 2 | 3 }[]) => {
     if (!aiNotesContext) {
-      console.log('[AI Coach] No context stored, skipping regeneration');
       return;
     }
-    
+
     setIsLoadingAiNotes(true);
     try {
       const aiInput: WorkoutCoachNotesInput = {
         ...aiNotesContext,
         injuries: injuries.length > 0 ? injuries : undefined,
       };
-      console.log('[AI Coach] Regenerating notes with injuries:', injuries);
       const result = await generateWorkoutCoachNotes(aiInput);
       setAiCoachNotes(result.notes);
     } catch (error) {
@@ -2268,8 +2263,7 @@ export default function WorkoutPage() {
       
       const maxExistingOrder = maxOrderResult?.order || 0;
       const newOrder = maxExistingOrder + 1;
-      console.log('Creating exercise block:', { sessionId, exerciseId: exercise.id, order: newOrder, suggestedWeight, maxExistingOrder });
-      
+
       const { data: newBlock, error: blockError } = await supabase
         .from('exercise_blocks')
         .insert({
@@ -2286,8 +2280,6 @@ export default function WorkoutPage() {
         })
         .select()
         .single();
-
-      console.log('Insert result:', { newBlock, blockError });
 
       if (blockError) {
         throw new Error(`Failed to create exercise block: ${blockError.message}`);
