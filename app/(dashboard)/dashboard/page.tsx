@@ -237,29 +237,20 @@ export default function DashboardPage() {
 
   // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
-    console.log(`[Dashboard] Calculating musclesBelowMev from muscleVolume:`, {
-      muscleVolumeLength: muscleVolume.length,
-      muscleVolume: muscleVolume.map(mv => `${mv.muscle}: ${mv.sets} sets`),
-      volumeSummaryLength: volumeSummary.length,
-      volumeSummary: volumeSummary.map(vs => `${vs.muscle}: ${vs.currentSets} sets, status: ${vs.status}`)
-    });
-    
     // Create a map of muscle -> sets from muscleVolume for quick lookup
     const volumeMap = new Map<string, number>();
     muscleVolume.forEach(mv => {
       volumeMap.set(mv.muscle, mv.sets);
     });
-    
+
     // Check ALL muscle groups, including those with 0 sets
     const result: MuscleVolumeData[] = [];
-    
+
     ALL_MUSCLE_GROUPS.forEach(muscle => {
       const sets = volumeMap.get(muscle) || 0;
       const mev = MEV_TARGETS[muscle] || 8;
       const isBelowMev = sets < mev;
-      
-      console.log(`[Dashboard] Checking ${muscle}: ${sets} sets vs MEV ${mev} = ${isBelowMev ? 'BELOW' : 'OK'}`);
-      
+
       if (isBelowMev) {
         const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
         
@@ -278,8 +269,7 @@ export default function DashboardPage() {
         });
       }
     });
-    
-    console.log(`[Dashboard] Found ${result.length} muscles below MEV (including 0-set muscles):`, result.map(r => `${r.muscleGroup}: ${r.totalSets} sets`));
+
     return result;
   }, [muscleVolume, volumeSummary]);
 
@@ -312,7 +302,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      console.log(`[Dashboard Debug] Starting to fetch dashboard data...`);
       try {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -440,32 +429,29 @@ export default function DashboardPage() {
           );
 
           if (todaySession) {
-            // This is the only sequential query we need - depends on mesocycle data
-            const [blocksResult, setLogsResult] = await Promise.all([
-              supabase.from('exercise_blocks')
-                .select('id, target_sets')
-                .eq('workout_session_id', todaySession.id),
-              supabase.from('exercise_blocks')
-                .select('id')
-                .eq('workout_session_id', todaySession.id)
-                .then(async (res: { data: { id: string }[] | null }) => {
-                  if (!res.data?.length) return { data: [] };
-                  return supabase.from('set_logs')
-                    .select('id')
-                    .in('exercise_block_id', res.data.map((b) => b.id))
-                    .eq('is_warmup', false);
-                }),
-            ]);
+            // Single join query - fetches blocks with their set_logs in one request
+            const { data: blocksWithSets } = await supabase
+              .from('exercise_blocks')
+              .select(`
+                id,
+                target_sets,
+                set_logs!left(id, is_warmup)
+              `)
+              .eq('workout_session_id', todaySession.id);
 
-            const blocks = blocksResult.data || [];
-            const setLogs = (setLogsResult as any).data || [];
+            const blocks = blocksWithSets || [];
+            // Count non-warmup set_logs across all blocks
+            const completedSets = blocks.reduce((sum: number, b: any) => {
+              const workingSets = (b.set_logs || []).filter((s: any) => !s.is_warmup);
+              return sum + workingSets.length;
+            }, 0);
 
             setTodaysWorkout({
               id: todaySession.id,
               name: mesocycle.name,
               state: todaySession.state,
               exercises: blocks.length,
-              completedSets: setLogs.length,
+              completedSets,
               totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
             });
           } else {
@@ -492,49 +478,22 @@ export default function DashboardPage() {
           setNutritionTotals(totals);
         }
 
-        // Debug nutrition targets
-        console.log('[Dashboard] targetsResult:', {
-          hasData: !!targetsResult.data,
-          hasError: !!targetsResult.error,
-          data: targetsResult.data,
-          error: targetsResult.error,
-        });
-        
+        // Process nutrition targets
         if (targetsResult.error) {
           // If error is about missing column, try fetching without cardio_prescription
           if (targetsResult.error.code === '42703' && targetsResult.error.message?.includes('cardio_prescription')) {
-            console.log('[Dashboard] cardio_prescription column not found, fetching without it');
-            const { data: fallbackData, error: fallbackError } = await supabase
+            const { data: fallbackData } = await supabase
               .from('nutrition_targets')
               .select('calories, protein, carbs, fat')
               .eq('user_id', user.id)
               .maybeSingle();
-            
-            if (fallbackError) {
-              console.error('[Dashboard] Error fetching nutrition targets (fallback):', fallbackError);
-              setNutritionTargets(null);
-            } else if (fallbackData) {
-              console.log('[Dashboard] Setting nutrition targets (without cardio_prescription):', fallbackData);
-              setNutritionTargets(fallbackData);
-            } else {
-              setNutritionTargets(null);
-            }
+
+            setNutritionTargets(fallbackData || null);
           } else {
-            console.error('[Dashboard] Error fetching nutrition targets:', targetsResult.error);
             setNutritionTargets(null);
           }
-        } else if (targetsResult.data) {
-          console.log('[Dashboard] Setting nutrition targets:', targetsResult.data);
-          console.log('[Dashboard] Cardio prescription in data:', {
-            hasCardioPrescription: !!targetsResult.data.cardio_prescription,
-            cardioPrescription: targetsResult.data.cardio_prescription,
-            needed: targetsResult.data.cardio_prescription?.needed,
-          });
-          setNutritionTargets(targetsResult.data);
         } else {
-          console.log('[Dashboard] No nutrition targets found, setting to null');
-          // Explicitly set to null if no data (maybeSingle returns null when no row found)
-          setNutritionTargets(null);
+          setNutritionTargets(targetsResult.data || null);
         }
 
         // Set user's preferred unit first (needed for weight processing)
@@ -551,70 +510,29 @@ export default function DashboardPage() {
           });
         }
 
-        // Process weight history with unit validation and debugging
+        // Process weight history with unit validation
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
-          
-          // Debug: Log raw data from database - expand to see all fields
-          console.log(`[Dashboard Debug] Received ${weightHistoryResult.data.length} weight entries from DB`);
-          console.log(`[Dashboard Debug] Raw weight entries from DB:`, JSON.parse(JSON.stringify(weightHistoryResult.data)));
-          
+
           const processedHistory = weightHistoryResult.data.map((w: any) => {
-            // Log the actual unit field from database
-            const hasUnit = 'unit' in w;
-            const unitValue = w.unit;
-            console.log(`[Dashboard Debug] Processing entry ${w.logged_at}:`, {
-              weight: w.weight,
-              unit_from_db: unitValue,
-              unit_type: typeof unitValue,
-              unit_is_null: unitValue === null,
-              unit_is_undefined: unitValue === undefined,
-              has_unit_field: hasUnit,
-              all_fields: Object.keys(w),
-            });
-            
             // Handle NULL or undefined unit - use default
-            let unit = (unitValue === null || unitValue === undefined) ? defaultUnit : unitValue;
-            
+            let unit = (w.unit === null || w.unit === undefined) ? defaultUnit : w.unit;
+
             // Validate: if unit says 'lb' but weight > 500, it's probably in kg
             // If unit says 'kg' but weight > 250, it's probably in lb
             if (unit === 'lb' && w.weight > 500) {
-              console.log(`[Weight Debug] Correcting unit for ${w.logged_at}: weight=${w.weight}, unit was 'lb', correcting to 'kg'`);
-              unit = 'kg'; // Correct the unit
+              unit = 'kg';
             } else if (unit === 'kg' && w.weight > 250) {
-              console.log(`[Weight Debug] Correcting unit for ${w.logged_at}: weight=${w.weight}, unit was 'kg', correcting to 'lb'`);
-              unit = 'lb'; // Correct the unit
+              unit = 'lb';
             }
-            
-            // Debug logging for Dec 19 specifically
-            if (w.logged_at === '2025-12-19' || w.logged_at?.includes('2025-12-19')) {
-              console.log(`[Dashboard Debug] Dec 19 entry processing:`, {
-                logged_at: w.logged_at,
-                raw_weight: w.weight,
-                raw_unit_from_db: unitValue,
-                unit_is_null: unitValue === null,
-                default_unit: defaultUnit,
-                final_unit: unit,
-                weight_in_lbs: unit === 'kg' ? w.weight * 2.20462 : w.weight,
-                will_convert: unit !== defaultUnit,
-              });
-            }
-            
+
             return {
               date: w.logged_at,
               weight: w.weight,
               unit: unit,
             };
           });
-          
-          console.log(`[Weight Debug] Processed ${processedHistory.length} weight entries for graph`);
-          
-          // Debug: Log Dec 19 entry specifically
-          const dec19Processed = processedHistory.find((w: { date: string; weight: number; unit: string }) => w.date === '2025-12-19' || w.date?.includes('2025-12-19'));
-          if (dec19Processed) {
-            console.log(`[Dashboard Debug] Dec 19 processed entry:`, dec19Processed);
-          }
-          
+
           setWeightHistory(processedHistory);
         }
 
@@ -1068,17 +986,10 @@ export default function DashboardPage() {
                 )}
 
                 {(() => {
-                  console.log('[Dashboard] Nutrition card render check:', {
-                    hasNutritionTargets: !!nutritionTargets,
-                    nutritionTargets,
-                    calories: nutritionTargets?.calories,
-                    protein: nutritionTargets?.protein,
-                  });
-                  
                   if (!nutritionTargets) return null;
-                  
-                  const targets = nutritionTargets; // TypeScript now knows it's not null
-                  
+
+                  const targets = nutritionTargets;
+
                   return (
                     <div className="space-y-3">
                       <div>
@@ -1340,17 +1251,9 @@ export default function DashboardPage() {
 
         case 'cardio':
           // Only show card if cardio prescription exists and is needed
-          console.log('[Dashboard] Cardio card check:', {
-            hasNutritionTargets: !!nutritionTargets,
-            hasCardioPrescription: !!nutritionTargets?.cardio_prescription,
-            cardioPrescription: nutritionTargets?.cardio_prescription,
-            needed: nutritionTargets?.cardio_prescription?.needed,
-          });
           if (!nutritionTargets?.cardio_prescription?.needed) {
-            console.log('[Dashboard] Cardio card not needed, returning null');
             return null;
           }
-          console.log('[Dashboard] Rendering cardio card');
           return (
             <Card>
               <CardHeader>

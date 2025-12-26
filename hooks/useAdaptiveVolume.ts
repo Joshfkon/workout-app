@@ -72,11 +72,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         const supabase = createUntypedClient();
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          console.log(`[useAdaptiveVolume] Got user from Supabase auth:`, authUser.id);
           setUser({ id: authUser.id });
         }
       } catch (err) {
-        console.error(`[useAdaptiveVolume] Error getting user from auth:`, err);
+        // Silently handle auth errors - user may not be logged in
       }
     }
     loadUser();
@@ -84,9 +83,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Fetch volume data for current and previous week
   const fetchVolumeData = useCallback(async () => {
-    console.log(`[useAdaptiveVolume] fetchVolumeData called, user:`, user?.id);
     if (!user?.id) {
-      console.log(`[useAdaptiveVolume] No user ID in fetchVolumeData, returning early`);
       return;
     }
 
@@ -124,26 +121,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       // If no pre-computed data, calculate from set logs
       if (!currentData || currentData.length === 0) {
-        console.log(`[useAdaptiveVolume] No pre-computed data found, calculating from set logs for rolling 7-day period`);
-        console.log(`[useAdaptiveVolume] Date calculation:`, {
-          now: now.toISOString(),
-          weekStart: weekStart.toISOString(),
-          weekStartStr,
-          weekEnd: weekEnd.toISOString(),
-          weekEndStr,
-          user_id: user.id
-        });
-        
-        console.log(`[useAdaptiveVolume] Rolling 7-day range: ${weekStartStr} to ${weekEndStr}`);
-
         // Fetch exercise blocks and sets for current week
-        console.log(`[useAdaptiveVolume] Querying exercise_blocks with filters:`, {
-          user_id: user.id,
-          completed_at_gte: weekStartStr,
-          completed_at_lte: weekEndStr,
-          state: 'completed'
-        });
-        
         const { data: blocks, error: blocksError } = await supabase
           .from('exercise_blocks')
           .select(`
@@ -175,87 +153,34 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           .lte('workout_sessions.completed_at', weekEndStr)
           .eq('workout_sessions.state', 'completed');
 
-        if (blocksError) {
-          console.error('[useAdaptiveVolume] Error fetching blocks:', blocksError);
-        }
-        
-        console.log(`[useAdaptiveVolume] Query result:`, {
-          blocksCount: blocks?.length || 0,
-          blocks: blocks?.slice(0, 3).map((b: ExerciseBlockFull) => ({
-            id: b.id,
-            exercise_name: b.exercises?.name,
-            primary_muscle: b.exercises?.primary_muscle,
-            completed_at: b.workout_sessions?.completed_at,
-            state: b.workout_sessions?.state,
-            set_logs_count: b.set_logs?.length || 0
-          }))
-        });
-        
-        console.log(`[useAdaptiveVolume] Found ${blocks?.length || 0} exercise blocks for rolling 7-day period`);
-
         if (blocks && blocks.length > 0) {
-          console.log(`[useAdaptiveVolume] Processing ${blocks.length} blocks`);
           
           // Calculate volume from blocks
           const volumeByMuscle = new Map<string, { totalSets: number; effectiveSets: number; totalRIR: number; rirCount: number }>();
           let processedBlocks = 0;
           let skippedBlocks = 0;
           
-          blocks.forEach((block: ExerciseBlockFull, index: number) => {
-            if (index < 5) {
-              console.log(`[useAdaptiveVolume] Block ${index + 1}/${blocks.length}:`, {
-                block_id: block.id,
-                exercise_id: block.exercise_id,
-                exercise: block.exercises ? {
-                  id: block.exercises.id,
-                  name: block.exercises.name,
-                  primary_muscle: block.exercises.primary_muscle
-                } : null,
-                workout_session: block.workout_sessions ? {
-                  id: block.workout_sessions.id,
-                  completed_at: block.workout_sessions.completed_at,
-                  state: block.workout_sessions.state,
-                  user_id: block.workout_sessions.user_id
-                } : null,
-                set_logs_count: block.set_logs?.length || 0,
-                set_logs: block.set_logs?.slice(0, 2).map((s: SetLogRow) => ({
-                  id: s.id,
-                  is_warmup: s.is_warmup,
-                  weight_kg: s.weight_kg,
-                  reps: s.reps
-                }))
-              });
-            }
-            
+          blocks.forEach((block: ExerciseBlockFull) => {
             const exercise = block.exercises;
             if (!exercise) {
-              console.log(`[useAdaptiveVolume] Block ${block.id} has no exercise`);
               skippedBlocks++;
               return;
             }
-            
+
             const allSets = block.set_logs || [];
             const workingSets = allSets.filter((s: SetLogRow) => !s.is_warmup);
 
             if (workingSets.length === 0) {
-              if (index < 5) {
-                console.log(`[useAdaptiveVolume] Block ${block.id} (${exercise.name}) has no working sets (total sets: ${allSets.length}, warmups: ${allSets.filter((s: SetLogRow) => s.is_warmup).length})`);
-              }
               skippedBlocks++;
               return;
             }
 
             const primaryMuscle = exercise.primary_muscle?.toLowerCase();
             if (!primaryMuscle) {
-              console.log(`[useAdaptiveVolume] Exercise ${exercise.name} has no primary_muscle`);
               skippedBlocks++;
               return;
             }
-            
-            if (index < 5) {
-              console.log(`[useAdaptiveVolume] Block ${block.id}: ${exercise.name} (${primaryMuscle}) - ${workingSets.length} working sets`);
-            }
-            
+
             if (!volumeByMuscle.has(primaryMuscle)) {
               volumeByMuscle.set(primaryMuscle, { totalSets: 0, effectiveSets: 0, totalRIR: 0, rirCount: 0 });
             }
@@ -281,20 +206,6 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             processedBlocks++;
           });
 
-          console.log(`[useAdaptiveVolume] Processing summary:`, {
-            totalBlocks: blocks.length,
-            processedBlocks,
-            skippedBlocks,
-            musclesFound: volumeByMuscle.size,
-            volumeByMuscle: Array.from(volumeByMuscle.entries()).map(([m, d]) => ({
-              muscle: m,
-              totalSets: d.totalSets,
-              effectiveSets: d.effectiveSets
-            }))
-          });
-          
-          console.log(`[useAdaptiveVolume] Calculated volume for ${volumeByMuscle.size} muscles:`, Array.from(volumeByMuscle.entries()).map(([m, d]) => `${m}: ${d.totalSets} sets`));
-
           // Convert to MuscleVolumeData format
           const calculatedData: MuscleVolumeData[] = Array.from(volumeByMuscle.entries()).map(([muscle, data]) => ({
             id: `${muscle}-${weekStartStr}`,
@@ -310,10 +221,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
             exercisePerformance: [],
           }));
           
-          console.log(`[useAdaptiveVolume] Setting volume data:`, calculatedData.map(d => `${d.muscle}: ${d.workingSets} sets`));
           setVolumeData(calculatedData);
-        } else {
-          console.log(`[useAdaptiveVolume] No blocks found for week ${weekStartStr}`);
         }
       } else {
         // Use pre-computed data
@@ -381,17 +289,14 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           overallRecovery: data.overall_recovery || 'well_recovered',
         });
       }
-    } catch (err) {
-      // Analysis might not exist yet
-      console.debug('No mesocycle analysis found:', err);
+    } catch {
+      // Analysis might not exist yet - expected for new users
     }
   }, [user?.id]);
 
   // Fetch or create volume profile
   const fetchProfile = useCallback(async () => {
-    console.log(`[useAdaptiveVolume] fetchProfile called, user:`, user?.id);
     if (!user?.id) {
-      console.log(`[useAdaptiveVolume] No user ID, returning early`);
       return;
     }
 
@@ -402,7 +307,6 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const supabase = createUntypedClient();
 
       // Try to fetch existing profile
-      console.log(`[useAdaptiveVolume] Fetching existing profile for user ${user.id}`);
       const { data: profileData, error: profileError } = await supabase
         .from('user_volume_profiles')
         .select('*')
@@ -411,12 +315,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
       if (profileError && profileError.code !== 'PGRST116') {
         // PGRST116 is "not found" - that's expected for new users
-        console.error(`[useAdaptiveVolume] Error fetching profile:`, profileError);
         throw profileError;
       }
 
       if (profileData) {
-        console.log(`[useAdaptiveVolume] Found existing profile`);
         // Parse stored profile
         const profile: UserVolumeProfile = {
           userId: profileData.user_id,
@@ -428,31 +330,25 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         };
         setVolumeProfile(profile);
       } else {
-        console.log(`[useAdaptiveVolume] No existing profile, creating initial profile`);
         // Create initial profile based on user's experience level
         const trainingAge = (user.experience || 'intermediate') as 'novice' | 'intermediate' | 'advanced';
         const initialProfile = createInitialVolumeProfile(user.id, trainingAge, false);
-        console.log(`[useAdaptiveVolume] Created initial profile:`, initialProfile);
         setVolumeProfile(initialProfile);
 
         // Optionally save to database
         await saveProfile(initialProfile);
-        console.log(`[useAdaptiveVolume] Saved initial profile to database`);
       }
 
       // Fetch current week volume data
-      console.log(`[useAdaptiveVolume] Calling fetchVolumeData`);
       await fetchVolumeData();
 
       // Fetch latest mesocycle analysis
       await fetchLatestAnalysis();
 
     } catch (err) {
-      console.error(`[useAdaptiveVolume] Error in fetchProfile:`, err);
       setError(err instanceof Error ? err.message : 'Failed to load volume profile');
     } finally {
       setIsLoading(false);
-      console.log(`[useAdaptiveVolume] fetchProfile completed, isLoading: false`);
     }
   }, [user?.id, user?.experience, fetchVolumeData, fetchLatestAnalysis]);
 
@@ -487,14 +383,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Calculate volume summary
   const volumeSummary = useMemo((): VolumeSummary[] => {
-    console.log(`[useAdaptiveVolume] Calculating volumeSummary:`, {
-      hasProfile: !!volumeProfile,
-      volumeDataLength: volumeData.length,
-      volumeData: volumeData.map(d => `${d.muscle}: ${d.workingSets} sets`),
-    });
-    
     if (!volumeProfile || volumeData.length === 0) {
-      console.log(`[useAdaptiveVolume] Returning default summary (no profile or no data)`);
       // Return default summary with baseline recommendations
       return MUSCLE_GROUPS.map(muscle => ({
         muscle,
@@ -507,9 +396,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       }));
     }
 
-    const summary = getVolumeSummary(volumeData, previousWeekData, volumeProfile);
-    console.log(`[useAdaptiveVolume] Calculated summary:`, summary.map(s => `${s.muscle}: ${s.currentSets}/${s.estimatedMEV} sets, status: ${s.status}`));
-    return summary;
+    return getVolumeSummary(volumeData, previousWeekData, volumeProfile);
   }, [volumeProfile, volumeData, previousWeekData]);
 
   // Calculate fatigue alerts
@@ -523,20 +410,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Load data on mount - only when user is available
   useEffect(() => {
-    console.log(`[useAdaptiveVolume] useEffect triggered:`, {
-      hasUser: !!user,
-      userId: user?.id,
-      fetchProfileExists: !!fetchProfile,
-      userObject: user
-    });
-    
     if (user?.id) {
-      console.log(`[useAdaptiveVolume] User available (${user.id}), calling fetchProfile`);
-      fetchProfile().catch(err => {
-        console.error(`[useAdaptiveVolume] Error in fetchProfile:`, err);
-      });
-    } else {
-      console.log(`[useAdaptiveVolume] User not available yet, waiting... (user:`, user, `)`);
+      fetchProfile();
     }
   }, [user, fetchProfile]);
 
