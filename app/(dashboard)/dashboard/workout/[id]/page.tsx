@@ -2149,8 +2149,7 @@ export default function WorkoutPage() {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
       setCurrentSetNumber(1);
-      setShowRestTimer(false);
-      restTimer.dismiss();
+      // Keep rest timer running - need rest between sets even when switching exercises
     }
   };
 
