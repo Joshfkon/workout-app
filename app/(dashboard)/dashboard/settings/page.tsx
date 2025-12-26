@@ -1132,7 +1132,7 @@ function EducationPreferencesCard() {
               <div>
                 <p className="text-sm font-medium text-surface-200">Reset Tips</p>
                 <p className="text-xs text-surface-500">
-                  You've dismissed {dismissedHints.length} tips. Reset to see them again.
+                  You&apos;ve dismissed {dismissedHints.length} tips. Reset to see them again.
                 </p>
               </div>
               {showResetConfirm ? (
