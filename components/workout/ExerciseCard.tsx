@@ -1989,19 +1989,40 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </AccordionTrigger>
                 <AccordionContent id="form-cues">
                   <div className="space-y-3">
-                    {/* Exercise Demo Image */}
+                    {/* Exercise Demo Video/Image */}
                     {(() => {
                       const demoGifUrl = exercise.demoGifUrl || (exercise as any).demo_gif_url;
                       const youtubeVideoId = exercise.youtubeVideoId || (exercise as any).youtube_video_id;
                       
                       if (!demoGifUrl && !youtubeVideoId) return null;
                       
+                      const isVideo = demoGifUrl && (demoGifUrl.endsWith('.mp4') || demoGifUrl.endsWith('.webm') || demoGifUrl.endsWith('.mov'));
+                      const isImage = demoGifUrl && !isVideo;
+                      
                       return (
                         <div className="mb-3">
                           <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
                             Exercise Demo
                           </p>
-                          {demoGifUrl && (
+                          {isVideo && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                              <video
+                                src={demoGifUrl}
+                                className="w-full h-auto max-h-48 object-contain"
+                                controls
+                                loop
+                                muted
+                                playsInline
+                                onError={(e) => {
+                                  console.error('[ExerciseCard] Failed to load video:', demoGifUrl);
+                                  (e.target as HTMLVideoElement).style.display = 'none';
+                                }}
+                              >
+                                Your browser does not support the video tag.
+                              </video>
+                            </div>
+                          )}
+                          {isImage && (
                             <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img

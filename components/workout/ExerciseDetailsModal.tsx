@@ -557,14 +557,40 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               return null;
             }
 
+            const isVideo = demoGifUrl && (demoGifUrl.endsWith('.mp4') || demoGifUrl.endsWith('.webm') || demoGifUrl.endsWith('.mov'));
+            const isImage = demoGifUrl && !isVideo;
+
             return (
               <div className="space-y-3">
                 <p className="text-xs font-medium text-surface-400 uppercase tracking-wider">
                   Exercise Demo
                 </p>
 
-                {/* GIF/Video Demo - using img for animated content from external sources */}
-                {demoGifUrl && (
+                {/* MP4 Video Demo */}
+                {isVideo && (
+                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                    <video
+                      src={demoGifUrl}
+                      className="w-full h-auto max-h-64 object-contain"
+                      controls
+                      loop
+                      muted
+                      playsInline
+                      onError={(e) => {
+                        console.error('[ExerciseDetailsModal] Failed to load video:', demoGifUrl, e);
+                        (e.target as HTMLVideoElement).style.display = 'none';
+                      }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
+                      MuscleWiki
+                    </div>
+                  </div>
+                )}
+
+                {/* Image/GIF Demo */}
+                {isImage && (
                   <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -574,7 +600,6 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                       loading="lazy"
                       onError={(e) => {
                         console.error('[ExerciseDetailsModal] Failed to load image:', demoGifUrl, e);
-                        // Hide the image on error
                         (e.target as HTMLImageElement).style.display = 'none';
                       }}
                     />
