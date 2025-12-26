@@ -90,7 +90,14 @@ export async function POST(request: NextRequest) {
       : STRIPE_PRICES.elite[billingPeriod as 'monthly' | 'yearly'];
     
     // Create checkout session
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      console.error('NEXT_PUBLIC_APP_URL is not configured');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
     
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
