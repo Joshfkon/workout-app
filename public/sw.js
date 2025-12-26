@@ -76,8 +76,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // For video files - network-only, no caching (they use range requests with 206 status)
+  // Must be checked BEFORE the static assets handler
+  if (url.pathname.match(/\.(mp4|webm|mov|avi|mkv)$/)) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // For static assets (JS, CSS, images) - cache-first
-  // Exclude videos (mp4, webm, mov) as they use range requests (206) which can't be cached
   if (
     url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|webp|woff2?|ttf|eot)$/) ||
     url.pathname.startsWith('/_next/static/')
@@ -114,12 +120,6 @@ self.addEventListener('fetch', (event) => {
         });
       })
     );
-    return;
-  }
-  
-  // For video files - network-only, no caching (they use range requests)
-  if (url.pathname.match(/\.(mp4|webm|mov|avi|mkv)$/)) {
-    event.respondWith(fetch(request));
     return;
   }
 
