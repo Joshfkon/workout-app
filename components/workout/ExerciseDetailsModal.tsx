@@ -535,9 +535,10 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   Exercise Demo
                 </p>
 
-                {/* GIF Demo */}
+                {/* GIF/Video Demo - using img for animated content from external sources */}
                 {demoGifUrl && (
                   <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={demoGifUrl}
                       alt={`${exercise.name} demonstration`}

@@ -67,7 +67,7 @@ async function downloadFile(url: string, outputPath: string): Promise<void> {
 }
 
 async function uploadToSupabase(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   filePath: string,
   storagePath: string
 ): Promise<string> {
