@@ -27,7 +27,6 @@ interface ActivityRow {
     avatar_url: string | null;
     bio: string | null;
     profile_visibility: string;
-    activity_visibility: string;
     follower_count: number;
     following_count: number;
     workout_count: number;
@@ -70,7 +69,6 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
             avatar_url,
             bio,
             profile_visibility,
-            activity_visibility,
             follower_count,
             following_count,
             workout_count
