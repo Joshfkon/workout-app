@@ -32,3 +32,5 @@ export {
   FullPageLoading 
 } from './LoadingAnimation';
 export { SwipeableRow } from './SwipeableRow';
+export { InfoTooltip, ExplainedTerm, type InfoTooltipProps } from './InfoTooltip';
+export { FirstTimeHint, InlineHint, type FirstTimeHintProps } from './FirstTimeHint';

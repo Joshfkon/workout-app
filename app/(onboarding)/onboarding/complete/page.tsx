@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Badge, ExplainedTerm } from '@/components/ui';
+import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { usePWA } from '@/hooks/usePWA';
 import { 
@@ -222,9 +223,14 @@ function CompleteContent() {
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white mb-2">Your Strength Profile</h1>
         <p className="text-surface-400">
-          Based on your calibration tests, here&apos;s how you stack up.
+          Based on your calibration tests, here&apos;s your personalized profile. This data powers smart recommendations across the app.
         </p>
       </div>
+
+      {/* Profile interpretation hint */}
+      <InlineHint id="profile-interpretation-hint">
+        <strong>What these numbers mean:</strong> Your overall score combines strength, balance between muscle groups, and body composition. We use this to recommend weights, detect imbalances, and track your progress over time.
+      </InlineHint>
       
       {/* Overall score card */}
       <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30">
@@ -283,9 +289,24 @@ function CompleteContent() {
                   <p className="text-2xl font-bold text-white">{profile.balanceScore}%</p>
                 </div>
                 <div className="p-3 bg-surface-900/50 rounded-lg">
-                  <p className="text-xs text-surface-500">FFMI</p>
+                  <p className="text-xs text-surface-500">
+                    <ExplainedTerm term="FFMI" />
+                  </p>
                   <p className="text-2xl font-bold text-white">{profile.bodyComposition.ffmi.toFixed(1)}</p>
                 </div>
+              </div>
+
+              {/* Score interpretation */}
+              <div className="mt-4 p-3 bg-surface-900/30 rounded-lg border border-surface-700">
+                <p className="text-sm text-surface-300">
+                  {profile.overallScore >= 80
+                    ? "Excellent! You have a well-developed strength foundation with good balance."
+                    : profile.overallScore >= 60
+                      ? "Good progress! You have solid strength with some areas to develop."
+                      : profile.overallScore >= 40
+                        ? "Solid starting point! Your profile shows clear opportunities for growth."
+                        : "Great baseline! Everyone starts somewhere, and we'll help you progress systematically."}
+                </p>
               </div>
             </div>
           </div>
