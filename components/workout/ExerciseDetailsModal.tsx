@@ -53,22 +53,37 @@ function calculateE1RM(weight: number, reps: number): number {
 }
 
 // Helper to get property value from either camelCase or snake_case
-function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): any {
+function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): string | null | undefined {
   const camelValue = (exercise as any)[camelKey];
   const snakeValue = (exercise as any)[snakeKey];
-  const result = camelValue ?? snakeValue;
+  let result = camelValue ?? snakeValue;
   
-  // Debug for video fields
-  if ((camelKey === 'demoGifUrl' || camelKey === 'youtubeVideoId') && exercise) {
-    console.log(`[getExerciseProp] ${camelKey}/${snakeKey}:`, {
-      camelValue,
-      snakeValue,
-      result,
-      exerciseKeys: Object.keys(exercise),
-    });
+  // Handle case where result might be an object (from nested queries)
+  // This can happen if the exercise data has a nested structure like exercise.exercises.demo_gif_url
+  if (result && typeof result === 'object' && !Array.isArray(result)) {
+    // Try to extract string value from nested structure
+    // Check if it's a nested exercises object
+    if ((result as any).demo_gif_url && typeof (result as any).demo_gif_url === 'string') {
+      result = (result as any).demo_gif_url;
+    } else if ((result as any).demoGifUrl && typeof (result as any).demoGifUrl === 'string') {
+      result = (result as any).demoGifUrl;
+    } else if ((result as any).youtube_video_id && typeof (result as any).youtube_video_id === 'string') {
+      result = (result as any).youtube_video_id;
+    } else if ((result as any).youtubeVideoId && typeof (result as any).youtubeVideoId === 'string') {
+      result = (result as any).youtubeVideoId;
+    } else {
+      // If we can't extract a string, log and return null
+      console.warn(`[getExerciseProp] Expected string but got object for ${camelKey}/${snakeKey}:`, result);
+      result = null;
+    }
   }
   
-  return result;
+  // Ensure we return a string or null/undefined, not an object or other type
+  if (result !== null && result !== undefined && typeof result !== 'string') {
+    return null;
+  }
+  
+  return result as string | null | undefined;
 }
 
 function getTierBadgeClasses(tier: string): string {
