@@ -112,7 +112,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
 
       if (activitiesData && activitiesData.length > 0) {
         // Fetch user profiles for all activities
-        const userIds = [...new Set(activitiesData.map(a => a.user_id))];
+        const userIds = Array.from(new Set(activitiesData.map(a => a.user_id)));
         const { data: profilesData, error: profilesError } = await supabase
           .from('user_profiles' as never)
           .select('id, user_id, username, display_name, avatar_url, bio, profile_visibility, follower_count, following_count, workout_count')
