@@ -53,14 +53,15 @@ function calculateE1RM(weight: number, reps: number): number {
 }
 
 // Helper to get property value from either camelCase or snake_case
-function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): string | null | undefined {
+function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): any {
   const camelValue = (exercise as any)[camelKey];
   const snakeValue = (exercise as any)[snakeKey];
   let result = camelValue ?? snakeValue;
   
+  // Special handling for video/image URL fields - they should always be strings
   // Handle case where result might be an object (from nested queries)
-  // This can happen if the exercise data has a nested structure like exercise.exercises.demo_gif_url
-  if (result && typeof result === 'object' && !Array.isArray(result)) {
+  if ((camelKey === 'demoGifUrl' || camelKey === 'youtubeVideoId' || snakeKey === 'demo_gif_url' || snakeKey === 'youtube_video_id') 
+      && result && typeof result === 'object' && !Array.isArray(result)) {
     // Try to extract string value from nested structure
     // Check if it's a nested exercises object
     if ((result as any).demo_gif_url && typeof (result as any).demo_gif_url === 'string') {
@@ -72,18 +73,13 @@ function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string)
     } else if ((result as any).youtubeVideoId && typeof (result as any).youtubeVideoId === 'string') {
       result = (result as any).youtubeVideoId;
     } else {
-      // If we can't extract a string, log and return null
+      // If we can't extract a string, log and return null for video fields
       console.warn(`[getExerciseProp] Expected string but got object for ${camelKey}/${snakeKey}:`, result);
       result = null;
     }
   }
   
-  // Ensure we return a string or null/undefined, not an object or other type
-  if (result !== null && result !== undefined && typeof result !== 'string') {
-    return null;
-  }
-  
-  return result as string | null | undefined;
+  return result;
 }
 
 function getTierBadgeClasses(tier: string): string {
