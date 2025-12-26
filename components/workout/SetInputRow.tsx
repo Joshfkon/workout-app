@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, memo } from 'react';
-import { Button } from '@/components/ui';
+import { Button, InfoTooltip } from '@/components/ui';
 import { SetFeedbackCard } from './SetFeedbackCard';
 import type { SetLog, WeightUnit, SetFeedback } from '@/types/schema';
 import { formatWeightValue, inputWeightToKg } from '@/lib/utils';
@@ -129,8 +129,9 @@ export const SetInputRow = memo(function SetInputRow({
         <span className="text-sm font-medium text-surface-300" id={`set-${setNumber}-label`}>
           Set {setNumber}
         </span>
-        <span className="text-xs text-surface-500" aria-label="Target">
+        <span className="flex items-center gap-1 text-xs text-surface-500" aria-label="Target">
           Target: {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
+          <InfoTooltip term="RIR" size="sm" />
         </span>
       </div>
 

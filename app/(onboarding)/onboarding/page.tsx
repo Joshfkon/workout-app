@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Select, ExplainedTerm } from '@/components/ui';
+import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateBodyComposition, getFFMIAssessment, getFFMIBracket } from '@/services/coachingEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -362,12 +363,20 @@ export default function OnboardingBodyCompPage() {
         ))}
       </div>
       
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <h1 className="text-3xl font-bold text-white mb-2">Body Composition</h1>
         <p className="text-surface-400">
-          Let&apos;s understand your body composition. This helps us calibrate your strength profile.
+          Let&apos;s understand your body composition to personalize your training.
         </p>
       </div>
+
+      {/* Context card explaining why we need this data */}
+      <ContextCard
+        cardKey="bodyComposition"
+        className="mb-6"
+        defaultCollapsed={false}
+        collapsible={true}
+      />
       
       {/* DEXA data notice */}
       {existingDexa && !useDexa && (
@@ -580,7 +589,9 @@ export default function OnboardingBodyCompPage() {
               <div className="space-y-6">
                 {/* FFMI display */}
                 <div className="text-center p-6 bg-surface-800/50 rounded-xl">
-                  <p className="text-sm text-surface-500 mb-1">Fat-Free Mass Index (FFMI)</p>
+                  <p className="text-sm text-surface-500 mb-1">
+                    <ExplainedTerm term="FFMI" />
+                  </p>
                   <p className="text-5xl font-bold text-white mb-2">{bodyComp.ffmi.toFixed(1)}</p>
                   <p className={`text-sm font-medium capitalize ${
                     bodyComp.ffmiBracket === 'elite' ? 'text-accent-400' :
@@ -593,10 +604,15 @@ export default function OnboardingBodyCompPage() {
                   </p>
                 </div>
                 
-                {/* Assessment */}
-                <p className="text-sm text-surface-400">
-                  {bodyComp.ffmiAssessment}
-                </p>
+                {/* Assessment with beginner-friendly context */}
+                <div className="p-3 bg-surface-800/30 rounded-lg border border-surface-700">
+                  <p className="text-sm text-surface-300 mb-2">
+                    {bodyComp.ffmiAssessment}
+                  </p>
+                  <p className="text-xs text-surface-500">
+                    This helps us understand your current muscle development and set realistic goals.
+                  </p>
+                </div>
                 
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4">

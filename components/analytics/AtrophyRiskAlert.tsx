@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, Badge } from '@/components/ui';
+import { Card, Badge, InfoTooltip } from '@/components/ui';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import type { Goal } from '@/types/schema';
 
@@ -99,6 +99,7 @@ export function AtrophyRiskAlert({
               <Badge variant={isOnCut ? 'danger' : 'warning'} size="sm">
                 {musclesBelowMev.length} muscle{musclesBelowMev.length > 1 ? 's' : ''} below MEV
               </Badge>
+              <InfoTooltip term="MEV" size="sm" />
             </div>
             <p className="text-sm text-surface-400">
               {isOnCut ? (

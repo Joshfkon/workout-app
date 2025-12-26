@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge } from '@/components/ui';
+import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { BENCHMARK_LIFTS, type BenchmarkLift } from '@/services/coachingEngine';
 
@@ -144,13 +145,21 @@ function BenchmarksContent() {
         ))}
       </div>
       
-      <div className="text-center mb-8">
+      <div className="text-center mb-6">
         <h1 className="text-3xl font-bold text-white mb-2">Select Benchmark Lifts</h1>
         <p className="text-surface-400">
-          Choose which lifts you&apos;d like to test. We&apos;ll use these to estimate your strength across all exercises.
+          Choose which lifts you&apos;d like to test. This helps us personalize your entire training experience.
         </p>
       </div>
-      
+
+      {/* Context card explaining why we test strength */}
+      <ContextCard
+        cardKey="benchmarkSelection"
+        className="mb-6"
+        defaultCollapsed={false}
+        collapsible={true}
+      />
+
       {/* Time estimate */}
       <Card className="bg-surface-800/50">
         <CardContent className="p-4">

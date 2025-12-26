@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint } from '@/components/ui';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
@@ -948,6 +948,12 @@ export default function DashboardPage() {
           } else {
             return (
               <Card className="overflow-hidden border-2 border-dashed border-primary-500/40 bg-gradient-to-r from-primary-500/10 to-accent-500/10">
+                <FirstTimeHint
+                  id="dashboard-mesocycle-intro"
+                  title="What's a Mesocycle?"
+                  description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
+                  position="top"
+                />
                 <CardContent className="p-6 text-center">
                   <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-primary-500/20 flex items-center justify-center">
                     <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -980,6 +986,12 @@ export default function DashboardPage() {
         case 'nutrition':
           return (
             <Card>
+              <FirstTimeHint
+                id="dashboard-nutrition"
+                title="Track Your Macros"
+                description="Hitting your protein target is key for muscle growth. The colored bars show your progress, and the small indicator shows if you're on pace for the day. Aim for consistent daily protein intake!"
+                position="top"
+              />
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
@@ -1319,6 +1331,12 @@ export default function DashboardPage() {
         case 'weekly-volume':
           return (
             <Card>
+              <FirstTimeHint
+                id="dashboard-weekly-volume"
+                title="Understanding Weekly Volume"
+                description="Volume tracking shows how many sets per muscle group you've done this week. Your body needs enough volume (MEV) to grow, but not so much (MRV) that you can't recover. Green means you're in the sweet spot!"
+                position="top"
+              />
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">

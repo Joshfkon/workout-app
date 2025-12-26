@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, useState } from 'react';
+import { InfoTooltip } from '@/components/ui';
 import type { FormRating } from '@/types/schema';
 
 interface FormOption {
@@ -68,7 +69,10 @@ export const FormRatingSelector = memo(function FormRatingSelector({
 
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-surface-300">Form</label>
+      <label className="flex items-center gap-1 text-sm font-medium text-surface-300">
+        Form
+        <InfoTooltip term="FORM_QUALITY" size="sm" />
+      </label>
       <div className="grid grid-cols-3 gap-2">
         {FORM_OPTIONS.map((option) => {
           const isSelected = value === option.value;

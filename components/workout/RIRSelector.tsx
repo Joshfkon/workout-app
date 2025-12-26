@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { InfoTooltip } from '@/components/ui';
 import type { RepsInTank } from '@/types/schema';
 
 interface RIROption {
@@ -64,8 +65,9 @@ export const RIRSelector = memo(function RIRSelector({
 }: RIRSelectorProps) {
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-surface-300">
+      <label className="flex items-center gap-1 text-sm font-medium text-surface-300">
         Reps left in tank?
+        <InfoTooltip term="RIR" size="sm" />
       </label>
       <div className="grid grid-cols-4 gap-2">
         {RIR_OPTIONS.map((option) => {
