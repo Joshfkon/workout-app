@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation, FirstTimeHint, InfoTooltip } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -1417,6 +1417,12 @@ function NewWorkoutContent() {
 
       {step === 1 && (
         <div className="space-y-4">
+          <FirstTimeHint
+            id="workout-first-session"
+            title="Your First Workout!"
+            description="Pick how much time you have and we'll build the perfect workout. The AI suggests exercises based on what muscles need training, your available equipment, and your goals. Just follow the sets and log how hard each one felt!"
+            position="top"
+          />
           {/* Time and Location Selection */}
           <Card>
             <CardHeader className="pb-2">

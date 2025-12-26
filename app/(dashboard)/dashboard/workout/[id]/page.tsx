@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation, FirstTimeHint } from '@/components/ui';
 import { RestTimerControlPanel } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 

@@ -1,6 +1,6 @@
 # Beginner-Friendly Onboarding & Education Plan
 
-> **Status**: Phase 1 & 2 Complete
+> **Status**: Phase 1, 2 & 3 (partial) Complete
 > **Last Updated**: 2025-12-26
 > **Branch**: `claude/beginner-onboarding-hxjJW`
 
@@ -189,18 +189,19 @@ Every data collection point should be preceded by context explaining:
 - [x] "Explain Science Terms" toggle
 - [x] "Reset Tips" button to restore dismissed hints
 
-### Phase 3: Guided Feature Introduction (Priority: High)
+### Phase 3: Guided Feature Introduction (Priority: High) - PARTIAL
 
 **Goal**: Walk users through advanced features when they first encounter them
 
-#### 3.1 First Mesocycle Creation
-- [ ] Step-by-step wizard with explanations
-- [ ] Explain periodization phases in plain terms
-- [ ] Show what each week will look like
+#### 3.1 First Mesocycle Creation - COMPLETE
+- [x] Step-by-step wizard with FirstTimeHint explanations
+- [x] Explain periodization phases in plain terms (deload tooltip)
+- [x] Show what each week will look like (review step hints)
 - [ ] Set expectations for deload week
 
-#### 3.2 First Workout
-- [ ] Optional guided workout mode
+#### 3.2 First Workout - PARTIAL
+- [x] FirstTimeHint on workout setup explaining the process
+- [ ] Optional guided workout mode (deferred)
 - [ ] Explain each screen section
 - [ ] Highlight where to log RIR
 - [ ] Show how to use rest timer
@@ -453,6 +454,13 @@ This is excellent pressing strength relative to your muscle mass.
 | RIR Selector | `/components/workout/RIRSelector.tsx` | Added InfoTooltip for RIR label |
 | Form Rating Selector | `/components/workout/FormRatingSelector.tsx` | Added InfoTooltip for Form Quality |
 | Settings Page | `/app/(dashboard)/dashboard/settings/page.tsx` | Added EducationPreferencesCard |
+
+### Modified Components (Phase 3)
+
+| Component | File | Changes Made |
+|-----------|------|--------------|
+| Mesocycle Wizard | `/app/(dashboard)/dashboard/mesocycle/new/page.tsx` | Added FirstTimeHint for each step, InfoTooltip for deload |
+| New Workout Page | `/app/(dashboard)/dashboard/workout/new/page.tsx` | Added FirstTimeHint explaining workout setup |
 
 ### Components to Modify (Future Phases)
 

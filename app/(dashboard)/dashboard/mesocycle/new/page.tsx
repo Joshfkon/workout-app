@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, FirstTimeHint, InfoTooltip } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
@@ -506,6 +506,12 @@ export default function NewMesocyclePage() {
       {/* Step 1: Schedule */}
       {step === 1 && (
         <Card variant="elevated">
+          <FirstTimeHint
+            id="mesocycle-wizard-intro"
+            title="Creating Your First Training Plan"
+            description="We'll walk you through 3 simple steps: 1) Set your schedule, 2) Customize the plan, 3) Review and start. The AI will handle the complex science - you just need to tell us how often you can train!"
+            position="top"
+          />
           <div className="space-y-6">
             <div className="text-center mb-6">
               <h2 className="text-lg font-semibold text-surface-100">How often can you train?</h2>
@@ -734,6 +740,12 @@ export default function NewMesocyclePage() {
       {/* Step 2: Customize */}
       {step === 2 && (
         <Card variant="elevated">
+          <FirstTimeHint
+            id="mesocycle-customize-intro"
+            title="Training Splits Explained"
+            description="A 'split' is how you divide muscle groups across your training days. Upper/Lower alternates between upper and lower body. PPL (Push/Pull/Legs) groups muscles by movement type. Full Body trains everything each session. The AI picked what works best for your schedule!"
+            position="top"
+          />
           <div className="space-y-6">
             <div className="text-center mb-6">
               <h2 className="text-lg font-semibold text-surface-100">Customize Your Plan</h2>
@@ -772,8 +784,10 @@ export default function NewMesocyclePage() {
             />
 
             <div className="p-4 bg-surface-800/50 rounded-lg">
-              <p className="text-sm text-surface-400">
-                <span className="text-surface-300 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
+              <p className="text-sm text-surface-400 flex items-center gap-1 flex-wrap">
+                <span className="text-surface-300 font-medium">Week {totalWeeks}</span> will automatically be a deload week
+                <InfoTooltip term="DELOAD" size="sm" />
+                with 50% reduced volume.
               </p>
             </div>
 
@@ -807,6 +821,12 @@ export default function NewMesocyclePage() {
       {/* Step 3: Review */}
       {step === 3 && (
         <Card variant="elevated">
+          <FirstTimeHint
+            id="mesocycle-review-intro"
+            title="What Happens Next?"
+            description="Once you create this plan, we'll generate your workouts automatically. Each week, the difficulty increases slightly (progressive overload). The final week is a 'deload' - lighter training to let your body recover and grow stronger. Trust the process!"
+            position="top"
+          />
           <div className="space-y-6">
             <div className="text-center mb-6">
               <h2 className="text-lg font-semibold text-surface-100">Review Your Plan</h2>
