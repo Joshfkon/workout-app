@@ -2,9 +2,28 @@
 
 This document tracks the progress of wrapping HyperTrack PWA in a native shell using Capacitor for App Store distribution.
 
-## Current Status: Pre-Migration
+## Current Status: Phase 1-3 Complete
 
-**Readiness Score: ~75%** - Strong foundation, needs Capacitor packages and icons.
+**Readiness Score: ~90%** - Capacitor installed and configured, needs app icons and native platforms.
+
+### Next Steps
+
+1. **Generate app icons** from `public/favicon.svg`:
+   - `icon-192.png` (192x192) - Android/manifest
+   - `icon-512.png` (512x512) - Android splash/manifest
+   - `apple-icon.png` (180x180) - iOS home screen
+
+2. **Add native platforms** (requires macOS for iOS):
+   ```bash
+   npx cap add ios      # Requires Xcode
+   npx cap add android  # Requires Android Studio
+   ```
+
+3. **Configure deep linking** in native projects (see Phase 5 below)
+
+4. **Deploy production server** with `NEXT_PUBLIC_APP_URL` set
+
+5. **Test on devices** with `npm run cap:livereload:ios` or `cap:livereload:android`
 
 ---
 
@@ -34,6 +53,23 @@ This document tracks the progress of wrapping HyperTrack PWA in a native shell u
 | Create Apple icon | ❌ TODO | Need `/public/apple-icon.png` (180x180) |
 | Set `NEXT_PUBLIC_APP_URL` | ❌ Verify | Must be set in production environment |
 | Deploy to production server | ❌ TODO | Capacitor WebView will point to this URL |
+
+### Capacitor Installation (Complete)
+
+| Task | Status | Notes |
+|------|--------|-------|
+| Install @capacitor/core | ✅ Done | v8.0.0 |
+| Install @capacitor/cli | ✅ Done | v8.0.0 |
+| Initialize capacitor.config.ts | ✅ Done | Configured for hosted app |
+| Install @capacitor/ios | ✅ Done | v8.0.0 |
+| Install @capacitor/android | ✅ Done | v8.0.0 |
+| Install @capacitor/browser | ✅ Done | For OAuth flows |
+| Install @capacitor/app | ✅ Done | Deep linking & lifecycle |
+| Install @capacitor/status-bar | ✅ Done | Dark theme styling |
+| Install @capacitor/splash-screen | ✅ Done | Launch screen |
+| Install @capacitor/push-notifications | ✅ Done | Optional notifications |
+| Update capacitor-stub.ts | ✅ Done | Real implementations |
+| Add npm scripts | ✅ Done | cap:sync, cap:ios, etc. |
 
 ### App Icons Needed
 
@@ -315,6 +351,10 @@ STRIPE_SECRET_KEY=...
 | Date | Change | Author |
 |------|--------|--------|
 | 2024-XX-XX | Initial migration prep: safe-area CSS, removed localhost fallbacks | Claude |
+| 2025-12-26 | Phase 1-3 complete: Installed Capacitor core, platforms, and plugins (v8.0.0) | Claude |
+| 2025-12-26 | Created capacitor.config.ts with hosted app configuration | Claude |
+| 2025-12-26 | Updated capacitor-stub.ts with real Capacitor implementations | Claude |
+| 2025-12-26 | Added npm scripts: cap:sync, cap:ios, cap:android, cap:run:*, cap:livereload:* | Claude |
 | | | |
 
 ---
