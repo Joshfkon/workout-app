@@ -54,16 +54,13 @@ export function WeightHistoryModal({
     // If unit says 'lb' but weight > 500, it's probably stored in kg (convert)
     // If unit says 'kg' but weight is in human range (150-200), it's probably mislabeled as kg but actually in lbs (don't convert, just use as-is)
     if (fromUnit === 'lb' && weight > 500) {
-      console.log(`[WeightHistoryModal Debug] Correcting unit: weight=${weight}, unit was 'lb', correcting to 'kg'`);
       return weight * 2.20462; // Convert from kg
     } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
       // Common weights 150-200 are human weights in lbs, mislabeled as kg
       // The weight is already in lbs, just mislabeled - don't convert, use as-is
-      console.log(`[WeightHistoryModal Debug] Correcting unit: weight=${weight} marked as 'kg' but in human weight range (150-200), treating as already in lbs (no conversion)`);
       return weight; // Already in lbs, just mislabeled
     } else if (fromUnit === 'kg' && weight > 250) {
       // Weight > 250 kg is probably in lbs, convert
-      console.log(`[WeightHistoryModal Debug] Correcting unit: weight=${weight}, unit was 'kg', correcting to 'lb'`);
       return weight / 2.20462; // Convert from lb
     }
     
@@ -125,17 +122,6 @@ export function WeightHistoryModal({
                     <div className="text-lg font-semibold text-surface-100">
                       {(() => {
                         const displayWeight = convertWeightWithValidation(entry.weight, entry.unit);
-                        // Debug logging for Dec 19
-                        if (entry.logged_at === '2025-12-19' || entry.logged_at?.includes('2025-12-19')) {
-                          console.log(`[WeightHistoryModal Debug] Dec 19 entry:`, {
-                            id: entry.id,
-                            logged_at: entry.logged_at,
-                            raw_weight: entry.weight,
-                            raw_unit: entry.unit,
-                            preferred_unit: preferredUnit,
-                            display_weight: displayWeight,
-                          });
-                        }
                         return `${displayWeight.toFixed(1)} ${preferredUnit === 'kg' ? 'kg' : 'lbs'}`;
                       })()}
                     </div>

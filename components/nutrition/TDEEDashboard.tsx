@@ -340,15 +340,6 @@ export function TDEEDashboard({
 
       {/* Weight Predictions */}
       {predictions.length > 0 && currentWeight && (() => {
-        // Debug: Log available data
-        console.log('[TDEEDashboard] Weight Predictions render:', {
-          heightCm,
-          currentWeight,
-          bodyFatPercent,
-          latestDexaScan,
-          activeEstimate: !!activeEstimate,
-        });
-        
         // Calculate current body composition
         const currentWeightKg = currentWeight / 2.20462;
         const currentBodyFatPercent = bodyFatPercent || (heightCm ? 15 : null); // Default estimate if not available
@@ -363,30 +354,27 @@ export function TDEEDashboard({
         const projectBodyComposition = (prediction: WeightPrediction): BodyCompProjection | null => {
           // Need minimum data
           if (!heightCm || !currentWeight) {
-            console.log('[TDEEDashboard] projectBodyComposition returning null:', { heightCm, currentWeight });
             return null;
           }
-          
+
           // Both currentWeight and prediction.predictedWeight are in lbs
           const currentWeightKg = currentWeight / 2.20462;
           const predictedWeightKg = prediction.predictedWeight / 2.20462; // prediction.predictedWeight is already in lbs
           const weightChangeKg = predictedWeightKg - currentWeightKg;
-          
+
           // Can't predict composition without baseline - use fallback if height is available
-          const currentBodyFat = bodyFatPercent || 
+          const currentBodyFat = bodyFatPercent ||
             (latestDexaScan ? (latestDexaScan.fat_mass_kg / latestDexaScan.weight_kg) * 100 : null) ||
             (heightCm ? 15 : null); // Default 15% if we have height but no body fat data
-          
+
           if (!currentBodyFat) {
-            console.log('[TDEEDashboard] projectBodyComposition returning null - no body fat data:', { bodyFatPercent, latestDexaScan, heightCm });
             return null;
           }
-          
+
           const currentLeanMassKg = currentWeightKg * (1 - currentBodyFat / 100);
-          
+
           // Calculate energy balance for P-ratio
           if (!activeEstimate) {
-            console.log('[TDEEDashboard] projectBodyComposition returning null - no activeEstimate');
             return null;
           }
           
