@@ -167,6 +167,7 @@ interface ExerciseCardProps {
     totalDrops: number;
   } | null;
   onDropsetCancel?: () => void;
+  onDropsetStart?: () => void;  // Called when manual dropset is started (to stop timer)
   // Bodyweight exercise support
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
 }
@@ -208,6 +209,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onShowTimerControls,
   pendingDropset = null,
   onDropsetCancel,
+  onDropsetStart,
   userBodyweightKg,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -738,6 +740,8 @@ export const ExerciseCard = memo(function ExerciseCard({
       parentSetId: parentSet.id,
       parentWeight: reducedWeight,
     });
+    // Stop the rest timer when starting a dropset
+    onDropsetStart?.();
   };
   
   // Cancel dropset mode

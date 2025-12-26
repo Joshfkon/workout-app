@@ -363,6 +363,22 @@ export function useRestTimer({
     clearTimerState();
   }, [defaultSeconds, clearTimerState]);
 
+  // Mark timer as complete without playing alarm (used when starting dropsets)
+  const markComplete = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setIsRunning(false);
+    setIsFinished(true);
+    setFinishedAt(Date.now());
+    setSeconds(0);
+    setIsSkipped(false);
+    setRestedSeconds(0);
+    endTimeRef.current = null;
+    clearTimerState();
+  }, [clearTimerState]);
+
   const progressPercent = initialSeconds > 0
     ? ((initialSeconds - seconds) / initialSeconds) * 100
     : 0;
@@ -386,5 +402,6 @@ export function useRestTimer({
     addTime,
     skip,
     dismiss,
+    markComplete,
   };
 }
