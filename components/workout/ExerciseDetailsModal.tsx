@@ -568,10 +568,15 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={demoGifUrl}
+                      src={demoGifUrl.startsWith('http') ? demoGifUrl : demoGifUrl}
                       alt={`${exercise.name} demonstration`}
                       className="w-full h-auto max-h-64 object-contain"
                       loading="lazy"
+                      onError={(e) => {
+                        console.error('[ExerciseDetailsModal] Failed to load image:', demoGifUrl, e);
+                        // Hide the image on error
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
                     />
                     <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
                       MuscleWiki
