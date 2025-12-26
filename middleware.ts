@@ -15,9 +15,10 @@ export const config = {
      * - opengraph-image (OG image generation)
      * - twitter-image (Twitter card image)
      * - api/og (OG image API routes)
+     * - exercise-demos/ (exercise demo images)
      * Feel free to modify this pattern to include more paths.
      */
-    '/((?!_next/static|_next/image|favicon.ico|opengraph-image|twitter-image|api/og|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|opengraph-image|twitter-image|api/og|exercise-demos|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
 

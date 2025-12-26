@@ -1,6 +1,7 @@
 'use client';
 
 import { memo } from 'react';
+import { InfoTooltip } from '@/components/ui';
 import type { RepsInTank } from '@/types/schema';
 
 interface RIROption {
@@ -17,17 +18,17 @@ const RIR_OPTIONS: RIROption[] = [
     value: 4,
     label: '4+',
     subLabel: 'Easy',
-    color: 'text-success-400',
-    bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
-    selectedBg: 'bg-success-500 text-white border-success-500',
+    color: 'text-danger-400',
+    bgColor: 'bg-danger-500/10 border-danger-500/20 hover:bg-danger-500/20',
+    selectedBg: 'bg-danger-500 text-white border-danger-500',
   },
   {
     value: 2,
     label: '2-3',
     subLabel: 'Good',
-    color: 'text-primary-400',
-    bgColor: 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/20',
-    selectedBg: 'bg-primary-500 text-white border-primary-500',
+    color: 'text-success-400',
+    bgColor: 'bg-success-500/10 border-success-500/20 hover:bg-success-500/20',
+    selectedBg: 'bg-success-500 text-white border-success-500',
   },
   {
     value: 1,
@@ -41,9 +42,9 @@ const RIR_OPTIONS: RIROption[] = [
     value: 0,
     label: 'Maxed',
     subLabel: 'Out',
-    color: 'text-danger-400',
-    bgColor: 'bg-danger-500/10 border-danger-500/20 hover:bg-danger-500/20',
-    selectedBg: 'bg-danger-500 text-white border-danger-500',
+    color: 'text-orange-400',
+    bgColor: 'bg-orange-500/10 border-orange-500/20 hover:bg-orange-500/20',
+    selectedBg: 'bg-orange-500 text-white border-orange-500',
   },
 ];
 
@@ -64,8 +65,9 @@ export const RIRSelector = memo(function RIRSelector({
 }: RIRSelectorProps) {
   return (
     <div className="space-y-2">
-      <label className="block text-sm font-medium text-surface-300">
+      <label className="flex items-center gap-1 text-sm font-medium text-surface-300">
         Reps left in tank?
+        <InfoTooltip term="RIR" size="sm" />
       </label>
       <div className="grid grid-cols-4 gap-2">
         {RIR_OPTIONS.map((option) => {

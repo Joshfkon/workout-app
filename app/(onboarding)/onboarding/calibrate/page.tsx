@@ -2,7 +2,10 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Badge } from '@/components/ui';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, Badge, Modal, ExplainedTerm } from '@/components/ui';
+import { RPEExplainer, RPEQuickReference } from '@/components/onboarding/RPEExplainer';
+import { ContextCard } from '@/components/onboarding/ContextCard';
+import { useFirstTimeHint } from '@/hooks/useEducationPreferences';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { 
   BENCHMARK_LIFTS, 
@@ -61,6 +64,17 @@ function CalibrateContent() {
   const [reps, setReps] = useState('5');
   const [rpe, setRpe] = useState('8');
   const [currentResult, setCurrentResult] = useState<CalibrationResult | null>(null);
+
+  // Education state - show RPE tutorial before first test
+  const { shouldShow: shouldShowRPETutorial, dismiss: dismissRPETutorial } = useFirstTimeHint('rpe-tutorial-calibration');
+  const [showRPEModal, setShowRPEModal] = useState(false);
+
+  // Show RPE tutorial on first load if not dismissed
+  useEffect(() => {
+    if (!isLoading && session && currentIndex === 0 && shouldShowRPETutorial) {
+      setShowRPEModal(true);
+    }
+  }, [isLoading, session, currentIndex, shouldShowRPETutorial]);
   
   // Helper functions for unit conversion
   const displayWeight = (kg: number) => {
@@ -306,8 +320,28 @@ function CalibrateContent() {
   
   if (!session) return null;
   
+  const handleRPETutorialComplete = () => {
+    setShowRPEModal(false);
+    dismissRPETutorial();
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* RPE Tutorial Modal */}
+      <Modal
+        isOpen={showRPEModal}
+        onClose={handleRPETutorialComplete}
+        title="Understanding Effort Levels"
+        size="lg"
+        showCloseButton={false}
+      >
+        <RPEExplainer
+          onComplete={handleRPETutorialComplete}
+          onSkip={handleRPETutorialComplete}
+          variant="inline"
+        />
+      </Modal>
+
       {/* Progress indicator */}
       <div className="flex items-center justify-center gap-2 mb-8">
         {[1, 2, 3, 4].map((step) => (
@@ -330,6 +364,16 @@ function CalibrateContent() {
         ))}
       </div>
       
+      {/* Context card on first test */}
+      {currentIndex === 0 && !isComplete && (
+        <ContextCard
+          cardKey="calibration"
+          className="mb-4"
+          defaultCollapsed={false}
+          collapsible={true}
+        />
+      )}
+
       {/* Test progress */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-surface-200">
@@ -534,34 +578,50 @@ function CalibrateContent() {
               {currentResult && (
                 <div className="p-4 bg-surface-800/50 rounded-xl space-y-4 mt-6">
                   <div className="text-center">
-                    <p className="text-sm text-surface-500">Estimated 1RM</p>
+                    <p className="text-sm text-surface-500">
+                      <ExplainedTerm term="E1RM" />
+                    </p>
                     <p className="text-4xl font-bold text-white">
-                      {currentBenchmark.id === 'pullup' 
+                      {currentBenchmark.id === 'pullup'
                         ? `${currentResult.testedReps} reps`
                         : `${displayWeight(currentResult.estimated1RM)} ${weightUnit}`}
                     </p>
-                    <Badge 
+                    <Badge
                       variant={getStrengthLevelBadgeVariant(currentResult.strengthLevel)}
                       className="mt-2"
                     >
                       {formatStrengthLevel(currentResult.strengthLevel)}
                     </Badge>
                   </div>
-                  
+
+                  {/* Percentile explanation */}
+                  <div className="text-center text-xs text-surface-400 border-t border-surface-700 pt-3">
+                    <ExplainedTerm term="PERCENTILE" /> rankings show how you compare to others
+                  </div>
+
                   <div className="space-y-3">
-                    <PercentileBar 
+                    <PercentileBar
                       percentile={currentResult.percentileScore.vsGeneralPopulation}
                       label="vs General Population"
                     />
-                    <PercentileBar 
+                    <PercentileBar
                       percentile={currentResult.percentileScore.vsTrainedPopulation}
                       label="vs Trained Lifters"
                     />
-                    <PercentileBar 
+                    <PercentileBar
                       percentile={currentResult.percentileScore.vsBodyComposition}
                       label="vs Similar Body Comp"
                     />
                   </div>
+
+                  {/* Interpretation helper */}
+                  <p className="text-xs text-surface-500 text-center pt-2">
+                    {currentResult.percentileScore.vsTrainedPopulation >= 75
+                      ? "Great! You're stronger than most trained lifters."
+                      : currentResult.percentileScore.vsTrainedPopulation >= 50
+                        ? "Solid foundation. You're in the middle of the pack."
+                        : "Room to grow! This data helps us set realistic progression."}
+                  </p>
                 </div>
               )}
               

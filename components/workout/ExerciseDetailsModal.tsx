@@ -54,7 +54,32 @@ function calculateE1RM(weight: number, reps: number): number {
 
 // Helper to get property value from either camelCase or snake_case
 function getExerciseProp(exercise: Exercise, camelKey: string, snakeKey: string): any {
-  return (exercise as any)[camelKey] ?? (exercise as any)[snakeKey];
+  const camelValue = (exercise as any)[camelKey];
+  const snakeValue = (exercise as any)[snakeKey];
+  let result = camelValue ?? snakeValue;
+  
+  // Special handling for video/image URL fields - they should always be strings
+  // Handle case where result might be an object (from nested queries)
+  if ((camelKey === 'demoGifUrl' || camelKey === 'youtubeVideoId' || snakeKey === 'demo_gif_url' || snakeKey === 'youtube_video_id') 
+      && result && typeof result === 'object' && !Array.isArray(result)) {
+    // Try to extract string value from nested structure
+    // Check if it's a nested exercises object
+    if ((result as any).demo_gif_url && typeof (result as any).demo_gif_url === 'string') {
+      result = (result as any).demo_gif_url;
+    } else if ((result as any).demoGifUrl && typeof (result as any).demoGifUrl === 'string') {
+      result = (result as any).demoGifUrl;
+    } else if ((result as any).youtube_video_id && typeof (result as any).youtube_video_id === 'string') {
+      result = (result as any).youtube_video_id;
+    } else if ((result as any).youtubeVideoId && typeof (result as any).youtubeVideoId === 'string') {
+      result = (result as any).youtubeVideoId;
+    } else {
+      // If we can't extract a string, log and return null for video fields
+      console.warn(`[getExerciseProp] Expected string but got object for ${camelKey}/${snakeKey}:`, result);
+      result = null;
+    }
+  }
+  
+  return result;
 }
 
 function getTierBadgeClasses(tier: string): string {
@@ -521,6 +546,95 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               </button>
             </div>
           </div>
+
+          {/* Video Demonstration Section */}
+          {!isEditing && (() => {
+            const demoGifUrl = getExerciseProp(exercise, 'demoGifUrl', 'demo_gif_url');
+            const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
+
+            if (!demoGifUrl && !youtubeVideoId) {
+              // Show debug info in development
+              if (process.env.NODE_ENV === 'development' && exercise) {
+                console.log('[ExerciseDetailsModal] No video fields found for exercise:', {
+                  exerciseName: exercise.name,
+                  exerciseId: exercise.id,
+                  allKeys: Object.keys(exercise),
+                  demoGifUrl_camel: (exercise as any).demoGifUrl,
+                  demoGifUrl_snake: (exercise as any).demo_gif_url,
+                  youtubeVideoId_camel: (exercise as any).youtubeVideoId,
+                  youtubeVideoId_snake: (exercise as any).youtube_video_id,
+                });
+              }
+              return null;
+            }
+
+            const isVideo = demoGifUrl && (demoGifUrl.endsWith('.mp4') || demoGifUrl.endsWith('.webm') || demoGifUrl.endsWith('.mov'));
+            const isImage = demoGifUrl && !isVideo;
+
+            return (
+              <div className="space-y-3">
+                <p className="text-xs font-medium text-surface-400 uppercase tracking-wider">
+                  Exercise Demo
+                </p>
+
+                {/* MP4 Video Demo */}
+                {isVideo && (
+                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                    <video
+                      src={demoGifUrl}
+                      className="w-full h-auto max-h-64 object-contain"
+                      controls
+                      loop
+                      muted
+                      playsInline
+                      onError={(e) => {
+                        console.error('[ExerciseDetailsModal] Failed to load video:', demoGifUrl, e);
+                        (e.target as HTMLVideoElement).style.display = 'none';
+                      }}
+                    >
+                      Your browser does not support the video tag.
+                    </video>
+                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
+                      MuscleWiki
+                    </div>
+                  </div>
+                )}
+
+                {/* Image/GIF Demo */}
+                {isImage && (
+                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={demoGifUrl.startsWith('http') ? demoGifUrl : demoGifUrl}
+                      alt={`${exercise.name} demonstration`}
+                      className="w-full h-auto max-h-64 object-contain"
+                      loading="lazy"
+                      onError={(e) => {
+                        console.error('[ExerciseDetailsModal] Failed to load image:', demoGifUrl, e);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
+                      MuscleWiki
+                    </div>
+                  </div>
+                )}
+
+                {/* YouTube Embed */}
+                {youtubeVideoId && (
+                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video">
+                    <iframe
+                      src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
+                      title={`${exercise.name} form video`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      className="absolute inset-0 w-full h-full"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Edit Form or View Mode */}
           {isEditing && editData ? (
@@ -1387,6 +1501,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
           {/* Action Buttons */}
           {!isEditing && (
           <div className="flex gap-3 pt-4 border-t border-surface-800">
+            {/* Show YouTube search link - always available for finding more videos */}
             <a
               href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
               target="_blank"
@@ -1396,7 +1511,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
               </svg>
-              Watch Form Video
+              {getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id') ? 'More Videos' : 'Find Videos'}
             </a>
             <Button variant="outline" onClick={onClose} className="flex-1">
               Close

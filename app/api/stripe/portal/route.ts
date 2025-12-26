@@ -56,7 +56,14 @@ export async function POST(request: NextRequest) {
     }
     
     // Create portal session
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      console.error('NEXT_PUBLIC_APP_URL is not configured');
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
     
     const session = await stripe.billingPortal.sessions.create({
       customer: subscription.stripe_customer_id,

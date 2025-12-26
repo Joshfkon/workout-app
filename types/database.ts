@@ -79,6 +79,9 @@ export interface Database {
           setup_note: string;
           movement_pattern: string;
           equipment_required: string[];
+          demo_gif_url: string | null;
+          demo_thumbnail_url: string | null;
+          youtube_video_id: string | null;
         };
         Insert: {
           id?: string;
@@ -94,6 +97,9 @@ export interface Database {
           setup_note?: string;
           movement_pattern?: string;
           equipment_required?: string[];
+          demo_gif_url?: string | null;
+          demo_thumbnail_url?: string | null;
+          youtube_video_id?: string | null;
         };
         Update: {
           id?: string;
@@ -109,6 +115,9 @@ export interface Database {
           setup_note?: string;
           movement_pattern?: string;
           equipment_required?: string[];
+          demo_gif_url?: string | null;
+          demo_thumbnail_url?: string | null;
+          youtube_video_id?: string | null;
         };
       };
       mesocycles: {

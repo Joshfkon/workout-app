@@ -24,6 +24,7 @@ const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.
 const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => m.ReadinessCheckIn), { ssr: false });
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
+const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -43,6 +44,7 @@ import {
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
+import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -421,6 +423,9 @@ export default function WorkoutPage() {
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   
+  // Share workout modal state
+  const [showShareModal, setShowShareModal] = useState(false);
+  
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
   
@@ -443,6 +448,7 @@ export default function WorkoutPage() {
   
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
+  const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
@@ -523,6 +529,46 @@ export default function WorkoutPage() {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
+
+  // Track workout progress for navigation protection (using ref to avoid re-running effect)
+  const hasWorkoutProgressRef = useRef(false);
+  useEffect(() => {
+    hasWorkoutProgressRef.current = phase === 'workout' && completedSets.length > 0;
+  }, [phase, completedSets.length]);
+
+  // Prevent accidental navigation away from active workout
+  useEffect(() => {
+    // Only set up protection when in workout phase
+    if (phase !== 'workout') return;
+
+    // Handle browser close/refresh - shows native browser confirmation dialog
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasWorkoutProgressRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    // Handle browser back button - intercepts navigation and shows cancel modal
+    const handlePopState = () => {
+      if (hasWorkoutProgressRef.current) {
+        // Push state back to stay on page and show cancel modal
+        window.history.pushState(null, '', window.location.href);
+        setShowCancelModal(true);
+      }
+    };
+
+    // Push an initial history state to detect back button press
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [phase]);
 
   // Load workout data
   useEffect(() => {
@@ -620,6 +666,10 @@ export default function WorkoutPage() {
                             (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
               bodyweightType: block.exercises.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
               assistanceType: block.exercises.assistance_type as 'machine' | 'band' | 'partner' | undefined,
+              // Video demonstration fields
+              demoGifUrl: block.exercises.demo_gif_url as string | undefined,
+              demoThumbnailUrl: block.exercises.demo_thumbnail_url as string | undefined,
+              youtubeVideoId: block.exercises.youtube_video_id as string | undefined,
             },
           }));
 
@@ -705,7 +755,7 @@ export default function WorkoutPage() {
           // Latest DEXA scan for body fat and regional data
           supabase
             .from('dexa_scans')
-            .select('body_fat_percentage, regional_data, lean_mass_kg')
+            .select('body_fat_percent, regional_data, lean_mass_kg')
             .eq('user_id', sessionData.user_id)
             .order('scan_date', { ascending: false })
             .limit(1)
@@ -733,7 +783,7 @@ export default function WorkoutPage() {
         const profile: UserProfileForWeights | undefined = userData ? {
           weightKg: userData.weight_kg || 70,
           heightCm: userData.height_cm || 175,
-          bodyFatPercent: dexaData?.body_fat_percentage || 20,
+          bodyFatPercent: dexaData?.body_fat_percent || 20,
           experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate',
           regionalData: dexaData?.regional_data as DexaRegionalData | undefined,
           calibratedLifts: calibratedLifts as CalibratedLift[] | undefined,
@@ -2139,8 +2189,7 @@ export default function WorkoutPage() {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
       setCurrentSetNumber(1);
-      setShowRestTimer(false);
-      restTimer.dismiss();
+      // Keep rest timer running - need rest between sets even when switching exercises
     }
   };
 
@@ -2576,13 +2625,33 @@ export default function WorkoutPage() {
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
         />
-        {isViewingCompleted && (
-          <div className="mt-6 text-center">
-            <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
-              ← Back to History
+        <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          {isViewingCompleted ? (
+            <>
+              <Button variant="outline" onClick={() => router.push('/dashboard/history')}>
+                ← Back to History
+              </Button>
+              <Button variant="outline" onClick={() => setShowShareModal(true)}>
+                Share Workout
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" onClick={() => setShowShareModal(true)}>
+              Share Workout
             </Button>
-          </div>
-        )}
+          )}
+        </div>
+        
+        {/* Share Workout Modal */}
+        <ShareWorkoutModal
+          workoutSessionId={sessionId}
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          onSuccess={() => {
+            setShowShareModal(false);
+            // Optionally show success message or refresh
+          }}
+        />
       </div>
     );
   }
@@ -2889,7 +2958,9 @@ export default function WorkoutPage() {
   };
 
   // Calculate overall workout progress
-  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
+  // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
+  const pendingExtraSets = addingExtraSet ? 1 : 0;
+  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup).length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
@@ -2984,6 +3055,16 @@ export default function WorkoutPage() {
             >
               <span>🤕</span>
               <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
+            </button>
+            <button
+              onClick={() => setShowPlateCalculator(true)}
+              className="px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium bg-surface-800 hover:bg-surface-700 text-surface-400"
+              title="Plate Calculator"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <span className="hidden sm:inline">Plates</span>
             </button>
             <Button
               variant="ghost"
@@ -3335,6 +3416,21 @@ export default function WorkoutPage() {
                 {isComplete && !isCurrent && (
                   <Badge variant="success" size="sm">Done</Badge>
                 )}
+                {/* Delete exercise button - visible without expanding */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Remove "${block.exercise.name}" from this workout?`)) {
+                      handleExerciseDelete(block.id);
+                    }
+                  }}
+                  className="p-2 text-surface-500 hover:text-error-400 transition-colors"
+                  title="Remove exercise"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
                 {/* Collapse/expand button */}
                 <button
                   onClick={(e) => {
@@ -3343,10 +3439,10 @@ export default function WorkoutPage() {
                   }}
                   className="p-2 text-surface-400 hover:text-surface-200 transition-colors"
                 >
-                  <svg 
+                  <svg
                     className={`w-5 h-5 transition-transform ${isBlockCollapsed ? '' : 'rotate-180'}`}
-                    fill="none" 
-                    viewBox="0 0 24 24" 
+                    fill="none"
+                    viewBox="0 0 24 24"
                     stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -3477,6 +3573,11 @@ export default function WorkoutPage() {
                     // Dropset props
                     pendingDropset={pendingDropset?.blockId === block.id ? pendingDropset : null}
                     onDropsetCancel={() => setPendingDropset(null)}
+                    onDropsetStart={() => {
+                      // Stop timer and mark as complete when manual dropset starts
+                      restTimer.markComplete();
+                      setShowRestTimer(false);
+                    }}
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}
@@ -4117,6 +4218,13 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Plate Calculator Modal */}
+      <PlateCalculatorModal
+        isOpen={showPlateCalculator}
+        onClose={() => setShowPlateCalculator(false)}
+        initialWeightKg={currentBlock?.targetWeightKg}
+      />
 
       {/* Page-level Swap Modal for injury-related swaps */}
       {showPageLevelSwapModal && swapTargetBlockId && (() => {

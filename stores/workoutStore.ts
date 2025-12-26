@@ -80,6 +80,7 @@ export const useWorkoutStore = create<WorkoutState>()(
           exerciseBlocks: [],
           setLogs: new Map(),
           currentBlockIndex: 0,
+          exercises: new Map(),
           restTimerEnd: null,
         });
       },

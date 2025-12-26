@@ -76,6 +76,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // For video files - network-only, no caching (they use range requests with 206 status)
+  // Must be checked BEFORE the static assets handler
+  if (url.pathname.match(/\.(mp4|webm|mov|avi|mkv)$/)) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   // For static assets (JS, CSS, images) - cache-first
   if (
     url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|webp|woff2?|ttf|eot)$/) ||
@@ -88,7 +95,8 @@ self.addEventListener('fetch', (event) => {
           event.waitUntil(
             fetch(request)
               .then((response) => {
-                if (response.ok) {
+                // Don't cache partial responses (206) - these are range requests for videos
+                if (response.ok && response.status !== 206) {
                   const responseToCache = response.clone();
                   caches.open(CACHE_NAME).then((cache) => {
                     cache.put(request, responseToCache);
@@ -101,7 +109,8 @@ self.addEventListener('fetch', (event) => {
         }
 
         return fetch(request).then((response) => {
-          if (response.ok) {
+          // Don't cache partial responses (206) - these are range requests for videos
+          if (response.ok && response.status !== 206) {
             const responseToCache = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, responseToCache);

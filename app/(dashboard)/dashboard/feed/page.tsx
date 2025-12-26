@@ -64,9 +64,18 @@ export default function FeedPage() {
   }, [activities, removeReaction, updateActivityReaction]);
 
   const handleComment = useCallback((activityId: string) => {
-    // TODO: Open comment modal/sheet
-    console.log('Comment on activity:', activityId);
+    // Comment section is now integrated into ActivityCard
+    // This callback can be used for scrolling to comments or other actions
+    const element = document.getElementById(`activity-${activityId}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }, []);
+
+  const handleCommentAdded = useCallback(() => {
+    // Refresh activities to update comment counts
+    refresh();
+  }, [refresh]);
 
   return (
     <div className="min-h-screen bg-surface-950">
@@ -164,15 +173,17 @@ export default function FeedPage() {
         {/* Activity list */}
         <div className="space-y-4">
           {activities.map((activity) => (
-            <ActivityCard
-              key={activity.id}
-              activity={activity}
-              currentUserId={userId}
-              units={units}
-              onReact={handleReact}
-              onUnreact={handleUnreact}
-              onComment={handleComment}
-            />
+            <div key={activity.id} id={`activity-${activity.id}`}>
+              <ActivityCard
+                activity={activity}
+                currentUserId={userId}
+                units={units}
+                onReact={handleReact}
+                onUnreact={handleUnreact}
+                onComment={handleComment}
+                onCommentAdded={handleCommentAdded}
+              />
+            </div>
           ))}
         </div>
 

@@ -27,7 +27,6 @@ interface ActivityRow {
     avatar_url: string | null;
     bio: string | null;
     profile_visibility: string;
-    activity_visibility: string;
     follower_count: number;
     following_count: number;
     workout_count: number;
@@ -51,6 +50,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Build base query for activities
       let query = supabase
         .from('activities' as never)
         .select(`
@@ -61,20 +61,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
           visibility,
           reaction_count,
           comment_count,
-          created_at,
-          user_profiles!inner (
-            id,
-            user_id,
-            username,
-            display_name,
-            avatar_url,
-            bio,
-            profile_visibility,
-            activity_visibility,
-            follower_count,
-            following_count,
-            workout_count
-          )
+          created_at
         `)
         .order('created_at', { ascending: false })
         .limit(limit);
@@ -109,11 +96,58 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         query = query.lt('created_at', cursor);
       }
 
-      const { data, error: fetchError } = await query as { data: ActivityRow[] | null; error: Error | null };
+      const { data: activitiesData, error: fetchError } = await query as { data: any[] | null; error: any };
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error('[useActivityFeed] Query error:', fetchError);
+        // Provide more helpful error messages
+        if (fetchError.code === 'PGRST116' || fetchError.message?.includes('does not exist')) {
+          throw new Error('Database tables not found. Please run the social features migrations in Supabase SQL Editor. See docs/SOCIAL_FEATURES_SETUP.md');
+        }
+        if (fetchError.code === '42703') {
+          throw new Error(`Database column error: ${fetchError.message}. Please check if migrations were run correctly.`);
+        }
+        throw fetchError;
+      }
 
-      if (data) {
+      if (activitiesData && activitiesData.length > 0) {
+        // Fetch user profiles for all activities
+        const userIds = Array.from(new Set(activitiesData.map(a => a.user_id)));
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('user_profiles' as never)
+          .select('id, user_id, username, display_name, avatar_url, bio, profile_visibility, follower_count, following_count, workout_count')
+          .in('user_id', userIds) as { data: any[] | null; error: any };
+
+        if (profilesError) {
+          console.error('[useActivityFeed] Profiles query error:', profilesError);
+          // If user_profiles table doesn't exist, provide helpful error
+          if (profilesError.code === 'PGRST116' || profilesError.message?.includes('does not exist')) {
+            throw new Error('The user_profiles table does not exist. Please run migration 20241228000001_add_user_profiles.sql in Supabase SQL Editor. See docs/SOCIAL_FEATURES_SETUP.md');
+          }
+          // For other errors, we'll continue but activities without profiles won't show
+        }
+
+        // Create a map of user_id -> profile
+        const profilesMap = new Map();
+        if (profilesData && profilesData.length > 0) {
+          profilesData.forEach(profile => {
+            profilesMap.set(profile.user_id, profile);
+          });
+        }
+
+        // Combine activities with profiles (only show activities that have profiles)
+        const data: ActivityRow[] = activitiesData
+          .filter(activity => {
+            if (!profilesMap.has(activity.user_id)) {
+              console.warn(`[useActivityFeed] Activity ${activity.id} has no user_profile for user ${activity.user_id}`);
+              return false;
+            }
+            return true;
+          })
+          .map(activity => ({
+            ...activity,
+            user_profiles: profilesMap.get(activity.user_id)!,
+          }));
         // Get current user's reactions for these activities
         let userReactions: Record<string, ActivityReaction> = {};
 
@@ -187,9 +221,20 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         setHasMore(data.length === limit);
         if (data.length > 0) {
           setCursor(data[data.length - 1].created_at);
+        } else {
+          setHasMore(false);
+        }
+      } else {
+        // No activities found
+        if (loadMore) {
+          setHasMore(false);
+        } else {
+          setActivities([]);
+          setHasMore(false);
         }
       }
     } catch (err) {
+      console.error('[useActivityFeed] Error loading activities:', err);
       const message = err instanceof Error ? err.message : 'Failed to load activities';
       setError(message);
     } finally {

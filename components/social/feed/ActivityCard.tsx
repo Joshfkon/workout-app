@@ -7,6 +7,7 @@ import { Avatar } from '@/components/social/profile';
 import { formatRelativeTime, getProfileUrl, getReactionEmoji } from '@/lib/social';
 import { formatWeight } from '@/lib/utils';
 import { ReactionBar } from './ReactionBar';
+import { CommentSection } from './CommentSection';
 import type { ActivityWithProfile, WorkoutCompletedData, PersonalRecordData, StreakMilestoneData } from '@/types/social';
 
 export interface ActivityCardProps {
@@ -16,6 +17,7 @@ export interface ActivityCardProps {
   onReact?: (activityId: string, reactionType: string) => void;
   onUnreact?: (activityId: string) => void;
   onComment?: (activityId: string) => void;
+  onCommentAdded?: () => void;
 }
 
 function ActivityCardComponent({
@@ -25,6 +27,7 @@ function ActivityCardComponent({
   onReact,
   onUnreact,
   onComment,
+  onCommentAdded,
 }: ActivityCardProps) {
   const { user_profile } = activity;
   const displayName = user_profile.display_name || user_profile.username;
@@ -94,8 +97,8 @@ function ActivityCardComponent({
         {renderActivityContent()}
       </div>
 
-      {/* Reactions & Comments */}
-      <div className="px-4 pb-4 border-t border-surface-800 pt-3">
+      {/* Reactions */}
+      <div className="px-4 pb-3 border-t border-surface-800 pt-3">
         <ReactionBar
           activityId={activity.id}
           reactionCount={activity.reaction_count}
@@ -107,6 +110,14 @@ function ActivityCardComponent({
           onComment={onComment}
         />
       </div>
+
+      {/* Comments Section */}
+      <CommentSection
+        activityId={activity.id}
+        commentCount={activity.comment_count}
+        currentUserId={currentUserId}
+        onCommentAdded={onCommentAdded}
+      />
     </Card>
   );
 }

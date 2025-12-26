@@ -12,7 +12,7 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts';
-import { Card } from '@/components/ui';
+import { Card, InfoTooltip } from '@/components/ui';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import type { VolumeStatus } from '@/types/schema';
 import type { RechartsTooltipProps } from '@/types/database-queries';
@@ -128,11 +128,12 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
         </ResponsiveContainer>
       </div>
 
-      {/* Legend */}
+      {/* Legend with tooltips */}
       <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-surface-800 text-xs">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-[#71717a]" />
           <span className="text-surface-400">Below MEV</span>
+          <InfoTooltip term="MEV" size="sm" />
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-[#0ea5e9]" />
@@ -141,6 +142,7 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-[#22c55e]" />
           <span className="text-surface-400">Optimal</span>
+          <InfoTooltip term="MAV" size="sm" />
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-[#eab308]" />
@@ -149,6 +151,7 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-[#ef4444]" />
           <span className="text-surface-400">Over MRV</span>
+          <InfoTooltip term="MRV" size="sm" />
         </div>
       </div>
     </Card>

@@ -235,6 +235,7 @@ BEGIN
         WHEN show_workouts = false THEN 'private'
         WHEN profile_visibility = 'private' THEN 'private'
         WHEN profile_visibility = 'followers_only' THEN 'followers'
+        WHEN profile_visibility = 'public' THEN 'public'
         ELSE 'followers'
       END,
       'followers'

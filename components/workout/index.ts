@@ -17,3 +17,7 @@ export { BodyweightSetEditRow } from './BodyweightSetEditRow';
 export { CompactSetRow } from './CompactSetRow';
 export { SegmentedControl } from './SegmentedControl';
 
+// Plate Calculator
+export { PlateCalculator } from './PlateCalculator';
+export { PlateCalculatorModal } from './PlateCalculatorModal';
+
