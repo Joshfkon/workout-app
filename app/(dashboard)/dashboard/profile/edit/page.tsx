@@ -35,10 +35,18 @@ export default function ProfileEditPage() {
       }
 
       const { data: profile, error: fetchError } = await supabase
-        .from('user_profiles')
+        .from('user_profiles' as never)
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .single() as { data: {
+          display_name: string | null;
+          bio: string | null;
+          profile_visibility: ProfileVisibility;
+          show_workouts: boolean;
+          show_stats: boolean;
+          training_experience: TrainingExperience | null;
+          gym_name: string | null;
+        } | null; error: any };
 
       if (fetchError || !profile) {
         setError('Failed to load profile');
