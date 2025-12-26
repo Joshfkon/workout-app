@@ -1080,13 +1080,13 @@ function EducationPreferencesCard() {
     dismissedHints,
     setShowBeginnerTips,
     setExplainScienceTerms,
-    resetDismissedHints,
+    resetAllHints,
   } = useEducationStore();
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleResetHints = () => {
-    resetDismissedHints();
+    resetAllHints();
     setShowResetConfirm(false);
   };
 
