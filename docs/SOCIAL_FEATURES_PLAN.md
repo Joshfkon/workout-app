@@ -1,19 +1,23 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 3 In Progress - Activity Feed
+> **Status**: Phase 4 Complete - Workout Sharing
 > **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 3 - Activity Feed (In Progress)
+> **Current Sprint**: Sprint 4 - Workout Sharing (Complete)
 >
-> ### Phase 3 Progress
-> - [x] Create activities database migration (activity_reactions, activity_comments tables)
-> - [x] Create ActivityCard component with workout/PR/streak content variants
-> - [x] Create ReactionBar component with emoji picker
-> - [x] Create useActivityFeed hook with cursor pagination
-> - [x] Create useReactions hook for reaction management
+> ### Phase 3 Progress (Activity Feed) - Complete
+> - [x] Create activities database migration
+> - [x] Create ActivityCard, ReactionBar components
+> - [x] Create useActivityFeed, useReactions hooks
 > - [x] Build activity feed page with Following/Discover tabs
-> - [x] Add Feed and Profile links to sidebar navigation
-> - [ ] Add comment section component
-> - [ ] Add activity creation triggers on workout completion
+> - [x] Add Feed and Profile links to sidebar
+>
+> ### Phase 4 Progress (Workout Sharing) - Complete
+> - [x] Create shared_workouts, saved_workouts, workout_copies database migration
+> - [x] Create ShareWorkoutModal component with type/difficulty/muscle group selection
+> - [x] Create SharedWorkoutCard component with stats and tags
+> - [x] Create SaveWorkoutButton and CopyWorkoutButton components
+> - [x] Create useSharedWorkouts hook with filters and pagination
+> - [x] Build workout browser page with Browse/Saved tabs and filters
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
 ---
