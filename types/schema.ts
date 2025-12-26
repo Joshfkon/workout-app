@@ -279,6 +279,17 @@ export interface Exercise {
   
   /** Hypertrophy effectiveness score based on Nippard methodology (optional) */
   hypertrophyScore?: HypertrophyScore;
+
+  // === Video Demonstration Fields ===
+
+  /** URL to demonstration GIF/animation (from MuscleWiki, Supabase Storage, etc.) */
+  demoGifUrl?: string;
+
+  /** URL to thumbnail image for the demo (optional) */
+  demoThumbnailUrl?: string;
+
+  /** YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ") */
+  youtubeVideoId?: string;
 }
 
 // ============ MESOCYCLE ============

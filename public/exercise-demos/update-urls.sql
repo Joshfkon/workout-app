@@ -1,0 +1,27 @@
+-- SQL to update database:
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-back-squat.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%barbell-back-squat%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-bench-press.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%barbell-bench-press%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-curl.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%barbell-curl%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-row.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%barbell-row%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/cable-fly.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%cable-fly%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/cable-row.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%cable-row%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/calf-raise.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%calf-raise%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/deadlift.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%deadlift%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dips--chest-focus-.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%dips--chest-focus-%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-bench-press.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%dumbbell-bench-press%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-curl.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%dumbbell-curl%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-lunges.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%dumbbell-lunges%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-row.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%dumbbell-row%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/hammer-curl.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%hammer-curl%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/incline-dumbbell-press.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%incline-dumbbell-press%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lat-pulldown.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%lat-pulldown%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lateral-raise.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%lateral-raise%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/leg-extension.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%leg-extension%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/leg-press.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%leg-press%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lying-leg-curl.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%lying-leg-curl%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/overhead-press.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%overhead-press%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/pull-ups.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%pull-ups%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/rear-delt-fly.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%rear-delt-fly%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/romanian-deadlift.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%romanian-deadlift%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/skull-crushers.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%skull-crushers%';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/tricep-pushdown.jpg' WHERE LOWER(REPLACE(name, ' ', '-')) LIKE '%tricep-pushdown%';
