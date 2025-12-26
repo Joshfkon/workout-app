@@ -541,18 +541,21 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
             const demoGifUrl = getExerciseProp(exercise, 'demoGifUrl', 'demo_gif_url');
             const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
 
-            // Debug logging
-            if (exercise) {
-              console.log('[ExerciseDetailsModal] Exercise video fields:', {
-                demoGifUrl,
-                youtubeVideoId,
-                exerciseKeys: Object.keys(exercise),
-                hasDemoGifUrl: !!(exercise as any).demoGifUrl || !!(exercise as any).demo_gif_url,
-                hasYoutubeVideoId: !!(exercise as any).youtubeVideoId || !!(exercise as any).youtube_video_id,
-              });
+            if (!demoGifUrl && !youtubeVideoId) {
+              // Show debug info in development
+              if (process.env.NODE_ENV === 'development' && exercise) {
+                console.log('[ExerciseDetailsModal] No video fields found for exercise:', {
+                  exerciseName: exercise.name,
+                  exerciseId: exercise.id,
+                  allKeys: Object.keys(exercise),
+                  demoGifUrl_camel: (exercise as any).demoGifUrl,
+                  demoGifUrl_snake: (exercise as any).demo_gif_url,
+                  youtubeVideoId_camel: (exercise as any).youtubeVideoId,
+                  youtubeVideoId_snake: (exercise as any).youtube_video_id,
+                });
+              }
+              return null;
             }
-
-            if (!demoGifUrl && !youtubeVideoId) return null;
 
             return (
               <div className="space-y-3">
