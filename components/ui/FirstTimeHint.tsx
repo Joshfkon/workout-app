@@ -87,16 +87,18 @@ export const FirstTimeHint = memo(function FirstTimeHint({
     return <>{children}</>;
   }
 
+  // Mobile-first positioning: start aligned on mobile, centered on larger screens
   const positionClasses = {
-    top: 'bottom-full mb-2 left-1/2 -translate-x-1/2',
-    bottom: 'top-full mt-2 left-1/2 -translate-x-1/2',
+    top: 'bottom-full mb-2 left-0 sm:left-1/2 sm:-translate-x-1/2',
+    bottom: 'top-full mt-2 left-0 sm:left-1/2 sm:-translate-x-1/2',
     left: 'right-full mr-2 top-1/2 -translate-y-1/2',
     right: 'left-full ml-2 top-1/2 -translate-y-1/2',
   };
 
+  // Arrow positioning: aligned with mobile hint position, centered on larger screens
   const arrowClasses = {
-    top: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-t-primary-600 border-x-transparent border-b-transparent',
-    bottom: 'top-0 left-1/2 -translate-x-1/2 -translate-y-full border-b-primary-600 border-x-transparent border-t-transparent',
+    top: 'bottom-0 left-4 sm:left-1/2 sm:-translate-x-1/2 translate-y-full border-t-primary-600 border-x-transparent border-b-transparent',
+    bottom: 'top-0 left-4 sm:left-1/2 sm:-translate-x-1/2 -translate-y-full border-b-primary-600 border-x-transparent border-t-transparent',
     left: 'right-0 top-1/2 -translate-y-1/2 translate-x-full border-l-primary-600 border-y-transparent border-r-transparent',
     right: 'left-0 top-1/2 -translate-y-1/2 -translate-x-full border-r-primary-600 border-y-transparent border-l-transparent',
   };
@@ -109,7 +111,7 @@ export const FirstTimeHint = memo(function FirstTimeHint({
       <div
         role="tooltip"
         className={cn(
-          'absolute z-50 w-64 p-3 rounded-lg',
+          'absolute z-50 w-64 max-w-[calc(100vw-2rem)] p-3 rounded-lg',
           'bg-primary-600 text-white shadow-lg',
           'transition-all duration-200',
           isAnimatingOut ? 'opacity-0 scale-95' : 'opacity-100 scale-100 animate-fade-in',
