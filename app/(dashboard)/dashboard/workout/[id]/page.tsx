@@ -530,6 +530,46 @@ export default function WorkoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
 
+  // Track workout progress for navigation protection (using ref to avoid re-running effect)
+  const hasWorkoutProgressRef = useRef(false);
+  useEffect(() => {
+    hasWorkoutProgressRef.current = phase === 'workout' && completedSets.length > 0;
+  }, [phase, completedSets.length]);
+
+  // Prevent accidental navigation away from active workout
+  useEffect(() => {
+    // Only set up protection when in workout phase
+    if (phase !== 'workout') return;
+
+    // Handle browser close/refresh - shows native browser confirmation dialog
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasWorkoutProgressRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+
+    // Handle browser back button - intercepts navigation and shows cancel modal
+    const handlePopState = () => {
+      if (hasWorkoutProgressRef.current) {
+        // Push state back to stay on page and show cancel modal
+        window.history.pushState(null, '', window.location.href);
+        setShowCancelModal(true);
+      }
+    };
+
+    // Push an initial history state to detect back button press
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [phase]);
+
   // Load workout data
   useEffect(() => {
     async function loadWorkout() {
