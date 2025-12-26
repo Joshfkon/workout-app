@@ -715,7 +715,7 @@ export default function WorkoutPage() {
           // Latest DEXA scan for body fat and regional data
           supabase
             .from('dexa_scans')
-            .select('body_fat_percentage, regional_data, lean_mass_kg')
+            .select('body_fat_percent, regional_data, lean_mass_kg')
             .eq('user_id', sessionData.user_id)
             .order('scan_date', { ascending: false })
             .limit(1)
@@ -743,7 +743,7 @@ export default function WorkoutPage() {
         const profile: UserProfileForWeights | undefined = userData ? {
           weightKg: userData.weight_kg || 70,
           heightCm: userData.height_cm || 175,
-          bodyFatPercent: dexaData?.body_fat_percentage || 20,
+          bodyFatPercent: dexaData?.body_fat_percent || 20,
           experience: (userData.experience as 'novice' | 'intermediate' | 'advanced') || 'intermediate',
           regionalData: dexaData?.regional_data as DexaRegionalData | undefined,
           calibratedLifts: calibratedLifts as CalibratedLift[] | undefined,
