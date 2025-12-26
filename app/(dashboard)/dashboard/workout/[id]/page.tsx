@@ -2919,7 +2919,9 @@ export default function WorkoutPage() {
   };
 
   // Calculate overall workout progress
-  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
+  // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
+  const pendingExtraSets = addingExtraSet ? 1 : 0;
+  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup).length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
