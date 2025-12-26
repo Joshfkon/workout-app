@@ -47,6 +47,8 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
 ];
 
 const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
+const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
+const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // MEV targets (minimum effective volume per muscle) - defined outside component for stable reference
 const MEV_TARGETS: Record<string, number> = {
@@ -196,6 +198,22 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.error('Failed to load card order:', e);
+    }
+  }, []);
+
+  // Load cached weight history on mount for faster initial render
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(WEIGHT_HISTORY_CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        // Use cache if still valid (within TTL)
+        if (Date.now() - timestamp < WEIGHT_HISTORY_CACHE_TTL && Array.isArray(data)) {
+          setWeightHistory(data);
+        }
+      }
+    } catch (e) {
+      // Ignore cache errors - fresh data will be fetched
     }
   }, []);
 
@@ -534,6 +552,16 @@ export default function DashboardPage() {
           });
 
           setWeightHistory(processedHistory);
+
+          // Cache weight history in localStorage for faster subsequent loads
+          try {
+            localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({
+              data: processedHistory,
+              timestamp: Date.now(),
+            }));
+          } catch (e) {
+            // Ignore cache errors - quota exceeded, etc.
+          }
         }
 
         // Process weekly volume (accounting for compound exercises - secondary muscles get 0.5x credit)

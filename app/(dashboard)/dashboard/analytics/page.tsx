@@ -27,6 +27,7 @@ import {
   generatePercentileSegments
 } from '@/services/coachingEngine';
 import { kgToLbs, roundToIncrement, formatWeight, formatDuration } from '@/lib/utils';
+// Recharts components still used inline - these will be gradually migrated
 import {
   LineChart,
   Line,
@@ -40,9 +41,60 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-
-// Dynamic imports for heavy components
+// Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
+
+// Body composition chart
+const BodyCompChart = dynamic(
+  () => import('@/components/analytics/BodyCompCharts').then(m => m.BodyCompChart),
+  { ssr: false, loading: () => <div className="h-64 animate-pulse bg-surface-700 rounded" /> }
+);
+
+// Wellness charts
+const HydrationChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.HydrationChart),
+  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-surface-700 rounded" /> }
+);
+const CardioChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.CardioChart),
+  { ssr: false, loading: () => <div className="h-[300px] animate-pulse bg-surface-700 rounded" /> }
+);
+const SleepHoursChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.SleepHoursChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const SleepQualityChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.SleepQualityChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const EnergyChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.EnergyChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const MoodChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.MoodChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const FocusChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.FocusChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const LibidoChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.LibidoChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const StressChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.StressChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const SorenessChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.SorenessChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
+const HungerChart = dynamic(
+  () => import('@/components/analytics/WellnessCharts').then(m => m.HungerChart),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
+);
 
 // Tab types
 type TabType = 'body-composition' | 'strength' | 'volume' | 'wellness';

@@ -5,7 +5,7 @@
 
 ## Completed Improvements
 
-The following Phase 1 optimizations have been implemented:
+### Phase 1 Optimizations (Completed Dec 26, 2024)
 
 | Task | File | Status | Impact |
 |------|------|--------|--------|
@@ -14,11 +14,34 @@ The following Phase 1 optimizations have been implemented:
 | Cache subscription in sessionStorage | `hooks/useSubscription.ts` | ✅ DONE | -200-400ms/page |
 | Fix waterfall query (today's workout) | `app/(dashboard)/dashboard/page.tsx` | ✅ DONE | -200-400ms |
 
-**Estimated total improvement: 550-1100ms**
+**Phase 1 improvement: 550-1100ms**
+
+### Phase 2 Optimizations (Completed Dec 26, 2024)
+
+| Task | File | Status | Impact |
+|------|------|--------|--------|
+| Convert DashboardLayout to Server Component | `app/(dashboard)/layout.tsx` | ✅ DONE | -500-1000ms |
+| Add dynamic imports for exercise charts | `exercises/page.tsx` | ✅ DONE | -200-300ms |
+| Add dynamic imports for analytics charts | `analytics/page.tsx` | ✅ DONE | -200-300ms |
+| Cache weight history in localStorage | `dashboard/page.tsx` | ✅ DONE | -100-200ms |
+
+**Phase 2 improvement: 1000-1800ms**
+
+**Total estimated improvement: 1550-2900ms**
 
 ### Notes on Auth Pages
 
 The recommendation to add `revalidate = false` to auth pages (login/register) was **not applicable**. These pages use `'use client'` directive and require client-side interactivity for form handling (useState, useRouter). Static generation is not possible for interactive forms.
+
+### Notes on DashboardLayout Refactoring
+
+The dashboard layout was refactored into modular components:
+- `DashboardLayoutClient.tsx` - Main client wrapper with layout structure
+- `Sidebar.tsx` - Client component handling navigation and active state
+- `SubscriptionBadge.tsx` - Client component for subscription status display
+- `SignOutButton.tsx` - Client component for sign out functionality
+
+This allows the layout to be a server component wrapper while client interactivity is isolated to specific components.
 
 ---
 
@@ -659,16 +682,16 @@ const { data: blocks } = await supabase
 | Add `revalidate = false` to static pages | `app/(auth)/*.tsx` | N/A | ⚠️ Not applicable (forms need client) |
 | Fix waterfall query in dashboard | `dashboard/page.tsx` | -200-400ms | ✅ Done |
 
-### Phase 2: Medium Effort (4-6 hours)
+### Phase 2: Medium Effort (4-6 hours) ✅ PARTIALLY COMPLETED
 **Expected Improvement: 1-2 seconds**
 
-| Task | File | Impact |
-|------|------|--------|
-| Convert DashboardLayout to Server Component | `app/(dashboard)/layout.tsx` | -500-1000ms |
-| Add dynamic imports for charts | `exercises/page.tsx`, `analytics/page.tsx` | -400-600ms |
-| Defer "today's workout" query | `dashboard/page.tsx` | -300-500ms |
-| Cache weight history in localStorage | `dashboard/page.tsx` | -100-200ms |
-| Add request deduplication | Multiple hooks | -300-500ms |
+| Task | File | Impact | Status |
+|------|------|--------|--------|
+| Convert DashboardLayout to Server Component | `app/(dashboard)/layout.tsx` | -500-1000ms | ✅ Done |
+| Add dynamic imports for charts | `exercises/page.tsx`, `analytics/page.tsx` | -400-600ms | ✅ Done |
+| Defer "today's workout" query | `dashboard/page.tsx` | -300-500ms | ⚠️ Already optimized in Phase 1 |
+| Cache weight history in localStorage | `dashboard/page.tsx` | -100-200ms | ✅ Done |
+| Add request deduplication | Multiple hooks | -300-500ms | Pending |
 
 ### Phase 3: Larger Refactors (8-12 hours)
 **Expected Improvement: 1-3 seconds**
@@ -708,17 +731,25 @@ app/(dashboard)/dashboard/page.tsx  # ✅ Fixed waterfall query, removed 20+ con
 # app/(auth)/register/page.tsx      # Has useState/useRouter - can't be static
 ```
 
-### Week 2: Layout & Code Splitting
+### Week 2: Layout & Code Splitting ✅ COMPLETED (Dec 26, 2024)
 
 ```bash
-# Files to modify:
-app/(dashboard)/layout.tsx           # Convert to Server Component
-components/dashboard/Sidebar.tsx     # Extract as Server Component
-components/dashboard/SubscriptionBadge.tsx  # Keep as Client Component
+# Files modified:
+app/(dashboard)/layout.tsx                      # ✅ Converted to Server Component wrapper
+components/dashboard/Sidebar.tsx                # ✅ Created as Client Component (handles navigation)
+components/dashboard/SubscriptionBadge.tsx      # ✅ Created as Client Component
+components/dashboard/SignOutButton.tsx          # ✅ Created as Client Component
+components/dashboard/DashboardLayoutClient.tsx  # ✅ Created as Client wrapper
 
-# Add dynamic imports:
-app/(dashboard)/dashboard/exercises/page.tsx
-app/(dashboard)/dashboard/analytics/page.tsx
+# Dynamic imports added:
+app/(dashboard)/dashboard/exercises/page.tsx    # ✅ ExerciseHistoryCharts dynamically imported
+app/(dashboard)/dashboard/analytics/page.tsx    # ✅ Chart components dynamically imported
+components/exercises/ExerciseHistoryCharts.tsx  # ✅ New component with Recharts
+components/analytics/WellnessCharts.tsx         # ✅ New component with Recharts
+components/analytics/BodyCompCharts.tsx         # ✅ New component with Recharts
+
+# Weight history caching:
+app/(dashboard)/dashboard/page.tsx              # ✅ Added localStorage cache with 1hr TTL
 ```
 
 ### Week 3: Caching & Data Fetching
