@@ -27,7 +27,18 @@
 
 **Phase 2 improvement: 1000-1800ms**
 
-**Total estimated improvement: 1550-2900ms**
+### Phase 3 Optimizations (Completed Dec 26, 2024)
+
+| Task | File | Status | Impact |
+|------|------|--------|--------|
+| Remove console.log statements (20+) | `hooks/useRestTimer.ts` | ✅ DONE | -50-100ms |
+| Remove console.log statements (3) | `services/importExport.ts` | ✅ DONE | -10-20ms |
+| Enable conditional image optimization | `next.config.mjs` | ✅ DONE | -30-50% bandwidth |
+| Add sessionStorage caching | `components/dashboard/ActivityCard.tsx` | ✅ DONE | -100-200ms/page |
+
+**Phase 3 improvement: 160-320ms + significant bandwidth savings**
+
+**Total estimated improvement: 1710-3220ms + bandwidth optimization**
 
 ### Notes on Auth Pages
 
@@ -693,7 +704,17 @@ const { data: blocks } = await supabase
 | Cache weight history in localStorage | `dashboard/page.tsx` | -100-200ms | ✅ Done |
 | Add request deduplication | Multiple hooks | -300-500ms | Pending |
 
-### Phase 3: Larger Refactors (8-12 hours)
+### Phase 3: Additional Quick Wins ✅ COMPLETED
+**Expected Improvement: 160-320ms + bandwidth savings**
+
+| Task | File | Impact | Status |
+|------|------|--------|--------|
+| Remove console.log statements | `hooks/useRestTimer.ts` | -50-100ms | ✅ Done |
+| Remove console.log statements | `services/importExport.ts` | -10-20ms | ✅ Done |
+| Enable image optimization | `next.config.mjs` | -30-50% bandwidth | ✅ Done |
+| Add sessionStorage caching | `components/dashboard/ActivityCard.tsx` | -100-200ms | ✅ Done |
+
+### Phase 4: Larger Refactors (8-12 hours)
 **Expected Improvement: 1-3 seconds**
 
 | Task | Impact |
@@ -701,10 +722,9 @@ const { data: blocks } = await supabase
 | Implement React Query/SWR for data fetching | Major caching improvement |
 | Enable ISR for frequently viewed pages | Faster page loads |
 | Server-render dashboard cards where possible | Reduced JS bundle |
-| Enable image optimization | 30-50% bandwidth reduction |
 | Extract large components to reduce bundle | Faster initial load |
 
-### Phase 4: Long-term (16+ hours)
+### Phase 5: Long-term (16+ hours)
 **Expected Improvement: 1-2 seconds**
 
 | Task | Impact |
@@ -752,7 +772,17 @@ components/analytics/BodyCompCharts.tsx         # ✅ New component with Rechart
 app/(dashboard)/dashboard/page.tsx              # ✅ Added localStorage cache with 1hr TTL
 ```
 
-### Week 3: Caching & Data Fetching
+### Week 3: Additional Logging & Caching Cleanup ✅ COMPLETED (Dec 26, 2024)
+
+```bash
+# Files modified:
+hooks/useRestTimer.ts                       # ✅ Removed 20+ console.log statements
+services/importExport.ts                    # ✅ Removed 3 console.log statements
+next.config.mjs                             # ✅ Enabled conditional image optimization
+components/dashboard/ActivityCard.tsx       # ✅ Added sessionStorage cache with 5min TTL
+```
+
+### Week 4: Caching & Data Fetching
 
 ```bash
 # Install and configure:
@@ -764,12 +794,13 @@ hooks/useVolumeData.ts           # Refactor with React Query
 hooks/useWeightHistory.ts        # Add localStorage caching
 ```
 
-### Week 4: Image & Build Optimization
+### Week 5: Build Optimization
 
 ```bash
-# Modify:
-next.config.mjs                  # Enable image optimization
-components/ui/Image.tsx          # Create optimized image component
+# Image optimization already enabled in next.config.mjs ✅
+
+# Create optimized image component:
+components/ui/Image.tsx          # Optional: Create wrapper component
 
 # Analyze bundle:
 npm run build
@@ -780,16 +811,19 @@ npx @next/bundle-analyzer
 
 ## Files Reference
 
-| File | Priority | Issues |
-|------|----------|--------|
-| `app/(dashboard)/layout.tsx` | CRITICAL | Client component, useSubscription every page |
-| `app/(dashboard)/dashboard/page.tsx` | CRITICAL | 13 queries, sequential dependencies |
-| `hooks/useAdaptiveVolume.ts` | HIGH | 40+ console.logs, multiple queries |
-| `hooks/useSubscription.ts` | HIGH | No caching, queries every page |
-| `next.config.mjs` | HIGH | Images unoptimized |
-| `components/workout/ExerciseCard.tsx` | MEDIUM | 2,512 lines, not dynamically loaded |
-| `components/workout/SessionSummary.tsx` | MEDIUM | 931 lines, always loaded |
-| `app/(dashboard)/dashboard/exercises/page.tsx` | MEDIUM | Charts load immediately |
+| File | Priority | Issues | Status |
+|------|----------|--------|--------|
+| `app/(dashboard)/layout.tsx` | CRITICAL | Client component, useSubscription every page | ✅ Fixed - Server Component wrapper |
+| `app/(dashboard)/dashboard/page.tsx` | CRITICAL | 13 queries, sequential dependencies | ✅ Fixed - Waterfall removed, caching added |
+| `hooks/useAdaptiveVolume.ts` | HIGH | 40+ console.logs, multiple queries | ✅ Fixed - console.logs removed |
+| `hooks/useSubscription.ts` | HIGH | No caching, queries every page | ✅ Fixed - sessionStorage caching added |
+| `hooks/useRestTimer.ts` | HIGH | 20+ console.logs | ✅ Fixed - console.logs removed |
+| `next.config.mjs` | HIGH | Images unoptimized | ✅ Fixed - conditional optimization enabled |
+| `components/dashboard/ActivityCard.tsx` | MEDIUM | Re-fetching on every render | ✅ Fixed - sessionStorage caching added |
+| `services/importExport.ts` | LOW | 3 console.logs | ✅ Fixed - console.logs removed |
+| `components/workout/ExerciseCard.tsx` | MEDIUM | 2,512 lines, not dynamically loaded | Pending |
+| `components/workout/SessionSummary.tsx` | MEDIUM | 931 lines, always loaded | Pending |
+| `app/(dashboard)/dashboard/exercises/page.tsx` | MEDIUM | Charts load immediately | ✅ Fixed - dynamic imports added |
 
 ---
 

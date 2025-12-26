@@ -1,9 +1,22 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Required for Capacitor - disables Next.js image optimization
-  // which requires a server. Images will be served as-is.
   images: {
-    unoptimized: true,
+    // Only disable optimization for Capacitor builds (mobile apps)
+    // Web builds benefit from automatic WebP/AVIF conversion, compression, and lazy loading
+    unoptimized: process.env.CAPACITOR === 'true',
+    // Allow Supabase storage images
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.supabase.co',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.supabaseusercontent.com',
+      },
+    ],
+    // Prefer modern formats for better compression
+    formats: ['image/avif', 'image/webp'],
   },
 
   // Capacitor notes:
