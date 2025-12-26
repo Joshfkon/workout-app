@@ -28,18 +28,17 @@ export async function serializeWorkoutForSharing(
         id,
         exercise_id,
         target_sets,
-        target_reps_min,
-        target_reps_max,
+        target_rep_range,
         target_rir,
-        notes,
-        superset_group,
+        note,
+        superset_group_id,
         exercises!inner (
           id,
           name
         )
       `)
       .eq('workout_session_id', workoutSessionId)
-      .order('order_index', { ascending: true });
+      .order('order', { ascending: true });
 
     if (blocksError || !blocks) {
       console.error('Failed to fetch exercise blocks:', blocksError);
@@ -52,15 +51,19 @@ export async function serializeWorkoutForSharing(
     const estimatedDurationMinutes = totalSets * 2 + blocks.length * 2;
 
     // Convert blocks to shared exercises
-    const exercises: SharedExercise[] = blocks.map((block: any) => ({
-      exercise_id: block.exercise_id,
-      exercise_name: block.exercises?.name || 'Unknown Exercise',
-      sets: block.target_sets || 0,
-      rep_range: [block.target_reps_min || 0, block.target_reps_max || 0] as [number, number],
-      target_rir: block.target_rir || 0,
-      notes: block.notes || undefined,
-      superset_group: block.superset_group || undefined,
-    }));
+    const exercises: SharedExercise[] = blocks.map((block: any) => {
+      // target_rep_range is stored as an array like [8, 12]
+      const repRange = block.target_rep_range || [0, 0];
+      return {
+        exercise_id: block.exercise_id,
+        exercise_name: block.exercises?.name || 'Unknown Exercise',
+        sets: block.target_sets || 0,
+        rep_range: [repRange[0] || 0, repRange[1] || 0] as [number, number],
+        target_rir: block.target_rir || 0,
+        notes: block.note || undefined,
+        superset_group: block.superset_group_id || undefined,
+      };
+    });
 
     return {
       exercises,
