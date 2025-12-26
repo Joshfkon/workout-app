@@ -1989,6 +1989,47 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </AccordionTrigger>
                 <AccordionContent id="form-cues">
                   <div className="space-y-3">
+                    {/* Exercise Demo Image */}
+                    {(() => {
+                      const demoGifUrl = exercise.demoGifUrl || (exercise as any).demo_gif_url;
+                      const youtubeVideoId = exercise.youtubeVideoId || (exercise as any).youtube_video_id;
+                      
+                      if (!demoGifUrl && !youtubeVideoId) return null;
+                      
+                      return (
+                        <div className="mb-3">
+                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                            Exercise Demo
+                          </p>
+                          {demoGifUrl && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={demoGifUrl}
+                                alt={`${exercise.name} demonstration`}
+                                className="w-full h-auto max-h-48 object-contain"
+                                loading="lazy"
+                                onError={(e) => {
+                                  console.error('[ExerciseCard] Failed to load image:', demoGifUrl);
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+                          {youtubeVideoId && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video">
+                              <iframe
+                                src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
+                                title={`${exercise.name} form video`}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                className="absolute inset-0 w-full h-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div>
                       <h4 className="text-xs font-medium text-surface-300 uppercase tracking-wide mb-1">
                         Key Cues
