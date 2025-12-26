@@ -1,6 +1,6 @@
 # Beginner-Friendly Onboarding & Education Plan
 
-> **Status**: Phase 1 Complete
+> **Status**: Phase 1 & 2 Complete
 > **Last Updated**: 2025-12-26
 > **Branch**: `claude/beginner-onboarding-hxjJW`
 
@@ -159,27 +159,35 @@ Every data collection point should be preceded by context explaining:
 - [x] Interactive "What's next" section with previews
 - [ ] Optional onboarding tour of dashboard
 
-### Phase 2: Contextual Tooltips System (Priority: High) - PARTIAL
+### Phase 2: Contextual Tooltips System (Priority: High) - COMPLETE
 
 **Goal**: Add help at every complex UI element
 
 #### 2.1 Create Reusable Tooltip Components
 - [x] `<InfoTooltip>` - Simple "?" icon with popover
-- [ ] `<LearnMoreLink>` - Links to Learn article with preview
+- [ ] `<LearnMoreLink>` - Links to Learn article with preview (deferred)
 - [x] `<FirstTimeHint>` - One-time educational callout
-- [ ] `<ConceptExplainer>` - Multi-level progressive disclosure
+- [ ] `<ConceptExplainer>` - Multi-level progressive disclosure (deferred)
 
 #### 2.2 Dashboard Tooltips
-- [ ] Volume tracker: Explain MEV/MAV/MRV on first view
-- [ ] Atrophy risk alert: What this means and why it matters
-- [ ] Weekly summary: Interpret the data shown
-- [ ] Mesocycle progress: Explain current phase
+- [x] Volume tracker: MEV/MAV/MRV tooltips in VolumeChart legend
+- [x] Atrophy risk alert: MEV tooltip next to badge
+- [x] Weekly volume card: FirstTimeHint explaining volume tracking
+- [x] Nutrition card: FirstTimeHint explaining macro tracking
+- [x] Mesocycle creation: FirstTimeHint explaining mesocycles
 
 #### 2.3 Workout Screen Tooltips
-- [ ] Set quality indicator: Show why set was classified this way
-- [ ] Weight recommendations: Explain how calculated
-- [ ] Rest timer: Why rest matters for hypertrophy
-- [ ] Form rating: What each option means
+- [x] RIR selector: InfoTooltip explaining "Reps In Reserve"
+- [x] Form rating: InfoTooltip explaining "Form Quality"
+- [x] Set input target: RIR tooltip in target display
+- [ ] Weight recommendations: Explain how calculated (deferred)
+- [ ] Rest timer: Why rest matters for hypertrophy (deferred)
+
+#### 2.4 Settings UI
+- [x] Education preferences card in settings page
+- [x] "Show Beginner Tips" toggle
+- [x] "Explain Science Terms" toggle
+- [x] "Reset Tips" button to restore dismissed hints
 
 ### Phase 3: Guided Feature Introduction (Priority: High)
 
@@ -203,7 +211,7 @@ Every data collection point should be preceded by context explaining:
 - [ ] Celebrate effective sets
 - [ ] Guide on adjustments
 
-### Phase 4: Settings & Preferences (Priority: Medium)
+### Phase 4: Settings & Preferences (Priority: Medium) - PARTIAL
 
 **Goal**: Let users control their education experience
 
@@ -212,11 +220,11 @@ Every data collection point should be preceded by context explaining:
 - [ ] Explain what changes based on selection
 - [ ] Allow changing later in settings
 
-#### 4.2 Education Preferences
-- [ ] "Show beginner tips" toggle
-- [ ] "Explain science terms" toggle
-- [ ] "Reset all tips" button
-- [ ] Notification preferences for educational content
+#### 4.2 Education Preferences - COMPLETE
+- [x] "Show beginner tips" toggle (in Settings page)
+- [x] "Explain science terms" toggle (in Settings page)
+- [x] "Reset all tips" button (in Settings page)
+- [ ] Notification preferences for educational content (deferred)
 
 #### 4.3 Terminology Glossary
 - [ ] Searchable glossary in settings
@@ -434,12 +442,24 @@ This is excellent pressing strength relative to your muscle mass.
 | Calibration Page | `/onboarding/calibrate/page.tsx` | Added RPE modal, ContextCard, percentile explanation |
 | Completion Screen | `/onboarding/complete/page.tsx` | Added InlineHint, score interpretation, ExplainedTerm |
 
+### Modified Components (Phase 2)
+
+| Component | File | Changes Made |
+|-----------|------|--------------|
+| Dashboard Page | `/app/(dashboard)/dashboard/page.tsx` | Added FirstTimeHint to volume, nutrition, mesocycle cards |
+| Volume Chart | `/components/analytics/VolumeChart.tsx` | Added InfoTooltip for MEV/MAV/MRV legend |
+| Atrophy Risk Alert | `/components/analytics/AtrophyRiskAlert.tsx` | Added InfoTooltip for MEV badge |
+| Set Input Row | `/components/workout/SetInputRow.tsx` | Added InfoTooltip for RIR target |
+| RIR Selector | `/components/workout/RIRSelector.tsx` | Added InfoTooltip for RIR label |
+| Form Rating Selector | `/components/workout/FormRatingSelector.tsx` | Added InfoTooltip for Form Quality |
+| Settings Page | `/app/(dashboard)/dashboard/settings/page.tsx` | Added EducationPreferencesCard |
+
 ### Components to Modify (Future Phases)
 
 | Component | File | Changes Needed |
 |-----------|------|----------------|
-| Dashboard Volume | `/app/(dashboard)/dashboard/page.tsx` | Add volume landmark tooltips |
-| Workout Set Input | `/components/workout/SetInputRow.tsx` | Add RIR tooltip, set quality feedback |
+| Workout Screen | Various | Add weight recommendation explanations |
+| Rest Timer | `/components/workout/RestTimer.tsx` | Add rest importance tooltip |
 
 ### New Hooks Created (Phase 1)
 

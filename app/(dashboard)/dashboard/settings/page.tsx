@@ -15,6 +15,7 @@ import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
@@ -544,6 +545,9 @@ export default function SettingsPage() {
       {/* Detailed Gym Equipment */}
       <GymEquipmentSettings />
 
+      {/* Education & Tips */}
+      <EducationPreferencesCard />
+
       {/* Preferences */}
       <Card>
         <CardHeader>
@@ -1065,5 +1069,109 @@ function InstallAppCard() {
         />
       </Modal>
     </>
+  );
+}
+
+// Education Preferences Card Component
+function EducationPreferencesCard() {
+  const {
+    showBeginnerTips,
+    explainScienceTerms,
+    dismissedHints,
+    setShowBeginnerTips,
+    setExplainScienceTerms,
+    resetDismissedHints,
+  } = useEducationStore();
+
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleResetHints = () => {
+    resetDismissedHints();
+    setShowResetConfirm(false);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          Education & Tips
+        </CardTitle>
+        <p className="text-sm text-surface-400 mt-1">
+          Control how the app explains features and terminology
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-surface-200">Show Beginner Tips</p>
+            <p className="text-xs text-surface-500">Display helpful hints when you first use features</p>
+          </div>
+          <Toggle
+            checked={showBeginnerTips}
+            onChange={setShowBeginnerTips}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-surface-200">Explain Science Terms</p>
+            <p className="text-xs text-surface-500">Show tooltips for terms like MEV, RIR, FFMI, etc.</p>
+          </div>
+          <Toggle
+            checked={explainScienceTerms}
+            onChange={setExplainScienceTerms}
+          />
+        </div>
+
+        {dismissedHints.length > 0 && (
+          <div className="pt-4 border-t border-surface-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Reset Tips</p>
+                <p className="text-xs text-surface-500">
+                  You've dismissed {dismissedHints.length} tips. Reset to see them again.
+                </p>
+              </div>
+              {showResetConfirm ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowResetConfirm(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={handleResetHints}
+                  >
+                    Reset
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowResetConfirm(true)}
+                >
+                  Reset Tips
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="p-3 bg-surface-800/50 rounded-lg">
+          <p className="text-xs text-surface-400">
+            <span className="text-primary-400">Tip:</span> You can always learn more about training concepts
+            in the <Link href="/dashboard/learn" className="text-primary-400 hover:underline">Learn Hub</Link>.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

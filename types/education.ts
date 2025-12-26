@@ -157,6 +157,11 @@ export const TOOLTIP_CONTENT: Record<string, TooltipContent> = {
     shortExplanation: 'Sets that are too easy (RPE 5 or below) to stimulate growth. They add fatigue without benefit.',
     longExplanation: 'Junk volume often comes from excessive warm-up sets or going through the motions. These sets don\'t count toward your weekly volume.',
   },
+  FORM_QUALITY: {
+    term: 'Form Quality',
+    shortExplanation: 'How well you maintained technique during the set. Good form means better results and lower injury risk.',
+    longExplanation: 'Tracking form helps identify when weight should increase vs. when technique needs work. Consistently ugly form suggests the weight is too heavy.',
+  },
 
   // Training Phases
   DELOAD: {
