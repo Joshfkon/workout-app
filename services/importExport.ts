@@ -142,12 +142,7 @@ function parseCSVLine(line: string): string[] {
 export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
   const rawRows = parseCSV(csvText);
   const workouts: Map<string, ParsedStrongWorkout> = new Map();
-  
-  console.log(`Parsing ${rawRows.length} rows from Strong CSV`);
-  if (rawRows.length > 0) {
-    console.log('First row columns:', Object.keys(rawRows[0]));
-  }
-  
+
   for (const rawRow of rawRows) {
     // Flexible column name mapping (Strong exports vary)
     const row: StrongWorkoutRow = {
@@ -221,8 +216,7 @@ export function parseStrongCSV(csvText: string): ParsedStrongWorkout[] {
       });
     }
   }
-  
-  console.log(`Parsed ${workouts.size} unique workouts`);
+
   return Array.from(workouts.values());
 }
 

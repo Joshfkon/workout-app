@@ -17,6 +17,16 @@ interface ActivityCardProps {
   userId: string;
 }
 
+const ACTIVITY_CACHE_KEY = 'activity_card_data';
+const ACTIVITY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+interface CachedActivityData {
+  connections: WearableConnection[];
+  todayActivity: DailyActivityData | null;
+  timestamp: number;
+  date: string;
+}
+
 export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardProps) {
   const [connections, setConnections] = useState<WearableConnection[]>([]);
   const [todayActivity, setTodayActivity] = useState<DailyActivityData | null>(null);
@@ -27,13 +37,48 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   const [showManualInput, setShowManualInput] = useState(false);
 
   const loadData = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Check sessionStorage cache first
+    try {
+      const cached = sessionStorage.getItem(ACTIVITY_CACHE_KEY);
+      if (cached) {
+        const parsed: CachedActivityData = JSON.parse(cached);
+        const isValid =
+          parsed.date === today &&
+          Date.now() - parsed.timestamp < ACTIVITY_CACHE_TTL;
+
+        if (isValid) {
+          setConnections(parsed.connections);
+          setTodayActivity(parsed.todayActivity);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch {
+      // Cache read failed, proceed with fetch
+    }
+
     try {
       const [connectionsData, activityData] = await Promise.all([
         getActiveWearableConnections(),
-        getDailyActivityData(new Date().toISOString().split('T')[0]),
+        getDailyActivityData(today),
       ]);
       setConnections(connectionsData);
       setTodayActivity(activityData);
+
+      // Cache the results
+      try {
+        const cacheData: CachedActivityData = {
+          connections: connectionsData,
+          todayActivity: activityData,
+          timestamp: Date.now(),
+          date: today,
+        };
+        sessionStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(cacheData));
+      } catch {
+        // Cache write failed, non-critical
+      }
     } catch (error) {
       console.error('Failed to load activity data:', error);
     } finally {
