@@ -203,3 +203,154 @@ export function percentage(value: number, total: number): number {
   return Math.round((value / total) * 100);
 }
 
+// ============ PLATE CALCULATOR ============
+
+/**
+ * Standard plate weights available (per side)
+ */
+export const STANDARD_PLATES = {
+  kg: [25, 20, 15, 10, 5, 2.5, 1.25],
+  lb: [45, 35, 25, 10, 5, 2.5],
+} as const;
+
+/**
+ * Common barbell types with their weights
+ */
+export const BARBELL_WEIGHTS = {
+  kg: {
+    olympic: { weight: 20, label: 'Olympic Barbell (20kg)' },
+    womens: { weight: 15, label: "Women's Olympic (15kg)" },
+    ez_curl: { weight: 10, label: 'EZ Curl Bar (10kg)' },
+    trap: { weight: 25, label: 'Trap Bar (25kg)' },
+  },
+  lb: {
+    olympic: { weight: 45, label: 'Olympic Barbell (45lb)' },
+    womens: { weight: 35, label: "Women's Olympic (35lb)" },
+    ez_curl: { weight: 25, label: 'EZ Curl Bar (25lb)' },
+    trap: { weight: 55, label: 'Trap Bar (55lb)' },
+  },
+} as const;
+
+export type BarbellType = keyof typeof BARBELL_WEIGHTS.kg;
+
+/**
+ * Result of plate calculation
+ */
+export interface PlateCalculationResult {
+  /** Whether the target weight is achievable with available plates */
+  isValid: boolean;
+  /** The barbell weight used */
+  barbellWeight: number;
+  /** Plates needed per side (array of plate weights) */
+  platesPerSide: number[];
+  /** Total weight per side (sum of plates) */
+  weightPerSide: number;
+  /** Actual total weight (may differ slightly from target due to rounding) */
+  actualTotal: number;
+  /** Error message if not valid */
+  error?: string;
+}
+
+/**
+ * Calculate which plates to load on each side of the barbell
+ * Uses a greedy algorithm to find the minimal number of plates
+ */
+export function calculatePlates(
+  targetWeight: number,
+  barbellWeight: number,
+  unit: 'kg' | 'lb',
+  availablePlates?: number[]
+): PlateCalculationResult {
+  const plates = availablePlates || [...STANDARD_PLATES[unit]];
+
+  // Target weight must be at least the barbell weight
+  if (targetWeight < barbellWeight) {
+    return {
+      isValid: false,
+      barbellWeight,
+      platesPerSide: [],
+      weightPerSide: 0,
+      actualTotal: barbellWeight,
+      error: `Target weight must be at least ${barbellWeight}${unit} (barbell weight)`,
+    };
+  }
+
+  // Calculate weight needed per side
+  const totalPlateWeight = targetWeight - barbellWeight;
+  let remainingPerSide = totalPlateWeight / 2;
+
+  // Check if the weight is divisible (plates go on both sides)
+  if (totalPlateWeight % 2 !== 0 && unit === 'kg') {
+    // For kg, we need the plate weight to be divisible by smallest increment
+    const smallestPlate = Math.min(...plates);
+    if ((totalPlateWeight / 2) % smallestPlate !== 0) {
+      // Round to nearest achievable weight
+      remainingPerSide = Math.round(remainingPerSide / smallestPlate) * smallestPlate;
+    }
+  }
+
+  const platesPerSide: number[] = [];
+
+  // Greedy algorithm: use largest plates first
+  for (const plate of plates.sort((a, b) => b - a)) {
+    while (remainingPerSide >= plate) {
+      platesPerSide.push(plate);
+      remainingPerSide -= plate;
+    }
+  }
+
+  // Check if we achieved the target (allowing small rounding errors)
+  const weightPerSide = platesPerSide.reduce((sum, p) => sum + p, 0);
+  const actualTotal = barbellWeight + (weightPerSide * 2);
+
+  if (Math.abs(remainingPerSide) > 0.01) {
+    return {
+      isValid: false,
+      barbellWeight,
+      platesPerSide,
+      weightPerSide,
+      actualTotal,
+      error: `Cannot exactly achieve ${targetWeight}${unit}. Closest: ${actualTotal}${unit}`,
+    };
+  }
+
+  return {
+    isValid: true,
+    barbellWeight,
+    platesPerSide,
+    weightPerSide,
+    actualTotal,
+  };
+}
+
+/**
+ * Get barbell weight based on type and unit
+ */
+export function getBarbellWeight(type: BarbellType, unit: 'kg' | 'lb'): number {
+  return BARBELL_WEIGHTS[unit][type].weight;
+}
+
+/**
+ * Get barbell label based on type and unit
+ */
+export function getBarbellLabel(type: BarbellType, unit: 'kg' | 'lb'): string {
+  return BARBELL_WEIGHTS[unit][type].label;
+}
+
+/**
+ * Get color for a plate based on its weight (follows standard Olympic color coding)
+ */
+export function getPlateColor(weight: number, unit: 'kg' | 'lb'): string {
+  // Convert lb to kg equivalent for color matching
+  const kgWeight = unit === 'lb' ? weight / 2.20462 : weight;
+
+  // Olympic plate colors (based on kg plates)
+  if (kgWeight >= 24) return '#E53935'; // Red - 25kg
+  if (kgWeight >= 19) return '#1E88E5'; // Blue - 20kg
+  if (kgWeight >= 14) return '#FDD835'; // Yellow - 15kg
+  if (kgWeight >= 9) return '#43A047'; // Green - 10kg
+  if (kgWeight >= 4) return '#FFFFFF'; // White - 5kg
+  if (kgWeight >= 2) return '#E53935'; // Red - 2.5kg
+  return '#9E9E9E'; // Gray - smaller plates
+}
+
