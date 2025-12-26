@@ -23,6 +23,7 @@ export function UserSearch({
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const searchUsers = useCallback(
     debounce(async (searchQuery: string) => {
       if (!searchQuery || searchQuery.length < 2) {
@@ -43,7 +44,7 @@ export function UserSearch({
         .limit(20);
 
       if (!error && data) {
-        setResults(data);
+        setResults(data as UserProfile[]);
       }
 
       setIsSearching(false);

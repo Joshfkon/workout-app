@@ -85,9 +85,9 @@ function AvatarUploadComponent({
           .getPublicUrl(fileName);
 
         // Update profile with new avatar URL
-        const { error: updateError } = await supabase
-          .from('user_profiles')
-          .update({ avatar_url: publicUrl })
+        const { error: updateError } = await (supabase
+          .from('user_profiles' as never) as ReturnType<typeof supabase.from>)
+          .update({ avatar_url: publicUrl } as never)
           .eq('user_id', user.id);
 
         if (updateError) {
@@ -125,9 +125,9 @@ function AvatarUploadComponent({
       }
 
       // Update profile to remove avatar URL
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ avatar_url: null })
+      const { error } = await (supabase
+        .from('user_profiles' as never) as ReturnType<typeof supabase.from>)
+        .update({ avatar_url: null } as never)
         .eq('user_id', user.id);
 
       if (error) throw error;

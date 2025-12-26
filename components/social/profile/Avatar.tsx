@@ -1,8 +1,17 @@
 'use client';
 
 import { memo, forwardRef, type HTMLAttributes } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/social';
+
+const sizePx = {
+  xs: 24,
+  sm: 32,
+  md: 40,
+  lg: 56,
+  xl: 80,
+};
 
 export interface AvatarProps extends HTMLAttributes<HTMLDivElement> {
   src?: string | null;
@@ -40,13 +49,16 @@ const Avatar = forwardRef<HTMLDivElement, AvatarProps>(
     return (
       <div ref={ref} className={cn('relative inline-block', className)} {...props}>
         {src ? (
-          <img
+          <Image
             src={src}
             alt={alt || name || 'Avatar'}
+            width={sizePx[size]}
+            height={sizePx[size]}
             className={cn(
               'rounded-full object-cover bg-surface-800',
               sizeClasses[size]
             )}
+            unoptimized
           />
         ) : (
           <div

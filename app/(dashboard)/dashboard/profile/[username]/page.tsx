@@ -42,7 +42,7 @@ export default function UserProfilePage() {
         .from('user_profiles')
         .select('*')
         .ilike('username', username)
-        .single();
+        .single<UserProfile>();
 
       if (error || !profileData) {
         setNotFoundError(true);
@@ -50,7 +50,7 @@ export default function UserProfilePage() {
         return;
       }
 
-      setProfile(profileData);
+      setProfile(profileData as UserProfile);
 
       // Check if this is the current user's profile
       if (authUser && profileData.user_id === authUser.id) {
@@ -61,25 +61,27 @@ export default function UserProfilePage() {
 
       // Check follow relationship if logged in
       if (authUser) {
-        const { data: followData } = await supabase
-          .from('follows')
+        type FollowRow = { status: string };
+
+        const { data: followData } = (await supabase
+          .from('follows' as never)
           .select('status')
           .eq('follower_id', authUser.id)
           .eq('following_id', profileData.user_id)
-          .single();
+          .single()) as { data: FollowRow | null };
 
-        const { data: followedByData } = await supabase
-          .from('follows')
+        const { data: followedByData } = (await supabase
+          .from('follows' as never)
           .select('status')
           .eq('follower_id', profileData.user_id)
           .eq('following_id', authUser.id)
           .eq('status', 'accepted')
-          .single();
+          .single()) as { data: FollowRow | null };
 
         setFollowRelationship({
           is_following: followData?.status === 'accepted',
           is_followed_by: !!followedByData,
-          follow_status: followData?.status ?? 'none',
+          follow_status: (followData?.status as FollowRelationship['follow_status']) ?? 'none',
         });
       }
 
@@ -105,14 +107,14 @@ export default function UserProfilePage() {
     // Determine if we need to send a request or direct follow
     const status = profile.profile_visibility === 'private' ? 'pending' : 'accepted';
 
-    const { error } = await supabase
-      .from('follows')
+    const { error } = await (supabase
+      .from('follows' as never) as ReturnType<typeof supabase.from>)
       .insert({
         follower_id: authUser.id,
         following_id: profile.user_id,
         status,
         accepted_at: status === 'accepted' ? new Date().toISOString() : null,
-      });
+      } as never);
 
     if (!error) {
       setFollowRelationship((prev) => ({
@@ -141,8 +143,8 @@ export default function UserProfilePage() {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
 
-    const { error } = await supabase
-      .from('follows')
+    const { error } = await (supabase
+      .from('follows' as never) as ReturnType<typeof supabase.from>)
       .delete()
       .eq('follower_id', authUser.id)
       .eq('following_id', profile.user_id);

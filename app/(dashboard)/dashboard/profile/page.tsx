@@ -59,7 +59,7 @@ export default function MyProfilePage() {
         .from('set_logs')
         .select('weight_kg, reps, exercise_blocks!inner(exercise_id, workout_sessions!inner(user_id))')
         .eq('exercise_blocks.workout_sessions.user_id', authUser.id)
-        .eq('is_warmup', false);
+        .eq('is_warmup', false) as { data: Array<{ weight_kg: number | null; reps: number | null }> | null };
 
       // Calculate stats
       const totalSets = setLogs?.length ?? 0;

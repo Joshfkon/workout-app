@@ -72,7 +72,8 @@ export default function ProfileSetupPage() {
     loadUser();
   }, [router]);
 
-  // Check username availability
+  // Check username availability (debounced)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const checkUsernameAvailability = useCallback(
     debounce(async (usernameToCheck: string) => {
       if (!usernameToCheck || usernameToCheck.length < 3) {
@@ -149,6 +150,7 @@ export default function ProfileSetupPage() {
       return;
     }
 
+    // @ts-expect-error - user_profiles table not in generated types yet
     const { error } = await supabase.from('user_profiles').insert({
       user_id: user.id,
       username: normalizeUsername(username),
@@ -261,13 +263,14 @@ export default function ProfileSetupPage() {
               label="Training Experience"
               value={trainingExperience}
               onChange={(e) => setTrainingExperience(e.target.value as TrainingExperience | '')}
-            >
-              <option value="">Select your experience level</option>
-              <option value="beginner">Beginner (0-1 years)</option>
-              <option value="intermediate">Intermediate (1-3 years)</option>
-              <option value="advanced">Advanced (3-5 years)</option>
-              <option value="elite">Elite (5+ years)</option>
-            </Select>
+              placeholder="Select your experience level"
+              options={[
+                { value: 'beginner', label: 'Beginner (0-1 years)' },
+                { value: 'intermediate', label: 'Intermediate (1-3 years)' },
+                { value: 'advanced', label: 'Advanced (3-5 years)' },
+                { value: 'elite', label: 'Elite (5+ years)' },
+              ]}
+            />
 
             {/* Gym Name */}
             <Input
