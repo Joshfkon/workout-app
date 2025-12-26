@@ -855,7 +855,7 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
       setNumber: 1,
       percentOfWorking: 0,
       targetReps: 10,
-      purpose: 'General warmup - increase blood flow',
+      purpose: 'General warmup',
       restSeconds: 30,
     });
   }
@@ -870,7 +870,7 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
       setNumber: protocol.length + 1,
       percentOfWorking: barPercentOfWorking,
       targetReps: 10,
-      purpose: 'Bar only - movement groove practice',
+      purpose: 'Bar warmup',
       restSeconds: 30,
       isBarOnly: true,
     } as WarmupSet);
@@ -901,9 +901,9 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
     const reps = percent <= 50 ? 8 : percent <= 70 ? 5 : 3;
 
     let purpose = 'Progressive loading';
-    if (percent <= 50) purpose = 'Movement groove practice';
-    else if (percent <= 70) purpose = 'Neuromuscular preparation';
-    else purpose = 'CNS potentiation';
+    if (percent <= 50) purpose = 'Movement groove';
+    else if (percent <= 70) purpose = 'Neuro prep';
+    else purpose = 'CNS activation';
 
     protocol.push({
       setNumber: protocol.length + 1,
