@@ -1,15 +1,18 @@
+#!/usr/bin/env node
 /**
- * Script to fetch exercise images from free-exercise-db and upload to Supabase Storage
+ * Script to fetch exercise images from free-exercise-db
  *
- * Usage:
- *   Download only:  npx ts-node scripts/fetch-exercise-videos.ts
- *   With upload:    NEXT_PUBLIC_SUPABASE_URL=xxx SUPABASE_SERVICE_ROLE_KEY=xxx npx ts-node scripts/fetch-exercise-videos.ts
+ * Usage: node scripts/fetch-exercise-videos.mjs
  *
  * Source: https://github.com/yuhonas/free-exercise-db (Public Domain)
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Free exercise database (public domain, 800+ exercises)
 const EXERCISE_DB_URL =
@@ -18,7 +21,7 @@ const IMAGE_BASE_URL =
   'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
 
 // Map our exercise names to free-exercise-db names
-const EXERCISE_MAPPINGS: Record<string, string> = {
+const EXERCISE_MAPPINGS = {
   // Chest
   'Barbell Bench Press': 'Barbell Bench Press - Medium Grip',
   'Dumbbell Bench Press': 'Dumbbell Bench Press',
@@ -59,16 +62,7 @@ const EXERCISE_MAPPINGS: Record<string, string> = {
   'Close-Grip Bench Press': 'Close-Grip Barbell Bench Press',
 };
 
-interface FreeExercise {
-  id: string;
-  name: string;
-  primaryMuscles: string[];
-  secondaryMuscles: string[];
-  images: string[];
-  instructions: string[];
-}
-
-async function fetchExerciseDatabase(): Promise<FreeExercise[]> {
+async function fetchExerciseDatabase() {
   console.log('📥 Fetching exercise database...');
   const response = await fetch(EXERCISE_DB_URL);
   if (!response.ok) {
@@ -77,7 +71,7 @@ async function fetchExerciseDatabase(): Promise<FreeExercise[]> {
   return response.json();
 }
 
-async function downloadImage(url: string, outputPath: string): Promise<void> {
+async function downloadImage(url, outputPath) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.statusText}`);
@@ -86,66 +80,9 @@ async function downloadImage(url: string, outputPath: string): Promise<void> {
   fs.writeFileSync(outputPath, Buffer.from(buffer));
 }
 
-async function uploadToSupabase(
-  supabaseUrl: string,
-  supabaseKey: string,
-  filePath: string,
-  storagePath: string
-): Promise<string> {
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const fileBuffer = fs.readFileSync(filePath);
-
-  const { error } = await supabase.storage
-    .from('exercise-demos')
-    .upload(storagePath, fileBuffer, {
-      contentType: 'image/jpeg',
-      upsert: true,
-    });
-
-  if (error) {
-    throw new Error(`Upload failed: ${error.message}`);
-  }
-
-  const { data: urlData } = supabase.storage
-    .from('exercise-demos')
-    .getPublicUrl(storagePath);
-
-  return urlData.publicUrl;
-}
-
-async function updateDatabase(
-  supabaseUrl: string,
-  supabaseKey: string,
-  exerciseName: string,
-  imageUrl: string
-): Promise<void> {
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { error } = await supabase
-    .from('exercises')
-    .update({ demo_gif_url: imageUrl })
-    .eq('name', exerciseName);
-
-  if (error) {
-    throw new Error(`DB update failed: ${error.message}`);
-  }
-}
-
 async function main() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const uploadMode = !!(supabaseUrl && supabaseKey);
-
-  if (!uploadMode) {
-    console.log('⚠️  No Supabase credentials found. Running in download-only mode.');
-    console.log('   Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to upload.\n');
-  }
-
   // Create output directory
-  const outputDir = path.join(process.cwd(), 'public', 'exercise-demos');
+  const outputDir = path.join(path.dirname(__dirname), 'public', 'exercise-demos');
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
@@ -155,7 +92,7 @@ async function main() {
   console.log(`📚 Found ${exercises.length} exercises in database\n`);
 
   // Process each mapped exercise
-  const results: { success: string[]; failed: string[] } = { success: [], failed: [] };
+  const results = { success: [], failed: [] };
 
   for (const [ourName, dbName] of Object.entries(EXERCISE_MAPPINGS)) {
     const exercise = exercises.find(
@@ -183,26 +120,11 @@ async function main() {
 
       console.log(`📥 Downloading: ${ourName}...`);
       await downloadImage(imageUrl, localPath);
-
-      if (uploadMode) {
-        console.log(`📤 Uploading: ${fileName}...`);
-        const publicUrl = await uploadToSupabase(
-          supabaseUrl!,
-          supabaseKey!,
-          localPath,
-          fileName
-        );
-
-        console.log(`💾 Updating database...`);
-        await updateDatabase(supabaseUrl!, supabaseKey!, ourName, publicUrl);
-        console.log(`✅ ${ourName}\n`);
-      } else {
-        console.log(`✅ Saved: ${localPath}\n`);
-      }
+      console.log(`✅ Saved: ${fileName}`);
 
       results.success.push(ourName);
     } catch (err) {
-      console.error(`❌ Failed: ${ourName} - ${err}`);
+      console.error(`❌ Failed: ${ourName} - ${err.message}`);
       results.failed.push(ourName);
     }
   }
@@ -211,14 +133,18 @@ async function main() {
   console.log('\n========== SUMMARY ==========');
   console.log(`✅ Success: ${results.success.length}`);
   console.log(`❌ Failed:  ${results.failed.length}`);
+  console.log(`\n📁 Images saved to: ${outputDir}`);
 
-  if (!uploadMode && results.success.length > 0) {
-    console.log(`\n📁 Images saved to: ${outputDir}`);
-    console.log('\nTo use these images, either:');
-    console.log('1. Reference them as /exercise-demos/[name].jpg in your app');
-    console.log('2. Upload to Supabase Storage and update the database');
-    console.log('\nSQL to update database with local paths:');
-    console.log('UPDATE exercises SET demo_gif_url = \'/exercise-demos/barbell-bench-press.jpg\' WHERE name = \'Barbell Bench Press\';');
+  // Generate SQL for updating database
+  if (results.success.length > 0) {
+    const sqlPath = path.join(outputDir, 'update-urls.sql');
+    let sql = '-- Update exercises with local image paths\n';
+    for (const name of results.success) {
+      const fileName = `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}.jpg`;
+      sql += `UPDATE exercises SET demo_gif_url = '/exercise-demos/${fileName}' WHERE name = '${name}';\n`;
+    }
+    fs.writeFileSync(sqlPath, sql);
+    console.log(`\n📝 SQL file generated: ${sqlPath}`);
   }
 }
 

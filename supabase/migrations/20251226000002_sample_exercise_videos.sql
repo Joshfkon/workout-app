@@ -1,25 +1,38 @@
--- Sample exercise video URLs
--- IMPORTANT: This migration is a TEMPLATE. The placeholder URLs below won't work!
---
--- To add working videos, either:
--- 1. Run: npx ts-node scripts/fetch-exercise-videos.ts (downloads from MuscleWiki API)
--- 2. Manually download GIFs from musclewiki.com and upload to Supabase Storage
--- 3. Use your own video hosting solution
---
--- After uploading to Supabase Storage, update with real URLs like:
--- UPDATE exercises SET demo_gif_url = 'https://your-project.supabase.co/storage/v1/object/public/exercise-demos/barbell-bench-press.mp4'
--- WHERE name = 'Barbell Bench Press';
---
--- MuscleWiki content is CC BY-SA licensed - attribution required
+-- Update exercises with demo images from free-exercise-db
+-- Source: https://github.com/yuhonas/free-exercise-db (Public Domain)
 
--- Example template (commented out - replace with actual URLs):
-/*
-UPDATE exercises SET demo_gif_url = 'YOUR_SUPABASE_STORAGE_URL/barbell-bench-press.mp4' WHERE name = 'Barbell Bench Press';
-UPDATE exercises SET demo_gif_url = 'YOUR_SUPABASE_STORAGE_URL/dumbbell-bench-press.mp4' WHERE name = 'Dumbbell Bench Press';
-UPDATE exercises SET demo_gif_url = 'YOUR_SUPABASE_STORAGE_URL/pull-ups.mp4' WHERE name = 'Pull-Ups';
-UPDATE exercises SET demo_gif_url = 'YOUR_SUPABASE_STORAGE_URL/barbell-squat.mp4' WHERE name = 'Barbell Back Squat';
-UPDATE exercises SET demo_gif_url = 'YOUR_SUPABASE_STORAGE_URL/deadlift.mp4' WHERE name = 'Deadlift';
-*/
+-- Chest
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-bench-press.jpg' WHERE name = 'Barbell Bench Press';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-bench-press.jpg' WHERE name = 'Dumbbell Bench Press';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/incline-dumbbell-press.jpg' WHERE name = 'Incline Dumbbell Press';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/cable-fly.jpg' WHERE name = 'Cable Fly';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dips--chest-focus-.jpg' WHERE name = 'Dips (Chest Focus)';
 
--- This migration intentionally does nothing until you add real URLs
-SELECT 'Exercise video fields ready - run scripts/fetch-exercise-videos.ts to populate' AS status;
+-- Back
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-row.jpg' WHERE name = 'Barbell Row';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-row.jpg' WHERE name = 'Dumbbell Row';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lat-pulldown.jpg' WHERE name = 'Lat Pulldown';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/pull-ups.jpg' WHERE name = 'Pull-Ups';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/deadlift.jpg' WHERE name = 'Deadlift';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/cable-row.jpg' WHERE name = 'Cable Row';
+
+-- Shoulders
+UPDATE exercises SET demo_gif_url = '/exercise-demos/overhead-press.jpg' WHERE name = 'Overhead Press';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lateral-raise.jpg' WHERE name = 'Lateral Raise';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/rear-delt-fly.jpg' WHERE name = 'Rear Delt Fly';
+
+-- Legs
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-back-squat.jpg' WHERE name = 'Barbell Back Squat';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/leg-press.jpg' WHERE name = 'Leg Press';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/romanian-deadlift.jpg' WHERE name = 'Romanian Deadlift';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/lying-leg-curl.jpg' WHERE name = 'Lying Leg Curl';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/leg-extension.jpg' WHERE name = 'Leg Extension';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-lunges.jpg' WHERE name = 'Dumbbell Lunges';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/calf-raise.jpg' WHERE name = 'Calf Raise';
+
+-- Arms
+UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-curl.jpg' WHERE name = 'Barbell Curl';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-curl.jpg' WHERE name = 'Dumbbell Curl';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/hammer-curl.jpg' WHERE name = 'Hammer Curl';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/tricep-pushdown.jpg' WHERE name = 'Tricep Pushdown';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/skull-crushers.jpg' WHERE name = 'Skull Crushers';
