@@ -52,7 +52,7 @@ export async function serializeWorkoutForSharing(
     const estimatedDurationMinutes = totalSets * 2 + blocks.length * 2;
 
     // Convert blocks to shared exercises
-    const exercises: SharedExercise[] = blocks.map((block) => ({
+    const exercises: SharedExercise[] = blocks.map((block: any) => ({
       exercise_id: block.exercise_id,
       exercise_name: block.exercises?.name || 'Unknown Exercise',
       sets: block.target_sets || 0,
