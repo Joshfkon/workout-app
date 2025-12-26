@@ -626,6 +626,10 @@ export default function WorkoutPage() {
                             (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
               bodyweightType: block.exercises.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
               assistanceType: block.exercises.assistance_type as 'machine' | 'band' | 'partner' | undefined,
+              // Video demonstration fields
+              demoGifUrl: block.exercises.demo_gif_url as string | undefined,
+              demoThumbnailUrl: block.exercises.demo_thumbnail_url as string | undefined,
+              youtubeVideoId: block.exercises.youtube_video_id as string | undefined,
             },
           }));
 
