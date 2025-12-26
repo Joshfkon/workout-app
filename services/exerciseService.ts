@@ -118,6 +118,17 @@ export interface Exercise {
 
   /** Default type of assistance for assisted bodyweight exercises */
   assistanceType?: 'machine' | 'band' | 'partner';
+
+  // === VIDEO DEMONSTRATION FIELDS ===
+
+  /** URL to demonstration GIF/animation (from MuscleWiki, Supabase Storage, etc.) */
+  demoGifUrl?: string;
+
+  /** URL to thumbnail image for the demo (optional) */
+  demoThumbnailUrl?: string;
+
+  /** YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ") */
+  youtubeVideoId?: string;
 }
 
 // Re-export hypertrophy types for convenience
@@ -491,6 +502,10 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
     isBodyweight: (row.is_bodyweight as boolean) ?? equipment === 'bodyweight',
     bodyweightType: row.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
     assistanceType: row.assistance_type as 'machine' | 'band' | 'partner' | undefined,
+    // Video demonstration fields
+    demoGifUrl: (row.demo_gif_url as string) || undefined,
+    demoThumbnailUrl: (row.demo_thumbnail_url as string) || undefined,
+    youtubeVideoId: (row.youtube_video_id as string) || undefined,
   };
 }
 
