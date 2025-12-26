@@ -16,6 +16,8 @@ COMMENT ON COLUMN exercises.youtube_video_id IS 'YouTube video ID for form tutor
 -- Source: https://github.com/yuhonas/free-exercise-db
 
 -- Chest
+-- Note: File extensions may be .gif, .jpg, or .png depending on source
+-- Update these paths after running the fetch script to match actual file extensions
 UPDATE exercises SET demo_gif_url = '/exercise-demos/barbell-bench-press.jpg' WHERE name = 'Barbell Bench Press';
 UPDATE exercises SET demo_gif_url = '/exercise-demos/dumbbell-bench-press.jpg' WHERE name = 'Dumbbell Bench Press';
 UPDATE exercises SET demo_gif_url = '/exercise-demos/incline-dumbbell-press.jpg' WHERE name = 'Incline Dumbbell Press';

@@ -115,12 +115,15 @@ async function main() {
       // Download the first image (starting position)
       const imagePath = exercise.images[0];
       const imageUrl = `${IMAGE_BASE_URL}${imagePath}`;
-      const fileName = `${ourName.toLowerCase().replace(/[^a-z0-9]/g, '-')}.jpg`;
+      
+      // Preserve original file extension from source (could be .gif, .jpg, .png, etc.)
+      const originalExt = path.extname(imagePath) || '.jpg';
+      const fileName = `${ourName.toLowerCase().replace(/[^a-z0-9]/g, '-')}${originalExt}`;
       const localPath = path.join(outputDir, fileName);
 
       console.log(`📥 Downloading: ${ourName}...`);
       await downloadImage(imageUrl, localPath);
-      console.log(`✅ Saved: ${fileName}`);
+      console.log(`✅ Saved: ${fileName} (format: ${originalExt})`);
 
       results.success.push(ourName);
     } catch (err) {
