@@ -40,13 +40,47 @@ const defaultState: SubscriptionState = {
   isLoading: true,
 };
 
+// Cache configuration
+const CACHE_KEY = 'subscription_data';
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
 // Global state for sharing across components
 let globalSubscription: SubscriptionState = defaultState;
 let globalListeners: Set<(state: SubscriptionState) => void> = new Set();
+let cacheLoaded = false;
 
 function notifyListeners(state: SubscriptionState) {
   globalSubscription = state;
   globalListeners.forEach(listener => listener(state));
+
+  // Cache to sessionStorage (only if not loading)
+  if (!state.isLoading && typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: state,
+        timestamp: Date.now()
+      }));
+    } catch {
+      // sessionStorage might be full or disabled
+    }
+  }
+}
+
+function loadFromCache(): SubscriptionState | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        return { ...data, isLoading: false };
+      }
+    }
+  } catch {
+    // Invalid cache, ignore
+  }
+  return null;
 }
 
 export function useSubscription() {
@@ -64,10 +98,20 @@ export function useSubscription() {
   // Load subscription data
   useEffect(() => {
     async function loadSubscription() {
+      // Check cache first (only on first load)
+      if (!cacheLoaded) {
+        cacheLoaded = true;
+        const cached = loadFromCache();
+        if (cached) {
+          notifyListeners(cached);
+          return;
+        }
+      }
+
       try {
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
-        
+
         if (!user) {
           notifyListeners({ ...defaultState, isLoading: false });
           return;
@@ -224,9 +268,12 @@ export function useSubscription() {
 
   // Refresh subscription data
   const refresh = useCallback(async () => {
+    // Clear cache to force fresh fetch
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(CACHE_KEY);
+    }
+    cacheLoaded = false;
     notifyListeners({ ...globalSubscription, isLoading: true });
-    // Re-trigger the useEffect by forcing a re-render
-    // In practice, the useEffect will re-run on mount
   }, []);
 
   return {
