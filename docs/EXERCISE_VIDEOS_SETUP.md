@@ -34,7 +34,7 @@ This migration:
 
 ## Verification
 
-After running the migration, verify it worked by running this query in Supabase SQL Editor:
+After running the migrations, verify it worked by running this query in Supabase SQL Editor:
 
 ```sql
 -- Check if columns exist
@@ -67,10 +67,9 @@ WHERE name ILIKE '%barbell%bench%press%';
 
 ## Expected Results
 
-After running the migration:
+After running the migrations:
 - You should see 3 columns in the first query result
-- You should see ~28 exercises with `demo_gif_url` populated
-- "Barbell Bench Press" should have `demo_gif_url = '/exercise-demos/barbell-bench-press.jpg'`
+- After fetching GIFs, you should see exercises with `demo_gif_url` populated (e.g., `/exercise-demos/barbell-bench-press.gif`)
 
 ## Troubleshooting
 
@@ -86,7 +85,7 @@ After running the migration:
    - You can manually update exercises:
      ```sql
      UPDATE exercises 
-     SET demo_gif_url = '/exercise-demos/barbell-bench-press.jpg' 
+     SET demo_gif_url = '/exercise-demos/barbell-bench-press.gif' 
      WHERE name = 'Your Exact Exercise Name';
      ```
 
@@ -99,17 +98,6 @@ After running the migration:
    - The exercise service caches exercise data
    - If you updated exercises after the app loaded, you may need to refresh
    - Or clear the cache programmatically (if you have access)
-
-## Alternative: Using free-exercise-db (Static Images)
-
-If you prefer static images from free-exercise-db instead of MuscleWiki GIFs:
-
-1. **Run the fetch script**:
-   ```bash
-   node scripts/fetch-exercise-videos.mjs
-   ```
-
-2. This downloads static images (JPG/PNG) from free-exercise-db
 
 ## Adding More Videos
 
@@ -134,9 +122,18 @@ To add videos to more exercises:
      WHERE name = 'Exercise Name';
      ```
 
+## Alternative: Using free-exercise-db (Static Images)
+
+If you prefer static images from free-exercise-db instead of MuscleWiki GIFs:
+
+1. **Run the fetch script**:
+   ```bash
+   node scripts/fetch-exercise-videos.mjs
+   ```
+
+2. This downloads static images (JPG/PNG) from free-exercise-db
+
 ## Image Sources
 
-The demo images are from the free-exercise-db project (Public Domain):
-- Source: https://github.com/yuhonas/free-exercise-db
-- Images are stored in `public/exercise-demos/` folder
-
+- **MuscleWiki**: Animated GIFs from https://api.musclewiki.com (recommended)
+- **free-exercise-db**: Static images from https://github.com/yuhonas/free-exercise-db (Public Domain)
