@@ -28,15 +28,15 @@ import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { getLocalDateString, formatDate } from '@/lib/utils';
-
-// Lazy load Recharts to reduce initial bundle
-const LineChart = dynamic(() => import('recharts').then(m => m.LineChart), { ssr: false });
-const Line = dynamic(() => import('recharts').then(m => m.Line), { ssr: false });
-const XAxis = dynamic(() => import('recharts').then(m => m.XAxis), { ssr: false });
-const YAxis = dynamic(() => import('recharts').then(m => m.YAxis), { ssr: false });
-const CartesianGrid = dynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false });
-const Tooltip = dynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
-const ResponsiveContainer = dynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 const DEFAULT_MEAL_CONFIG: { type: MealType; label: string; emoji: string }[] = [
   { type: 'breakfast', label: 'Breakfast', emoji: '🌅' },
