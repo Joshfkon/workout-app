@@ -1,6 +1,6 @@
 # Beginner-Friendly Onboarding & Education Plan
 
-> **Status**: Planning
+> **Status**: Phase 1 Complete
 > **Last Updated**: 2025-12-26
 > **Branch**: `claude/beginner-onboarding-hxjJW`
 
@@ -125,7 +125,7 @@ Every data collection point should be preceded by context explaining:
 
 ## Implementation Phases
 
-### Phase 1: Onboarding Enhancement (Priority: Critical)
+### Phase 1: Onboarding Enhancement (Priority: Critical) - COMPLETE
 
 **Goal**: Make the first 10 minutes crystal clear
 
@@ -136,37 +136,37 @@ Every data collection point should be preceded by context explaining:
 - [ ] Skip option for returning users
 
 #### 1.2 Body Composition Context
-- [ ] Add "Why we ask" collapsible before body comp form
-- [ ] Explain FFMI in plain terms: "This helps us understand your muscle-to-height ratio"
-- [ ] Add interpretation after FFMI calculation: "This means..."
+- [x] Add "Why we ask" collapsible before body comp form (`ContextCard`)
+- [x] Explain FFMI in plain terms (`ExplainedTerm` with tooltip)
+- [x] Add interpretation after FFMI calculation: "This means..."
 - [ ] Improve body fat visual guide (add female images)
 
 #### 1.3 Benchmark Selection Explanation
-- [ ] Add intro section: "Why we test your strength"
-- [ ] Explain: "These tests help us recommend the right weights for ALL exercises"
+- [x] Add intro section: "Why we test your strength" (`ContextCard`)
+- [x] Explain: "These tests help us recommend the right weights for ALL exercises"
 - [ ] Show preview of what personalization looks like
 - [ ] Better time estimate with what each test involves
 
 #### 1.4 Calibration Walkthrough
-- [ ] Add RPE/RIR explainer modal before first test
-- [ ] Interactive "What does RIR feel like?" guide
+- [x] Add RPE/RIR explainer modal before first test (`RPEExplainer`)
+- [x] Interactive "What does RIR feel like?" guide (quiz included)
 - [ ] Show real-time feedback: "Great! Based on this, you can likely bench X lbs"
-- [ ] Explain percentile results in plain language
+- [x] Explain percentile results in plain language
 
 #### 1.5 Completion Screen Enhancement
-- [ ] Add "What we learned about you" summary
-- [ ] Explain each insight: "Your pressing is stronger than pulling, so we'll..."
-- [ ] Interactive "What's next" section with previews
+- [x] Add "What we learned about you" summary (`InlineHint`)
+- [x] Score interpretation based on value
+- [x] Interactive "What's next" section with previews
 - [ ] Optional onboarding tour of dashboard
 
-### Phase 2: Contextual Tooltips System (Priority: High)
+### Phase 2: Contextual Tooltips System (Priority: High) - PARTIAL
 
 **Goal**: Add help at every complex UI element
 
 #### 2.1 Create Reusable Tooltip Components
-- [ ] `<InfoTooltip>` - Simple "?" icon with popover
+- [x] `<InfoTooltip>` - Simple "?" icon with popover
 - [ ] `<LearnMoreLink>` - Links to Learn article with preview
-- [ ] `<FirstTimeHint>` - One-time educational callout
+- [x] `<FirstTimeHint>` - One-time educational callout
 - [ ] `<ConceptExplainer>` - Multi-level progressive disclosure
 
 #### 2.2 Dashboard Tooltips
@@ -401,38 +401,60 @@ This is excellent pressing strength relative to your muscle mass.
 
 ## Component Inventory
 
-### New Components to Create
+### New Components Created (Phase 1)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| `InfoTooltip` | `/components/ui/InfoTooltip.tsx` | **DONE** |
+| `ExplainedTerm` | `/components/ui/InfoTooltip.tsx` | **DONE** |
+| `FirstTimeHint` | `/components/ui/FirstTimeHint.tsx` | **DONE** |
+| `InlineHint` | `/components/ui/FirstTimeHint.tsx` | **DONE** |
+| `ContextCard` | `/components/onboarding/ContextCard.tsx` | **DONE** |
+| `ContextBanner` | `/components/onboarding/ContextCard.tsx` | **DONE** |
+| `WelcomeCard` | `/components/onboarding/ContextCard.tsx` | **DONE** |
+| `RPEExplainer` | `/components/onboarding/RPEExplainer.tsx` | **DONE** |
+| `RPEQuickReference` | `/components/onboarding/RPEExplainer.tsx` | **DONE** |
+
+### Components to Create (Future Phases)
 
 | Component | Location | Priority |
 |-----------|----------|----------|
-| `InfoTooltip` | `/components/ui/InfoTooltip.tsx` | High |
-| `FirstTimeHint` | `/components/ui/FirstTimeHint.tsx` | High |
 | `ConceptExplainer` | `/components/ui/ConceptExplainer.tsx` | High |
-| `ContextCard` | `/components/onboarding/ContextCard.tsx` | High |
-| `RPEExplainer` | `/components/onboarding/RPEExplainer.tsx` | High |
 | `VolumeLandmarkVisual` | `/components/education/VolumeLandmarkVisual.tsx` | Medium |
 | `GuidedTour` | `/components/ui/GuidedTour.tsx` | Medium |
 | `CoachMessage` | `/components/coaching/CoachMessage.tsx` | Medium |
 | `MilestoneModal` | `/components/ui/MilestoneModal.tsx` | Low |
 
-### Existing Components to Modify
+### Modified Components (Phase 1)
+
+| Component | File | Changes Made |
+|-----------|------|--------------|
+| Onboarding Body Comp | `/app/(onboarding)/onboarding/page.tsx` | Added ContextCard, ExplainedTerm for FFMI |
+| Benchmark Selection | `/onboarding/benchmarks/page.tsx` | Added ContextCard explaining purpose |
+| Calibration Page | `/onboarding/calibrate/page.tsx` | Added RPE modal, ContextCard, percentile explanation |
+| Completion Screen | `/onboarding/complete/page.tsx` | Added InlineHint, score interpretation, ExplainedTerm |
+
+### Components to Modify (Future Phases)
 
 | Component | File | Changes Needed |
 |-----------|------|----------------|
-| Onboarding Body Comp | `/app/(onboarding)/onboarding/page.tsx` | Add context card, improve FFMI explanation |
-| Benchmark Selection | `/onboarding/benchmarks/page.tsx` | Add context card, explain purpose |
-| Calibration Page | `/onboarding/calibrate/page.tsx` | Add RPE explainer, improve feedback |
-| Completion Screen | `/onboarding/complete/page.tsx` | Add interpretations, better celebration |
 | Dashboard Volume | `/app/(dashboard)/dashboard/page.tsx` | Add volume landmark tooltips |
 | Workout Set Input | `/components/workout/SetInputRow.tsx` | Add RIR tooltip, set quality feedback |
 
-### New Hooks to Create
+### New Hooks Created (Phase 1)
 
-| Hook | Purpose |
+| Hook | Purpose | Status |
+|------|---------|--------|
+| `useEducationStore` | Zustand store for education preferences | **DONE** |
+| `useEducationPreferences` | Hook for education settings | **DONE** |
+| `useFirstTimeHint` | Track which hints have been dismissed | **DONE** |
+| `useGuidedTour` | Manage multi-step tour state | **DONE** |
+
+### New Types Created
+
+| File | Purpose |
 |------|---------|
-| `useEducationPreferences` | Manage user's education settings |
-| `useFirstTimeHint` | Track which hints have been dismissed |
-| `useGuidedTour` | Manage multi-step tour state |
+| `/types/education.ts` | Education types, tooltip content library, RIR explanations |
 
 ### User Preferences Additions
 
