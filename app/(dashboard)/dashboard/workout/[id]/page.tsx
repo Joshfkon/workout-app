@@ -24,6 +24,7 @@ const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.
 const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => m.ReadinessCheckIn), { ssr: false });
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
+const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -443,6 +444,7 @@ export default function WorkoutPage() {
   
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
+  const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
@@ -2985,6 +2987,16 @@ export default function WorkoutPage() {
               <span>🤕</span>
               <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
             </button>
+            <button
+              onClick={() => setShowPlateCalculator(true)}
+              className="px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium bg-surface-800 hover:bg-surface-700 text-surface-400"
+              title="Plate Calculator"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <span className="hidden sm:inline">Plates</span>
+            </button>
             <Button
               variant="ghost"
               onClick={() => setShowCancelModal(true)}
@@ -4117,6 +4129,13 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Plate Calculator Modal */}
+      <PlateCalculatorModal
+        isOpen={showPlateCalculator}
+        onClose={() => setShowPlateCalculator(false)}
+        initialWeightKg={currentBlock?.targetWeightKg}
+      />
 
       {/* Page-level Swap Modal for injury-related swaps */}
       {showPageLevelSwapModal && swapTargetBlockId && (() => {
