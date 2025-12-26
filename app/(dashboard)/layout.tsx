@@ -155,13 +155,19 @@ export default function DashboardLayout({
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-16 border-b border-surface-800">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <span className="text-lg font-bold text-white">HyperTrack</span>
+        <div className="flex items-center h-16 border-b border-surface-800 px-4">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+            onClick={() => setSidebarOpen(false)}
+          >
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <span className="text-lg font-bold text-white">HyperTrack</span>
+          </Link>
         </div>
 
         {/* Navigation */}
