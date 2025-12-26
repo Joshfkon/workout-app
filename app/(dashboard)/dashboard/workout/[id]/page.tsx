@@ -4,8 +4,19 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
-import { ExerciseCard, RestTimerControlPanel } from '@/components/workout';
+import { RestTimerControlPanel } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
+
+// Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
+const ExerciseCard = dynamic(
+  () => import('@/components/workout').then(m => m.ExerciseCard),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="animate-pulse bg-gray-800 rounded-xl h-64 w-full" />
+    )
+  }
+);
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 
 // Dynamic imports for components not needed on initial render
@@ -521,27 +532,29 @@ export default function WorkoutPage() {
       try {
         const supabase = createUntypedClient();
 
-        // Fetch session
-        const { data: sessionData, error: sessionError } = await supabase
-          .from('workout_sessions')
-          .select('*')
-          .eq('id', sessionId)
-          .single();
+        // Fetch session and exercise blocks in parallel (both only need sessionId from URL)
+        const [sessionResult, blocksResult] = await Promise.all([
+          supabase
+            .from('workout_sessions')
+            .select('*')
+            .eq('id', sessionId)
+            .single(),
+          supabase
+            .from('exercise_blocks')
+            .select(`
+              *,
+              exercises (*)
+            `)
+            .eq('workout_session_id', sessionId)
+            .order('order')
+        ]);
+
+        const { data: sessionData, error: sessionError } = sessionResult;
+        const { data: blocksData, error: blocksError } = blocksResult;
 
         if (sessionError || !sessionData) {
           throw new Error('Workout session not found');
         }
-
-        // Fetch exercise blocks with exercises
-        const { data: blocksData, error: blocksError } = await supabase
-          .from('exercise_blocks')
-          .select(`
-            *,
-            exercises (*)
-          `)
-          .eq('workout_session_id', sessionId)
-          .order('order');
-
         if (blocksError) throw blocksError;
 
         // Transform data
@@ -833,42 +846,47 @@ export default function WorkoutPage() {
           })();
         }
         
-        // Fetch exercise history for all exercises in parallel
+        // Fetch exercise history for all exercises in a single batched query (optimized from N+1)
         const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
         if (exerciseIds.length > 0) {
-          // Fetch all exercise histories in parallel
-          const historyPromises = exerciseIds.map(exerciseId =>
-            supabase
-              .from('exercise_blocks')
-              .select(`
+          // Single batched query instead of N+1 queries - much faster
+          const { data: allHistoryBlocks } = await supabase
+            .from('exercise_blocks')
+            .select(`
+              id,
+              exercise_id,
+              workout_sessions!inner (
                 id,
-                workout_sessions!inner (
-                  id,
-                  completed_at,
-                  state,
-                  user_id
-                ),
-                set_logs (
-                  weight_kg,
-                  reps,
-                  rpe,
-                  is_warmup,
-                  logged_at
-                )
-              `)
-              .eq('exercise_id', exerciseId)
-              .eq('workout_sessions.user_id', sessionData.user_id)
-              .eq('workout_sessions.state', 'completed')
-              .order('workout_sessions(completed_at)', { ascending: false })
-              .limit(20)
-              .then((result: { data: any[] | null }) => ({ exerciseId, data: result.data }))
-              .catch(() => ({ exerciseId, data: null }))
-          );
+                completed_at,
+                state,
+                user_id
+              ),
+              set_logs (
+                weight_kg,
+                reps,
+                rpe,
+                is_warmup,
+                logged_at
+              )
+            `)
+            .in('exercise_id', exerciseIds)
+            .eq('workout_sessions.user_id', sessionData.user_id)
+            .eq('workout_sessions.state', 'completed')
+            .order('workout_sessions(completed_at)', { ascending: false });
 
-          const historyResults = await Promise.all(historyPromises);
+          // Group results by exercise_id and limit to 10 per exercise
+          const groupedByExercise: Record<string, any[]> = {};
+          for (const block of (allHistoryBlocks || [])) {
+            const exId = block.exercise_id;
+            if (!groupedByExercise[exId]) groupedByExercise[exId] = [];
+            if (groupedByExercise[exId].length < 10) {
+              groupedByExercise[exId].push(block);
+            }
+          }
+
           const histories: Record<string, ExerciseHistoryData> = {};
 
-          for (const { exerciseId, data: historyBlocks } of historyResults) {
+          for (const [exerciseId, historyBlocks] of Object.entries(groupedByExercise)) {
             if (historyBlocks && historyBlocks.length > 0) {
               let bestE1RM = 0;
               let personalRecord: ExerciseHistoryData['personalRecord'] = null;
