@@ -1,7 +1,8 @@
 # Social Features Implementation Plan
 
-> **Status**: Planning Phase
+> **Status**: Phase 1 In Progress
 > **Last Updated**: 2025-12-26
+> **Current Sprint**: Sprint 1 - User Profiles Foundation
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
 ---
@@ -197,15 +198,24 @@ export interface ProfileStats {
 
 ### 1.5 Implementation Tasks
 
-- [ ] Create database migration for `user_profiles` table
-- [ ] Add username validation (alphanumeric, 3-30 chars, no reserved words)
+- [x] Create database migration for `user_profiles` table (`20241228000001_add_user_profiles.sql`)
+- [x] Add username validation (alphanumeric, 3-30 chars, no reserved words) (`lib/social.ts`)
 - [ ] Build avatar upload with Supabase Storage
 - [ ] Create profile onboarding flow (username selection)
-- [ ] Build ProfileCard component for profile previews
-- [ ] Build full profile page with stats
+- [x] Build ProfileCard component for profile previews (`components/social/profile/ProfileCard.tsx`)
+- [x] Build full profile page with stats (`app/(dashboard)/dashboard/profile/page.tsx`)
 - [ ] Implement privacy settings UI
-- [ ] Add profile link sharing (deep links)
+- [x] Add profile link sharing (deep links) (`lib/social.ts - getProfileShareUrl`)
 - [ ] Create username search API
+
+**Completed Files:**
+- `types/social.ts` - All social feature types
+- `lib/social.ts` - Username validation, social utilities
+- `supabase/migrations/20241228000001_add_user_profiles.sql` - Database schema
+- `components/social/profile/Avatar.tsx` - Avatar component
+- `components/social/profile/ProfileCard.tsx` - Profile card (compact/full)
+- `app/(dashboard)/dashboard/profile/page.tsx` - Own profile page
+- `app/(dashboard)/dashboard/profile/[username]/page.tsx` - View other profiles
 
 ---
 
