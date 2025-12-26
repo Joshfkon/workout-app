@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
-import { FFMIGauge } from '@/components/analytics/FFMIGauge';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -40,6 +40,9 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
+
+// Dynamic imports for heavy components
+const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 
 // Tab types
 type TabType = 'body-composition' | 'strength' | 'volume' | 'wellness';

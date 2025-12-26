@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, SwipeableRow } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { AddFoodModal } from '@/components/nutrition/AddFoodModal';
-import { WeightLogModal } from '@/components/nutrition/WeightLogModal';
-import { WeightHistoryModal } from '@/components/nutrition/WeightHistoryModal';
-import { NutritionTargetsModal } from '@/components/nutrition/NutritionTargetsModal';
-import { MacroCalculatorModal } from '@/components/nutrition/MacroCalculatorModal';
-import { CreateCustomFoodModal } from '@/components/nutrition/CreateCustomFoodModal';
-import { EditFoodModal } from '@/components/nutrition/EditFoodModal';
+
+// Dynamic imports for heavy modals - reduces initial bundle size
+const AddFoodModal = dynamic(() => import('@/components/nutrition/AddFoodModal').then(m => ({ default: m.AddFoodModal })), { ssr: false });
+const WeightLogModal = dynamic(() => import('@/components/nutrition/WeightLogModal').then(m => ({ default: m.WeightLogModal })), { ssr: false });
+const WeightHistoryModal = dynamic(() => import('@/components/nutrition/WeightHistoryModal').then(m => ({ default: m.WeightHistoryModal })), { ssr: false });
+const NutritionTargetsModal = dynamic(() => import('@/components/nutrition/NutritionTargetsModal').then(m => ({ default: m.NutritionTargetsModal })), { ssr: false });
+const MacroCalculatorModal = dynamic(() => import('@/components/nutrition/MacroCalculatorModal').then(m => ({ default: m.MacroCalculatorModal })), { ssr: false });
+const CreateCustomFoodModal = dynamic(() => import('@/components/nutrition/CreateCustomFoodModal').then(m => ({ default: m.CreateCustomFoodModal })), { ssr: false });
+const EditFoodModal = dynamic(() => import('@/components/nutrition/EditFoodModal').then(m => ({ default: m.EditFoodModal })), { ssr: false });
 import type {
   FoodLogEntry,
   WeightLogEntry,
