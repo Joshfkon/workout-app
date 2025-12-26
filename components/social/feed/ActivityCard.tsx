@@ -17,6 +17,7 @@ export interface ActivityCardProps {
   onReact?: (activityId: string, reactionType: string) => void;
   onUnreact?: (activityId: string) => void;
   onComment?: (activityId: string) => void;
+  onCommentAdded?: () => void;
 }
 
 function ActivityCardComponent({

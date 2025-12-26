@@ -289,7 +289,7 @@ export default function DashboardPage() {
     });
 
     return result;
-  }, [muscleVolume, volumeSummary]);
+  }, [muscleVolume]);
 
   // Normalize goal to the Goal type expected by AtrophyRiskAlert
   const normalizedGoal = useMemo(() => {

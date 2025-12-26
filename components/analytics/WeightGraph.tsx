@@ -114,7 +114,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     });
 
     return mapped;
-  }, [weightHistory, timeframe, preferredUnit, convertWeight]);
+  }, [weightHistory, timeframe, convertWeight]);
 
   // Calculate trend
   const trend = useMemo(() => {

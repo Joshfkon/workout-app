@@ -25,12 +25,6 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
   const [error, setError] = useState<string | null>(null);
   const [workoutData, setWorkoutData] = useState<SharedWorkoutContent | null>(null);
 
-  useEffect(() => {
-    if (isOpen && workoutSessionId) {
-      loadWorkoutData();
-    }
-  }, [isOpen, workoutSessionId]);
-
   const loadWorkoutData = async () => {
     setIsSerializing(true);
     setError(null);
@@ -57,6 +51,13 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
       setIsSerializing(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && workoutSessionId) {
+      loadWorkoutData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, workoutSessionId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
