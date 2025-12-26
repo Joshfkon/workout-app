@@ -47,7 +47,7 @@ export async function serializeWorkoutForSharing(
     }
 
     // Calculate total sets and estimated duration
-    const totalSets = blocks.reduce((sum, block) => sum + (block.target_sets || 0), 0);
+    const totalSets = blocks.reduce((sum: number, block) => sum + (block.target_sets || 0), 0);
     // Estimate: 2 minutes per set + 2 minutes rest between exercises
     const estimatedDurationMinutes = totalSets * 2 + blocks.length * 2;
 
