@@ -81,8 +81,8 @@ export default function ProfileEditPage() {
         throw new Error('Not logged in');
       }
 
-      const { error: updateError } = await supabase
-        .from('user_profiles')
+      const { error: updateError } = await (supabase
+        .from('user_profiles' as never)
         .update({
           display_name: displayName.trim() || null,
           bio: bio.trim() || null,
@@ -91,8 +91,8 @@ export default function ProfileEditPage() {
           show_stats: showStats,
           training_experience: trainingExperience || null,
           gym_name: gymName.trim() || null,
-        })
-        .eq('user_id', user.id);
+        } as never)
+        .eq('user_id', user.id)) as { error: any };
 
       if (updateError) throw updateError;
 
