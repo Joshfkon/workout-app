@@ -36,6 +36,13 @@ This creates:
 - Triggers to update reaction/comment counts
 - RLS policies for activity visibility
 
+### 4. Activity Visibility Fix (IMPORTANT)
+**File**: `supabase/migrations/20241228000005_fix_activity_visibility.sql`
+
+**⚠️ This fix is required for activities to appear in the Discover feed!**
+
+This fixes a bug where activities from users with public profiles were being created with 'followers' visibility instead of 'public'. Run this after migration #3.
+
 ## How to Run Migrations
 
 1. **Open Supabase Dashboard**
@@ -43,10 +50,11 @@ This creates:
    - Navigate to **SQL Editor**
 
 2. **Run Each Migration**
-   - Copy the contents of each migration file (in order: 1, 2, 3)
+   - Copy the contents of each migration file (in order: 1, 2, 3, 4)
    - Paste into the SQL Editor
    - Click **Run** or press `Ctrl+Enter` (Windows) / `Cmd+Enter` (Mac)
    - Wait for success confirmation
+   - **Important**: Migration #4 fixes a critical bug - don't skip it!
 
 3. **Verify Tables Were Created**
    - Go to **Table Editor** in Supabase
@@ -90,4 +98,5 @@ All migration files are in: `supabase/migrations/`
 - `20241228000002_add_follows.sql`
 - `20241228000003_add_avatars_storage.sql` (optional - for avatar uploads)
 - `20241228000004_add_activity_feed.sql`
+- `20241228000005_fix_activity_visibility.sql` (required fix)
 
