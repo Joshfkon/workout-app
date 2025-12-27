@@ -134,10 +134,16 @@ export class PerformanceTracker {
     }
 
     // Under-performance: missing targets or grinding consistently
+    // Note: AMRAP sets are excluded from RIR check since they intentionally go to failure
     const isUnderperforming = recentSessions.every(session =>
-      session.sets.every(set =>
-        set.actualReps < set.prescribedReps.min || set.reportedRIR === 0
-      )
+      session.sets.every(set => {
+        // For AMRAP sets, only check if they missed the rep minimum
+        if (set.wasAMRAP) {
+          return set.actualReps < set.prescribedReps.min;
+        }
+        // For non-AMRAP sets, missing reps OR hitting failure indicates underperformance
+        return set.actualReps < set.prescribedReps.min || set.reportedRIR === 0;
+      })
     );
 
     if (isUnderperforming) {
