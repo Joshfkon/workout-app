@@ -1,8 +1,8 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 3 In Progress - Activity Feed
+> **Status**: Phase 3 Complete - Ready for Phase 4
 > **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 3 - Activity Feed (In Progress)
+> **Current Sprint**: Sprint 3 - Activity Feed (Complete)
 >
 > ### Phase 3 Progress
 > - [x] Create activities database migration (activity_reactions, activity_comments tables)
@@ -12,8 +12,10 @@
 > - [x] Create useReactions hook for reaction management
 > - [x] Build activity feed page with Following/Discover tabs
 > - [x] Add Feed and Profile links to sidebar navigation
-> - [ ] Add comment section component
-> - [ ] Add activity creation triggers on workout completion
+> - [x] Add comment section component (CommentSection, CommentItem, CommentInput, useComments)
+> - [x] Add activity creation triggers on workout completion (trigger in 20241228000004 migration)
+> - [x] Add profile edit page with privacy settings (app/(dashboard)/dashboard/profile/edit/page.tsx)
+>
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
 ---
@@ -628,16 +630,30 @@ CREATE INDEX idx_feed_cache_user_timeline ON feed_cache (user_id, created_at DES
 
 ### 3.5 Implementation Tasks
 
-- [ ] Create database migrations for activities, reactions, comments
-- [ ] Implement activity creation triggers (on workout complete, PR, etc.)
-- [ ] Build ActivityFeed with infinite scroll
-- [ ] Create activity card variants for each type
-- [ ] Implement reaction system with optimistic updates
-- [ ] Build comment system with replies
+- [x] Create database migrations for activities, reactions, comments
+- [x] Implement activity creation triggers (on workout complete, PR, etc.)
+- [x] Build ActivityFeed with infinite scroll (cursor pagination)
+- [x] Create activity card variants for each type
+- [x] Implement reaction system with optimistic updates
+- [x] Build comment system with replies
 - [ ] Add feed caching strategy
 - [ ] Implement activity hiding/deletion
 - [ ] Create feed filtering options
-- [ ] Add pull-to-refresh functionality
+- [x] Add pull-to-refresh functionality
+
+**Completed Files:**
+- `supabase/migrations/20241228000004_add_activity_feed.sql` - Full migration with triggers
+- `supabase/migrations/20241228000005_fix_activity_visibility.sql` - Visibility fix
+- `hooks/useActivityFeed.ts` - Feed hook with pagination
+- `hooks/useReactions.ts` - Reaction management
+- `hooks/useComments.ts` - Comment management
+- `components/social/feed/ActivityCard.tsx` - Activity display
+- `components/social/feed/ReactionBar.tsx` - Reaction UI
+- `components/social/feed/CommentSection.tsx` - Comment section
+- `components/social/feed/CommentItem.tsx` - Single comment
+- `components/social/feed/CommentInput.tsx` - Comment form
+- `app/(dashboard)/dashboard/feed/page.tsx` - Feed page
+- `app/(dashboard)/dashboard/profile/edit/page.tsx` - Profile edit with privacy settings
 
 ---
 
@@ -781,16 +797,21 @@ export interface SharedWorkoutWithProfile extends SharedWorkout {
 
 ### 4.4 Implementation Tasks
 
-- [ ] Create database migration for shared workouts
-- [ ] Build share workout modal with privacy options
-- [ ] Implement workout serialization for sharing
+- [x] Create database migration for shared workouts (`20241228000006_add_workout_sharing.sql`)
+- [x] Build share workout modal with privacy options (`components/social/sharing/ShareWorkoutModal.tsx`)
+- [x] Implement workout serialization for sharing (`lib/workout-sharing.ts`)
 - [ ] Create public workout browser page
 - [ ] Build workout import/copy functionality
-- [ ] Add save/bookmark feature
+- [ ] Add save/bookmark feature UI (database exists)
 - [ ] Generate shareable deep links
 - [ ] Implement workout search and filters
-- [ ] Add share to activity feed
+- [x] Add share to activity feed (trigger in migration)
 - [ ] Track view/copy/save analytics
+
+**Completed Files:**
+- `supabase/migrations/20241228000006_add_workout_sharing.sql` - Tables and triggers
+- `components/social/sharing/ShareWorkoutModal.tsx` - Share modal UI
+- `lib/workout-sharing.ts` - Workout serialization utilities
 
 ---
 

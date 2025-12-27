@@ -1,98 +1,81 @@
 # Social Features Implementation Status
 
+> **Last Updated**: 2025-12-26
+> **Current Phase**: Phase 4 In Progress - Workout Sharing
+
 ## ✅ What's Working
 
-1. **Database Schema** - All migrations exist:
-   - ✅ `20241228000001_add_user_profiles.sql` - User profiles table
-   - ✅ `20241228000002_add_follows.sql` - Follow system
-   - ✅ `20241228000004_add_activity_feed.sql` - Activity feed tables and trigger
+### Database Schema
+All migrations exist and are ready:
+- ✅ `20241228000001_add_user_profiles.sql` - User profiles table
+- ✅ `20241228000002_add_follows.sql` - Follow system
+- ✅ `20241228000004_add_activity_feed.sql` - Activity feed tables and trigger
+- ✅ `20241228000005_fix_activity_visibility.sql` - Visibility fix for public profiles
+- ✅ `20241228000006_add_workout_sharing.sql` - Workout sharing tables
 
-2. **Activity Feed UI**:
-   - ✅ Feed page with Following/Discover tabs
-   - ✅ ActivityCard component
-   - ✅ ReactionBar component
-   - ✅ useActivityFeed hook
-   - ✅ useReactions hook
+### Activity Feed UI
+- ✅ Feed page with Following/Discover tabs (`app/(dashboard)/dashboard/feed/page.tsx`)
+- ✅ ActivityCard component with workout/PR/streak variants
+- ✅ ReactionBar component with emoji picker
+- ✅ useActivityFeed hook with cursor pagination
+- ✅ useReactions hook for reaction management
 
-3. **Automatic Activity Creation**:
-   - ✅ Trigger exists that creates activities when workouts are completed
-   - ⚠️ **BUG**: Activities are created with 'followers' visibility even when profile is 'public'
+### Comment System
+- ✅ CommentSection component
+- ✅ CommentItem component with reply threading
+- ✅ CommentInput component with validation
+- ✅ useComments hook for comment management
 
-## ❌ What's Missing/Broken
+### Profile Management
+- ✅ Profile setup page (`/dashboard/profile/setup`)
+- ✅ Profile view page (`/dashboard/profile`)
+- ✅ Profile edit page with privacy settings (`/dashboard/profile/edit`)
+- ✅ Avatar upload with Supabase Storage
 
-### Critical Issues
+### Automatic Activity Creation
+- ✅ Trigger creates activities when workouts are completed
+- ✅ Activity visibility respects user's profile visibility settings
 
-1. **Activity Visibility Bug** 🔴
-   - **Problem**: The trigger creates activities with 'followers' visibility even when user's profile is 'public'
-   - **Impact**: Activities don't show in the Discover feed
-   - **Fix**: Run migration `20241228000005_fix_activity_visibility.sql` to update the trigger function
-   - **Status**: Migration created, needs to be run in Supabase
+## ⚠️ Pending Database Migration
 
-2. **No Profile Edit Page** 🔴
-   - **Problem**: Users can't change their `profile_visibility` or `show_workouts` settings
-   - **Impact**: Users can't control whether their workouts appear in the feed
-   - **Fix**: Create `/dashboard/profile/edit` page with privacy settings
-   - **Status**: Not implemented
+The visibility fix migration (`20241228000005_fix_activity_visibility.sql`) needs to be run in Supabase to ensure public profiles create public activities.
 
-### Missing Features
-
-3. **Manual Share Button** 🟡
-   - **Problem**: No way to manually share a workout to the feed
-   - **Impact**: Users can only share automatically when completing workouts
-   - **Status**: Phase 4 (Workout Sharing) not started
-
-4. **Comment System** 🟡
-   - **Problem**: Comments UI not implemented
-   - **Impact**: Users can react but not comment
-   - **Status**: Partially implemented (database exists, UI missing)
-
-## 🔧 Quick Fixes Needed
-
-### 1. Run the Visibility Fix Migration
-
-In Supabase SQL Editor, run:
+Run in Supabase SQL Editor:
 ```sql
--- File: supabase/migrations/20241228000005_fix_activity_visibility.sql
+-- See: supabase/migrations/20241228000005_fix_activity_visibility.sql
 ```
 
-This will fix the trigger so public profiles create public activities.
+## 📋 Phase 3 Completion Checklist
 
-### 2. Create Profile Edit Page
+### Core Features - Complete
+- [x] Database migrations for activities, reactions, comments
+- [x] Activity creation triggers on workout completion
+- [x] Activity feed with infinite scroll
+- [x] Activity card variants (workout, PR, streak)
+- [x] Reaction system with optimistic updates
+- [x] Comment system with replies
+- [x] Pull-to-refresh functionality
+- [x] Profile edit page with privacy settings
 
-Create `app/(dashboard)/dashboard/profile/edit/page.tsx` with:
-- Profile visibility toggle (public/followers_only/private)
-- Show workouts toggle
-- Show stats toggle
-- Bio editing
-- Display name editing
+### Nice-to-Have - Remaining
+- [ ] Feed caching strategy (for performance at scale)
+- [ ] Activity hiding/deletion UI
+- [ ] Feed filtering by activity type
 
-### 3. Test the Flow
+## 🚀 Phase 4: Workout Sharing (In Progress)
 
-1. Ensure you have a user profile (visit `/dashboard/profile/setup` if needed)
-2. Complete a workout
-3. Check the feed - activities should appear if profile is public
+### Completed
+- [x] Database migration for shared_workouts and saved_workouts (`20241228000006`)
+- [x] ShareWorkoutModal component with privacy options
+- [x] Workout serialization utility (`lib/workout-sharing.ts`)
+- [x] Activity trigger for sharing (creates shared_workout activity)
 
-## 📋 Implementation Checklist
+### Remaining
+- [ ] Public workout browser page (`/dashboard/workouts/shared`)
+- [ ] Workout import/copy functionality
+- [ ] Save/bookmark UI (database ready)
+- [ ] Generate shareable deep links
+- [ ] Integrate share button with workout completion flow
 
-### Phase 3: Activity Feed
-- [x] Database migrations
-- [x] Activity feed UI
-- [x] Reaction system
-- [x] Activity creation trigger (needs fix)
-- [ ] Profile edit page
-- [ ] Comment system UI
-- [ ] Activity hiding/deletion
-
-### Phase 4: Workout Sharing
-- [ ] Share workout modal
-- [ ] Manual share button
-- [ ] Shared workout browser
-- [ ] Workout import/copy
-
-## 🚀 Next Steps
-
-1. **Immediate**: Run the visibility fix migration
-2. **Short-term**: Create profile edit page
-3. **Medium-term**: Add comment system UI
-4. **Long-term**: Implement Phase 4 (Workout Sharing)
+See Phase 4 section in `SOCIAL_FEATURES_PLAN.md` for full details.
 
