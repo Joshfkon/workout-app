@@ -107,6 +107,92 @@ const EXERCISE_MAPPINGS = {
   'Hanging Leg Raise': ['hanging leg raise', 'hanging knee raise'],
   'Ab Wheel Rollout': ['ab wheel rollout', 'ab wheel', 'ab roller'],
   'Plank': ['plank', 'forearm plank'],
+  
+  // Additional exercises from migrations
+  // Chest
+  'Pec Deck': ['pec deck', 'pec fly machine'],
+  'Smith Machine Bench Press': ['smith machine bench press', 'smith bench press'],
+  'Smith Machine Incline Press': ['smith machine incline press', 'smith incline'],
+  'Decline Barbell Press': ['decline bench press', 'decline barbell press'],
+  'Seated Cable Fly': ['seated cable fly', 'seated pec fly'],
+  
+  // Back
+  'Seated Machine Row': ['seated machine row', 'seated row machine'],
+  'Assisted Pull-Up Machine': ['assisted pull up', 'assisted pullup machine'],
+  'Straight Arm Pulldown': ['straight arm pulldown', 'straight arm lat pulldown'],
+  'Close Grip Lat Pulldown': ['close grip lat pulldown', 'close grip pulldown'],
+  'Back Extension': ['back extension', 'hyperextension'],
+  'Meadows Row': ['meadows row', 'landmine row'],
+  'Assisted Pull-Up': ['assisted pull up', 'assisted pullup'],
+  
+  // Shoulders
+  'Rear Delt Machine': ['rear delt machine', 'rear delt fly machine'],
+  'Machine Lateral Raise': ['machine lateral raise', 'lateral raise machine'],
+  'Smith Machine Shoulder Press': ['smith machine shoulder press', 'smith shoulder press'],
+  'Upright Row': ['upright row', 'barbell upright row'],
+  'Cable Upright Row': ['cable upright row'],
+  'Front Raise': ['front raise', 'dumbbell front raise'],
+  'Behind-the-Back Cable Lateral Raise': ['behind back lateral raise', 'rear lateral raise'],
+  'Cable Y-Raise': ['cable y raise', 'y raise'],
+  'Reverse Cable Crossover': ['reverse cable crossover', 'rear delt cable fly'],
+  'Cable Cross Body Lateral Raise': ['cable cross body lateral raise', 'cross body raise'],
+  'Barbell Shrug': ['barbell shrug', 'shrug'],
+  
+  // Biceps
+  'Machine Bicep Curl': ['machine bicep curl', 'bicep curl machine'],
+  'Concentration Curl': ['concentration curl'],
+  'EZ Bar Curl': ['ez bar curl', 'ez curl bar'],
+  'Bayesian Cable Curl': ['bayesian curl', 'cable bayesian curl'],
+  '45° Preacher Curl': ['45 degree preacher curl', 'incline preacher curl'],
+  'Cable Bicep Curl': ['cable bicep curl', 'cable curl'],
+  
+  // Triceps
+  'Machine Tricep Extension': ['machine tricep extension', 'tricep extension machine'],
+  'Rope Tricep Pushdown': ['rope tricep pushdown', 'rope pushdown'],
+  'Assisted Dip Machine': ['assisted dip machine', 'assisted dips'],
+  'Dumbbell Kickback': ['dumbbell kickback', 'tricep kickback'],
+  'Cable Overhead Tricep Extension': ['cable overhead tricep extension', 'overhead cable extension'],
+  'Cable Tricep Pushdown': ['cable tricep pushdown', 'cable pushdown'],
+  'Katana Tricep Extension': ['katana tricep extension', 'katana extension'],
+  
+  // Quads
+  'Smith Machine Squat': ['smith machine squat', 'smith squat'],
+  'Pendulum Squat': ['pendulum squat', 'pendulum leg press'],
+  'Sissy Squat': ['sissy squat'],
+  'Reverse Lunge': ['reverse lunge', 'reverse walking lunge'],
+  'Step Up': ['step up', 'dumbbell step up'],
+  'Incline Leg Press': ['incline leg press', '45 degree leg press'],
+  
+  // Hamstrings
+  'Stiff Leg Deadlift': ['stiff leg deadlift', 'sldl'],
+  'Single Leg RDL': ['single leg rdl', 'single leg romanian deadlift'],
+  'Nordic Curl': ['nordic curl', 'nordic hamstring curl'],
+  
+  // Glutes
+  'Glute Drive Machine': ['glute drive machine', 'hip thrust machine'],
+  'Hip Abduction Machine': ['hip abduction machine', 'abductor machine'],
+  'Hip Adduction Machine': ['hip adduction machine', 'adductor machine'],
+  'Single Leg Hip Thrust': ['single leg hip thrust', 'one leg hip thrust'],
+  'Sumo Deadlift': ['sumo deadlift', 'sumo dl'],
+  
+  // Calves
+  'Smith Machine Calf Raise': ['smith machine calf raise', 'smith calf raise'],
+  'Donkey Calf Raise': ['donkey calf raise', 'donkey raise'],
+  'Calf Press Machine': ['calf press machine', 'calf press'],
+  
+  // Abs
+  'Machine Ab Crunch': ['machine ab crunch', 'ab crunch machine'],
+  'Decline Crunch': ['decline crunch', 'decline sit up'],
+  'Captain\'s Chair Leg Raise': ['captains chair leg raise', 'captain chair'],
+  'Pallof Press': ['pallof press', 'cable pallof press'],
+  'Dead Bug': ['dead bug', 'dead bug exercise'],
+  'Russian Twist': ['russian twist', 'russian twist abs'],
+  'Cable Woodchop': ['cable woodchop', 'wood chop'],
+  'Hammer Strength Ab Crunch': ['hammer strength ab crunch', 'ab machine'],
+  
+  // Functional
+  'Farmer\'s Carry': ['farmers carry', 'farmer walk'],
+  'Suitcase Carry': ['suitcase carry', 'suitcase walk'],
 };
 
 async function searchMuscleWiki(exerciseName) {
