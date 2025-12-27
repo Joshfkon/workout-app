@@ -45,6 +45,7 @@ const EXERCISE_MAPPINGS = {
   'Incline Dumbbell Press': ['incline dumbbell press', 'incline press'],
   'Cable Fly': ['cable fly', 'cable crossover', 'pec fly'],
   'Dips (Chest Focus)': ['dips', 'chest dips'],
+  'Machine Chest Press': ['machine chest press', 'chest press machine', 'pec deck'],
   
   // Back
   'Barbell Row': ['barbell row', 'bent over row'],
@@ -53,11 +54,14 @@ const EXERCISE_MAPPINGS = {
   'Pull-Ups': ['pull up', 'pullup', 'chin up'],
   'Cable Row': ['cable row', 'seated row'],
   'Deadlift': ['deadlift', 'conventional deadlift'],
+  'Chest Supported Row': ['chest supported row', 'chest supported t-bar row'],
   
   // Shoulders
   'Overhead Press': ['overhead press', 'military press', 'shoulder press'],
   'Lateral Raise': ['lateral raise', 'side raise'],
   'Rear Delt Fly': ['rear delt fly', 'rear delt raise'],
+  'Dumbbell Shoulder Press': ['dumbbell shoulder press', 'dumbbell press', 'seated dumbbell press'],
+  'Face Pull': ['face pull', 'cable face pull'],
   
   // Legs
   'Barbell Back Squat': ['squat', 'barbell squat', 'back squat'],
@@ -66,14 +70,43 @@ const EXERCISE_MAPPINGS = {
   'Lying Leg Curl': ['lying leg curl', 'leg curl'],
   'Leg Extension': ['leg extension', 'quad extension'],
   'Dumbbell Lunges': ['dumbbell lunge', 'lunge'],
-  'Calf Raise': ['calf raise', 'standing calf raise'],
+  'Walking Lunges': ['walking lunge', 'walking lunges', 'lunge'],
+  'Bulgarian Split Squat': ['bulgarian split squat', 'bulgarian squat', 'split squat'],
+  'Hack Squat': ['hack squat', 'hack squat machine'],
+  'Good Morning': ['good morning', 'good morning exercise'],
+  'Seated Leg Curl': ['seated leg curl', 'seated hamstring curl'],
   
-  // Arms
+  // Glutes
+  'Cable Pull Through': ['cable pull through', 'pull through'],
+  'Glute Bridge': ['glute bridge', 'hip bridge'],
+  'Hip Thrust': ['hip thrust', 'barbell hip thrust'],
+  
+  // Calves
+  'Calf Raise': ['calf raise', 'standing calf raise'],
+  'Standing Calf Raise': ['standing calf raise', 'calf raise'],
+  'Seated Calf Raise': ['seated calf raise'],
+  'Leg Press Calf Raise': ['leg press calf raise', 'calf press'],
+  
+  // Arms - Biceps
   'Barbell Curl': ['barbell curl', 'bb curl'],
   'Dumbbell Curl': ['dumbbell curl', 'bicep curl'],
   'Hammer Curl': ['hammer curl'],
+  'Cable Curl': ['cable curl', 'cable bicep curl'],
+  'Incline Dumbbell Curl': ['incline dumbbell curl', 'incline curl'],
+  'Preacher Curl': ['preacher curl', 'preacher bench curl'],
+  
+  // Arms - Triceps
   'Tricep Pushdown': ['tricep pushdown', 'tricep extension'],
-  'Skull Crushers': ['skull crusher', 'lying tricep extension'],
+  'Skull Crusher': ['skull crusher', 'lying tricep extension', 'french press'],
+  'Close Grip Bench Press': ['close grip bench press', 'close grip press'],
+  'Dips (Tricep Focus)': ['dips', 'tricep dips', 'bench dips'],
+  'Overhead Tricep Extension': ['overhead tricep extension', 'overhead extension'],
+  
+  // Abs
+  'Cable Crunch': ['cable crunch', 'cable ab crunch'],
+  'Hanging Leg Raise': ['hanging leg raise', 'hanging knee raise'],
+  'Ab Wheel Rollout': ['ab wheel rollout', 'ab wheel', 'ab roller'],
+  'Plank': ['plank', 'forearm plank'],
 };
 
 async function searchMuscleWiki(exerciseName) {
@@ -82,7 +115,8 @@ async function searchMuscleWiki(exerciseName) {
   for (const term of searchTerms) {
     try {
       // Use the /search endpoint for better relevance matching
-      const searchResponse = await fetch(`${MUSCLEWIKI_API_URL}/search?q=${encodeURIComponent(term)}&limit=5`, {
+      const searchUrl = `${MUSCLEWIKI_API_URL}/search?q=${encodeURIComponent(term)}&limit=5`;
+      const searchResponse = await fetch(searchUrl, {
         headers: {
           'X-RapidAPI-Key': API_KEY,
           'X-RapidAPI-Host': API_HOST
@@ -90,16 +124,34 @@ async function searchMuscleWiki(exerciseName) {
       });
       
       if (!searchResponse.ok) {
+        // Only exit on auth errors for the first exercise, otherwise just log and continue
         if (searchResponse.status === 401 || searchResponse.status === 403) {
-          console.error(`❌ Authentication failed. Check your API key.`);
-          process.exit(1);
+          const errorText = await searchResponse.text().catch(() => 'Unable to read error');
+          console.error(`❌ Authentication failed (${searchResponse.status}). Check your API key and subscription.`);
+          console.error(`Response: ${errorText.substring(0, 200)}`);
+          // Don't exit immediately - might be a temporary issue, try next term
+          if (term === searchTerms[0] && searchTerms.length === 1) {
+            process.exit(1);
+          }
+          continue;
         }
+        console.log(`   ⚠️  Search returned ${searchResponse.status}, trying next term...`);
         continue;
       }
       
-      const exercises = await searchResponse.json();
+      const exercisesData = await searchResponse.json();
       
-      if (!Array.isArray(exercises) || exercises.length === 0) {
+      // Handle different response formats
+      let exercises = [];
+      if (Array.isArray(exercisesData)) {
+        exercises = exercisesData;
+      } else if (exercisesData.results && Array.isArray(exercisesData.results)) {
+        exercises = exercisesData.results;
+      } else if (exercisesData.data && Array.isArray(exercisesData.data)) {
+        exercises = exercisesData.data;
+      }
+      
+      if (exercises.length === 0) {
         continue;
       }
       
@@ -112,7 +164,25 @@ async function searchMuscleWiki(exerciseName) {
       
       const exercise = exactMatch || exercises[0];
       
-      // Search endpoint already returns full exercise details with videos
+      // If we only have basic info, fetch full details by ID
+      if (exercise.id && (!exercise.videos || exercise.videos.length === 0)) {
+        try {
+          const detailResponse = await fetch(`${MUSCLEWIKI_API_URL}/exercises/${exercise.id}?gender=male`, {
+            headers: {
+              'X-RapidAPI-Key': API_KEY,
+              'X-RapidAPI-Host': API_HOST
+            }
+          });
+          if (detailResponse.ok) {
+            const detailData = await detailResponse.json();
+            return detailData;
+          }
+        } catch (err) {
+          // Continue with basic exercise data
+        }
+      }
+      
+      // Search endpoint may return full exercise details with videos
       return exercise;
     } catch (err) {
       // Continue to next search term
