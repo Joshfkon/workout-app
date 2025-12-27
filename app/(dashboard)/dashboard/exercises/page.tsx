@@ -173,7 +173,7 @@ export default function ExercisesPage() {
       const supabase = createUntypedClient();
       const { data, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, form_cues, common_mistakes, equipment_required, equipment, movement_pattern, is_bodyweight, bodyweight_type, assistance_type, is_custom, hypertrophy_tier, stretch_under_load, resistance_profile, progression_ease, demo_gif_url, demo_thumbnail_url, youtube_video_id')
         .order('name');
 
       if (data && !error) {
@@ -1090,6 +1090,68 @@ export default function ExercisesPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Exercise Demo Video/Image */}
+                    {(() => {
+                      const demoGifUrl = (exercise as any).demo_gif_url;
+                      const youtubeVideoId = (exercise as any).youtube_video_id;
+                      
+                      if (!demoGifUrl && !youtubeVideoId) return null;
+                      
+                      const isVideo = demoGifUrl && (demoGifUrl.endsWith('.mp4') || demoGifUrl.endsWith('.webm') || demoGifUrl.endsWith('.mov'));
+                      const isImage = demoGifUrl && !isVideo;
+
+                      return (
+                        <div>
+                          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider mb-2">
+                            Exercise Demo
+                          </p>
+                          {isVideo && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video">
+                              <video
+                                src={demoGifUrl}
+                                className="w-full h-full object-contain"
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                controls
+                                onError={(e) => {
+                                  console.error('[ExercisesPage] Failed to load video:', demoGifUrl);
+                                  (e.target as HTMLVideoElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+                          {isImage && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={demoGifUrl}
+                                alt={`${exercise.name} demonstration`}
+                                className="w-full h-auto max-h-64 object-contain"
+                                loading="lazy"
+                                onError={(e) => {
+                                  console.error('[ExercisesPage] Failed to load image:', demoGifUrl);
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
+                          {youtubeVideoId && (
+                            <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video mt-2">
+                              <iframe
+                                src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
+                                title={`${exercise.name} form video`}
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                                className="absolute inset-0 w-full h-full"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Form cues */}
                     {exercise.form_cues && exercise.form_cues.length > 0 && (
