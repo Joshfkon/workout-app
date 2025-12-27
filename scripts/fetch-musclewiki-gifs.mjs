@@ -374,7 +374,9 @@ async function main() {
     
     for (const exerciseName of results.success) {
       const fileName = `${exerciseName.toLowerCase().replace(/[^a-z0-9]/g, '-')}.mp4`;
-      sql += `UPDATE exercises SET demo_gif_url = '/exercise-demos/${fileName}' WHERE name = '${exerciseName}';\n`;
+      // Escape single quotes in exercise names for SQL (double them)
+      const escapedName = exerciseName.replace(/'/g, "''");
+      sql += `UPDATE exercises SET demo_gif_url = '/exercise-demos/${fileName}' WHERE name = '${escapedName}';\n`;
     }
     
     fs.writeFileSync(sqlFile, sql);

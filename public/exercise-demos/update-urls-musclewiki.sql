@@ -104,5 +104,5 @@ UPDATE exercises SET demo_gif_url = '/exercise-demos/dead-bug.mp4' WHERE name = 
 UPDATE exercises SET demo_gif_url = '/exercise-demos/russian-twist.mp4' WHERE name = 'Russian Twist';
 UPDATE exercises SET demo_gif_url = '/exercise-demos/cable-woodchop.mp4' WHERE name = 'Cable Woodchop';
 UPDATE exercises SET demo_gif_url = '/exercise-demos/hammer-strength-ab-crunch.mp4' WHERE name = 'Hammer Strength Ab Crunch';
-UPDATE exercises SET demo_gif_url = '/exercise-demos/farmer-s-carry.mp4' WHERE name = 'Farmer's Carry';
+UPDATE exercises SET demo_gif_url = '/exercise-demos/farmer-s-carry.mp4' WHERE name = 'Farmer''s Carry';
 UPDATE exercises SET demo_gif_url = '/exercise-demos/suitcase-carry.mp4' WHERE name = 'Suitcase Carry';
