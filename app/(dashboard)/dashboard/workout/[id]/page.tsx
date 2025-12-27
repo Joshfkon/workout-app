@@ -3672,6 +3672,12 @@ export default function WorkoutPage() {
                       restTimer.markComplete();
                       setShowRestTimer(false);
                     }}
+                    // RPE calibration - adjust displayed RIR based on user's bias
+                    adjustedTargetRir={
+                      calibrationEngine.getAdjustedRIR(block.exercise.name, block.targetRir).hasAdjustment
+                        ? calibrationEngine.getAdjustedRIR(block.exercise.name, block.targetRir).prescribedRIR
+                        : undefined
+                    }
                   />
 
                   {/* Exercise complete actions - only show for current exercise */}

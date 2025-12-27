@@ -172,6 +172,8 @@ interface ExerciseCardProps {
   onDropsetStart?: () => void;  // Called when manual dropset is started (to stop timer)
   // Bodyweight exercise support
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
+  // RPE calibration - adjusted RIR based on user's bias
+  adjustedTargetRir?: number;  // If user has +2 bias, this would be 0 when block.targetRir is 2
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -213,6 +215,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onDropsetCancel,
   onDropsetStart,
   userBodyweightKg,
+  adjustedTargetRir,
 }: ExerciseCardProps) {
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editingRpeId, setEditingRpeId] = useState<string | null>(null);
@@ -974,7 +977,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="flex items-center gap-2 text-xs text-surface-400">
             <span>{block.targetRepRange[0]}-{block.targetRepRange[1]} reps</span>
             <span>@</span>
-            <span>RIR {block.targetRir}</span>
+            <span>RIR {adjustedTargetRir ?? block.targetRir}</span>
           </div>
           
           {/* Weight mode segmented control for bodyweight exercises */}
