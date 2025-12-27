@@ -48,12 +48,14 @@ interface WarmupSetData {
   restSeconds?: number;  // Rest time after this warmup set
 }
 
-import { 
-  getInjuryRisk, 
+import {
+  getInjuryRisk,
   INJURY_LABELS,
   type InjuryArea,
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
+import { SafetyTierBadge } from './SafetyTierBadge';
+import { getFailureSafetyTier } from '@/services/exerciseSafety';
 
 interface TemporaryInjury {
   area: string;
@@ -874,6 +876,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     {exercise.hypertrophyScore.tier}
                   </span>
                 )}
+                <SafetyTierBadge
+                  tier={getFailureSafetyTier(exercise.name)}
+                  variant="short"
+                  showTooltip={true}
+                />
                 {block.progressionType && (
                   <span className="flex items-center gap-1 text-primary-400">
                     {getProgressionIcon(block.progressionType)}
