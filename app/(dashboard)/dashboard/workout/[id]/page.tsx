@@ -47,6 +47,11 @@ import {
 } from '@/services/injuryAwareSwapper';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
+import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
+import { RPECalibrationEngine, type CalibrationResult } from '@/services/rpeCalibration';
+import { getFailureSafetyTier } from '@/services/exerciseSafety';
+import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
+import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -499,6 +504,11 @@ export default function WorkoutPage() {
     dropNumber: number; // 1-indexed: which drop we're on
     totalDrops: number;
   } | null>(null);
+
+  // Sanity check and calibration state
+  const [sanityCheckResult, setSanityCheckResult] = useState<SanityCheckResult | null>(null);
+  const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(null);
+  const [calibrationEngine] = useState(() => new RPECalibrationEngine());
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -1420,6 +1430,59 @@ export default function WorkoutPage() {
         restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       }
       setError(null);
+
+      // Run sanity checks on the completed set
+      if (currentExercise && setType === 'normal') {
+        const setLog = {
+          exerciseName: currentExercise.name,
+          weight: data.weightKg,
+          reps: data.reps,
+          reportedRIR: 10 - data.rpe, // Convert RPE to RIR
+          isWarmup: false,
+          setNumber: currentSetNumber,
+        };
+
+        const checkContext = {
+          workingWeight: currentBlock.targetWeightKg,
+          currentTimestamp: new Date(),
+          previousSets: currentBlockSets.map(s => ({
+            exerciseName: currentExercise.name,
+            weight: s.weightKg,
+            reps: s.reps,
+            reportedRIR: 10 - s.rpe,
+            isWarmup: s.isWarmup,
+            setNumber: s.setNumber,
+          })),
+        };
+
+        const checkResult = checkSetSanity(setLog, checkContext);
+        if (checkResult) {
+          setSanityCheckResult(checkResult);
+        }
+
+        // Check if this is an AMRAP-eligible set (last set on a safe exercise)
+        const safetyTier = getFailureSafetyTier(currentExercise.name);
+        const isLastSet = currentSetNumber >= currentBlock.targetSets;
+        const isAmrapEligible = safetyTier === 'push_freely' && isLastSet && data.rpe >= 9.5;
+
+        if (isAmrapEligible) {
+          // Log to calibration engine and check for result
+          const calibResult = calibrationEngine.addSetLog({
+            exerciseId: currentExercise.id,
+            exerciseName: currentExercise.name,
+            weight: data.weightKg,
+            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+            actualReps: data.reps,
+            reportedRIR: currentBlock.targetRir,
+            wasAMRAP: true,
+            timestamp: new Date(),
+          });
+
+          if (calibResult) {
+            setCalibrationResult(calibResult);
+          }
+        }
+      }
 
       // Return the set ID for optional feedback
       return insertedData.id;
@@ -4480,6 +4543,26 @@ export default function WorkoutPage() {
         onClose={() => setSelectedExerciseForDetails(null)}
         unit={preferences.units}
       />
+
+      {/* Sanity Check Toast */}
+      {sanityCheckResult && (
+        <SanityCheckToast
+          check={sanityCheckResult}
+          onDismiss={() => setSanityCheckResult(null)}
+        />
+      )}
+
+      {/* Calibration Result Card (modal overlay) */}
+      {calibrationResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="max-w-md w-full">
+            <CalibrationResultCard
+              result={calibrationResult}
+              onDismiss={() => setCalibrationResult(null)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
