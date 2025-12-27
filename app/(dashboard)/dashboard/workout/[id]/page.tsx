@@ -3844,6 +3844,7 @@ export default function WorkoutPage() {
                         return adjusted.hasAdjustment ? adjusted.prescribedRIR : undefined;
                       })()
                     }
+                    isAmrapSuggested={amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)}
                     warmupSets={(() => {
                       if (!isCurrent) return undefined;
                       

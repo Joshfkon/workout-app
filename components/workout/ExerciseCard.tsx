@@ -174,6 +174,8 @@ interface ExerciseCardProps {
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
   // RPE calibration - adjusted RIR based on user's bias
   adjustedTargetRir?: number;  // If user has +2 bias, this would be 0 when block.targetRir is 2
+  // AMRAP suggestion - indicates this is the last set and user should push to failure
+  isAmrapSuggested?: boolean;  // If true, pre-fill RPE with 9.5 as a target
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -216,6 +218,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onDropsetStart,
   userBodyweightKg,
   adjustedTargetRir,
+  isAmrapSuggested = false,
 }: ExerciseCardProps) {
   // Use adjusted RIR if available, otherwise fall back to block target RIR
   const effectiveTargetRir = adjustedTargetRir ?? block.targetRir;
@@ -454,9 +457,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         const setIndex = completedSets.length + i;
         const prevSet = previousSets[setIndex];
         const lastCompleted = completedSets[completedSets.length - 1];
+        const isLastSet = i === pendingSetsCount - 1;
         
         let defaultWeight: number;
         let defaultReps: number;
+        let defaultRpe: number;
         
         if (lastCompleted) {
           const lastRpe = lastCompleted.rpe || targetRpe;
@@ -477,17 +482,39 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
         }
         
+        // If this is the last set and AMRAP is suggested, pre-fill RPE with 9.5
+        if (isLastSet && isAmrapSuggested) {
+          defaultRpe = 9.5;
+        } else {
+          defaultRpe = targetRpe;
+        }
+        
         newPendingInputs.push({
           weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
           reps: String(defaultReps),
-          rpe: String(targetRpe),
+          rpe: String(defaultRpe),
         });
       }
       
       setPendingInputs(newPendingInputs);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [completedSets.length, pendingSetsCount]);
+  }, [completedSets.length, pendingSetsCount, isAmrapSuggested]);
+  
+  // Update RPE to 9.5 when AMRAP suggestion appears for the last pending set
+  useEffect(() => {
+    if (isAmrapSuggested && pendingInputs.length > 0) {
+      const lastIndex = pendingInputs.length - 1;
+      const lastInput = pendingInputs[lastIndex];
+      if (lastInput && parseFloat(lastInput.rpe) !== 9.5) {
+        setPendingInputs(prev => {
+          const updated = [...prev];
+          updated[lastIndex] = { ...updated[lastIndex], rpe: '9.5' };
+          return updated;
+        });
+      }
+    }
+  }, [isAmrapSuggested, pendingInputs.length]);
   
   // Recalculate suggestions when RPE or Form of the last completed set changes
   const lastCompletedSetRef = useRef<{ id: string; rpe: number | null; form: string | null } | null>(null);
@@ -1898,7 +1925,31 @@ export const ExerciseCard = memo(function ExerciseCard({
                       />
                     </td>
                     <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-600 text-[10px] sm:text-xs font-mono">—</span>
+                      {(() => {
+                        const isLastPendingSet = index === pendingInputs.length - 1;
+                        const shouldShowAmrapInput = isLastPendingSet && isAmrapSuggested;
+                        
+                        if (shouldShowAmrapInput) {
+                          return (
+                            <input
+                              type="number"
+                              value={input.rpe || '9.5'}
+                              onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                              step="0.5"
+                              min="1"
+                              max="10"
+                              className="w-full max-w-[3rem] px-1 py-1 bg-surface-800/50 border border-surface-600/50 rounded text-center font-mono text-surface-400 text-[10px] sm:text-xs focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50"
+                              placeholder="9.5"
+                              title="AMRAP target: Push to failure (RPE 9.5+)"
+                            />
+                          );
+                        }
+                        
+                        return (
+                          <span className="text-surface-600 text-[10px] sm:text-xs font-mono">—</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-1 py-1.5 text-center">
                       <span className="text-surface-600 text-[10px] sm:text-xs">—</span>
