@@ -1191,23 +1191,30 @@ export default function WorkoutPage() {
     }
 
     const safetyTier = getFailureSafetyTier(currentExercise.name);
-    const isLastSet = currentSetNumber >= currentBlock.targetSets;
     const isSafeExercise = safetyTier === 'push_freely';
-
+    
+    // Count completed sets for this block
+    const completedSetsForBlock = completedSets.filter(
+      s => s.exerciseBlockId === currentBlock.id && s.setType === 'normal'
+    ).length;
+    
     // Suggest AMRAP if:
-    // 1. It's the last set
+    // 1. We're about to do the last set (completed sets + 1 = target sets)
     // 2. Exercise is safe to push to failure
-    // 3. We haven't already completed this set
-    if (isLastSet && isSafeExercise && currentSetNumber === currentBlock.targetSets) {
+    // 3. We haven't already completed all sets
+    const isAboutToDoLastSet = completedSetsForBlock + 1 === currentBlock.targetSets;
+    const hasNotCompletedAllSets = completedSetsForBlock < currentBlock.targetSets;
+
+    if (isAboutToDoLastSet && isSafeExercise && hasNotCompletedAllSets) {
       setAmrapSuggestion({
         exerciseName: currentExercise.name,
         blockId: currentBlock.id,
-        setNumber: currentSetNumber,
+        setNumber: completedSetsForBlock + 1,
       });
     } else {
       setAmrapSuggestion(null);
     }
-  }, [currentBlock, currentExercise, currentSetNumber]);
+  }, [currentBlock, currentExercise, completedSets]);
 
   // Fetch frequently used exercises for sorting
   useEffect(() => {
