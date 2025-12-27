@@ -4,8 +4,10 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
+import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimerControlPanel } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 
 // Dynamic import ExerciseCard (118KB) to reduce initial bundle and improve page load
 const ExerciseCard = dynamic(
@@ -380,8 +382,10 @@ export default function WorkoutPage() {
   const sessionId = params.id as string;
   const fromCreate = searchParams.get('fromCreate') === 'true';
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
+  const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
+  const [isFirstWorkout, setIsFirstWorkout] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [blocks, setBlocks] = useState<ExerciseBlockWithExercise[]>([]);
@@ -825,7 +829,16 @@ export default function WorkoutPage() {
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.total_weeks);
         }
-        
+
+        // Check if this is the user's first workout for beginner hints
+        const { count: completedWorkoutsCount } = await supabase
+          .from('workout_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', sessionData.user_id)
+          .eq('state', 'completed');
+
+        setIsFirstWorkout(completedWorkoutsCount === 0);
+
         // Generate coach message with profile and context
         setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
         
@@ -3093,6 +3106,24 @@ export default function WorkoutPage() {
           style={{ width: `${overallProgress}%` }}
         />
       </div>
+
+      {/* First workout guidance */}
+      {isFirstWorkout && showBeginnerTips && (
+        <InlineHint id="first-workout-intro">
+          <div>
+            <p className="font-medium mb-2">Welcome to your first workout!</p>
+            <ul className="space-y-1 text-sm text-primary-200">
+              <li>• <strong>Log each set</strong> - Enter weight and reps after completing a set</li>
+              <li>• <strong>Rate difficulty</strong> - RIR (Reps In Reserve) tells us how hard the set was</li>
+              <li>• <strong>Use rest timer</strong> - Optimal rest helps maximize your gains</li>
+              <li>• <strong>Track form</strong> - Rate your form to ensure quality reps</li>
+            </ul>
+            <p className="text-xs text-primary-300 mt-2">
+              We&apos;ll learn your patterns and personalize recommendations as you train!
+            </p>
+          </div>
+        </InlineHint>
+      )}
 
       {/* Error alert */}
       {error && (
