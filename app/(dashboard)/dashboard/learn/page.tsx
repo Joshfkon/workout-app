@@ -5,6 +5,17 @@ import { Card } from '@/components/ui/Card';
 
 const articles = [
   {
+    id: 'rpe-calibration',
+    icon: '🎯',
+    title: 'RPE Calibration & Safety Tiers',
+    subtitle: 'How we help you understand true proximity to failure',
+    description:
+      'Learn why most lifters underestimate their capacity by 2-4 reps, how AMRAP sets calibrate your perception, and which exercises are safe to push to failure.',
+    color: 'green',
+    tag: 'Training Science',
+    readTime: '6 min read',
+  },
+  {
     id: 'adaptive-volume',
     icon: '📊',
     title: 'Personalized Volume & Recovery',
