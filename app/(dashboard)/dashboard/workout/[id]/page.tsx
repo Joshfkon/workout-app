@@ -48,7 +48,7 @@ import {
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
-import { RPECalibrationEngine, type CalibrationResult } from '@/services/rpeCalibration';
+import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
@@ -508,7 +508,18 @@ export default function WorkoutPage() {
   // Sanity check and calibration state
   const [sanityCheckResult, setSanityCheckResult] = useState<SanityCheckResult | null>(null);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(null);
-  const [calibrationEngine] = useState(() => new RPECalibrationEngine());
+  const [calibrationEngine, setCalibrationEngine] = useState(() => new RPECalibrationEngine());
+  const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
+  const [amrapSuggestion, setAmrapSuggestion] = useState<{
+    exerciseName: string;
+    blockId: string;
+    setNumber: number;
+  } | null>(null);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    calibrationEngineRef.current = calibrationEngine;
+  }, [calibrationEngine]);
 
   const currentBlock = blocks[currentBlockIndex];
   const currentExercise = currentBlock?.exercise;
@@ -1055,6 +1066,149 @@ export default function WorkoutPage() {
     loadWorkout();
   }, [sessionId]);
 
+  // Load historical set logs for RPE calibration
+  useEffect(() => {
+    async function loadCalibrationHistory() {
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Load set logs from the last 4 weeks for calibration
+        const fourWeeksAgo = new Date();
+        fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
+        const { data: setLogsData, error } = await supabase
+          .from('set_logs')
+          .select(`
+            id,
+            exercise_block_id,
+            set_number,
+            weight_kg,
+            reps,
+            rpe,
+            set_type,
+            logged_at,
+            exercise_blocks!inner (
+              exercise_id,
+              target_rep_range,
+              target_rir,
+              exercises!inner (
+                id,
+                name
+              ),
+              workout_sessions!inner (
+                user_id,
+                completed_at
+              )
+            )
+          `)
+          .eq('exercise_blocks.workout_sessions.user_id', user.id)
+          .eq('exercise_blocks.workout_sessions.state', 'completed')
+          .gte('logged_at', fourWeeksAgo.toISOString())
+          .eq('set_type', 'normal')
+          .order('logged_at', { ascending: true });
+
+        if (error) {
+          console.error('Failed to load calibration history:', error);
+          return;
+        }
+
+        if (!setLogsData || setLogsData.length === 0) {
+          return; // No historical data, engine stays empty
+        }
+
+        // Convert to CalibrationSetLog format
+        const calibrationLogs: CalibrationSetLog[] = [];
+        const calibrationResults: CalibrationResult[] = [];
+
+        for (const log of setLogsData) {
+          const block = log.exercise_blocks as any;
+          const exercise = block.exercises as any;
+          
+          if (!exercise || !block) continue;
+
+          const reportedRIR = Math.max(0, Math.round(10 - log.rpe));
+          const wasAMRAP = log.rpe >= 9.5 && getFailureSafetyTier(exercise.name) === 'push_freely';
+
+          calibrationLogs.push({
+            exerciseId: exercise.id,
+            exerciseName: exercise.name,
+            weight: log.weight_kg,
+            prescribedReps: {
+              min: block.target_rep_range?.[0] || 0,
+              max: block.target_rep_range?.[1] || null,
+            },
+            actualReps: log.reps,
+            reportedRIR,
+            wasAMRAP,
+            timestamp: new Date(log.logged_at),
+          });
+        }
+
+        // Process sets in chronological order to build up calibration results
+        // The engine needs to process sets sequentially so AMRAPs can compare to previous sets
+        const engine = new RPECalibrationEngine([], []);
+        
+        // Sort logs by timestamp to process chronologically
+        const sortedLogs = [...calibrationLogs].sort((a, b) => 
+          a.timestamp.getTime() - b.timestamp.getTime()
+        );
+        
+        // Process each log sequentially
+        for (const log of sortedLogs) {
+          if (log.wasAMRAP) {
+            const result = engine.addSetLog(log);
+            // AMRAP sets automatically create calibration results
+          } else {
+            // Non-AMRAP sets are logged for comparison data
+            engine.addSetLog(log);
+          }
+        }
+        
+        setCalibrationEngine(engine);
+      } catch (err) {
+        console.error('Error loading calibration history:', err);
+      }
+    }
+
+    // Only load if we have a user session
+    async function initCalibration() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await loadCalibrationHistory();
+      }
+    }
+    initCalibration();
+  }, [sessionId]);
+
+  // Check for AMRAP suggestions when current block or set number changes
+  useEffect(() => {
+    if (!currentBlock || !currentExercise) {
+      setAmrapSuggestion(null);
+      return;
+    }
+
+    const safetyTier = getFailureSafetyTier(currentExercise.name);
+    const isLastSet = currentSetNumber >= currentBlock.targetSets;
+    const isSafeExercise = safetyTier === 'push_freely';
+
+    // Suggest AMRAP if:
+    // 1. It's the last set
+    // 2. Exercise is safe to push to failure
+    // 3. We haven't already completed this set
+    if (isLastSet && isSafeExercise && currentSetNumber === currentBlock.targetSets) {
+      setAmrapSuggestion({
+        exerciseName: currentExercise.name,
+        blockId: currentBlock.id,
+        setNumber: currentSetNumber,
+      });
+    } else {
+      setAmrapSuggestion(null);
+    }
+  }, [currentBlock, currentExercise, currentSetNumber]);
+
   // Fetch frequently used exercises for sorting
   useEffect(() => {
     async function loadFrequentExercises() {
@@ -1469,7 +1623,7 @@ export default function WorkoutPage() {
           // Log to calibration engine and check for result
           // Use actual reported RIR from the set (converted from RPE), not the target RIR
           const reportedRIR = 10 - data.rpe;
-          const calibResult = calibrationEngine.addSetLog({
+          const calibResult = calibrationEngineRef.current.addSetLog({
             exerciseId: currentExercise.id,
             exerciseName: currentExercise.name,
             weight: data.weightKg,
@@ -1488,7 +1642,7 @@ export default function WorkoutPage() {
         // Also log non-AMRAP sets for calibration comparison (but don't show result)
         if (safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
           const reportedRIR = 10 - data.rpe;
-          calibrationEngine.addSetLog({
+          calibrationEngineRef.current.addSetLog({
             exerciseId: currentExercise.id,
             exerciseName: currentExercise.name,
             weight: data.weightKg,
@@ -3572,6 +3726,51 @@ export default function WorkoutPage() {
                 
                 return (
                 <div className="mt-3 space-y-3">
+                  {/* AMRAP Suggestion Banner */}
+                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
+                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
+                            <span className="text-primary-400 text-lg">🎯</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                            AMRAP Set Suggestion
+                          </h3>
+                          <p className="text-xs text-surface-300 mb-3">
+                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>. 
+                            Push to failure (RPE 9.5+) to calibrate your RPE perception. 
+                            This helps us adjust your future RIR prescriptions.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                // The user will complete the set normally, but we'll track it as AMRAP
+                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
+                                setAmrapSuggestion(null);
+                              }}
+                              className="text-xs"
+                            >
+                              Got it - I'll push hard
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setAmrapSuggestion(null)}
+                              className="text-xs"
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+
                   {/* Exercise card with integrated set inputs and warmups - hideHeader on mobile since name shows above */}
                   <ExerciseCard
                     hideHeader
@@ -3632,6 +3831,12 @@ export default function WorkoutPage() {
                     recommendedWeight={aiRecommendedWeight}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
+                    adjustedTargetRir={
+                      (() => {
+                        const adjusted = calibrationEngineRef.current.getAdjustedRIR(block.exercise.name, block.targetRir);
+                        return adjusted.hasAdjustment ? adjusted.prescribedRIR : undefined;
+                      })()
+                    }
                     warmupSets={(() => {
                       if (!isCurrent) return undefined;
                       

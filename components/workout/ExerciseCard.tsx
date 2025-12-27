@@ -172,6 +172,8 @@ interface ExerciseCardProps {
   onDropsetStart?: () => void;  // Called when manual dropset is started (to stop timer)
   // Bodyweight exercise support
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
+  // RPE calibration - adjusted RIR based on user's bias
+  adjustedTargetRir?: number;  // If user has +2 bias, this would be 0 when block.targetRir is 2
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -213,7 +215,11 @@ export const ExerciseCard = memo(function ExerciseCard({
   onDropsetCancel,
   onDropsetStart,
   userBodyweightKg,
+  adjustedTargetRir,
 }: ExerciseCardProps) {
+  // Use adjusted RIR if available, otherwise fall back to block target RIR
+  const effectiveTargetRir = adjustedTargetRir ?? block.targetRir;
+  
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [editingRpeId, setEditingRpeId] = useState<string | null>(null);
   const [editingFormId, setEditingFormId] = useState<string | null>(null);
@@ -351,7 +357,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const recalculatePendingInputs = useCallback(() => {
     if (pendingSetsCount === 0) return;
     
-    const targetRpe = 10 - block.targetRir;
+    const targetRpe = 10 - effectiveTargetRir;
     const lastCompleted = completedSets[completedSets.length - 1];
     
     if (!lastCompleted) return;
@@ -382,7 +388,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
     
     setPendingInputs(updatedInputs);
-  }, [completedSets, pendingSetsCount, block.targetRir, block.targetRepRange, displayWeight]);
+  }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, displayWeight]);
   
   // Initialize pending inputs when component mounts or when we need a full reset
   // Only reinitialize when pendingSetsCount increases (sets were added) or on first mount
@@ -394,7 +400,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // If a set was just completed (count increased), update all pending inputs
     // based on the just-completed set's performance
     if (currentCount > prevCount) {
-      const targetRpe = 10 - block.targetRir;
+      const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
       
       // Calculate smart defaults based on the just-completed set
@@ -436,7 +442,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     // - OR pendingSetsCount increased (new sets were added to the target)
     if (pendingSetsCount > 0 && (pendingInputs.length === 0 || pendingInputs.length < pendingSetsCount)) {
       const newPendingInputs: { weight: string; reps: string; rpe: string }[] = [];
-      const targetRpe = 10 - block.targetRir;
+      const targetRpe = 10 - effectiveTargetRir;
       
       for (let i = 0; i < pendingSetsCount; i++) {
         // Keep existing input if available
@@ -687,7 +693,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     const setNumber = completedSets.length + index + 1;
 
     // Use target RPE as default (will be updated if user provides feedback)
-    const targetRpe = 10 - block.targetRir;
+    const targetRpe = 10 - effectiveTargetRir;
 
     // Complete the set immediately (rest timer starts in parent)
     const result = await onSetComplete({
@@ -974,7 +980,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           <div className="flex items-center gap-2 text-xs text-surface-400">
             <span>{block.targetRepRange[0]}-{block.targetRepRange[1]} reps</span>
             <span>@</span>
-            <span>RIR {block.targetRir}</span>
+            <span>RIR {adjustedTargetRir ?? block.targetRir}</span>
           </div>
           
           {/* Weight mode segmented control for bodyweight exercises */}
