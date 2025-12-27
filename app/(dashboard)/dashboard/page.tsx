@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint } from '@/components/ui';
+import { InlineHint } from '@/components/ui/FirstTimeHint';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
@@ -178,6 +180,8 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>('maintain');
   const [debugError, setDebugError] = useState<string | null>(null);
+  const [completedWorkoutsCount, setCompletedWorkoutsCount] = useState<number>(0);
+  const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
@@ -347,6 +351,7 @@ export default function DashboardPage() {
           weeklyBlocksResult,
           frequentDataResult,
           systemFoodsResult,
+          completedWorkoutsResult,
         ] = await Promise.all([
           // User profile (goal)
           supabase.from('users').select('goal').eq('id', user.id).single(),
@@ -410,11 +415,22 @@ export default function DashboardPage() {
             .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
             .eq('is_active', true)
             .order('name'),
+
+          // Count completed workouts (for first week hints)
+          supabase.from('workout_sessions')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('state', 'completed'),
         ]);
         
         // Process user profile
         if (userProfileResult.data?.goal) {
           setUserGoal(userProfileResult.data.goal);
+        }
+
+        // Process completed workouts count for first week hints
+        if (completedWorkoutsResult.count !== null) {
+          setCompletedWorkoutsCount(completedWorkoutsResult.count);
         }
 
         // Process mesocycles
@@ -1405,6 +1421,43 @@ export default function DashboardPage() {
                 ) : (
                   <div className="text-center py-6">
                     <p className="text-surface-400 text-sm">Complete workouts to track volume</p>
+                  </div>
+                )}
+
+                {/* First week progress interpretation */}
+                {muscleVolume.length > 0 && completedWorkoutsCount <= 5 && showBeginnerTips && (
+                  <div className="mt-4">
+                    <InlineHint id="first-week-volume-interpretation">
+                      <div>
+                        <p className="font-medium mb-2">Your first week progress!</p>
+                        <div className="space-y-2 text-sm text-primary-200">
+                          {muscleVolume.filter(mv => mv.sets > 0).length > 0 ? (
+                            <>
+                              <p>
+                                Great start! You&apos;ve trained{' '}
+                                <strong>{muscleVolume.filter(mv => mv.sets > 0).length} muscle groups</strong>{' '}
+                                this week.
+                              </p>
+                              {muscleVolume.some(mv => mv.status === 'optimal') && (
+                                <p className="text-success-300">
+                                  {muscleVolume.filter(mv => mv.status === 'optimal').length} muscles are in the optimal zone (green) - perfect for growth!
+                                </p>
+                              )}
+                              {muscleVolume.some(mv => mv.status === 'low' && mv.sets > 0) && (
+                                <p className="text-warning-300">
+                                  {muscleVolume.filter(mv => mv.status === 'low' && mv.sets > 0).length} muscles need a bit more volume - aim to complete more workouts this week.
+                                </p>
+                              )}
+                              <p className="text-xs text-primary-300 mt-1">
+                                Keep going! As you complete more workouts, your volume will reach optimal levels for each muscle.
+                              </p>
+                            </>
+                          ) : (
+                            <p>Complete some workouts to see your volume progress!</p>
+                          )}
+                        </div>
+                      </div>
+                    </InlineHint>
                   </div>
                 )}
               </CardContent>

@@ -3,9 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
+import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
+import { ContextCard } from '@/components/onboarding/ContextCard';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
@@ -25,8 +28,10 @@ export default function NewMesocyclePage() {
   const router = useRouter();
   const { preferences, isLoading: prefsLoading } = useUserPreferences();
   const { canAccess, isLoading: subLoading } = useSubscription();
-  
+  const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+
   const [step, setStep] = useState(1);
+  const [isFirstMesocycle, setIsFirstMesocycle] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -209,9 +214,17 @@ export default function NewMesocyclePage() {
         // Get unavailable gym equipment
         const unavailable = await getUnavailableEquipment(user.id);
         setUnavailableEquipmentIds(unavailable);
+
+        // Check if this is the user's first mesocycle
+        const { count } = await supabase
+          .from('mesocycles')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+
+        setIsFirstMesocycle(count === 0);
       }
     }
-    
+
     loadUserData();
   }, []);
 
@@ -408,6 +421,24 @@ export default function NewMesocyclePage() {
           />
         ))}
       </div>
+
+      {/* First-time mesocycle creation hint */}
+      {step === 1 && isFirstMesocycle && showBeginnerTips && (
+        <InlineHint id="first-mesocycle-intro">
+          <div>
+            <p className="font-medium mb-1">Creating your first training program!</p>
+            <p className="text-sm text-primary-200">
+              A mesocycle is a 4-8 week training block designed to progressively build your strength and muscle.
+              We&apos;ll help you set up the perfect plan based on your goals and schedule.
+            </p>
+          </div>
+        </InlineHint>
+      )}
+
+      {/* Step 1: Context Card */}
+      {step === 1 && showBeginnerTips && (
+        <ContextCard cardKey="mesocycleSchedule" variant="subtle" defaultCollapsed={!isFirstMesocycle} />
+      )}
 
       {/* Your Profile Summary */}
       {step === 1 && (
@@ -731,6 +762,11 @@ export default function NewMesocyclePage() {
         </Card>
       )}
 
+      {/* Step 2: Context Card */}
+      {step === 2 && showBeginnerTips && (
+        <ContextCard cardKey="mesocycleCustomize" variant="subtle" defaultCollapsed={!isFirstMesocycle} />
+      )}
+
       {/* Step 2: Customize */}
       {step === 2 && (
         <Card variant="elevated">
@@ -842,8 +878,8 @@ export default function NewMesocyclePage() {
             
             {/* Weekly time commitment with status */}
             <div className={`p-3 rounded-lg border ${
-              volumeAssessment.status === 'optimal' 
-                ? 'bg-success-500/10 border-success-500/20' 
+              volumeAssessment.status === 'optimal'
+                ? 'bg-success-500/10 border-success-500/20'
                 : volumeAssessment.status === 'quick'
                 ? 'bg-accent-500/10 border-accent-500/20'
                 : volumeAssessment.status === 'too_high'
@@ -861,6 +897,60 @@ export default function NewMesocyclePage() {
                 {volumeAssessment.message}
               </p>
             </div>
+
+            {/* Week-by-Week Preview - for beginners */}
+            {showBeginnerTips && (
+              <div className="p-4 bg-surface-800/50 rounded-lg">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">📅</span>
+                  <span className="font-medium text-surface-200">What Each Week Looks Like</span>
+                </div>
+                <div className="space-y-2">
+                  {Array.from({ length: totalWeeks }, (_, i) => {
+                    const weekNum = i + 1;
+                    const isDeload = weekNum === totalWeeks;
+                    const volumePercent = isDeload ? 50 : Math.min(100, 80 + (weekNum - 1) * 5);
+
+                    return (
+                      <div
+                        key={weekNum}
+                        className={`flex items-center gap-3 p-2 rounded ${
+                          isDeload ? 'bg-warning-500/10 border border-warning-500/20' : 'bg-surface-900/50'
+                        }`}
+                      >
+                        <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                          isDeload ? 'bg-warning-500/20 text-warning-400' : 'bg-primary-500/20 text-primary-400'
+                        }`}>
+                          {weekNum}
+                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-sm ${isDeload ? 'text-warning-400' : 'text-surface-300'}`}>
+                              {isDeload ? 'Deload Week' : `Week ${weekNum}`}
+                            </span>
+                            <span className="text-xs text-surface-500">{volumePercent}% volume</span>
+                          </div>
+                          <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                isDeload ? 'bg-warning-500' : 'bg-primary-500'
+                              }`}
+                              style={{ width: `${volumePercent}%` }}
+                            />
+                          </div>
+                        </div>
+                        {isDeload && (
+                          <span className="text-xs text-warning-400">Recovery</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-surface-500 mt-3">
+                  Volume gradually increases each week, then drops during deload for recovery and growth.
+                </p>
+              </div>
+            )}
 
             {/* Science Behind Your Program - Collapsible */}
             <details className="group">

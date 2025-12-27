@@ -231,6 +231,72 @@ export const CONTEXT_CARDS: Record<string, ContextCardContent> = {
     ],
     preview: 'Your mesocycle will include smart progressions and automatic deload timing.',
   },
+  mesocycleSchedule: {
+    icon: '📆',
+    title: 'Setting your training schedule',
+    points: [
+      'More training days = higher frequency per muscle (great for growth)',
+      'Session length determines how many exercises you can do',
+      'We\'ll recommend the best split for your schedule',
+      'Short on time? We\'ll prioritize the most effective exercises',
+    ],
+    preview: 'Your schedule affects which muscles get trained together and how often.',
+  },
+  mesocycleCustomize: {
+    icon: '⚙️',
+    title: 'Fine-tuning your program',
+    points: [
+      'Training split determines which muscles get trained together',
+      'Longer mesocycles allow more progression before deloading',
+      'Our AI recommendations are based on your profile and goals',
+      'Feel free to customize - you know your body best',
+    ],
+    preview: 'Any changes you make here will be reflected in your workout structure.',
+  },
+  periodization: {
+    icon: '📈',
+    title: 'How your program progresses',
+    points: [
+      'Each week gradually increases challenge (progressive overload)',
+      'Volume increases while intensity stays consistent',
+      'The final week is a deload - reduced volume for recovery',
+      'After the deload, you\'ll be stronger and ready for the next block',
+    ],
+    preview: 'This wave pattern of stress and recovery is key to long-term gains.',
+  },
+  deloadWeek: {
+    icon: '🔄',
+    title: 'Why the deload week matters',
+    points: [
+      'Accumulated fatigue can mask your true strength',
+      'Recovery allows your body to fully adapt to training',
+      'You\'ll feel refreshed and often hit PRs after deloading',
+      'Skipping deloads leads to burnout and plateaus',
+    ],
+    preview: 'The deload uses 50% of normal volume while keeping weights the same.',
+  },
+  firstWorkout: {
+    icon: '🏋️',
+    title: 'Your first workout',
+    points: [
+      'We\'ll guide you through each exercise with clear targets',
+      'Log your sets to track progress and get smart recommendations',
+      'Rate how hard each set felt (RIR) for auto-regulation',
+      'Rest timers help optimize your recovery between sets',
+    ],
+    preview: 'After a few workouts, we\'ll learn your patterns and personalize even more.',
+  },
+  weeklyProgress: {
+    icon: '📊',
+    title: 'Understanding your weekly progress',
+    points: [
+      'Volume tracks total sets per muscle group',
+      'Green zone means optimal training for growth',
+      'Below minimum (MEV) risks muscle loss',
+      'Above maximum (MRV) means too much to recover from',
+    ],
+    preview: 'Check your dashboard weekly to see how your training is distributed.',
+  },
 };
 
 // ============ RIR/RPE EXPLANATION CONTENT ============
