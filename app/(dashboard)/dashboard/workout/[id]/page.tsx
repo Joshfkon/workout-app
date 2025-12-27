@@ -1467,13 +1467,15 @@ export default function WorkoutPage() {
 
         if (isAmrapEligible) {
           // Log to calibration engine and check for result
+          // Use actual reported RIR from the set (converted from RPE), not the target RIR
+          const reportedRIR = 10 - data.rpe;
           const calibResult = calibrationEngine.addSetLog({
             exerciseId: currentExercise.id,
             exerciseName: currentExercise.name,
             weight: data.weightKg,
             prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
             actualReps: data.reps,
-            reportedRIR: currentBlock.targetRir,
+            reportedRIR: Math.max(0, Math.round(reportedRIR)), // Ensure RIR is non-negative integer
             wasAMRAP: true,
             timestamp: new Date(),
           });
@@ -1481,6 +1483,21 @@ export default function WorkoutPage() {
           if (calibResult) {
             setCalibrationResult(calibResult);
           }
+        }
+        
+        // Also log non-AMRAP sets for calibration comparison (but don't show result)
+        if (safetyTier === 'push_freely' && !isAmrapEligible && setType === 'normal') {
+          const reportedRIR = 10 - data.rpe;
+          calibrationEngine.addSetLog({
+            exerciseId: currentExercise.id,
+            exerciseName: currentExercise.name,
+            weight: data.weightKg,
+            prescribedReps: { min: currentBlock.targetRepRange[0], max: currentBlock.targetRepRange[1] },
+            actualReps: data.reps,
+            reportedRIR: Math.max(0, Math.round(reportedRIR)),
+            wasAMRAP: false,
+            timestamp: new Date(),
+          });
         }
       }
 
