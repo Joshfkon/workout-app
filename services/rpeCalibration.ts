@@ -323,7 +323,7 @@ export class RPECalibrationEngine {
       reason: string;
     }> = [];
 
-    for (const exerciseName of allExercises) {
+    for (const exerciseName of Array.from(allExercises)) {
       const calibration = this.calibrationResults.get(exerciseName.toLowerCase());
 
       if (!calibration) {
