@@ -3755,7 +3755,7 @@ export default function WorkoutPage() {
                               }}
                               className="text-xs"
                             >
-                              Got it - I'll push hard
+                              Got it - I&apos;ll push hard
                             </Button>
                             <Button
                               size="sm"
