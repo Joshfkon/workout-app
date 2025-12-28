@@ -1,8 +1,8 @@
 # Beginner-Friendly Onboarding & Education Plan
 
-> **Status**: Phase 1, 2, & 3 Complete
-> **Last Updated**: 2025-12-26
-> **Branch**: `claude/complete-onboarding-tasks-RcylU`
+> **Status**: Phase 1, 2, 3, & 4 Complete
+> **Last Updated**: 2025-12-28
+> **Branch**: `claude/check-project-status-x2Gzf`
 
 This document outlines the comprehensive plan to make HyperTrack more accessible to beginners by simplifying advanced features and adding contextual explanations throughout the user journey.
 
@@ -211,14 +211,14 @@ Every data collection point should be preceded by context explaining:
 - [x] Celebrate effective sets (muscle group count and optimal zone celebration)
 - [x] Guide on adjustments (suggestions for muscles needing more volume)
 
-### Phase 4: Settings & Preferences (Priority: Medium) - PARTIAL
+### Phase 4: Settings & Preferences (Priority: Medium) - COMPLETE
 
 **Goal**: Let users control their education experience
 
-#### 4.1 Experience Level Selection
-- [ ] Add clear "I'm new to training" vs "I'm experienced" choice
-- [ ] Explain what changes based on selection
-- [ ] Allow changing later in settings
+#### 4.1 Experience Level Selection - COMPLETE
+- [x] Add clear "I'm new to training" vs "I'm experienced" choice (in Education & Tips card)
+- [x] Explain what changes based on selection (expandable "What changes?" panel)
+- [x] Allow changing later in settings (integrated into settings page)
 
 #### 4.2 Education Preferences - COMPLETE
 - [x] "Show beginner tips" toggle (in Settings page)
@@ -226,10 +226,12 @@ Every data collection point should be preceded by context explaining:
 - [x] "Reset all tips" button (in Settings page)
 - [ ] Notification preferences for educational content (deferred)
 
-#### 4.3 Terminology Glossary
-- [ ] Searchable glossary in settings
-- [ ] Quick access from any tooltip
-- [ ] Links to relevant Learn articles
+#### 4.3 Terminology Glossary - COMPLETE
+- [x] Searchable glossary page (`/dashboard/glossary`)
+- [x] Quick access link from Education & Tips settings card
+- [x] Links to relevant Learn articles from glossary entries
+- [x] Category filtering (volume, intensity, periodization, etc.)
+- [x] 30+ terms with short and long explanations
 
 ### Phase 5: In-App Coaching Messages (Priority: Medium)
 
@@ -462,6 +464,19 @@ This is excellent pressing strength relative to your muscle mass.
 | Workout Session Page | `/app/(dashboard)/dashboard/workout/[id]/page.tsx` | Added first workout InlineHint with key actions guide |
 | Dashboard Page | `/app/(dashboard)/dashboard/page.tsx` | Added first week volume interpretation InlineHint |
 | Education Types | `/types/education.ts` | Added new context cards for mesocycle, periodization, deload, first workout, weekly progress |
+
+### New Pages Created (Phase 4)
+
+| Page | File | Description |
+|------|------|-------------|
+| Glossary Page | `/app/(dashboard)/dashboard/glossary/page.tsx` | Searchable terminology glossary with category filtering |
+
+### Modified Components (Phase 4)
+
+| Component | File | Changes Made |
+|-----------|------|--------------|
+| EducationPreferencesCard | `/app/(dashboard)/dashboard/settings/page.tsx` | Added experience level selector with "What changes?" panel, glossary link |
+| Education Types | `/types/education.ts` | Added GlossaryCategory type, GLOSSARY_CATEGORIES config, 30+ new tooltip entries with categories |
 
 ### Components to Modify (Future Phases)
 
