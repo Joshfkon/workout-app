@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 
@@ -49,12 +49,60 @@ const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: strin
 // Info icon component with tooltip
 function InfoIcon({ instructions }: { instructions: string }) {
   const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<'center' | 'left' | 'right'>('center');
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleClick = () => {
+    if (!showTooltip && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const tooltipWidth = 192; // w-48 = 12rem = 192px
+      const viewportWidth = window.innerWidth;
+
+      // Check if tooltip would overflow on the left
+      if (rect.left < tooltipWidth / 2) {
+        setTooltipPosition('left');
+      }
+      // Check if tooltip would overflow on the right
+      else if (viewportWidth - rect.right < tooltipWidth / 2) {
+        setTooltipPosition('right');
+      }
+      else {
+        setTooltipPosition('center');
+      }
+    }
+    setShowTooltip(!showTooltip);
+  };
+
+  const getTooltipClasses = () => {
+    const base = 'absolute z-50 bottom-full mb-2 w-48 p-2 bg-surface-800 border border-surface-600 rounded-lg shadow-lg';
+    switch (tooltipPosition) {
+      case 'left':
+        return `${base} left-0`;
+      case 'right':
+        return `${base} right-0`;
+      default:
+        return `${base} left-1/2 -translate-x-1/2`;
+    }
+  };
+
+  const getArrowClasses = () => {
+    const base = 'absolute top-full -mt-px';
+    switch (tooltipPosition) {
+      case 'left':
+        return `${base} left-2`;
+      case 'right':
+        return `${base} right-2`;
+      default:
+        return `${base} left-1/2 -translate-x-1/2`;
+    }
+  };
 
   return (
     <div className="relative inline-block">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => setShowTooltip(!showTooltip)}
+        onClick={handleClick}
         onBlur={() => setTimeout(() => setShowTooltip(false), 150)}
         className="w-4 h-4 rounded-full bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-surface-200 text-[10px] font-medium flex items-center justify-center transition-colors"
         aria-label="Measurement instructions"
@@ -62,9 +110,9 @@ function InfoIcon({ instructions }: { instructions: string }) {
         i
       </button>
       {showTooltip && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-surface-800 border border-surface-600 rounded-lg shadow-lg">
+        <div className={getTooltipClasses()}>
           <p className="text-xs text-surface-200 leading-relaxed">{instructions}</p>
-          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
+          <div className={getArrowClasses()}>
             <div className="border-4 border-transparent border-t-surface-600"></div>
           </div>
         </div>
