@@ -172,8 +172,18 @@ CREATE POLICY "Users can delete their own best lifts"
   ON user_best_lifts FOR DELETE
   USING (auth.uid() = user_id);
 
+-- Function for best lifts updated_at (separate from muscle priorities)
+CREATE OR REPLACE FUNCTION update_best_lifts_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Trigger for updated_at
+DROP TRIGGER IF EXISTS trigger_update_best_lifts_timestamp ON user_best_lifts;
 CREATE TRIGGER trigger_update_best_lifts_timestamp
   BEFORE UPDATE ON user_best_lifts
   FOR EACH ROW
-  EXECUTE FUNCTION update_muscle_priority_updated_at();
+  EXECUTE FUNCTION update_best_lifts_updated_at();
