@@ -14,6 +14,7 @@ import { usePWA } from '@/hooks/usePWA';
 import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
+import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -688,7 +689,7 @@ export default function SettingsPage() {
               <p className="text-sm font-medium text-surface-200">Redeem Promo Code</p>
             </div>
             <p className="text-xs text-surface-400 mb-3">Have a promo code? Enter it below to unlock premium features.</p>
-            
+
             <div className="flex gap-2">
               <Input
                 value={promoCode}
@@ -697,8 +698,8 @@ export default function SettingsPage() {
                 className="flex-1 uppercase"
                 disabled={promoLoading}
               />
-              <Button 
-                onClick={handleRedeemPromo} 
+              <Button
+                onClick={handleRedeemPromo}
                 disabled={!promoCode.trim() || promoLoading}
                 isLoading={promoLoading}
               >
@@ -708,7 +709,7 @@ export default function SettingsPage() {
 
             {promoResult && (
               <div className={`mt-3 p-3 rounded-lg text-sm ${
-                promoResult.success 
+                promoResult.success
                   ? 'bg-success-500/10 border border-success-500/20 text-success-400'
                   : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
               }`}>
@@ -718,6 +719,9 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Import & Export */}
+      <ImportExportSettings />
 
       {/* Volume Landmarks */}
       <Card>
