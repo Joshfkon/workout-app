@@ -440,6 +440,12 @@ export const ExerciseCard = memo(function ExerciseCard({
       return;
     }
     
+    // Trim pendingInputs if pendingSetsCount decreased (user removed sets via minus button)
+    if (pendingInputs.length > pendingSetsCount) {
+      setPendingInputs(pendingInputs.slice(0, pendingSetsCount));
+      return;
+    }
+
     // Full initialization only if:
     // - pendingInputs is empty and we need inputs
     // - OR pendingSetsCount increased (new sets were added to the target)
