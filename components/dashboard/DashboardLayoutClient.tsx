@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Sidebar } from './Sidebar';
+import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 
@@ -62,8 +63,11 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
         </header>
 
         {/* Page content */}
-        <main className="p-4 lg:p-6 overflow-x-hidden">{children}</main>
+        <main className="p-4 pb-20 lg:p-6 lg:pb-6 overflow-x-hidden">{children}</main>
       </div>
+
+      {/* Bottom navigation for mobile */}
+      <BottomNavigation />
     </div>
   );
 }
