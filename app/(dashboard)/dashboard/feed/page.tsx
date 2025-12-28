@@ -1,25 +1,35 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ActivityCard } from '@/components/social/feed';
+import { Avatar } from '@/components/social/profile';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { useReactions } from '@/hooks/useReactions';
 import { useUserStore } from '@/stores';
-import { cn } from '@/lib/utils';
-import type { ReactionType, ActivityReaction } from '@/types/social';
+import { createClient } from '@/lib/supabase/client';
+import { cn, formatWeight } from '@/lib/utils';
+import { formatSocialCount, getProfileUrl } from '@/lib/social';
+import type { ReactionType } from '@/types/social';
+import type { UserProfile, ProfileStats } from '@/types/social';
 
-type FeedType = 'following' | 'discover';
+type TabType = 'following' | 'discover' | 'profile';
 
 export default function FeedPage() {
-  const [feedType, setFeedType] = useState<FeedType>('following');
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<TabType>('following');
   const units = useUserStore((state) => state.user?.preferences.units ?? 'kg');
   const userId = useUserStore((state) => state.user?.id);
 
+  // Feed state
+  const feedType = activeTab === 'profile' ? 'following' : activeTab;
   const {
     activities,
-    isLoading,
-    error,
+    isLoading: feedLoading,
+    error: feedError,
     hasMore,
     loadMore,
     refresh,
@@ -27,6 +37,71 @@ export default function FeedPage() {
   } = useActivityFeed({ feedType });
 
   const { addReaction, removeReaction } = useReactions();
+
+  // Profile state
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [stats, setStats] = useState<ProfileStats | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [needsProfile, setNeedsProfile] = useState(false);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const supabase = createClient();
+
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
+        router.push('/login');
+        return;
+      }
+
+      // Fetch user profile
+      const { data: profileData, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', authUser.id)
+        .single();
+
+      if (error || !profileData) {
+        setNeedsProfile(true);
+        setProfileLoading(false);
+        return;
+      }
+
+      setProfile(profileData);
+
+      // Fetch additional stats
+      const { data: workoutStats } = await supabase
+        .from('workout_sessions')
+        .select('id, completed_at')
+        .eq('user_id', authUser.id)
+        .eq('state', 'completed');
+
+      const { data: setLogs } = await supabase
+        .from('set_logs')
+        .select('weight_kg, reps, exercise_blocks!inner(exercise_id, workout_sessions!inner(user_id))')
+        .eq('exercise_blocks.workout_sessions.user_id', authUser.id)
+        .eq('is_warmup', false) as { data: Array<{ weight_kg: number | null; reps: number | null }> | null };
+
+      // Calculate stats
+      const totalSets = setLogs?.length ?? 0;
+      const totalVolume = setLogs?.reduce((sum, log) =>
+        sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
+
+      setStats({
+        total_workouts: workoutStats?.length ?? 0,
+        total_volume_kg: totalVolume,
+        total_sets: totalSets,
+        current_streak: 0,
+        longest_streak: 0,
+        favorite_exercise: null,
+        strongest_lift: null,
+      });
+
+      setProfileLoading(false);
+    };
+
+    fetchProfile();
+  }, [router]);
 
   const handleReact = useCallback(async (activityId: string, reactionType: string) => {
     if (!userId) return;
@@ -44,7 +119,6 @@ export default function FeedPage() {
 
     const result = await addReaction(activityId, typedReaction);
     if (!result.success) {
-      // Revert on failure
       updateActivityReaction(activityId, undefined);
     }
   }, [userId, addReaction, updateActivityReaction]);
@@ -53,19 +127,15 @@ export default function FeedPage() {
     const activity = activities.find(a => a.id === activityId);
     const previousReaction = activity?.user_reaction;
 
-    // Optimistic update
     updateActivityReaction(activityId, undefined);
 
     const result = await removeReaction(activityId);
     if (!result.success && previousReaction) {
-      // Revert on failure
       updateActivityReaction(activityId, previousReaction);
     }
   }, [activities, removeReaction, updateActivityReaction]);
 
   const handleComment = useCallback((activityId: string) => {
-    // Comment section is now integrated into ActivityCard
-    // This callback can be used for scrolling to comments or other actions
     const element = document.getElementById(`activity-${activityId}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -73,69 +143,242 @@ export default function FeedPage() {
   }, []);
 
   const handleCommentAdded = useCallback(() => {
-    // Refresh activities to update comment counts
     refresh();
   }, [refresh]);
 
-  return (
-    <div className="min-h-screen bg-surface-950">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-surface-100">Activity Feed</h1>
+  const isLoading = activeTab === 'profile' ? profileLoading : feedLoading;
+
+  const renderProfileContent = () => {
+    if (profileLoading) {
+      return (
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-500" />
+        </div>
+      );
+    }
+
+    if (needsProfile) {
+      return (
+        <div className="max-w-lg mx-auto py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create Your Profile</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-surface-400 mb-6">
+                Set up your profile to connect with other lifters, share your workouts, and appear on leaderboards.
+              </p>
+              <Link href="/dashboard/profile/setup">
+                <Button variant="primary" className="w-full">
+                  Create Profile
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    if (!profile) {
+      return null;
+    }
+
+    const displayName = profile.display_name || profile.username;
+
+    return (
+      <div className="space-y-6 py-6">
+        {/* Profile Header */}
+        <Card padding="lg">
+          <div className="flex items-start gap-4">
+            <Avatar
+              src={profile.avatar_url}
+              name={displayName}
+              size="xl"
+            />
+
+            <div className="flex-1 min-w-0">
+              <h1 className="text-2xl font-bold text-surface-100 truncate">
+                {displayName}
+              </h1>
+              <p className="text-surface-400">@{profile.username}</p>
+
+              {profile.bio && (
+                <p className="mt-3 text-surface-300">{profile.bio}</p>
+              )}
+
+              <div className="flex flex-wrap gap-2 mt-3 text-sm text-surface-400">
+                {profile.training_experience && (
+                  <span className="capitalize">{profile.training_experience}</span>
+                )}
+                {profile.gym_name && (
+                  <>
+                    {profile.training_experience && <span>•</span>}
+                    <span>{profile.gym_name}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <Link href="/dashboard/profile/edit">
+              <Button variant="outline" size="sm">
+                Edit Profile
+              </Button>
+            </Link>
+          </div>
+
+          {/* Stats */}
+          <div className="flex items-center justify-around mt-6 pt-6 border-t border-surface-800">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-surface-100">
+                {formatSocialCount(profile.workout_count)}
+              </p>
+              <p className="text-sm text-surface-400">Workouts</p>
+            </div>
+
+            <div className="w-px h-10 bg-surface-800" />
+
+            <Link
+              href={`${getProfileUrl(profile.username)}/followers`}
+              className="text-center hover:opacity-80 transition-opacity"
+            >
+              <p className="text-2xl font-bold text-surface-100">
+                {formatSocialCount(profile.follower_count)}
+              </p>
+              <p className="text-sm text-surface-400">Followers</p>
+            </Link>
+
+            <div className="w-px h-10 bg-surface-800" />
+
+            <Link
+              href={`${getProfileUrl(profile.username)}/following`}
+              className="text-center hover:opacity-80 transition-opacity"
+            >
+              <p className="text-2xl font-bold text-surface-100">
+                {formatSocialCount(profile.following_count)}
+              </p>
+              <p className="text-sm text-surface-400">Following</p>
+            </Link>
+          </div>
+        </Card>
+
+        {/* Badges */}
+        {profile.badges.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Badges</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                {profile.badges.map((badge) => (
+                  <div
+                    key={badge.id}
+                    className="flex items-center gap-2 px-3 py-2 bg-surface-800 rounded-lg"
+                    title={badge.description}
+                  >
+                    <span className="text-xl">{badge.icon}</span>
+                    <div>
+                      <p className="text-sm font-medium text-surface-100">
+                        {badge.name}
+                      </p>
+                      <p className="text-xs text-surface-400">
+                        {badge.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Training Stats */}
+        {stats && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Training Stats</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-surface-800 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">
+                    {stats.total_workouts}
+                  </p>
+                  <p className="text-sm text-surface-400">Total Workouts</p>
+                </div>
+
+                <div className="p-4 bg-surface-800 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">
+                    {stats.total_sets.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-surface-400">Total Sets</p>
+                </div>
+
+                <div className="p-4 bg-surface-800 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">
+                    {formatWeight(stats.total_volume_kg, units, 0)}
+                  </p>
+                  <p className="text-sm text-surface-400">Total Volume</p>
+                </div>
+
+                <div className="p-4 bg-surface-800 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">
+                    {stats.current_streak}
+                  </p>
+                  <p className="text-sm text-surface-400">Day Streak</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Privacy Settings Quick Link */}
+        <Card>
+          <CardContent className="flex items-center justify-between py-4">
+            <div>
+              <p className="font-medium text-surface-100">Privacy Settings</p>
+              <p className="text-sm text-surface-400">
+                Profile is {profile.profile_visibility}
+              </p>
+            </div>
+            <Link href="/dashboard/profile/edit#privacy">
+              <Button variant="ghost" size="sm">
+                Manage
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        {/* Share Profile */}
+        <Card>
+          <CardContent className="flex items-center justify-between py-4">
+            <div>
+              <p className="font-medium text-surface-100">Share Profile</p>
+              <p className="text-sm text-surface-400">
+                hypertrack.app{getProfileUrl(profile.username)}
+              </p>
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={refresh}
-              disabled={isLoading}
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  `${window.location.origin}${getProfileUrl(profile.username)}`
+                );
+              }}
             >
-              <svg
-                className={cn('w-5 h-5', isLoading && 'animate-spin')}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
+              Copy Link
             </Button>
-          </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
-          {/* Feed tabs */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFeedType('following')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
-                feedType === 'following'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Following
-            </button>
-            <button
-              onClick={() => setFeedType('discover')}
-              className={cn(
-                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
-                feedType === 'discover'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
-              )}
-            >
-              Discover
-            </button>
-          </div>
-        </div>
-      </header>
+  const renderFeedContent = () => {
+    const error = feedError;
 
-      {/* Feed content */}
-      <main className="max-w-2xl mx-auto px-4 py-6">
+    return (
+      <>
         {error && (
           <div className="text-center py-8">
             <p className="text-error-400 mb-4">{error}</p>
@@ -143,26 +386,26 @@ export default function FeedPage() {
           </div>
         )}
 
-        {!error && activities.length === 0 && !isLoading && (
+        {!error && activities.length === 0 && !feedLoading && (
           <div className="text-center py-16">
             <p className="text-5xl mb-4">
-              {feedType === 'following' ? '👥' : '🌎'}
+              {activeTab === 'following' ? '👥' : '🌎'}
             </p>
             <h2 className="text-xl font-semibold text-surface-100 mb-2">
-              {feedType === 'following'
+              {activeTab === 'following'
                 ? 'No activities yet'
                 : 'Nothing to discover'}
             </h2>
             <p className="text-surface-400 max-w-sm mx-auto">
-              {feedType === 'following'
+              {activeTab === 'following'
                 ? 'Follow other lifters to see their workouts and achievements here.'
                 : 'Be the first to share your workout with the community!'}
             </p>
-            {feedType === 'following' && (
+            {activeTab === 'following' && (
               <Button
                 variant="outline"
                 className="mt-6"
-                onClick={() => setFeedType('discover')}
+                onClick={() => setActiveTab('discover')}
               >
                 Discover Lifters
               </Button>
@@ -171,7 +414,7 @@ export default function FeedPage() {
         )}
 
         {/* Activity list */}
-        <div className="space-y-4">
+        <div className="space-y-4 py-6">
           {activities.map((activity) => (
             <div key={activity.id} id={`activity-${activity.id}`}>
               <ActivityCard
@@ -188,14 +431,14 @@ export default function FeedPage() {
         </div>
 
         {/* Loading state */}
-        {isLoading && (
+        {feedLoading && (
           <div className="flex justify-center py-8">
             <div className="animate-spin h-8 w-8 border-2 border-surface-500 border-t-primary-500 rounded-full" />
           </div>
         )}
 
         {/* Load more */}
-        {!isLoading && hasMore && activities.length > 0 && (
+        {!feedLoading && hasMore && activities.length > 0 && (
           <div className="flex justify-center py-8">
             <Button
               variant="outline"
@@ -207,11 +450,90 @@ export default function FeedPage() {
         )}
 
         {/* End of feed */}
-        {!isLoading && !hasMore && activities.length > 0 && (
+        {!feedLoading && !hasMore && activities.length > 0 && (
           <p className="text-center text-surface-500 py-8">
-            You&apos;re all caught up! 💪
+            You&apos;re all caught up!
           </p>
         )}
+      </>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-surface-950">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur-sm border-b border-surface-800">
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-bold text-surface-100">
+              {activeTab === 'profile' ? 'Profile' : 'Activity Feed'}
+            </h1>
+            {activeTab !== 'profile' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refresh}
+                disabled={isLoading}
+              >
+                <svg
+                  className={cn('w-5 h-5', isLoading && 'animate-spin')}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </Button>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('following')}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
+                activeTab === 'following'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              )}
+            >
+              Following
+            </button>
+            <button
+              onClick={() => setActiveTab('discover')}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
+                activeTab === 'discover'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              )}
+            >
+              Discover
+            </button>
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
+                activeTab === 'profile'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              )}
+            >
+              Profile
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Content */}
+      <main className="max-w-2xl mx-auto px-4">
+        {activeTab === 'profile' ? renderProfileContent() : renderFeedContent()}
       </main>
     </div>
   );
