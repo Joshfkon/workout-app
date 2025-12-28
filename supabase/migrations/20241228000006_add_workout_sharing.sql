@@ -2,7 +2,7 @@
 -- Enables users to share workouts as templates/programs that others can discover and copy
 
 -- Shared workouts (templates/programs shared publicly)
-CREATE TABLE shared_workouts (
+CREATE TABLE IF NOT EXISTS shared_workouts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 
@@ -33,13 +33,13 @@ CREATE TABLE shared_workouts (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_shared_workouts_user ON shared_workouts (user_id);
-CREATE INDEX idx_shared_workouts_public ON shared_workouts (is_public, created_at DESC);
-CREATE INDEX idx_shared_workouts_type ON shared_workouts (share_type);
-CREATE INDEX idx_shared_workouts_difficulty ON shared_workouts (difficulty) WHERE difficulty IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_shared_workouts_user ON shared_workouts (user_id);
+CREATE INDEX IF NOT EXISTS idx_shared_workouts_public ON shared_workouts (is_public, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_shared_workouts_type ON shared_workouts (share_type);
+CREATE INDEX IF NOT EXISTS idx_shared_workouts_difficulty ON shared_workouts (difficulty) WHERE difficulty IS NOT NULL;
 
 -- Saved/bookmarked workouts
-CREATE TABLE saved_workouts (
+CREATE TABLE IF NOT EXISTS saved_workouts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   shared_workout_id UUID NOT NULL REFERENCES shared_workouts(id) ON DELETE CASCADE,
@@ -48,8 +48,8 @@ CREATE TABLE saved_workouts (
   CONSTRAINT unique_save UNIQUE (user_id, shared_workout_id)
 );
 
-CREATE INDEX idx_saved_workouts_user ON saved_workouts (user_id, created_at DESC);
-CREATE INDEX idx_saved_workouts_shared ON saved_workouts (shared_workout_id);
+CREATE INDEX IF NOT EXISTS idx_saved_workouts_user ON saved_workouts (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_saved_workouts_shared ON saved_workouts (shared_workout_id);
 
 -- Trigger to update updated_at
 CREATE OR REPLACE FUNCTION update_shared_workout_updated_at()
@@ -60,11 +60,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_shared_workout_updated_at ON shared_workouts;
 CREATE TRIGGER trigger_shared_workout_updated_at
   BEFORE UPDATE ON shared_workouts
   FOR EACH ROW EXECUTE FUNCTION update_shared_workout_updated_at();
 
--- Trigger to update save_count
+-- Trigger to update save_count (idempotent)
 CREATE OR REPLACE FUNCTION update_shared_workout_save_count()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -77,6 +78,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_shared_workout_save_count ON saved_workouts;
 CREATE TRIGGER trigger_shared_workout_save_count
   AFTER INSERT OR DELETE ON saved_workouts
   FOR EACH ROW EXECUTE FUNCTION update_shared_workout_save_count();
@@ -86,36 +88,43 @@ ALTER TABLE shared_workouts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_workouts ENABLE ROW LEVEL SECURITY;
 
 -- Public workouts are viewable by all
+DROP POLICY IF EXISTS "Public workouts are viewable" ON shared_workouts;
 CREATE POLICY "Public workouts are viewable"
   ON shared_workouts FOR SELECT
   USING (is_public = true OR user_id = auth.uid());
 
 -- Users can share workouts
+DROP POLICY IF EXISTS "Users can share workouts" ON shared_workouts;
 CREATE POLICY "Users can share workouts"
   ON shared_workouts FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Users can update own shares
+DROP POLICY IF EXISTS "Users can update own shares" ON shared_workouts;
 CREATE POLICY "Users can update own shares"
   ON shared_workouts FOR UPDATE
   USING (auth.uid() = user_id);
 
 -- Users can delete own shares
+DROP POLICY IF EXISTS "Users can delete own shares" ON shared_workouts;
 CREATE POLICY "Users can delete own shares"
   ON shared_workouts FOR DELETE
   USING (auth.uid() = user_id);
 
 -- Users can view their saved workouts
+DROP POLICY IF EXISTS "Users can view own saved workouts" ON saved_workouts;
 CREATE POLICY "Users can view own saved workouts"
   ON saved_workouts FOR SELECT
   USING (auth.uid() = user_id);
 
 -- Users can save workouts
+DROP POLICY IF EXISTS "Users can save workouts" ON saved_workouts;
 CREATE POLICY "Users can save workouts"
   ON saved_workouts FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
 -- Users can unsave workouts
+DROP POLICY IF EXISTS "Users can unsave workouts" ON saved_workouts;
 CREATE POLICY "Users can unsave workouts"
   ON saved_workouts FOR DELETE
   USING (auth.uid() = user_id);
@@ -145,6 +154,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_create_shared_workout_activity ON shared_workouts;
 CREATE TRIGGER trigger_create_shared_workout_activity
   AFTER INSERT ON shared_workouts
   FOR EACH ROW EXECUTE FUNCTION create_shared_workout_activity();

@@ -46,19 +46,10 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
 
+      // Query shared workouts first (without user_profiles join)
       let query = supabase
         .from('shared_workouts' as never)
-        .select(`
-          *,
-          user_profiles (
-            id,
-            user_id,
-            username,
-            display_name,
-            avatar_url,
-            training_experience
-          )
-        `)
+        .select('*')
         .eq('is_public', true);
 
       // Apply filters
@@ -95,11 +86,40 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       }
       query = query.limit(limit);
 
-      const { data, error: fetchError } = await query;
+      const { data: workoutsData, error: fetchError } = await query;
 
       if (fetchError) {
         console.error('Error fetching shared workouts:', fetchError);
         throw new Error(`Failed to load workouts: ${fetchError.message || fetchError.code || 'Unknown error'}`);
+      }
+
+      if (!workoutsData || workoutsData.length === 0) {
+        setWorkouts([]);
+        setHasMore(false);
+        setIsLoading(false);
+        return;
+      }
+
+      // Get unique user IDs from workouts
+      const userIds = Array.from(new Set(workoutsData.map((w: any) => w.user_id)));
+
+      // Fetch user profiles separately (PostgREST can't infer relationship through users table)
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('user_profiles' as never)
+        .select('id, user_id, username, display_name, avatar_url, training_experience')
+        .in('user_id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching user profiles:', profilesError);
+        // Continue without profiles rather than failing completely
+      }
+
+      // Create a map of user_id -> profile
+      const profilesMap = new Map();
+      if (profilesData) {
+        profilesData.forEach((profile: any) => {
+          profilesMap.set(profile.user_id, profile);
+        });
       }
 
       // Get saved workout IDs for current user
@@ -113,36 +133,39 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         savedIds = savedWorkouts?.map((s) => s.shared_workout_id) || [];
       }
 
-      // Transform data
-      const transformedWorkouts: SharedWorkoutWithProfile[] = (data || [])
-        .filter((workout: any) => workout.user_profiles) // Filter out workouts without profiles
-        .map((workout: any) => ({
-          ...workout,
-          user_profile: {
-            id: workout.user_profiles.id,
-            user_id: workout.user_profiles.user_id,
-            username: workout.user_profiles.username,
-            display_name: workout.user_profiles.display_name,
-            avatar_url: workout.user_profiles.avatar_url,
-            bio: null,
-            profile_visibility: 'public' as const,
-            show_workouts: true,
-            show_stats: true,
-            show_progress_photos: false,
-            follower_count: 0,
-            following_count: 0,
-            workout_count: 0,
-            total_volume_kg: 0,
-            training_experience: workout.user_profiles.training_experience,
-            primary_goal: null,
-            gym_name: null,
-            badges: [],
-            featured_achievement: null,
-            created_at: '',
-            updated_at: '',
-          },
-          is_saved: savedIds.includes(workout.id),
-        }));
+      // Transform data - filter out workouts without profiles
+      const transformedWorkouts: SharedWorkoutWithProfile[] = (workoutsData || [])
+        .filter((workout: any) => profilesMap.has(workout.user_id))
+        .map((workout: any) => {
+          const profile = profilesMap.get(workout.user_id);
+          return {
+            ...workout,
+            user_profile: {
+              id: profile.id,
+              user_id: profile.user_id,
+              username: profile.username,
+              display_name: profile.display_name,
+              avatar_url: profile.avatar_url,
+              bio: null,
+              profile_visibility: 'public' as const,
+              show_workouts: true,
+              show_stats: true,
+              show_progress_photos: false,
+              follower_count: 0,
+              following_count: 0,
+              workout_count: 0,
+              total_volume_kg: 0,
+              training_experience: profile.training_experience,
+              primary_goal: null,
+              gym_name: null,
+              badges: [],
+              featured_achievement: null,
+              created_at: '',
+              updated_at: '',
+            },
+            is_saved: savedIds.includes(workout.id),
+          };
+        });
 
       if (isLoadMore) {
         setWorkouts(prev => [...prev, ...transformedWorkouts]);
