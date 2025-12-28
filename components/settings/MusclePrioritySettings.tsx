@@ -70,8 +70,18 @@ export function MusclePrioritySettings({
         .select('*')
         .eq('user_id', userId);
 
+      const priorityMap = new Map<MuscleGroup, MusclePriorityData>();
+
+      // First, initialize all muscles with default priority (3)
+      MUSCLE_GROUPS.forEach((muscle) => {
+        priorityMap.set(muscle, {
+          muscleGroup: muscle,
+          priority: 3,
+        });
+      });
+
+      // Then override with saved priorities from database
       if (!error && data) {
-        const priorityMap = new Map<MuscleGroup, MusclePriorityData>();
         data.forEach((row: { muscle_group: MuscleGroup; priority: MusclePriorityLevel; reason?: string }) => {
           priorityMap.set(row.muscle_group, {
             muscleGroup: row.muscle_group,
@@ -79,20 +89,9 @@ export function MusclePrioritySettings({
             reason: row.reason,
           });
         });
-        setPriorities(priorityMap);
       }
 
-      // Initialize missing muscles with default priority (3)
-      const newMap = new Map(priorities);
-      MUSCLE_GROUPS.forEach((muscle) => {
-        if (!newMap.has(muscle)) {
-          newMap.set(muscle, {
-            muscleGroup: muscle,
-            priority: 3,
-          });
-        }
-      });
-      setPriorities(newMap);
+      setPriorities(priorityMap);
       setIsLoading(false);
     };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Badge, Card, CardHeader, CardTitle, CardContent, Progress } from '@/components/ui';
+import { Badge, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import {
   analyzeImbalances,
   type BodyMeasurements,
