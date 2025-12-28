@@ -72,7 +72,7 @@ export default function SharedWorkoutDetailPage() {
         }
 
         // Increment view count
-        await supabase.rpc('increment_shared_workout_views', { workout_id: workoutId });
+        await supabase.rpc('increment_shared_workout_views' as never, { workout_id: workoutId } as never);
 
         // Check if saved by current user
         let isSaved = false;
