@@ -1,13 +1,31 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Image from 'next/image';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { searchFoods, lookupBarcode, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
+import { searchFoods, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
+import { lookupBarcode as lookupBarcodeOFF, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { MealType, CustomFood, FrequentFood, SystemFood } from '@/types/nutrition';
+
+// Serving unit options for scanned foods
+type ServingUnit = 'grams' | 'serving' | 'pieces';
+
+interface ScannedProduct {
+  name: string;
+  brand?: string;
+  servingSize: string;
+  servingQuantity: number; // grams per serving
+  calories: number; // per serving
+  protein: number;
+  carbs: number;
+  fat: number;
+  imageUrl?: string;
+  barcode: string;
+}
 
 interface AddFoodModalProps {
   isOpen: boolean;
@@ -94,6 +112,11 @@ export function AddFoodModal({
   const [selectedServingIndex, setSelectedServingIndex] = useState(0);
   const [filterQuery, setFilterQuery] = useState('');
 
+  // Scanned product state
+  const [scannedProduct, setScannedProduct] = useState<ScannedProduct | null>(null);
+  const [scannedQuantity, setScannedQuantity] = useState('1');
+  const [scannedUnit, setScannedUnit] = useState<ServingUnit>('serving');
+
   // Reset meal type when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -160,13 +183,26 @@ export function AddFoodModal({
     setIsLookingUpBarcode(true);
 
     try {
-      const result = await lookupBarcode(barcode);
-      if (result.error) {
-        setBarcodeError(result.error);
-      } else if (result.food) {
-        setSelectedFood(result.food);
-        setServings('1');
-        setActiveTab('quick'); // Switch back to show the food details
+      const result = await lookupBarcodeOFF(barcode);
+      if (!result.found || !result.product) {
+        setBarcodeError(result.error || 'Product not found. Try searching by name.');
+      } else {
+        // Set the scanned product for serving selection
+        setScannedProduct({
+          name: result.product.name,
+          brand: result.product.brand,
+          servingSize: result.product.servingSize,
+          servingQuantity: result.product.servingQuantity,
+          calories: result.product.calories,
+          protein: result.product.protein,
+          carbs: result.product.carbs,
+          fat: result.product.fat,
+          imageUrl: result.product.imageUrl,
+          barcode: result.product.barcode,
+        });
+        setScannedQuantity('1');
+        setScannedUnit('serving');
+        // Stay on barcode tab to show serving selector
       }
     } catch (err) {
       setBarcodeError('Failed to lookup barcode. Please try again.');
@@ -469,7 +505,12 @@ export function AddFoodModal({
     });
     setError('');
     setSearchError('');
+    setBarcodeError('');
     setSelectedServingIndex(0);
+    // Reset scanned product state
+    setScannedProduct(null);
+    setScannedQuantity('1');
+    setScannedUnit('serving');
     onClose();
   };
 
@@ -517,6 +558,91 @@ export function AddFoodModal({
       fat: Math.round((selectedCustomFood.fat_per_ref || 0) * multiplier * 10) / 10,
     };
   }, [selectedCustomFood, weightAmount, weightUnit]);
+
+  // Calculate live nutrition for scanned products
+  const scannedProductNutrition = useMemo(() => {
+    if (!scannedProduct) return null;
+
+    const qty = parseFloat(scannedQuantity) || 0;
+    let multiplier = 0;
+
+    // Calculate multiplier based on unit selection
+    // Base nutrition is stored per serving (servingQuantity grams)
+    switch (scannedUnit) {
+      case 'serving':
+        // qty servings
+        multiplier = qty;
+        break;
+      case 'grams':
+        // qty grams - convert to servings
+        multiplier = qty / scannedProduct.servingQuantity;
+        break;
+      case 'pieces':
+        // For pieces, assume same as serving
+        multiplier = qty;
+        break;
+    }
+
+    return {
+      calories: Math.round(scannedProduct.calories * multiplier),
+      protein: Math.round(scannedProduct.protein * multiplier * 10) / 10,
+      carbs: Math.round(scannedProduct.carbs * multiplier * 10) / 10,
+      fat: Math.round(scannedProduct.fat * multiplier * 10) / 10,
+    };
+  }, [scannedProduct, scannedQuantity, scannedUnit]);
+
+  // Get display text for serving size
+  const getServingSizeDisplay = () => {
+    if (!scannedProduct) return '';
+    const qty = parseFloat(scannedQuantity) || 0;
+
+    switch (scannedUnit) {
+      case 'serving':
+        return `${qty} ${qty === 1 ? 'serving' : 'servings'} (${Math.round(scannedProduct.servingQuantity * qty)}g)`;
+      case 'grams':
+        return `${qty}g`;
+      case 'pieces':
+        return `${qty} ${qty === 1 ? 'piece' : 'pieces'}`;
+      default:
+        return scannedProduct.servingSize;
+    }
+  };
+
+  // Handle adding scanned product
+  const handleAddScannedProduct = async () => {
+    if (!scannedProduct || !scannedProductNutrition) return;
+
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      await onAdd({
+        food_name: scannedProduct.name,
+        serving_size: getServingSizeDisplay(),
+        servings: 1, // We've already calculated the total
+        calories: scannedProductNutrition.calories,
+        protein: scannedProductNutrition.protein,
+        carbs: scannedProductNutrition.carbs,
+        fat: scannedProductNutrition.fat,
+        meal_type: mealType,
+        source: 'nutritionix', // Using this as generic barcode source
+      });
+
+      resetAndClose();
+    } catch (err) {
+      setError('Failed to add food. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle scan again
+  const handleScanAgain = () => {
+    setScannedProduct(null);
+    setScannedQuantity('1');
+    setScannedUnit('serving');
+    setBarcodeError('');
+  };
 
   return (
     <Modal
@@ -776,6 +902,162 @@ export function AddFoodModal({
             {isLookingUpBarcode ? (
               <div className="flex items-center justify-center py-8">
                 <div className="text-surface-400">Looking up product...</div>
+              </div>
+            ) : scannedProduct ? (
+              // Scanned Product with Serving Selection
+              <div className="space-y-4">
+                {/* Product Info */}
+                <div className="bg-surface-800 rounded-lg p-4 space-y-4">
+                  {/* Product Image and Name */}
+                  <div className="flex items-start gap-4">
+                    {scannedProduct.imageUrl ? (
+                      <div className="relative w-20 h-20 rounded-lg bg-white overflow-hidden">
+                        <Image
+                          src={scannedProduct.imageUrl}
+                          alt={scannedProduct.name}
+                          fill
+                          className="object-contain"
+                          unoptimized
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-20 h-20 bg-surface-700 rounded-lg flex items-center justify-center">
+                        <span className="text-3xl">🍽️</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-surface-100 text-lg leading-tight">
+                        {scannedProduct.name}
+                      </h3>
+                      {scannedProduct.brand && (
+                        <p className="text-sm text-surface-400 mt-1">
+                          {scannedProduct.brand}
+                        </p>
+                      )}
+                      <p className="text-xs text-surface-500 mt-1">
+                        Base: {scannedProduct.servingSize}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Serving Size Selector */}
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-surface-300">
+                      Amount
+                    </label>
+                    <div className="flex gap-2">
+                      {/* Quantity Input with +/- buttons */}
+                      <div className="flex items-center bg-surface-900 rounded-lg border border-surface-700">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = parseFloat(scannedQuantity) || 1;
+                            setScannedQuantity(Math.max(0.5, current - 0.5).toString());
+                          }}
+                          className="px-3 py-2 text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-l-lg transition-colors"
+                        >
+                          -
+                        </button>
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0.5"
+                          value={scannedQuantity}
+                          onChange={(e) => setScannedQuantity(e.target.value)}
+                          className="w-20 text-center border-0 bg-transparent focus:ring-0"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const current = parseFloat(scannedQuantity) || 1;
+                            setScannedQuantity((current + 0.5).toString());
+                          }}
+                          className="px-3 py-2 text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-r-lg transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Unit Selector */}
+                      <select
+                        value={scannedUnit}
+                        onChange={(e) => setScannedUnit(e.target.value as ServingUnit)}
+                        className="flex-1 px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      >
+                        <option value="serving">Serving ({scannedProduct.servingQuantity}g)</option>
+                        <option value="grams">Grams</option>
+                        <option value="pieces">Pieces</option>
+                      </select>
+                    </div>
+
+                    {/* Quick portion buttons */}
+                    <div className="flex gap-2">
+                      {[0.5, 1, 1.5, 2].map((qty) => (
+                        <button
+                          key={qty}
+                          type="button"
+                          onClick={() => setScannedQuantity(qty.toString())}
+                          className={`flex-1 py-1.5 text-sm rounded-lg transition-colors ${
+                            scannedQuantity === qty.toString()
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-700 text-surface-300 hover:bg-surface-600'
+                          }`}
+                        >
+                          {qty}x
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Nutrition Display */}
+                  {scannedProductNutrition && (
+                    <div className="grid grid-cols-4 gap-2 p-4 bg-surface-900/50 rounded-lg">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-primary-400">
+                          {scannedProductNutrition.calories}
+                        </p>
+                        <p className="text-xs text-surface-400">cal</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl font-semibold text-blue-400">
+                          {scannedProductNutrition.protein}g
+                        </p>
+                        <p className="text-xs text-surface-400">protein</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl font-semibold text-amber-400">
+                          {scannedProductNutrition.carbs}g
+                        </p>
+                        <p className="text-xs text-surface-400">carbs</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-xl font-semibold text-red-400">
+                          {scannedProductNutrition.fat}g
+                        </p>
+                        <p className="text-xs text-surface-400">fat</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleScanAgain}
+                    variant="secondary"
+                    className="flex-1"
+                  >
+                    Scan Again
+                  </Button>
+                  <Button
+                    onClick={handleAddScannedProduct}
+                    variant="primary"
+                    disabled={isSubmitting || !scannedProductNutrition?.calories}
+                    className="flex-1"
+                  >
+                    {isSubmitting ? 'Adding...' : 'Add Food'}
+                  </Button>
+                </div>
               </div>
             ) : (
               <BarcodeScanner
