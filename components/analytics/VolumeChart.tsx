@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import {
   BarChart,
   Bar,
@@ -33,7 +33,46 @@ interface VolumeChartProps {
   showLandmarks?: boolean;
 }
 
-export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
+// Moved outside component to prevent re-creation on every render
+const VolumeTooltip = memo(function VolumeTooltip({ active, payload, label }: RechartsTooltipProps<VolumeChartDataPoint>) {
+  if (!active || !payload || !payload.length) return null;
+
+  const data = payload[0].payload as VolumeChartDataPoint;
+
+  return (
+    <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
+      <p className="font-medium text-surface-100 mb-2">{label}</p>
+      <div className="space-y-1 text-sm">
+        <p className="text-surface-300">
+          Total Sets: <span className="font-mono text-primary-400">{data.sets}</span>
+        </p>
+        <p className="text-surface-400">
+          Direct: {data.direct} | Indirect: {data.indirect}
+        </p>
+        <div className="pt-2 mt-2 border-t border-surface-700 text-xs text-surface-500">
+          <p>MEV: {data.mev} | MAV: {data.mav} | MRV: {data.mrv}</p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const getBarColor = (status: VolumeStatus) => {
+  switch (status) {
+    case 'below_mev':
+      return '#71717a'; // surface-500
+    case 'effective':
+      return '#0ea5e9'; // primary-500
+    case 'optimal':
+      return '#22c55e'; // success-500
+    case 'approaching_mrv':
+      return '#eab308'; // warning-500
+    case 'exceeding_mrv':
+      return '#ef4444'; // danger-500
+  }
+};
+
+export const VolumeChart = memo(function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
   const chartData = useMemo(() => {
     return data.map((item) => ({
       name: item.muscleGroup.charAt(0).toUpperCase() + item.muscleGroup.slice(1),
@@ -46,44 +85,6 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
       status: item.status,
     }));
   }, [data]);
-
-  const getBarColor = (status: VolumeStatus) => {
-    switch (status) {
-      case 'below_mev':
-        return '#71717a'; // surface-500
-      case 'effective':
-        return '#0ea5e9'; // primary-500
-      case 'optimal':
-        return '#22c55e'; // success-500
-      case 'approaching_mrv':
-        return '#eab308'; // warning-500
-      case 'exceeding_mrv':
-        return '#ef4444'; // danger-500
-    }
-  };
-
-  const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps<VolumeChartDataPoint>) => {
-    if (!active || !payload || !payload.length) return null;
-
-    const data = payload[0].payload as VolumeChartDataPoint;
-
-    return (
-      <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
-        <p className="font-medium text-surface-100 mb-2">{label}</p>
-        <div className="space-y-1 text-sm">
-          <p className="text-surface-300">
-            Total Sets: <span className="font-mono text-primary-400">{data.sets}</span>
-          </p>
-          <p className="text-surface-400">
-            Direct: {data.direct} | Indirect: {data.indirect}
-          </p>
-          <div className="pt-2 mt-2 border-t border-surface-700 text-xs text-surface-500">
-            <p>MEV: {data.mev} | MAV: {data.mav} | MRV: {data.mrv}</p>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <Card>
@@ -114,7 +115,7 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
               tickLine={false}
               axisLine={false}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<VolumeTooltip />} />
             <Bar
               dataKey="sets"
               radius={[0, 4, 4, 0]}
@@ -156,26 +157,26 @@ export function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
       </div>
     </Card>
   );
-}
+});
 
-// Compact version for dashboard
-export function VolumeChartCompact({ data }: { data: MuscleVolumeData[] }) {
+const getStatusColorClass = (status: VolumeStatus) => {
+  switch (status) {
+    case 'below_mev': return 'bg-surface-600';
+    case 'effective': return 'bg-primary-500';
+    case 'optimal': return 'bg-success-500';
+    case 'approaching_mrv': return 'bg-warning-500';
+    case 'exceeding_mrv': return 'bg-danger-500';
+  }
+};
+
+// Compact version for dashboard - memoized
+export const VolumeChartCompact = memo(function VolumeChartCompact({ data }: { data: MuscleVolumeData[] }) {
   return (
     <div className="space-y-2">
       {data.map((item) => {
         const percent = Math.min(100, (item.totalSets / item.landmarks.mrv) * 100);
         const mevPercent = (item.landmarks.mev / item.landmarks.mrv) * 100;
         const mavPercent = (item.landmarks.mav / item.landmarks.mrv) * 100;
-
-        const getStatusColor = (status: VolumeStatus) => {
-          switch (status) {
-            case 'below_mev': return 'bg-surface-600';
-            case 'effective': return 'bg-primary-500';
-            case 'optimal': return 'bg-success-500';
-            case 'approaching_mrv': return 'bg-warning-500';
-            case 'exceeding_mrv': return 'bg-danger-500';
-          }
-        };
 
         return (
           <div key={item.muscleGroup} className="group">
@@ -200,7 +201,7 @@ export function VolumeChartCompact({ data }: { data: MuscleVolumeData[] }) {
               />
               {/* Progress bar */}
               <div
-                className={`h-full transition-all duration-300 ${getStatusColor(item.status)}`}
+                className={`h-full transition-all duration-300 ${getStatusColorClass(item.status)}`}
                 style={{ width: `${percent}%` }}
               />
             </div>
@@ -209,5 +210,5 @@ export function VolumeChartCompact({ data }: { data: MuscleVolumeData[] }) {
       })}
     </div>
   );
-}
+});
 

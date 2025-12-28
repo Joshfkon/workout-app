@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -43,7 +43,27 @@ interface WeightGraphProps {
   className?: string;
 }
 
-export function WeightGraph({ weightHistory, preferredUnit, className }: WeightGraphProps) {
+// Moved outside component to prevent re-creation on every render
+const WeightTooltip = memo(function WeightTooltip({
+  active,
+  payload,
+  preferredUnit,
+}: RechartsTooltipProps<WeightChartDataPoint> & { preferredUnit: string }) {
+  if (!active || !payload || !payload.length) return null;
+
+  const data = payload[0].payload as WeightChartDataPoint;
+
+  return (
+    <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
+      <p className="text-sm text-surface-400 mb-1">{formatDate(data.date)}</p>
+      <p className="text-surface-100 font-semibold">
+        {data.weight} <span className="text-surface-400 font-normal">{preferredUnit}</span>
+      </p>
+    </div>
+  );
+});
+
+export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredUnit, className }: WeightGraphProps) {
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
   const [isMounted, setIsMounted] = useState(false);
 
@@ -144,21 +164,6 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
     return { current, max, min, avg };
   }, [chartData]);
 
-  const CustomTooltip = ({ active, payload }: RechartsTooltipProps<WeightChartDataPoint>) => {
-    if (!active || !payload || !payload.length) return null;
-
-    const data = payload[0].payload as WeightChartDataPoint;
-
-    return (
-      <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
-        <p className="text-sm text-surface-400 mb-1">{formatDate(data.date)}</p>
-        <p className="text-surface-100 font-semibold">
-          {data.weight} <span className="text-surface-400 font-normal">{preferredUnit}</span>
-        </p>
-      </div>
-    );
-  };
-
   if (chartData.length === 0) {
     return (
       <div className={className}>
@@ -230,7 +235,7 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
               tickFormatter={(v) => `${v}`}
               width={35}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<WeightTooltip preferredUnit={preferredUnit} />} />
             {stats && (
               <ReferenceLine
                 y={stats.avg}
@@ -252,4 +257,4 @@ export function WeightGraph({ weightHistory, preferredUnit, className }: WeightG
       </div>
     </div>
   );
-}
+});

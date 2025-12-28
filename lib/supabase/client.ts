@@ -1,19 +1,29 @@
 import { createBrowserClient } from '@supabase/ssr';
 import type { Database } from '@/types/database';
 
+// Singleton instances to avoid creating new clients on every call
+// This reduces memory overhead and ensures connection reuse
+let typedClientInstance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+let untypedClientInstance: ReturnType<typeof createBrowserClient> | null = null;
+
 /**
  * Create a fully typed Supabase client for browser use.
+ * Uses a singleton pattern to reuse the same client instance.
  * Use this for read operations where type safety is desired.
  */
 export function createClient() {
-  return createBrowserClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  if (!typedClientInstance) {
+    typedClientInstance = createBrowserClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return typedClientInstance;
 }
 
 /**
  * Create an untyped Supabase client for write operations.
+ * Uses a singleton pattern to reuse the same client instance.
  *
  * WHY THIS EXISTS:
  * The Database types generated from Supabase schema don't always match
@@ -35,9 +45,12 @@ export function createClient() {
  * - Handling computed/generated columns
  */
 export function createUntypedClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  ) as any;
+  if (!untypedClientInstance) {
+    untypedClientInstance = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+  }
+  return untypedClientInstance as any;
 }
 

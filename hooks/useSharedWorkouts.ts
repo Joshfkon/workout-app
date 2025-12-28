@@ -103,12 +103,23 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       // Get unique user IDs from workouts
       const userIds = Array.from(new Set(workoutsData.map((w: any) => w.user_id)));
 
-      // Fetch user profiles separately (PostgREST can't infer relationship through users table)
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('user_profiles' as never)
-        .select('id, user_id, username, display_name, avatar_url, training_experience')
-        .in('user_id', userIds);
+      // Fetch user profiles and saved workouts in parallel (not sequentially)
+      const [profilesResult, savedResult] = await Promise.all([
+        // Fetch user profiles
+        supabase
+          .from('user_profiles' as never)
+          .select('id, user_id, username, display_name, avatar_url, training_experience')
+          .in('user_id', userIds),
+        // Fetch saved workouts for current user (only if authenticated)
+        user
+          ? supabase
+              .from('saved_workouts' as never)
+              .select('shared_workout_id')
+              .eq('user_id', user.id)
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
+      const { data: profilesData, error: profilesError } = profilesResult;
       if (profilesError) {
         console.error('Error fetching user profiles:', profilesError);
         // Continue without profiles rather than failing completely
@@ -122,16 +133,9 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         });
       }
 
-      // Get saved workout IDs for current user
-      let savedIds: string[] = [];
-      if (user) {
-        const { data: savedData } = await supabase
-          .from('saved_workouts' as never)
-          .select('shared_workout_id')
-          .eq('user_id', user.id);
-        const savedWorkouts = savedData as Array<{ shared_workout_id: string }> | null;
-        savedIds = savedWorkouts?.map((s) => s.shared_workout_id) || [];
-      }
+      // Extract saved workout IDs
+      const savedWorkouts = savedResult.data as Array<{ shared_workout_id: string }> | null;
+      const savedIds: string[] = savedWorkouts?.map((s) => s.shared_workout_id) || [];
 
       // Transform data - filter out workouts without profiles
       const transformedWorkouts: SharedWorkoutWithProfile[] = (workoutsData || [])

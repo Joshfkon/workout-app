@@ -74,7 +74,13 @@ function loadFromCache(): SubscriptionState | null {
     if (cached) {
       const { data, timestamp } = JSON.parse(cached);
       if (Date.now() - timestamp < CACHE_TTL) {
-        return { ...data, isLoading: false };
+        // Re-hydrate Date objects that were serialized to strings
+        return {
+          ...data,
+          isLoading: false,
+          trialEndsAt: data.trialEndsAt ? new Date(data.trialEndsAt) : null,
+          currentPeriodEnd: data.currentPeriodEnd ? new Date(data.currentPeriodEnd) : null,
+        };
       }
     }
   } catch {

@@ -38,21 +38,96 @@ interface BodyMeasurementsProps {
   showImbalanceAnalysis?: boolean;
 }
 
-const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: string }[] = [
-  { key: 'neck', label: 'Neck', group: 'Upper Body' },
-  { key: 'shoulders', label: 'Shoulders', group: 'Upper Body' },
-  { key: 'chest', label: 'Chest', group: 'Upper Body' },
-  { key: 'left_bicep', label: 'Left Bicep', group: 'Arms' },
-  { key: 'right_bicep', label: 'Right Bicep', group: 'Arms' },
-  { key: 'left_forearm', label: 'Left Forearm', group: 'Arms' },
-  { key: 'right_forearm', label: 'Right Forearm', group: 'Arms' },
-  { key: 'waist', label: 'Waist', group: 'Core' },
-  { key: 'hips', label: 'Hips', group: 'Core' },
-  { key: 'left_thigh', label: 'Left Thigh', group: 'Legs' },
-  { key: 'right_thigh', label: 'Right Thigh', group: 'Legs' },
-  { key: 'left_calf', label: 'Left Calf', group: 'Legs' },
-  { key: 'right_calf', label: 'Right Calf', group: 'Legs' },
+const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: string; instructions: string }[] = [
+  { key: 'neck', label: 'Neck', group: 'Upper Body', instructions: 'Measure around the middle of your neck, just below the Adam\'s apple. Keep the tape level and snug but not tight.' },
+  { key: 'shoulders', label: 'Shoulders', group: 'Upper Body', instructions: 'Measure around your shoulders at the widest point, typically across the deltoids. Keep your arms relaxed at your sides.' },
+  { key: 'chest', label: 'Chest', group: 'Upper Body', instructions: 'Measure around the fullest part of your chest, usually at nipple level. Keep the tape level and breathe normally.' },
+  { key: 'left_bicep', label: 'Left Bicep', group: 'Arms', instructions: 'Measure around the largest part of your flexed bicep. Keep your arm at a 90-degree angle with fist clenched.' },
+  { key: 'right_bicep', label: 'Right Bicep', group: 'Arms', instructions: 'Measure around the largest part of your flexed bicep. Keep your arm at a 90-degree angle with fist clenched.' },
+  { key: 'left_forearm', label: 'Left Forearm', group: 'Arms', instructions: 'Measure around the thickest part of your forearm, usually about 1 inch below the elbow. Keep your arm straight.' },
+  { key: 'right_forearm', label: 'Right Forearm', group: 'Arms', instructions: 'Measure around the thickest part of your forearm, usually about 1 inch below the elbow. Keep your arm straight.' },
+  { key: 'waist', label: 'Waist', group: 'Core', instructions: 'Measure around your natural waistline, typically at the narrowest point above your belly button. Keep the tape snug but not compressing.' },
+  { key: 'hips', label: 'Hips', group: 'Core', instructions: 'Measure around the widest part of your hips and buttocks. Keep your feet together and the tape level.' },
+  { key: 'left_thigh', label: 'Left Thigh', group: 'Legs', instructions: 'Measure around the largest part of your thigh, usually just below the groin. Stand with weight evenly distributed.' },
+  { key: 'right_thigh', label: 'Right Thigh', group: 'Legs', instructions: 'Measure around the largest part of your thigh, usually just below the groin. Stand with weight evenly distributed.' },
+  { key: 'left_calf', label: 'Left Calf', group: 'Legs', instructions: 'Measure around the largest part of your calf muscle. Stand with weight evenly distributed on both feet.' },
+  { key: 'right_calf', label: 'Right Calf', group: 'Legs', instructions: 'Measure around the largest part of your calf muscle. Stand with weight evenly distributed on both feet.' },
 ];
+
+// Info icon component with tooltip
+function InfoIcon({ instructions }: { instructions: string }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<'center' | 'left' | 'right'>('center');
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleClick = () => {
+    if (!showTooltip && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const tooltipWidth = 192; // w-48 = 12rem = 192px
+      const viewportWidth = window.innerWidth;
+
+      // Check if tooltip would overflow on the left
+      if (rect.left < tooltipWidth / 2) {
+        setTooltipPosition('left');
+      }
+      // Check if tooltip would overflow on the right
+      else if (viewportWidth - rect.right < tooltipWidth / 2) {
+        setTooltipPosition('right');
+      }
+      else {
+        setTooltipPosition('center');
+      }
+    }
+    setShowTooltip(!showTooltip);
+  };
+
+  const getTooltipClasses = () => {
+    const base = 'absolute z-50 bottom-full mb-2 w-48 p-2 bg-surface-800 border border-surface-600 rounded-lg shadow-lg';
+    switch (tooltipPosition) {
+      case 'left':
+        return `${base} left-0`;
+      case 'right':
+        return `${base} right-0`;
+      default:
+        return `${base} left-1/2 -translate-x-1/2`;
+    }
+  };
+
+  const getArrowClasses = () => {
+    const base = 'absolute top-full -mt-px';
+    switch (tooltipPosition) {
+      case 'left':
+        return `${base} left-2`;
+      case 'right':
+        return `${base} right-2`;
+      default:
+        return `${base} left-1/2 -translate-x-1/2`;
+    }
+  };
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={handleClick}
+        onBlur={() => setTimeout(() => setShowTooltip(false), 150)}
+        className="w-4 h-4 rounded-full bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-surface-200 text-[10px] font-medium flex items-center justify-center transition-colors"
+        aria-label="Measurement instructions"
+      >
+        i
+      </button>
+      {showTooltip && (
+        <div className={getTooltipClasses()}>
+          <p className="text-xs text-surface-200 leading-relaxed">{instructions}</p>
+          <div className={getArrowClasses()}>
+            <div className="border-4 border-transparent border-t-surface-600"></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Convert cm to inches
 const cmToIn = (cm: number) => Math.round(cm / 2.54 * 10) / 10;
@@ -278,7 +353,10 @@ export function BodyMeasurements({
                 <div className="grid grid-cols-2 gap-2">
                   {fields.map(field => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <label className="text-xs text-surface-400 w-24 flex-shrink-0">{field.label}</label>
+                      <label className="text-xs text-surface-400 w-24 flex-shrink-0 flex items-center gap-1">
+                        {field.label}
+                        <InfoIcon instructions={field.instructions} />
+                      </label>
                       <div className="flex items-center gap-1 flex-1">
                         <input
                           type="number"
@@ -327,7 +405,10 @@ export function BodyMeasurements({
                       
                       return (
                         <div key={field.key} className="flex items-center justify-between py-0.5">
-                          <span className="text-xs text-surface-400">{field.label}</span>
+                          <span className="text-xs text-surface-400 flex items-center gap-1">
+                            {field.label}
+                            <InfoIcon instructions={field.instructions} />
+                          </span>
                           <div className="flex items-center gap-1">
                             <span className="text-sm font-medium text-surface-200">
                               {getDisplayValue(value)} {displayUnit}
