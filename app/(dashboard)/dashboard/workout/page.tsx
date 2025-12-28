@@ -234,6 +234,25 @@ const DEFAULT_WORKOUT_CARD_ORDER: WorkoutTabCardId[] = [
 const WORKOUT_CARD_ORDER_STORAGE_KEY = 'workout-card-order';
 const WORKOUT_HIDDEN_CARDS_STORAGE_KEY = 'workout-hidden-cards';
 
+// Card identifiers for reordering in the Mesocycle tab
+type MesocycleTabCardId =
+  | 'today-workout'
+  | 'mesocycle-overview'
+  | 'program-logic'
+  | 'what-is-mesocycle'
+  | 'past-mesocycles';
+
+const DEFAULT_MESOCYCLE_CARD_ORDER: MesocycleTabCardId[] = [
+  'today-workout',
+  'mesocycle-overview',
+  'program-logic',
+  'what-is-mesocycle',
+  'past-mesocycles',
+];
+
+const MESOCYCLE_CARD_ORDER_STORAGE_KEY = 'mesocycle-card-order';
+const MESOCYCLE_HIDDEN_CARDS_STORAGE_KEY = 'mesocycle-hidden-cards';
+
 export default function WorkoutPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('workouts');
@@ -279,6 +298,11 @@ export default function WorkoutPage() {
   const [cardOrder, setCardOrder] = useState<WorkoutTabCardId[]>(DEFAULT_WORKOUT_CARD_ORDER);
   const [hiddenCards, setHiddenCards] = useState<Set<WorkoutTabCardId>>(new Set());
 
+  // Edit mode state for rearranging mesocycle cards
+  const [isMesocycleEditMode, setIsMesocycleEditMode] = useState(false);
+  const [mesocycleCardOrder, setMesocycleCardOrder] = useState<MesocycleTabCardId[]>(DEFAULT_MESOCYCLE_CARD_ORDER);
+  const [mesocycleHiddenCards, setMesocycleHiddenCards] = useState<Set<MesocycleTabCardId>>(new Set());
+
   const supabase = createUntypedClient();
 
   useEffect(() => {
@@ -313,6 +337,30 @@ export default function WorkoutPage() {
       }
     } catch (e) {
       console.error('Failed to load hidden cards:', e);
+    }
+
+    // Load mesocycle card order
+    try {
+      const savedOrder = localStorage.getItem(MESOCYCLE_CARD_ORDER_STORAGE_KEY);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as MesocycleTabCardId[];
+        const newCards = DEFAULT_MESOCYCLE_CARD_ORDER.filter(id => !parsed.includes(id));
+        setMesocycleCardOrder([...parsed.filter(id => DEFAULT_MESOCYCLE_CARD_ORDER.includes(id)), ...newCards]);
+      }
+    } catch (e) {
+      console.error('Failed to load mesocycle card order:', e);
+    }
+
+    // Load mesocycle hidden cards
+    try {
+      const savedHidden = localStorage.getItem(MESOCYCLE_HIDDEN_CARDS_STORAGE_KEY);
+      if (savedHidden) {
+        const parsed = JSON.parse(savedHidden) as MesocycleTabCardId[];
+        const validHidden = parsed.filter(id => DEFAULT_MESOCYCLE_CARD_ORDER.includes(id));
+        setMesocycleHiddenCards(new Set(validHidden));
+      }
+    } catch (e) {
+      console.error('Failed to load mesocycle hidden cards:', e);
     }
   }, []);
 
@@ -360,6 +408,55 @@ export default function WorkoutPage() {
         localStorage.setItem(WORKOUT_HIDDEN_CARDS_STORAGE_KEY, JSON.stringify(Array.from(newHidden)));
       } catch (e) {
         console.error('Failed to save hidden cards:', e);
+      }
+      return newHidden;
+    });
+  }, []);
+
+  // Save mesocycle card order to localStorage
+  const saveMesocycleCardOrder = useCallback((newOrder: MesocycleTabCardId[]) => {
+    setMesocycleCardOrder(newOrder);
+    try {
+      localStorage.setItem(MESOCYCLE_CARD_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    } catch (e) {
+      console.error('Failed to save mesocycle card order:', e);
+    }
+  }, []);
+
+  // Move mesocycle card up in order
+  const moveMesocycleCardUp = useCallback((cardId: MesocycleTabCardId) => {
+    const index = mesocycleCardOrder.indexOf(cardId);
+    if (index > 0) {
+      const newOrder = [...mesocycleCardOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      saveMesocycleCardOrder(newOrder);
+    }
+  }, [mesocycleCardOrder, saveMesocycleCardOrder]);
+
+  // Move mesocycle card down in order
+  const moveMesocycleCardDown = useCallback((cardId: MesocycleTabCardId) => {
+    const index = mesocycleCardOrder.indexOf(cardId);
+    if (index < mesocycleCardOrder.length - 1) {
+      const newOrder = [...mesocycleCardOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      saveMesocycleCardOrder(newOrder);
+    }
+  }, [mesocycleCardOrder, saveMesocycleCardOrder]);
+
+  // Toggle mesocycle card visibility (hide/show)
+  const toggleMesocycleCardVisibility = useCallback((cardId: MesocycleTabCardId) => {
+    setMesocycleHiddenCards(prev => {
+      const newHidden = new Set(prev);
+      if (newHidden.has(cardId)) {
+        newHidden.delete(cardId);
+      } else {
+        newHidden.add(cardId);
+      }
+      // Save to localStorage
+      try {
+        localStorage.setItem(MESOCYCLE_HIDDEN_CARDS_STORAGE_KEY, JSON.stringify(Array.from(newHidden)));
+      } catch (e) {
+        console.error('Failed to save mesocycle hidden cards:', e);
       }
       return newHidden;
     });
@@ -1159,6 +1256,30 @@ export default function WorkoutPage() {
               )}
             </Button>
           )}
+          {activeTab === 'mesocycle' && (
+            <Button
+              variant={isMesocycleEditMode ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setIsMesocycleEditMode(!isMesocycleEditMode)}
+              className={isMesocycleEditMode ? 'bg-primary-500 hover:bg-primary-600' : ''}
+            >
+              {isMesocycleEditMode ? (
+                <>
+                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Done
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </>
+              )}
+            </Button>
+          )}
           <Button onClick={handleQuickStart} isLoading={isStarting}>
             <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1580,346 +1701,436 @@ export default function WorkoutPage() {
               </Link>
             </Card>
           ) : (
-            <>
-              {/* Today's Workout Card */}
-              {todayWorkout ? (
-                <Card variant="elevated" className="border-2 border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-accent-500/5">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-3xl">🏋️</span>
-                          <div>
-                            <p className="text-sm text-primary-400 font-medium">Today&apos;s Workout</p>
-                            <h2 className="text-xl font-bold text-surface-100">{todayWorkout.dayName}</h2>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {todayWorkout.muscles.map(muscle => (
-                            <Badge key={muscle} variant="default" className="capitalize">
-                              {muscle}
-                            </Badge>
-                          ))}
-                        </div>
-                        <p className="text-sm text-surface-400 mt-3">
-                          Week {activeMeso.current_week} • Day {todayWorkout.dayNumber} of {activeMeso.days_per_week}
-                        </p>
-                      </div>
-                      <Button
-                        size="lg"
-                        onClick={handleStartMesocycleWorkout}
-                        isLoading={isStartingWorkout}
-                        className="shrink-0"
+            <div className={`space-y-6 ${isMesocycleEditMode ? 'pl-14' : ''}`}>
+              {/* Render cards in order based on mesocycleCardOrder */}
+              {mesocycleCardOrder.map((cardId) => {
+                const isHidden = mesocycleHiddenCards.has(cardId);
+                // Skip hidden cards when not in edit mode
+                if (isHidden && !isMesocycleEditMode) return null;
+
+                // Get visible cards for determining first/last
+                const visibleCards = mesocycleCardOrder.filter(id => isMesocycleEditMode || !mesocycleHiddenCards.has(id));
+                const visibleIndex = visibleCards.indexOf(cardId);
+                const isFirst = visibleIndex === 0;
+                const isLast = visibleIndex === visibleCards.length - 1;
+
+                // Render each card based on its ID
+                switch (cardId) {
+                  case 'today-workout':
+                    return (
+                      <WorkoutCard
+                        key={cardId}
+                        id={cardId}
+                        isEditMode={isMesocycleEditMode}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                        isHidden={isHidden}
+                        hiddenLabel="Hidden from mesocycle"
+                        onMoveUp={() => moveMesocycleCardUp(cardId)}
+                        onMoveDown={() => moveMesocycleCardDown(cardId)}
+                        onToggleVisibility={() => toggleMesocycleCardVisibility(cardId)}
                       >
-                        <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Start Workout
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card className="border border-surface-700">
-                  <CardContent className="p-6 text-center">
-                    <span className="text-4xl block mb-3">😴</span>
-                    <h3 className="text-lg font-semibold text-surface-200">Rest Day</h3>
-                    <p className="text-surface-400 mt-1">
-                      No workout scheduled for today. Recovery is part of the process!
-                    </p>
-                    <Link href="/dashboard/workout/new">
-                      <Button variant="secondary" className="mt-4">
-                        Start Ad-hoc Workout
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Mesocycle Overview Card */}
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>{activeMeso.name}</CardTitle>
-                      <p className="text-surface-400 text-sm mt-1">{activeMeso.split_type}</p>
-                    </div>
-                    <Badge variant="success">Active</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 sm:grid-cols-4">
-                    <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                      <p className="text-2xl font-bold text-surface-100">
-                        {activeMeso.current_week}/{activeMeso.total_weeks}
-                      </p>
-                      <p className="text-sm text-surface-500">Current Week</p>
-                    </div>
-                    <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                      <p className="text-2xl font-bold text-surface-100">{activeMeso.days_per_week}</p>
-                      <p className="text-sm text-surface-500">Days/Week</p>
-                    </div>
-                    <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                      <p className="text-2xl font-bold text-surface-100">{activeMeso.deload_week}</p>
-                      <p className="text-sm text-surface-500">Deload Week</p>
-                    </div>
-                    <div className="text-center p-4 bg-surface-800/50 rounded-lg">
-                      <p className="text-2xl font-bold text-primary-400">
-                        {Math.round((activeMeso.current_week / activeMeso.total_weeks) * 100)}%
-                      </p>
-                      <p className="text-sm text-surface-500">Complete</p>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="mt-6">
-                    <div className="flex justify-between text-sm text-surface-400 mb-2">
-                      <span>Progress</span>
-                      <span>Week {activeMeso.current_week} of {activeMeso.total_weeks}</span>
-                    </div>
-                    <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all"
-                        style={{ width: `${(activeMeso.current_week / activeMeso.total_weeks) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Week Schedule */}
-                  <div className="mt-6 pt-6 border-t border-surface-800">
-                    <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
-                    <div className="flex gap-2 overflow-x-auto pb-2">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
-                        const dayNum = index + 1;
-                        const workout = getWorkoutForDay(activeMeso.split_type, dayNum, activeMeso.days_per_week);
-                        const isToday = (new Date().getDay() || 7) === dayNum;
-
-                        return (
-                          <div
-                            key={day}
-                            className={`shrink-0 p-3 rounded-lg text-center min-w-[80px] ${
-                              isToday
-                                ? 'bg-primary-500/20 border border-primary-500/40'
-                                : workout
-                                  ? 'bg-surface-800/50'
-                                  : 'bg-surface-900/30'
-                            }`}
-                          >
-                            <p className={`text-xs font-medium ${isToday ? 'text-primary-400' : 'text-surface-500'}`}>
-                              {day}
-                            </p>
-                            {workout ? (
-                              <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
-                                {workout.dayName.split(' ')[0]}
-                              </p>
-                            ) : (
-                              <p className="text-xs text-surface-600 mt-1">Rest</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Programming Logic */}
-          {activeMeso && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  How Your Program Works
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">🗓️ {activeMeso.split_type} Split</h3>
-                    <p className="text-sm text-surface-400">
-                      {activeMeso.split_type === 'Full Body'
-                        ? 'Each workout hits all muscle groups. This maximizes training frequency (2-3x/week per muscle) which is great for strength and hypertrophy.'
-                        : activeMeso.split_type === 'Upper/Lower'
-                        ? 'Alternating between upper and lower body allows high volume per session while maintaining 2x/week frequency.'
-                        : activeMeso.split_type === 'PPL'
-                        ? 'Push/Pull/Legs groups muscles by movement pattern. Great for high volume training with 1-2x frequency.'
-                        : 'Your split is designed to balance volume and recovery.'}
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">🎯 Smart Rep Ranges</h3>
-                    <p className="text-sm text-surface-400 mb-2">
-                      Rep ranges vary based on muscle fiber composition:
-                    </p>
-                    <ul className="text-xs text-surface-500 space-y-1">
-                      <li>• <span className="text-danger-400">Hamstrings/Triceps:</span> Lower reps (fast-twitch)</li>
-                      <li>• <span className="text-warning-400">Chest/Back/Quads:</span> Moderate reps (mixed)</li>
-                      <li>• <span className="text-success-400">Calves/Delts/Core:</span> Higher reps (slow-twitch)</li>
-                    </ul>
-                  </div>
-
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">📈 Weekly Progression</h3>
-                    <p className="text-sm text-surface-400">
-                      Each week, we aim to add 1-2 reps or 2.5% weight to key lifts. This progressive overload drives adaptation.
-                    </p>
-                    <div className="flex gap-2 mt-2">
-                      {Array.from({ length: activeMeso.total_weeks }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`flex-1 h-2 rounded ${
-                            i === activeMeso.total_weeks - 1
-                              ? 'bg-warning-500'
-                              : i < activeMeso.current_week
-                              ? 'bg-primary-500'
-                              : 'bg-surface-700'
-                          }`}
-                          title={i === activeMeso.total_weeks - 1 ? 'Deload' : `Week ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                    <p className="text-xs text-surface-500 mt-1">
-                      Weeks 1-{activeMeso.total_weeks - 1}: Build • Week {activeMeso.total_weeks}: Deload
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">💪 Volume Targets</h3>
-                    <p className="text-sm text-surface-400 mb-2">
-                      Weekly sets per muscle group:
-                    </p>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="px-2 py-1 bg-surface-700 rounded">MV: 6</span>
-                      <span className="text-surface-600">→</span>
-                      <span className="px-2 py-1 bg-success-500/20 text-success-300 rounded">Target: 10-20</span>
-                      <span className="text-surface-600">→</span>
-                      <span className="px-2 py-1 bg-surface-700 rounded">MRV: 20+</span>
-                    </div>
-                    <p className="text-xs text-surface-500 mt-2">
-                      MV = Minimum Viable • MRV = Maximum Recoverable
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">⚡ Fatigue Tracking</h3>
-                    <p className="text-sm text-surface-400">
-                      We monitor systemic and local fatigue. High RPE, poor sleep, or missed reps trigger adaptive responses.
-                    </p>
-                    <div className="mt-2 p-2 bg-surface-900/50 rounded text-xs text-surface-500">
-                      <strong className="text-surface-400">Auto-deload triggers:</strong> Performance drop, RPE 9.5+, poor recovery
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200 mb-2">😴 Deload Week</h3>
-                    <p className="text-sm text-surface-400">
-                      Week {activeMeso.deload_week} reduces volume by 50% while maintaining intensity. This lets accumulated fatigue dissipate.
-                    </p>
-                    <div className="mt-2 flex gap-2 text-xs">
-                      <span className="px-2 py-1 bg-surface-700 rounded">Volume: -50%</span>
-                      <span className="px-2 py-1 bg-surface-700 rounded">Intensity: Same</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* What is a mesocycle */}
-          {!isLoading && (
-            <Card>
-              <CardHeader>
-                <CardTitle>What is a Mesocycle?</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-surface-400 mb-4">
-                  A mesocycle is a training block typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
-                </p>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200">📈 Progressive Overload</h3>
-                    <p className="text-sm text-surface-500 mt-1">
-                      Gradually increase volume and intensity week over week
-                    </p>
-                  </div>
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200">😴 Planned Deloads</h3>
-                    <p className="text-sm text-surface-500 mt-1">
-                      Scheduled recovery weeks to manage fatigue
-                    </p>
-                  </div>
-                  <div className="p-4 bg-surface-800/50 rounded-lg">
-                    <h3 className="font-medium text-surface-200">🎯 Auto-Regulation</h3>
-                    <p className="text-sm text-surface-500 mt-1">
-                      Adjust based on readiness and performance
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Past mesocycles */}
-          {pastMesocycles.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Past Mesocycles</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {pastMesocycles.map((meso) => (
-                    <div key={meso.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
-                      <div>
-                        <p className="font-medium text-surface-200">{meso.name}</p>
-                        <p className="text-sm text-surface-500">
-                          {meso.split_type} • {meso.total_weeks} weeks • {new Date(meso.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
-                          {meso.state}
-                        </Badge>
-                        {confirmDeleteId === meso.id ? (
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="danger"
-                              size="sm"
-                              onClick={() => handleDeleteMesocycle(meso.id)}
-                              isLoading={deletingId === meso.id}
-                            >
-                              Confirm
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setConfirmDeleteId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
+                        {todayWorkout ? (
+                          <Card variant="elevated" className="border-2 border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-accent-500/5">
+                            <CardContent className="p-6">
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <span className="text-3xl">🏋️</span>
+                                    <div>
+                                      <p className="text-sm text-primary-400 font-medium">Today&apos;s Workout</p>
+                                      <h2 className="text-xl font-bold text-surface-100">{todayWorkout.dayName}</h2>
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2 mt-3">
+                                    {todayWorkout.muscles.map(muscle => (
+                                      <Badge key={muscle} variant="default" className="capitalize">
+                                        {muscle}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                  <p className="text-sm text-surface-400 mt-3">
+                                    Week {activeMeso.current_week} • Day {todayWorkout.dayNumber} of {activeMeso.days_per_week}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="lg"
+                                  onClick={handleStartMesocycleWorkout}
+                                  isLoading={isStartingWorkout}
+                                  className="shrink-0"
+                                >
+                                  <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Start Workout
+                                </Button>
+                              </div>
+                            </CardContent>
+                          </Card>
                         ) : (
-                          <button
-                            onClick={() => setConfirmDeleteId(meso.id)}
-                            className="p-1.5 text-surface-500 hover:text-danger-400 hover:bg-danger-500/10 rounded transition-colors"
-                            title="Delete mesocycle"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          <Card className="border border-surface-700">
+                            <CardContent className="p-6 text-center">
+                              <span className="text-4xl block mb-3">😴</span>
+                              <h3 className="text-lg font-semibold text-surface-200">Rest Day</h3>
+                              <p className="text-surface-400 mt-1">
+                                No workout scheduled for today. Recovery is part of the process!
+                              </p>
+                              <Link href="/dashboard/workout/new">
+                                <Button variant="secondary" className="mt-4">
+                                  Start Ad-hoc Workout
+                                </Button>
+                              </Link>
+                            </CardContent>
+                          </Card>
                         )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                      </WorkoutCard>
+                    );
+
+                  case 'mesocycle-overview':
+                    return (
+                      <WorkoutCard
+                        key={cardId}
+                        id={cardId}
+                        isEditMode={isMesocycleEditMode}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                        isHidden={isHidden}
+                        hiddenLabel="Hidden from mesocycle"
+                        onMoveUp={() => moveMesocycleCardUp(cardId)}
+                        onMoveDown={() => moveMesocycleCardDown(cardId)}
+                        onToggleVisibility={() => toggleMesocycleCardVisibility(cardId)}
+                      >
+                        <Card>
+                          <CardHeader>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <CardTitle>{activeMeso.name}</CardTitle>
+                                <p className="text-surface-400 text-sm mt-1">{activeMeso.split_type}</p>
+                              </div>
+                              <Badge variant="success">Active</Badge>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid gap-4 sm:grid-cols-4">
+                              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                                <p className="text-2xl font-bold text-surface-100">
+                                  {activeMeso.current_week}/{activeMeso.total_weeks}
+                                </p>
+                                <p className="text-sm text-surface-500">Current Week</p>
+                              </div>
+                              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                                <p className="text-2xl font-bold text-surface-100">{activeMeso.days_per_week}</p>
+                                <p className="text-sm text-surface-500">Days/Week</p>
+                              </div>
+                              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                                <p className="text-2xl font-bold text-surface-100">{activeMeso.deload_week}</p>
+                                <p className="text-sm text-surface-500">Deload Week</p>
+                              </div>
+                              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                                <p className="text-2xl font-bold text-primary-400">
+                                  {Math.round((activeMeso.current_week / activeMeso.total_weeks) * 100)}%
+                                </p>
+                                <p className="text-sm text-surface-500">Complete</p>
+                              </div>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="mt-6">
+                              <div className="flex justify-between text-sm text-surface-400 mb-2">
+                                <span>Progress</span>
+                                <span>Week {activeMeso.current_week} of {activeMeso.total_weeks}</span>
+                              </div>
+                              <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all"
+                                  style={{ width: `${(activeMeso.current_week / activeMeso.total_weeks) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Week Schedule */}
+                            <div className="mt-6 pt-6 border-t border-surface-800">
+                              <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
+                              <div className="flex gap-2 overflow-x-auto pb-2">
+                                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                                  const dayNum = index + 1;
+                                  const workout = getWorkoutForDay(activeMeso.split_type, dayNum, activeMeso.days_per_week);
+                                  const isToday = (new Date().getDay() || 7) === dayNum;
+
+                                  return (
+                                    <div
+                                      key={day}
+                                      className={`shrink-0 p-3 rounded-lg text-center min-w-[80px] ${
+                                        isToday
+                                          ? 'bg-primary-500/20 border border-primary-500/40'
+                                          : workout
+                                            ? 'bg-surface-800/50'
+                                            : 'bg-surface-900/30'
+                                      }`}
+                                    >
+                                      <p className={`text-xs font-medium ${isToday ? 'text-primary-400' : 'text-surface-500'}`}>
+                                        {day}
+                                      </p>
+                                      {workout ? (
+                                        <p className="text-xs text-surface-300 mt-1 truncate" title={workout.dayName}>
+                                          {workout.dayName.split(' ')[0]}
+                                        </p>
+                                      ) : (
+                                        <p className="text-xs text-surface-600 mt-1">Rest</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </WorkoutCard>
+                    );
+
+                  case 'program-logic':
+                    return (
+                      <WorkoutCard
+                        key={cardId}
+                        id={cardId}
+                        isEditMode={isMesocycleEditMode}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                        isHidden={isHidden}
+                        hiddenLabel="Hidden from mesocycle"
+                        onMoveUp={() => moveMesocycleCardUp(cardId)}
+                        onMoveDown={() => moveMesocycleCardDown(cardId)}
+                        onToggleVisibility={() => toggleMesocycleCardVisibility(cardId)}
+                      >
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                              <svg className="w-5 h-5 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                              How Your Program Works
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">🗓️ {activeMeso.split_type} Split</h3>
+                                <p className="text-sm text-surface-400">
+                                  {activeMeso.split_type === 'Full Body'
+                                    ? 'Each workout hits all muscle groups. This maximizes training frequency (2-3x/week per muscle) which is great for strength and hypertrophy.'
+                                    : activeMeso.split_type === 'Upper/Lower'
+                                    ? 'Alternating between upper and lower body allows high volume per session while maintaining 2x/week frequency.'
+                                    : activeMeso.split_type === 'PPL'
+                                    ? 'Push/Pull/Legs groups muscles by movement pattern. Great for high volume training with 1-2x frequency.'
+                                    : 'Your split is designed to balance volume and recovery.'}
+                                </p>
+                              </div>
+
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">🎯 Smart Rep Ranges</h3>
+                                <p className="text-sm text-surface-400 mb-2">
+                                  Rep ranges vary based on muscle fiber composition:
+                                </p>
+                                <ul className="text-xs text-surface-500 space-y-1">
+                                  <li>• <span className="text-danger-400">Hamstrings/Triceps:</span> Lower reps (fast-twitch)</li>
+                                  <li>• <span className="text-warning-400">Chest/Back/Quads:</span> Moderate reps (mixed)</li>
+                                  <li>• <span className="text-success-400">Calves/Delts/Core:</span> Higher reps (slow-twitch)</li>
+                                </ul>
+                              </div>
+
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">📈 Weekly Progression</h3>
+                                <p className="text-sm text-surface-400">
+                                  Each week, we aim to add 1-2 reps or 2.5% weight to key lifts. This progressive overload drives adaptation.
+                                </p>
+                                <div className="flex gap-2 mt-2">
+                                  {Array.from({ length: activeMeso.total_weeks }).map((_, i) => (
+                                    <div
+                                      key={i}
+                                      className={`flex-1 h-2 rounded ${
+                                        i === activeMeso.total_weeks - 1
+                                          ? 'bg-warning-500'
+                                          : i < activeMeso.current_week
+                                          ? 'bg-primary-500'
+                                          : 'bg-surface-700'
+                                      }`}
+                                      title={i === activeMeso.total_weeks - 1 ? 'Deload' : `Week ${i + 1}`}
+                                    />
+                                  ))}
+                                </div>
+                                <p className="text-xs text-surface-500 mt-1">
+                                  Weeks 1-{activeMeso.total_weeks - 1}: Build • Week {activeMeso.total_weeks}: Deload
+                                </p>
+                              </div>
+
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">💪 Volume Targets</h3>
+                                <p className="text-sm text-surface-400 mb-2">
+                                  Weekly sets per muscle group:
+                                </p>
+                                <div className="flex items-center gap-2 text-xs">
+                                  <span className="px-2 py-1 bg-surface-700 rounded">MV: 6</span>
+                                  <span className="text-surface-600">→</span>
+                                  <span className="px-2 py-1 bg-success-500/20 text-success-300 rounded">Target: 10-20</span>
+                                  <span className="text-surface-600">→</span>
+                                  <span className="px-2 py-1 bg-surface-700 rounded">MRV: 20+</span>
+                                </div>
+                                <p className="text-xs text-surface-500 mt-2">
+                                  MV = Minimum Viable • MRV = Maximum Recoverable
+                                </p>
+                              </div>
+
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">⚡ Fatigue Tracking</h3>
+                                <p className="text-sm text-surface-400">
+                                  We monitor systemic and local fatigue. High RPE, poor sleep, or missed reps trigger adaptive responses.
+                                </p>
+                                <div className="mt-2 p-2 bg-surface-900/50 rounded text-xs text-surface-500">
+                                  <strong className="text-surface-400">Auto-deload triggers:</strong> Performance drop, RPE 9.5+, poor recovery
+                                </div>
+                              </div>
+
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200 mb-2">😴 Deload Week</h3>
+                                <p className="text-sm text-surface-400">
+                                  Week {activeMeso.deload_week} reduces volume by 50% while maintaining intensity. This lets accumulated fatigue dissipate.
+                                </p>
+                                <div className="mt-2 flex gap-2 text-xs">
+                                  <span className="px-2 py-1 bg-surface-700 rounded">Volume: -50%</span>
+                                  <span className="px-2 py-1 bg-surface-700 rounded">Intensity: Same</span>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </WorkoutCard>
+                    );
+
+                  case 'what-is-mesocycle':
+                    return (
+                      <WorkoutCard
+                        key={cardId}
+                        id={cardId}
+                        isEditMode={isMesocycleEditMode}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                        isHidden={isHidden}
+                        hiddenLabel="Hidden from mesocycle"
+                        onMoveUp={() => moveMesocycleCardUp(cardId)}
+                        onMoveDown={() => moveMesocycleCardDown(cardId)}
+                        onToggleVisibility={() => toggleMesocycleCardVisibility(cardId)}
+                      >
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>What is a Mesocycle?</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <p className="text-surface-400 mb-4">
+                              A mesocycle is a training block typically lasting 4-8 weeks, designed to progressively overload your muscles before a recovery (deload) week.
+                            </p>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200">📈 Progressive Overload</h3>
+                                <p className="text-sm text-surface-500 mt-1">
+                                  Gradually increase volume and intensity week over week
+                                </p>
+                              </div>
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200">😴 Planned Deloads</h3>
+                                <p className="text-sm text-surface-500 mt-1">
+                                  Scheduled recovery weeks to manage fatigue
+                                </p>
+                              </div>
+                              <div className="p-4 bg-surface-800/50 rounded-lg">
+                                <h3 className="font-medium text-surface-200">🎯 Auto-Regulation</h3>
+                                <p className="text-sm text-surface-500 mt-1">
+                                  Adjust based on readiness and performance
+                                </p>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </WorkoutCard>
+                    );
+
+                  case 'past-mesocycles':
+                    // Only render if there are past mesocycles
+                    if (pastMesocycles.length === 0) return null;
+                    return (
+                      <WorkoutCard
+                        key={cardId}
+                        id={cardId}
+                        isEditMode={isMesocycleEditMode}
+                        isFirst={isFirst}
+                        isLast={isLast}
+                        isHidden={isHidden}
+                        hiddenLabel="Hidden from mesocycle"
+                        onMoveUp={() => moveMesocycleCardUp(cardId)}
+                        onMoveDown={() => moveMesocycleCardDown(cardId)}
+                        onToggleVisibility={() => toggleMesocycleCardVisibility(cardId)}
+                      >
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>Past Mesocycles</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-3">
+                              {pastMesocycles.map((meso) => (
+                                <div key={meso.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
+                                  <div>
+                                    <p className="font-medium text-surface-200">{meso.name}</p>
+                                    <p className="text-sm text-surface-500">
+                                      {meso.split_type} • {meso.total_weeks} weeks • {new Date(meso.created_at).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
+                                      {meso.state}
+                                    </Badge>
+                                    {confirmDeleteId === meso.id ? (
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          variant="danger"
+                                          size="sm"
+                                          onClick={() => handleDeleteMesocycle(meso.id)}
+                                          isLoading={deletingId === meso.id}
+                                        >
+                                          Confirm
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => setConfirmDeleteId(null)}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        onClick={() => setConfirmDeleteId(meso.id)}
+                                        className="p-1.5 text-surface-500 hover:text-danger-400 hover:bg-danger-500/10 rounded transition-colors"
+                                        title="Delete mesocycle"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </WorkoutCard>
+                    );
+
+                  default:
+                    return null;
+                }
+              })}
+            </div>
           )}
         </div>
       ) : activeTab === 'history' ? (
