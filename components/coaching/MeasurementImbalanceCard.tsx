@@ -129,7 +129,7 @@ export function MeasurementImbalanceCard({
 function BalanceScoreBadge({ score }: { score: number }) {
   const variant = score >= 80 ? 'success' : score >= 60 ? 'warning' : 'danger';
   return (
-    <Badge variant={variant} size="lg">
+    <Badge variant={variant} size="md">
       {score}%
     </Badge>
   );
