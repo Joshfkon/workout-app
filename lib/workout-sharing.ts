@@ -85,3 +85,41 @@ export function extractMuscleGroups(workoutData: SharedWorkoutContent): string[]
   return [];
 }
 
+/**
+ * Copy a shared workout to the user's workout templates
+ * Uses the database RPC function for atomic operation
+ */
+export async function copySharedWorkout(
+  sharedWorkoutId: string,
+  supabase: any,
+  targetMesocycleId?: string
+): Promise<{ success: boolean; workoutId?: string; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('copy_shared_workout', {
+      p_shared_workout_id: sharedWorkoutId,
+      p_target_mesocycle_id: targetMesocycleId || null,
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, workoutId: data };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to copy workout',
+    };
+  }
+}
+
+/**
+ * Generate a shareable URL for a workout
+ */
+export function getSharedWorkoutUrl(workoutId: string): string {
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/dashboard/discover/${workoutId}`;
+  }
+  return `/dashboard/discover/${workoutId}`;
+}
+

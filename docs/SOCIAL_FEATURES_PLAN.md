@@ -1,20 +1,26 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 3 Complete - Ready for Phase 4
-> **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 3 - Activity Feed (Complete)
+> **Status**: Phase 4 In Progress - Workout Sharing
+> **Last Updated**: 2025-12-28
+> **Current Sprint**: Sprint 4 - Workout Sharing (In Progress)
 >
-> ### Phase 3 Progress
-> - [x] Create activities database migration (activity_reactions, activity_comments tables)
-> - [x] Create ActivityCard component with workout/PR/streak content variants
-> - [x] Create ReactionBar component with emoji picker
-> - [x] Create useActivityFeed hook with cursor pagination
-> - [x] Create useReactions hook for reaction management
-> - [x] Build activity feed page with Following/Discover tabs
-> - [x] Add Feed and Profile links to sidebar navigation
-> - [x] Add comment section component (CommentSection, CommentItem, CommentInput, useComments)
-> - [x] Add activity creation triggers on workout completion (trigger in 20241228000004 migration)
-> - [x] Add profile edit page with privacy settings (app/(dashboard)/dashboard/profile/edit/page.tsx)
+> ### Phase 4 Progress
+> - [x] Create database migration for shared workouts (20241228000006)
+> - [x] Build share workout modal with privacy options (ShareWorkoutModal.tsx)
+> - [x] Implement workout serialization for sharing (lib/workout-sharing.ts)
+> - [x] Create public workout browser page (app/(dashboard)/dashboard/discover/page.tsx)
+> - [x] Build workout import/copy functionality (20241228000007 RPC functions)
+> - [x] Add save/bookmark feature UI (SaveWorkoutButton, useSharedWorkouts hook)
+> - [x] Generate shareable deep links (discover/[id]/page.tsx)
+> - [x] Add Discover link to sidebar navigation
+> - [x] Create SharedWorkoutCard component
+> - [ ] Implement workout search and filters (basic filters done, advanced search pending)
+> - [ ] Track view/copy/save analytics (counters implemented, dashboard pending)
+>
+> ### Completed Phases
+> - Phase 1: User Profiles (Complete)
+> - Phase 2: Follow System (Complete)
+> - Phase 3: Activity Feed (Complete)
 >
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
@@ -800,18 +806,25 @@ export interface SharedWorkoutWithProfile extends SharedWorkout {
 - [x] Create database migration for shared workouts (`20241228000006_add_workout_sharing.sql`)
 - [x] Build share workout modal with privacy options (`components/social/sharing/ShareWorkoutModal.tsx`)
 - [x] Implement workout serialization for sharing (`lib/workout-sharing.ts`)
-- [ ] Create public workout browser page
-- [ ] Build workout import/copy functionality
-- [ ] Add save/bookmark feature UI (database exists)
-- [ ] Generate shareable deep links
-- [ ] Implement workout search and filters
+- [x] Create public workout browser page (`app/(dashboard)/dashboard/discover/page.tsx`)
+- [x] Build workout import/copy functionality (`20241228000007_add_sharing_functions.sql`)
+- [x] Add save/bookmark feature UI (`SaveWorkoutButton.tsx`, `useSharedWorkouts.ts`)
+- [x] Generate shareable deep links (`app/(dashboard)/dashboard/discover/[id]/page.tsx`)
+- [x] Implement workout search and filters (basic - type, difficulty, muscle groups)
 - [x] Add share to activity feed (trigger in migration)
-- [ ] Track view/copy/save analytics
+- [ ] Track view/copy/save analytics (counters work, analytics dashboard pending)
 
 **Completed Files:**
 - `supabase/migrations/20241228000006_add_workout_sharing.sql` - Tables and triggers
+- `supabase/migrations/20241228000007_add_sharing_functions.sql` - RPC functions for copy/view/save
 - `components/social/sharing/ShareWorkoutModal.tsx` - Share modal UI
-- `lib/workout-sharing.ts` - Workout serialization utilities
+- `components/social/sharing/SharedWorkoutCard.tsx` - Shared workout display card
+- `components/social/sharing/SaveWorkoutButton.tsx` - Save/bookmark button
+- `components/social/sharing/index.ts` - Component exports
+- `hooks/useSharedWorkouts.ts` - Hook for fetching shared workouts
+- `lib/workout-sharing.ts` - Workout serialization and copy utilities
+- `app/(dashboard)/dashboard/discover/page.tsx` - Browse shared workouts page
+- `app/(dashboard)/dashboard/discover/[id]/page.tsx` - Shared workout detail page
 
 ---
 
