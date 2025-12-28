@@ -1,20 +1,25 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 3 Complete - Ready for Phase 4
-> **Last Updated**: 2025-12-26
-> **Current Sprint**: Sprint 3 - Activity Feed (Complete)
+> **Status**: Phase 5 Complete - Ready for Phase 6
+> **Last Updated**: 2025-12-28
+> **Current Sprint**: Sprint 6 - Notifications (Ready)
 >
-> ### Phase 3 Progress
-> - [x] Create activities database migration (activity_reactions, activity_comments tables)
-> - [x] Create ActivityCard component with workout/PR/streak content variants
-> - [x] Create ReactionBar component with emoji picker
-> - [x] Create useActivityFeed hook with cursor pagination
-> - [x] Create useReactions hook for reaction management
-> - [x] Build activity feed page with Following/Discover tabs
-> - [x] Add Feed and Profile links to sidebar navigation
-> - [x] Add comment section component (CommentSection, CommentItem, CommentInput, useComments)
-> - [x] Add activity creation triggers on workout completion (trigger in 20241228000004 migration)
-> - [x] Add profile edit page with privacy settings (app/(dashboard)/dashboard/profile/edit/page.tsx)
+> ### Completed Phases
+> - Phase 1: User Profiles (Complete)
+> - Phase 2: Follow System (Complete)
+> - Phase 3: Activity Feed (Complete)
+> - Phase 4: Workout Sharing (Complete)
+> - Phase 5: Leaderboards (Complete)
+>
+> ### Phase 5 Summary (Completed)
+> - [x] Database migration with leaderboard tables and RLS (20241228000009)
+> - [x] Leaderboard calculation functions (weekly volume, workouts completed)
+> - [x] get_leaderboard and get_user_rank RPC functions
+> - [x] Friend groups tables for private leaderboards
+> - [x] LeaderboardEntry, LeaderboardTable, UserRankCard components
+> - [x] Leaderboards page with tabs for different metrics
+> - [x] Leaderboards link added to sidebar navigation
+> - [x] useLeaderboard hook with pagination
 >
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
@@ -800,18 +805,29 @@ export interface SharedWorkoutWithProfile extends SharedWorkout {
 - [x] Create database migration for shared workouts (`20241228000006_add_workout_sharing.sql`)
 - [x] Build share workout modal with privacy options (`components/social/sharing/ShareWorkoutModal.tsx`)
 - [x] Implement workout serialization for sharing (`lib/workout-sharing.ts`)
-- [ ] Create public workout browser page
-- [ ] Build workout import/copy functionality
-- [ ] Add save/bookmark feature UI (database exists)
-- [ ] Generate shareable deep links
-- [ ] Implement workout search and filters
+- [x] Create public workout browser page (`app/(dashboard)/dashboard/discover/page.tsx`)
+- [x] Build workout import/copy functionality (`20241228000007_add_sharing_functions.sql`)
+- [x] Add save/bookmark feature UI (`SaveWorkoutButton.tsx`, `useSharedWorkouts.ts`)
+- [x] Generate shareable deep links (`app/(dashboard)/dashboard/discover/[id]/page.tsx`)
+- [x] Implement workout search and filters (`20241228000008_add_workout_search.sql`)
 - [x] Add share to activity feed (trigger in migration)
-- [ ] Track view/copy/save analytics
+- [x] Track view/copy/save analytics (`MySharedWorkouts.tsx` on profile page)
 
 **Completed Files:**
 - `supabase/migrations/20241228000006_add_workout_sharing.sql` - Tables and triggers
+- `supabase/migrations/20241228000007_add_sharing_functions.sql` - RPC functions for copy/view/save
+- `supabase/migrations/20241228000008_add_workout_search.sql` - Full-text search with tsvector
 - `components/social/sharing/ShareWorkoutModal.tsx` - Share modal UI
-- `lib/workout-sharing.ts` - Workout serialization utilities
+- `components/social/sharing/SharedWorkoutCard.tsx` - Shared workout display card
+- `components/social/sharing/SaveWorkoutButton.tsx` - Save/bookmark button
+- `components/social/sharing/MySharedWorkouts.tsx` - User's shared workout analytics
+- `components/social/sharing/index.ts` - Component exports
+- `hooks/useSharedWorkouts.ts` - Hook for fetching shared workouts
+- `lib/workout-sharing.ts` - Workout serialization and copy utilities
+- `lib/utils.ts` - Added `formatDistanceToNow` utility
+- `app/(dashboard)/dashboard/discover/page.tsx` - Browse shared workouts page
+- `app/(dashboard)/dashboard/discover/[id]/page.tsx` - Shared workout detail page
+- `app/(dashboard)/dashboard/profile/page.tsx` - Added MySharedWorkouts section
 
 ---
 
@@ -976,16 +992,25 @@ export async function calculateExercise1RMLeaderboards() {
 
 ### 5.5 Implementation Tasks
 
-- [ ] Create database migrations for leaderboards
-- [ ] Build leaderboard calculation jobs
-- [ ] Create leaderboard UI components
-- [ ] Implement exercise-specific leaderboards
-- [ ] Add friend group creation and management
-- [ ] Create private group leaderboards
-- [ ] Add leaderboard opt-out toggle
-- [ ] Build dashboard leaderboard widget
-- [ ] Implement rank change indicators
-- [ ] Add weight class divisions (optional)
+- [x] Create database migrations for leaderboards (`20241228000009_add_leaderboards.sql`)
+- [x] Build leaderboard calculation functions (weekly volume, workouts)
+- [x] Create leaderboard UI components (`LeaderboardEntry`, `LeaderboardTable`, `UserRankCard`)
+- [ ] Implement exercise-specific leaderboards (1RM tracking) - future
+- [x] Add friend group tables and RLS policies
+- [ ] Create private group leaderboards UI - future
+- [x] Add leaderboard opt-out toggle (`show_on_leaderboards` column)
+- [ ] Build dashboard leaderboard widget - future
+- [x] Implement rank change indicators
+- [ ] Add weight class divisions (optional) - future
+
+**Completed Files:**
+- `supabase/migrations/20241228000009_add_leaderboards.sql` - Tables, RLS, calculation functions
+- `hooks/useLeaderboard.ts` - Leaderboard data fetching hook
+- `components/social/leaderboards/LeaderboardEntry.tsx` - Single entry display
+- `components/social/leaderboards/LeaderboardTable.tsx` - Leaderboard list
+- `components/social/leaderboards/UserRankCard.tsx` - User's current rank display
+- `components/social/leaderboards/index.ts` - Component exports
+- `app/(dashboard)/dashboard/leaderboards/page.tsx` - Leaderboards page
 
 ---
 

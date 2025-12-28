@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/social/profile';
+import { MySharedWorkouts } from '@/components/social/sharing/MySharedWorkouts';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
 import { formatWeight } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
@@ -263,6 +264,9 @@ export default function MyProfilePage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Shared Workouts */}
+      <MySharedWorkouts userId={profile.user_id} />
 
       {/* Privacy Settings Quick Link */}
       <Card>
