@@ -769,8 +769,11 @@ export default function WorkoutPage() {
           }
         }
         
-        // Fetch user profile, DEXA, calibrated lifts, and mesocycle in parallel
-        const [userResult, dexaResult, calibratedResult, mesocycleResult] = await Promise.all([
+        // Fetch user profile, DEXA, calibrated lifts, mesocycle, and completed count in parallel
+        // Also fetch exercise history for all exercises (moved here from later in the function)
+        const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
+
+        const [userResult, dexaResult, calibratedResult, mesocycleResult, completedCountResult, historyResult] = await Promise.all([
           // User profile for weight estimation (including preferences for AI coach notes setting)
           supabase
             .from('users')
@@ -798,12 +801,46 @@ export default function WorkoutPage() {
             .eq('user_id', sessionData.user_id)
             .eq('is_active', true)
             .single(),
+          // Check if this is the user's first workout for beginner hints
+          supabase
+            .from('workout_sessions')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', sessionData.user_id)
+            .eq('state', 'completed'),
+          // Exercise history for all exercises (single batched query)
+          exerciseIds.length > 0
+            ? supabase
+                .from('exercise_blocks')
+                .select(`
+                  id,
+                  exercise_id,
+                  workout_sessions!inner (
+                    id,
+                    completed_at,
+                    state,
+                    user_id
+                  ),
+                  set_logs (
+                    weight_kg,
+                    reps,
+                    rpe,
+                    is_warmup,
+                    logged_at
+                  )
+                `)
+                .in('exercise_id', exerciseIds)
+                .eq('workout_sessions.user_id', sessionData.user_id)
+                .eq('workout_sessions.state', 'completed')
+                .order('workout_sessions(completed_at)', { ascending: false })
+            : Promise.resolve({ data: null }),
         ]);
 
         const userData = userResult.data;
         const dexaData = dexaResult.data;
         const calibratedLifts = calibratedResult.data;
         const mesocycleData = mesocycleResult.data;
+        const completedWorkoutsCount = completedCountResult.count ?? 0;
+        const allHistoryBlocks = historyResult.data;
         
         const profile: UserProfileForWeights | undefined = userData ? {
           weightKg: userData.weight_kg || 70,
@@ -850,13 +887,6 @@ export default function WorkoutPage() {
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.total_weeks);
         }
-
-        // Check if this is the user's first workout for beginner hints
-        const { count: completedWorkoutsCount } = await supabase
-          .from('workout_sessions')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', sessionData.user_id)
-          .eq('state', 'completed');
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
 
@@ -927,34 +957,8 @@ export default function WorkoutPage() {
           })();
         }
         
-        // Fetch exercise history for all exercises in a single batched query (optimized from N+1)
-        const exerciseIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.exerciseId);
-        if (exerciseIds.length > 0) {
-          // Single batched query instead of N+1 queries - much faster
-          const { data: allHistoryBlocks } = await supabase
-            .from('exercise_blocks')
-            .select(`
-              id,
-              exercise_id,
-              workout_sessions!inner (
-                id,
-                completed_at,
-                state,
-                user_id
-              ),
-              set_logs (
-                weight_kg,
-                reps,
-                rpe,
-                is_warmup,
-                logged_at
-              )
-            `)
-            .in('exercise_id', exerciseIds)
-            .eq('workout_sessions.user_id', sessionData.user_id)
-            .eq('workout_sessions.state', 'completed')
-            .order('workout_sessions(completed_at)', { ascending: false });
-
+        // Process exercise history (already fetched in parallel above)
+        if (allHistoryBlocks && allHistoryBlocks.length > 0) {
           // Group results by exercise_id and limit to 10 per exercise
           const groupedByExercise: Record<string, any[]> = {};
           for (const block of (allHistoryBlocks || [])) {
@@ -1027,22 +1031,10 @@ export default function WorkoutPage() {
         } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
-          // Check if user wants to skip pre-workout check-in
-          // Fetch preference directly from DB to avoid race condition with React state
-          const { data: { user } } = await supabase.auth.getUser();
-          let shouldSkipCheckIn = false;
-          
-          if (user) {
-            const { data: userData } = await supabase
-              .from('users')
-              .select('preferences')
-              .eq('id', user.id)
-              .single();
-            
-            const prefs = (userData?.preferences as Record<string, unknown>) || {};
-            shouldSkipCheckIn = (prefs.skipPreWorkoutCheckIn as boolean) ?? false;
-          }
-          
+          // Check if user wants to skip pre-workout check-in (use preferences already fetched above)
+          const userPrefs = (userData?.preferences as Record<string, unknown>) || {};
+          const shouldSkipCheckIn = (userPrefs.skipPreWorkoutCheckIn as boolean) ?? false;
+
           if (shouldSkipCheckIn) {
             // Skip check-in, go directly to workout
             await supabase

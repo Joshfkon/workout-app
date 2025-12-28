@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -31,7 +31,28 @@ interface E1RMGraphProps {
   showTrend?: boolean;
 }
 
-export function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGraphProps) {
+// Moved outside component to prevent re-creation on every render
+const CustomTooltip = memo(function CustomTooltip({ active, payload }: RechartsTooltipProps<E1RMDataPoint>) {
+  if (!active || !payload || !payload.length) return null;
+
+  const data = payload[0].payload as E1RMDataPoint;
+
+  return (
+    <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
+      <p className="text-sm text-surface-400 mb-2">{formatDate(data.date)}</p>
+      <div className="space-y-1">
+        <p className="text-surface-100">
+          E1RM: <span className="font-mono text-primary-400 font-bold">{data.e1rm}kg</span>
+        </p>
+        <p className="text-xs text-surface-500">
+          {data.weight}kg × {data.reps} @ RPE {data.rpe}
+        </p>
+      </div>
+    </div>
+  );
+});
+
+export const E1RMGraph = memo(function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGraphProps) {
   const chartData = useMemo(() => {
     return [...snapshots]
       .sort((a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime())
@@ -48,12 +69,12 @@ export function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGra
   // Calculate trend
   const trend = useMemo(() => {
     if (chartData.length < 2) return null;
-    
+
     const first = chartData[0].e1rm;
     const last = chartData[chartData.length - 1].e1rm;
     const change = last - first;
     const percentChange = ((change / first) * 100).toFixed(1);
-    
+
     return {
       change,
       percentChange,
@@ -64,33 +85,13 @@ export function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGra
   // Calculate max and current
   const stats = useMemo(() => {
     if (chartData.length === 0) return null;
-    
+
     const current = chartData[chartData.length - 1].e1rm;
     const max = Math.max(...chartData.map((d) => d.e1rm));
     const min = Math.min(...chartData.map((d) => d.e1rm));
-    
+
     return { current, max, min };
   }, [chartData]);
-
-  const CustomTooltip = ({ active, payload }: RechartsTooltipProps<E1RMDataPoint>) => {
-    if (!active || !payload || !payload.length) return null;
-
-    const data = payload[0].payload as E1RMDataPoint;
-
-    return (
-      <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
-        <p className="text-sm text-surface-400 mb-2">{formatDate(data.date)}</p>
-        <div className="space-y-1">
-          <p className="text-surface-100">
-            E1RM: <span className="font-mono text-primary-400 font-bold">{data.e1rm}kg</span>
-          </p>
-          <p className="text-xs text-surface-500">
-            {data.weight}kg × {data.reps} @ RPE {data.rpe}
-          </p>
-        </div>
-      </div>
-    );
-  };
 
   if (chartData.length === 0) {
     return (
@@ -176,10 +177,10 @@ export function E1RMGraph({ exerciseName, snapshots, showTrend = true }: E1RMGra
       </div>
     </Card>
   );
-}
+});
 
-// Compact sparkline version
-export function E1RMSparkline({
+// Compact sparkline version - memoized to prevent re-renders
+export const E1RMSparkline = memo(function E1RMSparkline({
   snapshots,
   className,
 }: {
@@ -212,5 +213,5 @@ export function E1RMSparkline({
       </ResponsiveContainer>
     </div>
   );
-}
+});
 
