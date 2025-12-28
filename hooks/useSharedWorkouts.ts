@@ -47,7 +47,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const { data: { user } } = await supabase.auth.getUser();
 
       let query = supabase
-        .from('shared_workouts')
+        .from('shared_workouts' as never)
         .select(`
           *,
           user_profiles!inner (
@@ -103,10 +103,11 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       let savedIds: string[] = [];
       if (user) {
         const { data: savedData } = await supabase
-          .from('saved_workouts')
+          .from('saved_workouts' as never)
           .select('shared_workout_id')
           .eq('user_id', user.id);
-        savedIds = savedData?.map((s: { shared_workout_id: string }) => s.shared_workout_id) || [];
+        const savedWorkouts = savedData as Array<{ shared_workout_id: string }> | null;
+        savedIds = savedWorkouts?.map((s) => s.shared_workout_id) || [];
       }
 
       // Transform data
@@ -175,11 +176,11 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       }
 
       const { error: saveError } = await supabase
-        .from('saved_workouts')
+        .from('saved_workouts' as never)
         .insert({
           user_id: user.id,
           shared_workout_id: workoutId,
-        });
+        } as never);
 
       if (saveError) {
         if (saveError.code === '23505') {
@@ -213,7 +214,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       }
 
       const { error: deleteError } = await supabase
-        .from('saved_workouts')
+        .from('saved_workouts' as never)
         .delete()
         .eq('user_id', user.id)
         .eq('shared_workout_id', workoutId);
