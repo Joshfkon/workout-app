@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select } from '@/components/ui';
+import { Button, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import type { CardioModality } from '@/lib/nutrition/macroCalculator';
@@ -43,6 +43,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const [todayLogs, setTodayLogs] = useState<CardioLogEntry[]>([]);
   const [isLogging, setIsLogging] = useState(false);
   const [showLogForm, setShowLogForm] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const [minutes, setMinutes] = useState('');
   const [modality, setModality] = useState<CardioModality>('incline_walk');
   const [notes, setNotes] = useState('');
@@ -132,60 +133,32 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     setNotes('');
   }, []);
 
+  const toggleInfo = useCallback(() => setShowInfo(prev => !prev), []);
+
   const targetMinutes = prescription?.prescribedMinutesPerDay || 0;
   const percentage = useMemo(() =>
     targetMinutes > 0 ? Math.min(100, Math.round((todayTotal / targetMinutes) * 100)) : 0
   , [targetMinutes, todayTotal]);
-  const remaining = useMemo(() => Math.max(0, targetMinutes - todayTotal), [targetMinutes, todayTotal]);
 
   return (
     <div className="space-y-3">
-      {/* Prescription Info */}
-      {prescription && (
-        <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-          {prescription.summary && (
-            <p className="text-sm text-primary-300 mb-3">
-              {prescription.summary}
-            </p>
-          )}
-          <div className="grid grid-cols-2 gap-3 text-xs mb-3">
-            <div>
-              <span className="text-surface-400">Target:</span>
-              <span className="ml-2 font-semibold text-surface-200">
-                {prescription.prescribedMinutesPerDay} min/day
-              </span>
-            </div>
-            <div>
-              <span className="text-surface-400">Today:</span>
-              <span className="ml-2 font-semibold text-surface-200">
-                {todayTotal} min
-              </span>
-            </div>
-            {prescription.prescribedMinutesPerWeek && (
-              <div>
-                <span className="text-surface-400">Minutes/Week:</span>
-                <span className="ml-2 font-semibold text-surface-200">
-                  {prescription.prescribedMinutesPerWeek}
-                </span>
-              </div>
-            )}
-            {prescription.shortfallKcalPerDay && (
-              <div>
-                <span className="text-surface-400">Kcal/Day:</span>
-                <span className="ml-2 font-semibold text-surface-200">
-                  ~{prescription.shortfallKcalPerDay}
-                </span>
-              </div>
-            )}
-          </div>
-          {targetMinutes > 0 && (
-            <div className="space-y-1 mb-3">
-              <div className="flex justify-between text-xs">
-                <span className="text-surface-400">Progress</span>
-                <span className={percentage >= 100 ? 'text-success-400' : 'text-surface-400'}>
-                  {percentage}%
-                </span>
-              </div>
+      {/* Compact Header with Progress and Info Button */}
+      {prescription && targetMinutes > 0 && (
+        <div className="relative">
+          {/* Info Button */}
+          <button
+            onClick={toggleInfo}
+            className="absolute -top-1 -right-1 p-1.5 text-surface-400 hover:text-primary-400 hover:bg-surface-800 rounded-full transition-colors"
+            aria-label={showInfo ? 'Hide details' : 'Show details'}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+
+          {/* Compact Progress View */}
+          <div className="flex items-center gap-3 pr-8">
+            <div className="flex-1">
               <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-500 ${
@@ -200,52 +173,81 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
                   style={{ width: `${percentage}%` }}
                 />
               </div>
-              {remaining > 0 && (
-                <p className="text-xs text-surface-500 mt-1">
-                  {remaining} minutes remaining
+            </div>
+            <span className="text-xs font-medium text-surface-300 whitespace-nowrap">
+              {todayTotal}/{targetMinutes} min
+            </span>
+          </div>
+
+          {/* Expandable Details */}
+          {showInfo && (
+            <div className="mt-3 p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+              {prescription.summary && (
+                <p className="text-sm text-primary-300 mb-3">
+                  {prescription.summary}
                 </p>
               )}
-            </div>
-          )}
-          {prescription.hitCap && prescription.capMinutesPerDay && (
-            <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
-              ⚠️ Cardio capped at {prescription.capMinutesPerDay} min/day
-            </div>
-          )}
-          {prescription.whyCardioNotDiet && (
-            <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">
-              <strong className="text-surface-300">Why cardio ≠ eating less:</strong>{' '}
-              {prescription.whyCardioNotDiet}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-surface-400">Target:</span>
+                  <span className="ml-1 font-semibold text-surface-200">
+                    {prescription.prescribedMinutesPerDay} min/day
+                  </span>
+                </div>
+                {prescription.prescribedMinutesPerWeek && (
+                  <div>
+                    <span className="text-surface-400">Weekly:</span>
+                    <span className="ml-1 font-semibold text-surface-200">
+                      {prescription.prescribedMinutesPerWeek} min
+                    </span>
+                  </div>
+                )}
+                {prescription.shortfallKcalPerDay && (
+                  <div>
+                    <span className="text-surface-400">Burns:</span>
+                    <span className="ml-1 font-semibold text-surface-200">
+                      ~{prescription.shortfallKcalPerDay} kcal/day
+                    </span>
+                  </div>
+                )}
+              </div>
+              {prescription.hitCap && prescription.capMinutesPerDay && (
+                <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded text-xs text-warning-300">
+                  Cardio capped at {prescription.capMinutesPerDay} min/day
+                </div>
+              )}
+              {prescription.whyCardioNotDiet && (
+                <div className="mt-3 p-2 bg-surface-900/50 rounded text-xs text-surface-400">
+                  <strong className="text-surface-300">Why cardio helps:</strong>{' '}
+                  {prescription.whyCardioNotDiet}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* Today's Logs */}
+      {/* Today's Logs - Compact */}
       {todayLogs.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-surface-400 uppercase tracking-wider">Today&apos;s Sessions</p>
+        <div className="space-y-1">
           {todayLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-center justify-between p-2 bg-surface-800/50 rounded-lg"
+              className="flex items-center justify-between py-1 px-2 bg-surface-800/30 rounded"
             >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-surface-200">{log.minutes} min</span>
-                <span className="text-xs text-surface-400 capitalize">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="font-medium text-surface-200">{log.minutes} min</span>
+                <span className="text-surface-500 capitalize">
                   {log.modality.replace('_', ' ')}
                 </span>
-                {log.notes && (
-                  <span className="text-xs text-surface-500">• {log.notes}</span>
-                )}
               </div>
               <button
                 onClick={() => deleteLog(log.id)}
-                className="p-1 text-surface-500 hover:text-danger-400 transition-colors"
+                className="p-0.5 text-surface-600 hover:text-danger-400 transition-colors"
                 aria-label="Delete cardio log"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>

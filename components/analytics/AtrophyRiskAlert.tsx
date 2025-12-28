@@ -124,53 +124,54 @@ export function AtrophyRiskAlert({
           )}
         </div>
 
-        {/* Muscle list */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {sortedMuscles.map((muscle) => {
-            const deficit = muscle.landmarks.mev - muscle.totalSets;
-            return (
-              <div
-                key={muscle.muscleGroup}
-                className={`px-2.5 py-1.5 rounded-lg text-sm ${
-                  isOnCut
-                    ? 'bg-danger-500/10 border border-danger-500/20'
-                    : 'bg-warning-500/10 border border-warning-500/20'
-                }`}
-              >
-                <span className={`font-medium ${isOnCut ? 'text-danger-300' : 'text-warning-300'}`}>
-                  {formatMuscleName(muscle.muscleGroup)}
-                </span>
-                <span className="text-surface-500 ml-1.5">
-                  {muscle.totalSets}/{muscle.landmarks.mev} sets
-                </span>
-                <span className={`text-xs ml-1 ${isOnCut ? 'text-danger-400' : 'text-warning-400'}`}>
-                  (+{deficit} needed)
-                </span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Expandable suggestions */}
-        <div className="mt-3">
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className={`flex items-center gap-1 text-sm ${
-              isOnCut ? 'text-danger-400 hover:text-danger-300' : 'text-primary-400 hover:text-primary-300'
-            } transition-colors`}
+        {/* Expand/collapse toggle */}
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`mt-2 flex items-center gap-1 text-sm ${
+            isOnCut ? 'text-danger-400 hover:text-danger-300' : 'text-primary-400 hover:text-primary-300'
+          } transition-colors`}
+        >
+          {isExpanded ? 'Hide' : 'Show'} details
+          <svg
+            className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
           >
-            {isExpanded ? 'Hide' : 'Show'} recommendations
-            <svg
-              className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
 
-          {isExpanded && (
+        {isExpanded && (
+          <>
+            {/* Muscle list */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {sortedMuscles.map((muscle) => {
+                const deficit = muscle.landmarks.mev - muscle.totalSets;
+                return (
+                  <div
+                    key={muscle.muscleGroup}
+                    className={`px-2.5 py-1.5 rounded-lg text-sm ${
+                      isOnCut
+                        ? 'bg-danger-500/10 border border-danger-500/20'
+                        : 'bg-warning-500/10 border border-warning-500/20'
+                    }`}
+                  >
+                    <span className={`font-medium ${isOnCut ? 'text-danger-300' : 'text-warning-300'}`}>
+                      {formatMuscleName(muscle.muscleGroup)}
+                    </span>
+                    <span className="text-surface-500 ml-1.5">
+                      {muscle.totalSets}/{muscle.landmarks.mev} sets
+                    </span>
+                    <span className={`text-xs ml-1 ${isOnCut ? 'text-danger-400' : 'text-warning-400'}`}>
+                      (+{deficit} needed)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Suggestions */}
             <div className="mt-3 space-y-2">
               {getSuggestions().map((suggestion, i) => (
                 <div
@@ -182,8 +183,8 @@ export function AtrophyRiskAlert({
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </>
+        )}
 
         {/* Cut-specific science callout */}
         {isOnCut && isExpanded && (

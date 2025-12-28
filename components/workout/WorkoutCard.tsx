@@ -2,28 +2,30 @@
 
 import { ReactNode, memo } from 'react';
 
-interface DashboardCardProps {
+interface WorkoutCardProps {
   id: string;
   children: ReactNode;
   isEditMode: boolean;
   isFirst: boolean;
   isLast: boolean;
   isHidden?: boolean;
+  hiddenLabel?: string;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onToggleVisibility?: () => void;
 }
 
-export const DashboardCard = memo(function DashboardCard({
+export const WorkoutCard = memo(function WorkoutCard({
   children,
   isEditMode,
   isFirst,
   isLast,
   isHidden = false,
+  hiddenLabel = 'Hidden from workouts',
   onMoveUp,
   onMoveDown,
   onToggleVisibility,
-}: DashboardCardProps) {
+}: WorkoutCardProps) {
   if (!isEditMode) {
     return <>{children}</>;
   }
@@ -67,7 +69,7 @@ export const DashboardCard = memo(function DashboardCard({
         isHidden ? 'ring-surface-600/50' : 'ring-primary-500/30'
       }`}>
         {/* Top controls: drag handle and hide/show button */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
           {/* Drag handle indicator */}
           <div className={`px-3 py-1 rounded-full border ${
             isHidden
@@ -114,7 +116,7 @@ export const DashboardCard = memo(function DashboardCard({
         {isHidden && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="bg-surface-900/80 px-4 py-2 rounded-lg border border-surface-700">
-              <span className="text-sm text-surface-400 font-medium">Hidden from dashboard</span>
+              <span className="text-sm text-surface-400 font-medium">{hiddenLabel}</span>
             </div>
           </div>
         )}

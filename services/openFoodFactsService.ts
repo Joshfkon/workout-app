@@ -3,6 +3,27 @@
 
 import { lookupBarcode as lookupBarcodeUSDA } from './usdaService';
 
+/**
+ * Parse gram weight from a serving size string
+ * Examples: "30g" -> 30, "100g" -> 100, "1 cup (240g)" -> 240, "2 oz" -> 56.7
+ */
+function parseGramsFromServingSize(servingSize: string): number {
+  // Try to find grams pattern like "30g" or "(240g)"
+  const gramsMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*g(?:rams?)?/i);
+  if (gramsMatch) {
+    return parseFloat(gramsMatch[1]);
+  }
+
+  // Try to find ounces and convert
+  const ozMatch = servingSize.match(/(\d+(?:\.\d+)?)\s*oz/i);
+  if (ozMatch) {
+    return parseFloat(ozMatch[1]) * 28.3495;
+  }
+
+  // Default to 100g if can't parse
+  return 100;
+}
+
 export interface OpenFoodFactsProduct {
   code: string;
   product_name: string;
@@ -73,19 +94,25 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResul
   // Fall back to USDA if not found in Open Food Facts
   try {
     const usdaResult = await lookupBarcodeUSDA(cleanBarcode);
-    
+
     if (usdaResult.food) {
+      // USDA returns nutrition per 100g, but servingSize may differ
+      // Parse the actual gram weight and scale nutrition accordingly
+      const servingGrams = parseGramsFromServingSize(usdaResult.food.servingSize);
+      const scaleFactor = servingGrams / 100;
+
       return {
         found: true,
         product: {
           name: usdaResult.food.name,
           brand: usdaResult.food.brandName,
           servingSize: usdaResult.food.servingSize,
-          servingQuantity: 100,
-          calories: usdaResult.food.calories,
-          protein: usdaResult.food.protein,
-          carbs: usdaResult.food.carbs,
-          fat: usdaResult.food.fat,
+          servingQuantity: servingGrams,
+          // Scale nutrition from per-100g to per-serving
+          calories: Math.round(usdaResult.food.calories * scaleFactor),
+          protein: Math.round(usdaResult.food.protein * scaleFactor * 10) / 10,
+          carbs: Math.round(usdaResult.food.carbs * scaleFactor * 10) / 10,
+          fat: Math.round(usdaResult.food.fat * scaleFactor * 10) / 10,
           barcode: cleanBarcode,
         },
       };
