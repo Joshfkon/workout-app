@@ -1,24 +1,25 @@
 # Social Features Implementation Plan
 
-> **Status**: Phase 4 Complete - Ready for Phase 5
+> **Status**: Phase 5 Complete - Ready for Phase 6
 > **Last Updated**: 2025-12-28
-> **Current Sprint**: Sprint 5 - Leaderboards (Starting)
+> **Current Sprint**: Sprint 6 - Notifications (Ready)
 >
 > ### Completed Phases
 > - Phase 1: User Profiles (Complete)
 > - Phase 2: Follow System (Complete)
 > - Phase 3: Activity Feed (Complete)
 > - Phase 4: Workout Sharing (Complete)
+> - Phase 5: Leaderboards (Complete)
 >
-> ### Phase 4 Summary (Completed)
-> - [x] Database migrations for shared workouts and search
-> - [x] Share workout modal with privacy options
-> - [x] Public workout browser with filters (type, difficulty, muscle groups)
-> - [x] Full-text search for workout discovery (20241228000008)
-> - [x] Workout import/copy functionality
-> - [x] Save/bookmark feature with optimistic updates
-> - [x] Shareable deep links for workouts
-> - [x] MySharedWorkouts analytics component on profile
+> ### Phase 5 Summary (Completed)
+> - [x] Database migration with leaderboard tables and RLS (20241228000009)
+> - [x] Leaderboard calculation functions (weekly volume, workouts completed)
+> - [x] get_leaderboard and get_user_rank RPC functions
+> - [x] Friend groups tables for private leaderboards
+> - [x] LeaderboardEntry, LeaderboardTable, UserRankCard components
+> - [x] Leaderboards page with tabs for different metrics
+> - [x] Leaderboards link added to sidebar navigation
+> - [x] useLeaderboard hook with pagination
 >
 > **Target Competitor**: Hevy (primary social fitness app benchmark)
 
@@ -991,16 +992,25 @@ export async function calculateExercise1RMLeaderboards() {
 
 ### 5.5 Implementation Tasks
 
-- [ ] Create database migrations for leaderboards
-- [ ] Build leaderboard calculation jobs
-- [ ] Create leaderboard UI components
-- [ ] Implement exercise-specific leaderboards
-- [ ] Add friend group creation and management
-- [ ] Create private group leaderboards
-- [ ] Add leaderboard opt-out toggle
-- [ ] Build dashboard leaderboard widget
-- [ ] Implement rank change indicators
-- [ ] Add weight class divisions (optional)
+- [x] Create database migrations for leaderboards (`20241228000009_add_leaderboards.sql`)
+- [x] Build leaderboard calculation functions (weekly volume, workouts)
+- [x] Create leaderboard UI components (`LeaderboardEntry`, `LeaderboardTable`, `UserRankCard`)
+- [ ] Implement exercise-specific leaderboards (1RM tracking) - future
+- [x] Add friend group tables and RLS policies
+- [ ] Create private group leaderboards UI - future
+- [x] Add leaderboard opt-out toggle (`show_on_leaderboards` column)
+- [ ] Build dashboard leaderboard widget - future
+- [x] Implement rank change indicators
+- [ ] Add weight class divisions (optional) - future
+
+**Completed Files:**
+- `supabase/migrations/20241228000009_add_leaderboards.sql` - Tables, RLS, calculation functions
+- `hooks/useLeaderboard.ts` - Leaderboard data fetching hook
+- `components/social/leaderboards/LeaderboardEntry.tsx` - Single entry display
+- `components/social/leaderboards/LeaderboardTable.tsx` - Leaderboard list
+- `components/social/leaderboards/UserRankCard.tsx` - User's current rank display
+- `components/social/leaderboards/index.ts` - Component exports
+- `app/(dashboard)/dashboard/leaderboards/page.tsx` - Leaderboards page
 
 ---
 
