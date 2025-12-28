@@ -87,15 +87,60 @@ export default function SharedWorkoutDetailPage() {
         }
 
         // Transform data
+        const workoutData = data as {
+          id: string;
+          user_id: string;
+          source_workout_id: string | null;
+          source_mesocycle_id: string | null;
+          title: string;
+          description: string | null;
+          workout_data: SharedWorkoutWithProfile['workout_data'];
+          share_type: SharedWorkoutWithProfile['share_type'];
+          difficulty: SharedWorkoutWithProfile['difficulty'];
+          duration_weeks: number | null;
+          target_muscle_groups: string[];
+          save_count: number;
+          copy_count: number;
+          view_count: number;
+          is_public: boolean;
+          created_at: string;
+          updated_at: string;
+          user_profiles: {
+            id: string;
+            user_id: string;
+            username: string;
+            display_name: string | null;
+            avatar_url: string | null;
+            training_experience: string | null;
+            bio: string | null;
+          };
+        };
+
         setWorkout({
-          ...data,
+          id: workoutData.id,
+          user_id: workoutData.user_id,
+          source_workout_id: workoutData.source_workout_id,
+          source_mesocycle_id: workoutData.source_mesocycle_id,
+          title: workoutData.title,
+          description: workoutData.description,
+          workout_data: workoutData.workout_data,
+          share_type: workoutData.share_type,
+          difficulty: workoutData.difficulty,
+          duration_weeks: workoutData.duration_weeks,
+          target_muscle_groups: workoutData.target_muscle_groups,
+          save_count: workoutData.save_count,
+          copy_count: workoutData.copy_count,
+          view_count: workoutData.view_count,
+          is_public: workoutData.is_public,
+          created_at: workoutData.created_at,
+          updated_at: workoutData.updated_at,
           user_profile: {
-            id: data.user_profiles.id,
-            user_id: data.user_profiles.user_id,
-            username: data.user_profiles.username,
-            display_name: data.user_profiles.display_name,
-            avatar_url: data.user_profiles.avatar_url,
-            bio: data.user_profiles.bio,
+            id: workoutData.user_profiles.id,
+            user_id: workoutData.user_profiles.user_id,
+            username: workoutData.user_profiles.username,
+            display_name: workoutData.user_profiles.display_name,
+            avatar_url: workoutData.user_profiles.avatar_url,
+            bio: workoutData.user_profiles.bio,
             profile_visibility: 'public' as const,
             show_workouts: true,
             show_stats: true,
@@ -104,7 +149,7 @@ export default function SharedWorkoutDetailPage() {
             following_count: 0,
             workout_count: 0,
             total_volume_kg: 0,
-            training_experience: data.user_profiles.training_experience,
+            training_experience: workoutData.user_profiles.training_experience as SharedWorkoutWithProfile['user_profile']['training_experience'],
             primary_goal: null,
             gym_name: null,
             badges: [],
