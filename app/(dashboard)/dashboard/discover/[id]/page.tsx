@@ -183,8 +183,8 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: saveError } = await supabase
-      .from('saved_workouts')
-      .insert({ user_id: user.id, shared_workout_id: id });
+      .from('saved_workouts' as never)
+      .insert({ user_id: user.id, shared_workout_id: id } as never);
 
     if (saveError) {
       return { success: false, error: saveError.message };
@@ -203,7 +203,7 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: deleteError } = await supabase
-      .from('saved_workouts')
+      .from('saved_workouts' as never)
       .delete()
       .eq('user_id', user.id)
       .eq('shared_workout_id', id);
