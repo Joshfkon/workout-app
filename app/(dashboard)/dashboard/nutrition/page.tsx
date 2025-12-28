@@ -1041,7 +1041,7 @@ export default function NutritionPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-surface-100">Nutrition Tracking</h1>
+          <h1 className="text-3xl font-bold text-surface-100">Food Tracking</h1>
           <p className="text-surface-400 mt-1">Track your daily food intake and weight</p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -1061,43 +1061,38 @@ export default function NutritionPage() {
       </div>
 
       {/* Date Selector */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => changeDate(-1)}
-            >
-              ← Previous
-            </Button>
-            <div className="text-center">
-              <div className="text-lg font-semibold text-surface-100">{dateDisplay}</div>
-              <div className="text-sm text-surface-400">
-                {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric' })}
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => changeDate(1)}
-              disabled={isToday}
-            >
-              Next →
-            </Button>
-          </div>
+      <div className="flex items-center justify-center gap-4">
+        <button
+          onClick={() => changeDate(-1)}
+          className="p-2 text-surface-400 hover:text-surface-100 transition-colors"
+          aria-label="Previous day"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div className="text-center min-w-[140px]">
+          <span className="text-base font-medium text-surface-100">{dateDisplay}</span>
           {!isToday && (
-            <div className="mt-3 text-center">
-              <button
-                onClick={goToToday}
-                className="text-sm text-primary-400 hover:text-primary-300"
-              >
-                Jump to Today
-              </button>
-            </div>
+            <button
+              onClick={goToToday}
+              className="ml-2 text-xs text-primary-400 hover:text-primary-300"
+            >
+              Today
+            </button>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <button
+          onClick={() => changeDate(1)}
+          disabled={isToday}
+          className="p-2 text-surface-400 hover:text-surface-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          aria-label="Next day"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
 
       {/* Daily Summary */}
       <Card>
