@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
+import { WorkoutCard } from '@/components/workout/WorkoutCard';
 
 // Dynamically import ExercisesPage to avoid code duplication
 const ExercisesTab = dynamic(() => import('../exercises/page'), {
@@ -214,6 +215,25 @@ function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: num
 
 type TabType = 'workouts' | 'mesocycle' | 'history' | 'exercises';
 
+// Card identifiers for reordering in the Workouts tab
+type WorkoutTabCardId =
+  | 'active-mesocycle'
+  | 'ai-planned'
+  | 'in-progress'
+  | 'muscle-recovery'
+  | 'templates';
+
+const DEFAULT_WORKOUT_CARD_ORDER: WorkoutTabCardId[] = [
+  'active-mesocycle',
+  'ai-planned',
+  'in-progress',
+  'muscle-recovery',
+  'templates',
+];
+
+const WORKOUT_CARD_ORDER_STORAGE_KEY = 'workout-card-order';
+const WORKOUT_HIDDEN_CARDS_STORAGE_KEY = 'workout-hidden-cards';
+
 export default function WorkoutPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('workouts');
@@ -254,6 +274,11 @@ export default function WorkoutPage() {
   const { preferences } = useUserPreferences();
   const unit = preferences.units;
 
+  // Edit mode state for rearranging workout cards
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [cardOrder, setCardOrder] = useState<WorkoutTabCardId[]>(DEFAULT_WORKOUT_CARD_ORDER);
+  const [hiddenCards, setHiddenCards] = useState<Set<WorkoutTabCardId>>(new Set());
+
   const supabase = createUntypedClient();
 
   useEffect(() => {
@@ -261,6 +286,83 @@ export default function WorkoutPage() {
     fetchTemplates();
     fetchMesocycles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load card order and hidden cards from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedOrder = localStorage.getItem(WORKOUT_CARD_ORDER_STORAGE_KEY);
+      if (savedOrder) {
+        const parsed = JSON.parse(savedOrder) as WorkoutTabCardId[];
+        // Validate that all cards are present (in case we add new cards in the future)
+        const validOrder = DEFAULT_WORKOUT_CARD_ORDER.filter(id => parsed.includes(id));
+        const newCards = DEFAULT_WORKOUT_CARD_ORDER.filter(id => !parsed.includes(id));
+        setCardOrder([...parsed.filter(id => DEFAULT_WORKOUT_CARD_ORDER.includes(id)), ...newCards]);
+      }
+    } catch (e) {
+      console.error('Failed to load card order:', e);
+    }
+
+    try {
+      const savedHidden = localStorage.getItem(WORKOUT_HIDDEN_CARDS_STORAGE_KEY);
+      if (savedHidden) {
+        const parsed = JSON.parse(savedHidden) as WorkoutTabCardId[];
+        // Only keep valid card IDs
+        const validHidden = parsed.filter(id => DEFAULT_WORKOUT_CARD_ORDER.includes(id));
+        setHiddenCards(new Set(validHidden));
+      }
+    } catch (e) {
+      console.error('Failed to load hidden cards:', e);
+    }
+  }, []);
+
+  // Save card order to localStorage
+  const saveCardOrder = useCallback((newOrder: WorkoutTabCardId[]) => {
+    setCardOrder(newOrder);
+    try {
+      localStorage.setItem(WORKOUT_CARD_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
+    } catch (e) {
+      console.error('Failed to save card order:', e);
+    }
+  }, []);
+
+  // Move card up in order
+  const moveCardUp = useCallback((cardId: WorkoutTabCardId) => {
+    const index = cardOrder.indexOf(cardId);
+    if (index > 0) {
+      const newOrder = [...cardOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      saveCardOrder(newOrder);
+    }
+  }, [cardOrder, saveCardOrder]);
+
+  // Move card down in order
+  const moveCardDown = useCallback((cardId: WorkoutTabCardId) => {
+    const index = cardOrder.indexOf(cardId);
+    if (index < cardOrder.length - 1) {
+      const newOrder = [...cardOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      saveCardOrder(newOrder);
+    }
+  }, [cardOrder, saveCardOrder]);
+
+  // Toggle card visibility (hide/show)
+  const toggleCardVisibility = useCallback((cardId: WorkoutTabCardId) => {
+    setHiddenCards(prev => {
+      const newHidden = new Set(prev);
+      if (newHidden.has(cardId)) {
+        newHidden.delete(cardId);
+      } else {
+        newHidden.add(cardId);
+      }
+      // Save to localStorage
+      try {
+        localStorage.setItem(WORKOUT_HIDDEN_CARDS_STORAGE_KEY, JSON.stringify(Array.from(newHidden)));
+      } catch (e) {
+        console.error('Failed to save hidden cards:', e);
+      }
+      return newHidden;
+    });
   }, []);
 
   async function fetchTemplates() {
@@ -1032,12 +1134,38 @@ export default function WorkoutPage() {
           <h1 className="text-2xl font-bold text-surface-100">Workouts</h1>
           <p className="text-surface-400 mt-1">Start a workout or view planned sessions</p>
         </div>
-        <Button onClick={handleQuickStart} isLoading={isStarting}>
-          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Workout
-        </Button>
+        <div className="flex items-center gap-2">
+          {activeTab === 'workouts' && (
+            <Button
+              variant={isEditMode ? 'primary' : 'ghost'}
+              size="sm"
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={isEditMode ? 'bg-primary-500 hover:bg-primary-600' : ''}
+            >
+              {isEditMode ? (
+                <>
+                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Done
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </>
+              )}
+            </Button>
+          )}
+          <Button onClick={handleQuickStart} isLoading={isStarting}>
+            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Workout
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -1085,106 +1213,302 @@ export default function WorkoutPage() {
       </div>
 
       {activeTab === 'workouts' ? (
-        <>
-          {/* Active Mesocycle */}
-          {activeMesocycle && (
-            <Card className="border border-primary-500/20 bg-gradient-to-r from-primary-500/5 to-transparent">
-              <CardContent className="p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="info" size="sm">Week {activeMesocycle.currentWeek}/{activeMesocycle.weeks}</Badge>
-                      <span className="text-sm text-surface-400 capitalize">{activeMesocycle.split.replace('_', '/')} Split</span>
-                    </div>
-                    <h3 className="text-lg font-semibold text-surface-100 mt-1">{activeMesocycle.name}</h3>
-                    <p className="text-sm text-surface-400">
-                      {activeMesocycle.workoutsThisWeek} of {activeMesocycle.daysPerWeek} workouts this week
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-1.5">
-                      {Array.from({ length: activeMesocycle.daysPerWeek }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`w-3 h-3 rounded-full ${
-                            i < activeMesocycle.workoutsThisWeek
-                              ? 'bg-success-500'
-                              : 'bg-surface-700'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => setActiveTab('mesocycle')}>
-                      View Plan →
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        <div className={`space-y-6 ${isEditMode ? 'pl-14' : ''}`}>
+          {/* Render cards in order based on cardOrder */}
+          {cardOrder.map((cardId, index) => {
+            const isHidden = hiddenCards.has(cardId);
+            // Skip hidden cards when not in edit mode
+            if (isHidden && !isEditMode) return null;
 
-          {/* AI-Planned Workout */}
-          <Card className="border border-accent-500/30 bg-gradient-to-r from-accent-500/10 via-primary-500/5 to-transparent overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-accent-500/20 to-transparent rounded-bl-full" />
-            <CardContent className="p-6 relative">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-500 to-primary-500 flex items-center justify-center flex-shrink-0">
-                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-semibold text-surface-100">AI-Planned Workout</h3>
-                      <Badge variant="info" size="sm">Smart</Badge>
-                    </div>
-                    <p className="text-surface-400 text-sm">
-                      Get a personalized workout based on your recovery, goals, and training history
-                    </p>
-                  </div>
-                </div>
-                <Link href="/dashboard/workout/new?ai=true">
-                  <Button className="whitespace-nowrap bg-gradient-to-r from-accent-500 to-primary-500 hover:from-accent-600 hover:to-primary-600">
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Generate Workout
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+            // Get visible cards for determining first/last
+            const visibleCards = cardOrder.filter(id => isEditMode || !hiddenCards.has(id));
+            const visibleIndex = visibleCards.indexOf(cardId);
+            const isFirst = visibleIndex === 0;
+            const isLast = visibleIndex === visibleCards.length - 1;
 
-          {/* In-progress workout */}
-          {inProgressWorkout && (
-            <Card variant="elevated" className="border-2 border-warning-500/50">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="warning">In Progress</Badge>
-                      <h3 className="text-lg font-semibold text-surface-100">
-                        Continue Your Workout
-                      </h3>
-                    </div>
-                    <p className="text-surface-400 mt-1">
-                      {inProgressWorkout.exercise_count} exercises • Started {formatDate(inProgressWorkout.planned_date)}
-                    </p>
-                  </div>
-                  <Link href={`/dashboard/workout/${inProgressWorkout.id}`}>
-                    <Button>Continue</Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+            // Render each card based on its ID
+            switch (cardId) {
+              case 'active-mesocycle':
+                // Only render if there's an active mesocycle
+                if (!activeMesocycle) return null;
+                return (
+                  <WorkoutCard
+                    key={cardId}
+                    id={cardId}
+                    isEditMode={isEditMode}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    isHidden={isHidden}
+                    onMoveUp={() => moveCardUp(cardId)}
+                    onMoveDown={() => moveCardDown(cardId)}
+                    onToggleVisibility={() => toggleCardVisibility(cardId)}
+                  >
+                    <Card className="border border-primary-500/20 bg-gradient-to-r from-primary-500/5 to-transparent">
+                      <CardContent className="p-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="info" size="sm">Week {activeMesocycle.currentWeek}/{activeMesocycle.weeks}</Badge>
+                              <span className="text-sm text-surface-400 capitalize">{activeMesocycle.split.replace('_', '/')} Split</span>
+                            </div>
+                            <h3 className="text-lg font-semibold text-surface-100 mt-1">{activeMesocycle.name}</h3>
+                            <p className="text-sm text-surface-400">
+                              {activeMesocycle.workoutsThisWeek} of {activeMesocycle.daysPerWeek} workouts this week
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-1.5">
+                              {Array.from({ length: activeMesocycle.daysPerWeek }).map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={`w-3 h-3 rounded-full ${
+                                    i < activeMesocycle.workoutsThisWeek
+                                      ? 'bg-success-500'
+                                      : 'bg-surface-700'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setActiveTab('mesocycle')}>
+                              View Plan →
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </WorkoutCard>
+                );
 
-          {/* Muscle Recovery Card */}
-          <MuscleRecoveryCard />
+              case 'ai-planned':
+                return (
+                  <WorkoutCard
+                    key={cardId}
+                    id={cardId}
+                    isEditMode={isEditMode}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    isHidden={isHidden}
+                    onMoveUp={() => moveCardUp(cardId)}
+                    onMoveDown={() => moveCardDown(cardId)}
+                    onToggleVisibility={() => toggleCardVisibility(cardId)}
+                  >
+                    <Card className="border border-accent-500/30 bg-gradient-to-r from-accent-500/10 via-primary-500/5 to-transparent overflow-hidden relative">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-accent-500/20 to-transparent rounded-bl-full" />
+                      <CardContent className="p-6 relative">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <div className="flex items-start gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent-500 to-primary-500 flex items-center justify-center flex-shrink-0">
+                              <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="text-lg font-semibold text-surface-100">AI-Planned Workout</h3>
+                                <Badge variant="info" size="sm">Smart</Badge>
+                              </div>
+                              <p className="text-surface-400 text-sm">
+                                Get a personalized workout based on your recovery, goals, and training history
+                              </p>
+                            </div>
+                          </div>
+                          <Link href="/dashboard/workout/new?ai=true">
+                            <Button className="whitespace-nowrap bg-gradient-to-r from-accent-500 to-primary-500 hover:from-accent-600 hover:to-primary-600">
+                              <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              Generate Workout
+                            </Button>
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </WorkoutCard>
+                );
 
-          {/* Empty state */}
-          {!isLoading && !inProgressWorkout && !activeMesocycle && (
+              case 'in-progress':
+                // Only render if there's an in-progress workout
+                if (!inProgressWorkout) return null;
+                return (
+                  <WorkoutCard
+                    key={cardId}
+                    id={cardId}
+                    isEditMode={isEditMode}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    isHidden={isHidden}
+                    onMoveUp={() => moveCardUp(cardId)}
+                    onMoveDown={() => moveCardDown(cardId)}
+                    onToggleVisibility={() => toggleCardVisibility(cardId)}
+                  >
+                    <Card variant="elevated" className="border-2 border-warning-500/50">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant="warning">In Progress</Badge>
+                              <h3 className="text-lg font-semibold text-surface-100">
+                                Continue Your Workout
+                              </h3>
+                            </div>
+                            <p className="text-surface-400 mt-1">
+                              {inProgressWorkout.exercise_count} exercises • Started {formatDate(inProgressWorkout.planned_date)}
+                            </p>
+                          </div>
+                          <Link href={`/dashboard/workout/${inProgressWorkout.id}`}>
+                            <Button>Continue</Button>
+                          </Link>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </WorkoutCard>
+                );
+
+              case 'muscle-recovery':
+                return (
+                  <WorkoutCard
+                    key={cardId}
+                    id={cardId}
+                    isEditMode={isEditMode}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    isHidden={isHidden}
+                    onMoveUp={() => moveCardUp(cardId)}
+                    onMoveDown={() => moveCardDown(cardId)}
+                    onToggleVisibility={() => toggleCardVisibility(cardId)}
+                  >
+                    <MuscleRecoveryCard />
+                  </WorkoutCard>
+                );
+
+              case 'templates':
+                return (
+                  <WorkoutCard
+                    key={cardId}
+                    id={cardId}
+                    isEditMode={isEditMode}
+                    isFirst={isFirst}
+                    isLast={isLast}
+                    isHidden={isHidden}
+                    onMoveUp={() => moveCardUp(cardId)}
+                    onMoveDown={() => moveCardDown(cardId)}
+                    onToggleVisibility={() => toggleCardVisibility(cardId)}
+                  >
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <CardTitle>Workout Templates</CardTitle>
+                          <div className="flex gap-2">
+                            <Button variant="primary" size="sm" onClick={() => setShowCreateTemplate(true)}>
+                              + Template
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setShowCreateFolder(true)}>
+                              📁
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Custom Templates - Folders */}
+                        {folders.map((folder) => (
+                          <div key={folder.id} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={() => toggleFolder(folder.id)}
+                                className="flex items-center gap-2 text-sm font-medium text-surface-300 hover:text-surface-100"
+                              >
+                                <span style={{ color: folder.color }}>📁</span>
+                                {folder.name} ({folder.templates.length})
+                                <span className="text-xs">{folder.isExpanded ? '▼' : '▶'}</span>
+                              </button>
+                              <div className="relative">
+                                <button
+                                  onClick={() => setOpenMenu(openMenu === folder.id ? null : folder.id)}
+                                  className="p-1 text-surface-500 hover:text-surface-300"
+                                >
+                                  •••
+                                </button>
+                                {openMenu === folder.id && (
+                                  <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 min-w-[120px]">
+                                    <button
+                                      onClick={() => { setTemplateFolderId(folder.id); setShowCreateTemplate(true); setOpenMenu(null); }}
+                                      className="w-full px-3 py-2 text-left text-sm text-surface-200 hover:bg-surface-700"
+                                    >
+                                      Add Template
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFolder(folder.id)}
+                                      className="w-full px-3 py-2 text-left text-sm text-danger-400 hover:bg-surface-700"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {folder.isExpanded && folder.templates.length > 0 && (
+                              <div className="grid gap-2 sm:grid-cols-2 pl-5">
+                                {folder.templates.map((template) => (
+                                  <TemplateCard
+                                    key={template.id}
+                                    template={template}
+                                    formatExerciseList={formatExerciseList}
+                                    onDelete={() => handleDeleteTemplate(template.id)}
+                                    menuOpen={openMenu === template.id}
+                                    onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Unfoldered Custom Templates */}
+                        {unfolderedTemplates.length > 0 && (
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            {unfolderedTemplates.map((template) => (
+                              <TemplateCard
+                                key={template.id}
+                                template={template}
+                                formatExerciseList={formatExerciseList}
+                                onDelete={() => handleDeleteTemplate(template.id)}
+                                menuOpen={openMenu === template.id}
+                                onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Quick Start Templates */}
+                        <div>
+                          <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">Quick Start</p>
+                          <div className="grid gap-2 grid-cols-3 sm:grid-cols-6">
+                            {QUICK_TEMPLATES.map((template) => (
+                              <Link
+                                key={template.name}
+                                href={`/dashboard/workout/new?template=${encodeURIComponent(template.name)}&muscles=${template.muscleIds}`}
+                                className="p-3 bg-surface-800/50 rounded-lg text-center hover:bg-surface-800 transition-colors group"
+                              >
+                                <span className="text-xl block">{template.icon}</span>
+                                <span className="text-xs font-medium text-surface-400 group-hover:text-surface-200">
+                                  {template.name}
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </WorkoutCard>
+                );
+
+              default:
+                return null;
+            }
+          })}
+
+          {/* Empty state - shown outside of the card order system */}
+          {!isLoading && !inProgressWorkout && !activeMesocycle && !isEditMode && (
             <Card variant="elevated" className="overflow-hidden">
               <div className="p-8 text-center">
                 <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
@@ -1207,114 +1531,7 @@ export default function WorkoutPage() {
               </div>
             </Card>
           )}
-
-          {/* Workout templates */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Workout Templates</CardTitle>
-                <div className="flex gap-2">
-                  <Button variant="primary" size="sm" onClick={() => setShowCreateTemplate(true)}>
-                    + Template
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setShowCreateFolder(true)}>
-                    📁
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Custom Templates - Folders */}
-              {folders.map((folder) => (
-                <div key={folder.id} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => toggleFolder(folder.id)}
-                      className="flex items-center gap-2 text-sm font-medium text-surface-300 hover:text-surface-100"
-                    >
-                      <span style={{ color: folder.color }}>📁</span>
-                      {folder.name} ({folder.templates.length})
-                      <span className="text-xs">{folder.isExpanded ? '▼' : '▶'}</span>
-                    </button>
-                    <div className="relative">
-                      <button
-                        onClick={() => setOpenMenu(openMenu === folder.id ? null : folder.id)}
-                        className="p-1 text-surface-500 hover:text-surface-300"
-                      >
-                        •••
-                      </button>
-                      {openMenu === folder.id && (
-                        <div className="absolute right-0 top-full mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 min-w-[120px]">
-                          <button
-                            onClick={() => { setTemplateFolderId(folder.id); setShowCreateTemplate(true); setOpenMenu(null); }}
-                            className="w-full px-3 py-2 text-left text-sm text-surface-200 hover:bg-surface-700"
-                          >
-                            Add Template
-                          </button>
-                          <button
-                            onClick={() => handleDeleteFolder(folder.id)}
-                            className="w-full px-3 py-2 text-left text-sm text-danger-400 hover:bg-surface-700"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {folder.isExpanded && folder.templates.length > 0 && (
-                    <div className="grid gap-2 sm:grid-cols-2 pl-5">
-                      {folder.templates.map((template) => (
-                        <TemplateCard
-                          key={template.id}
-                          template={template}
-                          formatExerciseList={formatExerciseList}
-                          onDelete={() => handleDeleteTemplate(template.id)}
-                          menuOpen={openMenu === template.id}
-                          onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Unfoldered Custom Templates */}
-              {unfolderedTemplates.length > 0 && (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {unfolderedTemplates.map((template) => (
-                    <TemplateCard
-                      key={template.id}
-                      template={template}
-                      formatExerciseList={formatExerciseList}
-                      onDelete={() => handleDeleteTemplate(template.id)}
-                      menuOpen={openMenu === template.id}
-                      onMenuToggle={() => setOpenMenu(openMenu === template.id ? null : template.id)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {/* Quick Start Templates */}
-              <div>
-                <p className="text-xs text-surface-500 uppercase tracking-wide mb-2">Quick Start</p>
-                <div className="grid gap-2 grid-cols-3 sm:grid-cols-6">
-                  {QUICK_TEMPLATES.map((template) => (
-                    <Link
-                      key={template.name}
-                      href={`/dashboard/workout/new?template=${encodeURIComponent(template.name)}&muscles=${template.muscleIds}`}
-                      className="p-3 bg-surface-800/50 rounded-lg text-center hover:bg-surface-800 transition-colors group"
-                    >
-                      <span className="text-xl block">{template.icon}</span>
-                      <span className="text-xs font-medium text-surface-400 group-hover:text-surface-200">
-                        {template.name}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </>
+        </div>
       ) : activeTab === 'mesocycle' ? (
         /* Mesocycle Tab Content */
         <div className="space-y-6">
