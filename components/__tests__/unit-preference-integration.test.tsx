@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SetInputRow } from '../workout/SetInputRow';
 import { formatWeight, formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
@@ -62,53 +62,47 @@ describe('Unit Preference Integration', () => {
 
       const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
       const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
 
       fireEvent.change(weightInput, { target: { value: '100' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
-      // Click proceed to go to feedback phase
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Click proceed button to go to feedback phase (has aria-label "Log set 1")
+      const proceedButton = screen.getByRole('button', { name: /log set 1/i });
+      fireEvent.click(proceedButton);
+
+      // Wait for feedback phase to render - look for RIR selector text
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
 
       // Now we're in feedback phase - find RIR selector buttons
       // RIRSelector shows buttons with labels like "2-3", "1", "4+", "Maxed"
       const allButtons = screen.getAllByRole('button');
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
         btn.textContent?.includes('Good')
       );
-      
+
       expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
+      fireEvent.click(rirButton!);
 
       // Find form selector button (Clean, Some Breakdown, Ugly)
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') ||
         btn.textContent?.includes('Textbook')
       );
-      
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
 
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
-        btn.textContent?.includes('Save Set')
-      );
-      
-      expect(saveButton).toBeTruthy();
-      expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      expect(formButton).toBeTruthy();
+      fireEvent.click(formButton!);
+
+      // Wait for Save Set button to be enabled and click it
+      await waitFor(() => {
+        const saveBtn = screen.getByRole('button', { name: /save set/i });
+        expect(saveBtn).not.toBeDisabled();
+      });
+
+      const saveButton = screen.getByRole('button', { name: /save set/i });
+      fireEvent.click(saveButton);
 
       // Verify submission - weight should be stored in kg
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -137,54 +131,48 @@ describe('Unit Preference Integration', () => {
 
       const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
       const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
 
       fireEvent.change(weightInput, { target: { value: '225' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
-      // Click proceed to go to feedback phase
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Click proceed button to go to feedback phase (has aria-label "Log set 1")
+      const proceedButton = screen.getByRole('button', { name: /log set 1/i });
+      fireEvent.click(proceedButton);
+
+      // Wait for feedback phase to render - look for RIR selector text
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
 
       // Now we're in feedback phase - find RIR and Form selectors
       const allButtons = screen.getAllByRole('button');
-      
+
       // Find RIR selector button (shows "2-3" or "Good")
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
         btn.textContent?.includes('Good')
       );
-      
+
       expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
+      fireEvent.click(rirButton!);
 
       // Find form selector button (shows "Clean")
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') ||
         btn.textContent?.includes('Textbook')
       );
-      
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
 
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
-        btn.textContent?.includes('Save Set')
-      );
-      
-      expect(saveButton).toBeTruthy();
-      expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      expect(formButton).toBeTruthy();
+      fireEvent.click(formButton!);
+
+      // Wait for Save Set button to be enabled and click it
+      await waitFor(() => {
+        const saveBtn = screen.getByRole('button', { name: /save set/i });
+        expect(saveBtn).not.toBeDisabled();
+      });
+
+      const saveButton = screen.getByRole('button', { name: /save set/i });
+      fireEvent.click(saveButton);
 
       // Verify the conversion is correct (225lbs ~= 102.06kg)
       expect(onSubmit).toHaveBeenCalledTimes(1);

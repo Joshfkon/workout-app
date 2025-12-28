@@ -355,10 +355,10 @@ describe('ExerciseCard', () => {
 
     it('displays set count badge', () => {
       const { container } = render(<ExerciseCard {...defaultProps} />);
-      // Badge with "X/Y" format exists
-      const badge = container.querySelector('.rounded-full');
-      expect(badge).toBeInTheDocument();
-      expect(badge?.textContent).toContain('/');
+      // Badge with "X/Y" format exists - look for all rounded-full badges and find the one with set count
+      const badges = container.querySelectorAll('.rounded-full');
+      const setCountBadge = Array.from(badges).find(b => b.textContent?.includes('/'));
+      expect(setCountBadge).toBeInTheDocument();
     });
 
     it('displays primary muscle', () => {

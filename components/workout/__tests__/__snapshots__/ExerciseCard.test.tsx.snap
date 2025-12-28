@@ -27,6 +27,17 @@ exports[`ExerciseCard Different Exercise Types handles bodyweight exercise 1`] =
                 (bodyweight)
               </span>
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              >
+                🟢
+                 
+                Safe
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -282,6 +293,17 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             >
               Cable Fly
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              >
+                🟢
+                 
+                Safe
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -357,47 +379,47 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -408,111 +430,123 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -610,6 +644,17 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             >
               Leg Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              >
+                🟢
+                 
+                Safe
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -685,47 +730,47 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -736,111 +781,123 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -938,6 +995,17 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -1013,47 +1081,47 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -1072,7 +1140,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 min="0"
                 placeholder="???"
                 step="0.5"
@@ -1084,7 +1152,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 max="100"
                 min="0"
                 type="number"
@@ -1095,31 +1163,31 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs font-mono"
+                class="text-surface-600 text-[10px] sm:text-xs font-mono"
               >
                 —
               </span>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 —
               </span>
             </td>
             <td
-              class="px-3 py-1.5 text-center"
+              class="px-2 py-1.5 text-center min-w-0"
             >
               <span
-                class="text-surface-600"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 ???
               </span>
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1154,7 +1222,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 min="0"
                 placeholder="???"
                 step="0.5"
@@ -1166,7 +1234,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 max="100"
                 min="0"
                 type="number"
@@ -1177,31 +1245,31 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs font-mono"
+                class="text-surface-600 text-[10px] sm:text-xs font-mono"
               >
                 —
               </span>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 —
               </span>
             </td>
             <td
-              class="px-3 py-1.5 text-center"
+              class="px-2 py-1.5 text-center min-w-0"
             >
               <span
-                class="text-surface-600"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 ???
               </span>
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1236,7 +1304,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 min="0"
                 placeholder="???"
                 step="0.5"
@@ -1248,7 +1316,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5"
             >
               <input
-                class="w-full px-2 py-1.5 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                class="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 max="100"
                 min="0"
                 type="number"
@@ -1259,31 +1327,31 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs font-mono"
+                class="text-surface-600 text-[10px] sm:text-xs font-mono"
               >
                 —
               </span>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-1 py-1.5 text-center"
             >
               <span
-                class="text-surface-600 text-xs"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 —
               </span>
             </td>
             <td
-              class="px-3 py-1.5 text-center"
+              class="px-2 py-1.5 text-center min-w-0"
             >
               <span
-                class="text-surface-600"
+                class="text-surface-600 text-[10px] sm:text-xs"
               >
                 ???
               </span>
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1422,6 +1490,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -1497,47 +1576,47 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -1548,57 +1627,73 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                1
+                <span
+                  class="truncate"
+                >
+                  1
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              100
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
             >
               <span
-                class="font-mono text-surface-200 "
+                class="truncate block"
+              >
+                100
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
+            >
+              <span
+                class="truncate block"
+              >
+                10
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center min-w-0"
+            >
+              <span
+                class="font-mono text-surface-200 text-xs sm:text-sm truncate block "
               >
                 8.0
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center min-w-0"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-[10px] sm:text-xs truncate block "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
+              class="px-2 py-2.5 text-center min-w-0"
             >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              <div
+                class="flex justify-center"
               >
-                Stimulative
-              </span>
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-2 rounded-lg bg-success-500"
@@ -1623,57 +1718,73 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                2
+                <span
+                  class="truncate"
+                >
+                  2
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              100
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
             >
               <span
-                class="font-mono text-surface-200 "
+                class="truncate block"
+              >
+                100
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
+            >
+              <span
+                class="truncate block"
+              >
+                10
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center min-w-0"
+            >
+              <span
+                class="font-mono text-surface-200 text-xs sm:text-sm truncate block "
               >
                 8.0
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center min-w-0"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-[10px] sm:text-xs truncate block "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
+              class="px-2 py-2.5 text-center min-w-0"
             >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              <div
+                class="flex justify-center"
               >
-                Stimulative
-              </span>
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-2 rounded-lg bg-success-500"
@@ -1698,57 +1809,73 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                3
+                <span
+                  class="truncate"
+                >
+                  3
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              100
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
             >
               <span
-                class="font-mono text-surface-200 "
+                class="truncate block"
+              >
+                100
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
+            >
+              <span
+                class="truncate block"
+              >
+                10
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center min-w-0"
+            >
+              <span
+                class="font-mono text-surface-200 text-xs sm:text-sm truncate block "
               >
                 8.0
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center min-w-0"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-[10px] sm:text-xs truncate block "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
+              class="px-2 py-2.5 text-center min-w-0"
             >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              <div
+                class="flex justify-center"
               >
-                Stimulative
-              </span>
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-2 rounded-lg bg-success-500"
@@ -1864,6 +1991,17 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -1939,47 +2077,47 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -1990,111 +2128,123 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -2192,6 +2342,17 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -2267,47 +2428,47 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -2318,111 +2479,123 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -2520,6 +2693,17 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             >
               Bicep Curl
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              >
+                🟢
+                 
+                Safe
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -2595,47 +2779,47 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -2646,111 +2830,123 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -2848,6 +3044,17 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -2923,47 +3130,47 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -2974,111 +3181,123 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -3193,6 +3412,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -3268,47 +3498,47 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -3319,57 +3549,73 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                1
+                <span
+                  class="truncate"
+                >
+                  1
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              100
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
             >
               <span
-                class="font-mono text-surface-200 "
+                class="truncate block"
+              >
+                100
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
+            >
+              <span
+                class="truncate block"
+              >
+                10
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center min-w-0"
+            >
+              <span
+                class="font-mono text-surface-200 text-xs sm:text-sm truncate block "
               >
                 7.0
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center min-w-0"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-[10px] sm:text-xs truncate block "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
+              class="px-2 py-2.5 text-center min-w-0"
             >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              <div
+                class="flex justify-center"
               >
-                Stimulative
-              </span>
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-2 rounded-lg bg-success-500"
@@ -3394,57 +3640,73 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                2
+                <span
+                  class="truncate"
+                >
+                  2
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              100
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
-            >
-              9
-            </td>
-            <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
             >
               <span
-                class="font-mono text-surface-200 "
+                class="truncate block"
+              >
+                100
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 "
+            >
+              <span
+                class="truncate block"
+              >
+                9
+              </span>
+            </td>
+            <td
+              class="px-1 py-2.5 text-center min-w-0"
+            >
+              <span
+                class="font-mono text-surface-200 text-xs sm:text-sm truncate block "
               >
                 8.0
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center min-w-0"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-[10px] sm:text-xs truncate block "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
+              class="px-2 py-2.5 text-center min-w-0"
             >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+              <div
+                class="flex justify-center"
               >
-                Stimulative
-              </span>
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-2 rounded-lg bg-success-500"
@@ -3469,37 +3731,41 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -3597,6 +3863,17 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -3710,47 +3987,47 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -3761,111 +4038,123 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -3968,6 +4257,17 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             >
               S
             </span>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -4059,47 +4359,47 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -4110,111 +4410,123 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -4312,6 +4624,17 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -4387,47 +4710,47 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -4438,111 +4761,123 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -4640,6 +4975,17 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -4715,47 +5061,47 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -4766,111 +5112,123 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -4968,6 +5326,17 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -5043,47 +5412,47 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -5094,111 +5463,123 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
@@ -5296,6 +5677,17 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -5371,47 +5763,47 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14"
             >
               RPE
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-2 py-2 text-center text-surface-400 font-medium w-20"
             >
               Quality
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10 sm:w-12"
             />
           </tr>
         </thead>
@@ -5422,111 +5814,123 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              1
+              <span
+                class="truncate block"
+              >
+                1
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              2
+              <span
+                class="truncate block"
+              >
+                2
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500 min-w-0"
             >
-              3
+              <span
+                class="truncate block"
+              >
+                3
+              </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
-            >
-              ???
-            </td>
-            <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
             >
               ???
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0"
+            >
+              ???
+            </td>
+            <td
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>
