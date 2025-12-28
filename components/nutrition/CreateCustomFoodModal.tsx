@@ -102,7 +102,8 @@ export function CreateCustomFoodModal({
       });
       handleClose();
     } catch (err) {
-      setError('Failed to save. Please try again.');
+      console.error('Failed to save custom food:', err);
+      setError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
