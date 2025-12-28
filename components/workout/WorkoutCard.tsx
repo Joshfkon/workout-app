@@ -9,6 +9,7 @@ interface WorkoutCardProps {
   isFirst: boolean;
   isLast: boolean;
   isHidden?: boolean;
+  hiddenLabel?: string;
   onMoveUp: () => void;
   onMoveDown: () => void;
   onToggleVisibility?: () => void;
@@ -20,6 +21,7 @@ export const WorkoutCard = memo(function WorkoutCard({
   isFirst,
   isLast,
   isHidden = false,
+  hiddenLabel = 'Hidden from workouts',
   onMoveUp,
   onMoveDown,
   onToggleVisibility,
@@ -114,7 +116,7 @@ export const WorkoutCard = memo(function WorkoutCard({
         {isHidden && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="bg-surface-900/80 px-4 py-2 rounded-lg border border-surface-700">
-              <span className="text-sm text-surface-400 font-medium">Hidden from workouts</span>
+              <span className="text-sm text-surface-400 font-medium">{hiddenLabel}</span>
             </div>
           </div>
         )}
