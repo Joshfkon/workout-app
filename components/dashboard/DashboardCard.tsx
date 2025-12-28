@@ -67,7 +67,7 @@ export const DashboardCard = memo(function DashboardCard({
         isHidden ? 'ring-surface-600/50' : 'ring-primary-500/30'
       }`}>
         {/* Top controls: drag handle and hide/show button */}
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-2">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
           {/* Drag handle indicator */}
           <div className={`px-3 py-1 rounded-full border ${
             isHidden
