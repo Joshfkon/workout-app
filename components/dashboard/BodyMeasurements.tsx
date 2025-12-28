@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
