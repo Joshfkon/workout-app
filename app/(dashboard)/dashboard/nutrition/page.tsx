@@ -671,7 +671,7 @@ export default function NutritionPage() {
 
       if (error) {
         console.error('Error updating custom food:', error);
-        throw error;
+        throw new Error(error.message || 'Failed to update custom food');
       }
     } else {
       // Create new
@@ -695,7 +695,7 @@ export default function NutritionPage() {
 
       if (error) {
         console.error('Error creating custom food:', error);
-        throw error;
+        throw new Error(error.message || 'Failed to create custom food');
       }
     }
 
