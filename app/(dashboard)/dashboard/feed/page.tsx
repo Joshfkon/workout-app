@@ -13,10 +13,39 @@ import { useUserStore } from '@/stores';
 import { createClient } from '@/lib/supabase/client';
 import { cn, formatWeight } from '@/lib/utils';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
-import type { ReactionType } from '@/types/social';
+import type { ReactionType, LeaderboardType } from '@/types/social';
 import type { UserProfile, ProfileStats } from '@/types/social';
+import { LeaderboardTable, UserRankCard } from '@/components/social/leaderboards';
+import { useLeaderboard } from '@/hooks/useLeaderboard';
 
-type TabType = 'following' | 'discover' | 'profile';
+type TabType = 'following' | 'discover' | 'leaderboards' | 'profile';
+
+const LEADERBOARD_TABS: Array<{
+  id: LeaderboardType;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: 'total_volume_week',
+    label: 'Weekly Volume',
+    description: 'Total weight lifted this week',
+  },
+  {
+    id: 'workouts_completed_week',
+    label: 'Weekly Workouts',
+    description: 'Workouts completed this week',
+  },
+  {
+    id: 'total_volume_month',
+    label: 'Monthly Volume',
+    description: 'Total weight lifted this month',
+  },
+  {
+    id: 'workouts_completed_month',
+    label: 'Monthly Workouts',
+    description: 'Workouts completed this month',
+  },
+];
 
 export default function FeedPage() {
   const router = useRouter();
@@ -43,6 +72,18 @@ export default function FeedPage() {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [needsProfile, setNeedsProfile] = useState(false);
+
+  // Leaderboard state
+  const [selectedLeaderboardType, setSelectedLeaderboardType] = useState<LeaderboardType>('total_volume_week');
+  const {
+    entries: leaderboardEntries,
+    userRank,
+    isLoading: leaderboardLoading,
+    error: leaderboardError,
+    refresh: refreshLeaderboard,
+    loadMore: loadMoreLeaderboard,
+    hasMore: hasMoreLeaderboard,
+  } = useLeaderboard({ type: selectedLeaderboardType });
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -146,7 +187,11 @@ export default function FeedPage() {
     refresh();
   }, [refresh]);
 
-  const isLoading = activeTab === 'profile' ? profileLoading : feedLoading;
+  const isLoading = activeTab === 'profile'
+    ? profileLoading
+    : activeTab === 'leaderboards'
+      ? leaderboardLoading
+      : feedLoading;
 
   const renderProfileContent = () => {
     if (profileLoading) {
@@ -374,6 +419,101 @@ export default function FeedPage() {
     );
   };
 
+  const renderLeaderboardContent = () => {
+    const selectedTab = LEADERBOARD_TABS.find(t => t.id === selectedLeaderboardType);
+
+    return (
+      <div className="space-y-6 py-6">
+        {/* Leaderboard type selector */}
+        <div className="flex gap-2 overflow-x-auto pb-2 -mb-2 scrollbar-hide">
+          {LEADERBOARD_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setSelectedLeaderboardType(tab.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                selectedLeaderboardType === tab.id
+                  ? 'bg-accent-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Description */}
+        {selectedTab && (
+          <p className="text-surface-400 text-sm">{selectedTab.description}</p>
+        )}
+
+        {/* User's rank card */}
+        <UserRankCard userRank={userRank} type={selectedLeaderboardType} units={units} />
+
+        {/* Error state */}
+        {leaderboardError && (
+          <Card>
+            <CardContent className="text-center py-8">
+              <p className="text-error-400 mb-4">{leaderboardError}</p>
+              <Button onClick={refreshLeaderboard}>Try Again</Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Leaderboard */}
+        {!leaderboardError && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="text-2xl">🏆</span>
+                Top Lifters
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeaderboardTable
+                entries={leaderboardEntries}
+                type={selectedLeaderboardType}
+                units={units}
+                currentUserId={userId}
+                isLoading={leaderboardLoading}
+                hasMore={hasMoreLeaderboard}
+                onLoadMore={loadMoreLeaderboard}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Info card */}
+        <Card className="bg-surface-800/50">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <svg
+                className="w-5 h-5 text-surface-400 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div className="text-sm text-surface-400">
+                <p className="font-medium text-surface-300 mb-1">How rankings work</p>
+                <p>
+                  Leaderboards update throughout the week as you complete workouts.
+                  Only users who have opted in to leaderboards in their privacy settings are shown.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
   const renderFeedContent = () => {
     const error = feedError;
 
@@ -466,13 +606,17 @@ export default function FeedPage() {
         <div className="max-w-2xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-surface-100">
-              {activeTab === 'profile' ? 'Profile' : 'Activity Feed'}
+              {activeTab === 'profile'
+                ? 'Profile'
+                : activeTab === 'leaderboards'
+                  ? 'Leaderboards'
+                  : 'Activity Feed'}
             </h1>
             {activeTab !== 'profile' && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={refresh}
+                onClick={activeTab === 'leaderboards' ? refreshLeaderboard : refresh}
                 disabled={isLoading}
               >
                 <svg
@@ -517,6 +661,17 @@ export default function FeedPage() {
               Discover
             </button>
             <button
+              onClick={() => setActiveTab('leaderboards')}
+              className={cn(
+                'px-4 py-2 rounded-full text-sm font-medium transition-colors',
+                activeTab === 'leaderboards'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:text-surface-200'
+              )}
+            >
+              Leaderboards
+            </button>
+            <button
               onClick={() => setActiveTab('profile')}
               className={cn(
                 'px-4 py-2 rounded-full text-sm font-medium transition-colors',
@@ -533,7 +688,11 @@ export default function FeedPage() {
 
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4">
-        {activeTab === 'profile' ? renderProfileContent() : renderFeedContent()}
+        {activeTab === 'profile'
+          ? renderProfileContent()
+          : activeTab === 'leaderboards'
+            ? renderLeaderboardContent()
+            : renderFeedContent()}
       </main>
     </div>
   );
