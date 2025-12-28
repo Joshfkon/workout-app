@@ -31,7 +31,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
 
       // Fetch user's shared workouts
       const { data: workoutsData, error } = await supabase
-        .from('shared_workouts')
+        .from('shared_workouts' as never)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -43,20 +43,21 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
         return;
       }
 
-      setWorkouts(workoutsData || []);
+      setWorkouts((workoutsData as SharedWorkout[]) || []);
 
       // Calculate aggregate stats
       const { data: allWorkouts } = await supabase
-        .from('shared_workouts')
+        .from('shared_workouts' as never)
         .select('view_count, save_count, copy_count')
         .eq('user_id', userId);
 
       if (allWorkouts) {
+        const workoutStats = allWorkouts as Array<{ view_count: number; save_count: number; copy_count: number }>;
         setStats({
-          total_shared: allWorkouts.length,
-          total_views: allWorkouts.reduce((sum, w) => sum + (w.view_count || 0), 0),
-          total_saves: allWorkouts.reduce((sum, w) => sum + (w.save_count || 0), 0),
-          total_copies: allWorkouts.reduce((sum, w) => sum + (w.copy_count || 0), 0),
+          total_shared: workoutStats.length,
+          total_views: workoutStats.reduce((sum, w) => sum + (w.view_count || 0), 0),
+          total_saves: workoutStats.reduce((sum, w) => sum + (w.save_count || 0), 0),
+          total_copies: workoutStats.reduce((sum, w) => sum + (w.copy_count || 0), 0),
         });
       }
 
