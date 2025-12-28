@@ -58,7 +58,20 @@ export function useLeaderboard({
       if (fetchError) throw fetchError;
 
       // Transform data to match our types
-      const transformedEntries: LeaderboardEntryWithProfile[] = (data || []).map((entry: any) => ({
+      const leaderboardData = (data || []) as Array<{
+        id: string;
+        user_id: string;
+        score: number;
+        rank: number;
+        previous_rank: number | null;
+        period_start: string;
+        period_end: string;
+        rank_change: number;
+        username: string;
+        display_name: string | null;
+        avatar_url: string | null;
+      }>;
+      const transformedEntries: LeaderboardEntryWithProfile[] = leaderboardData.map((entry) => ({
         id: entry.id,
         user_id: entry.user_id,
         leaderboard_type: type,
@@ -111,8 +124,9 @@ export function useLeaderboard({
           p_exercise_id: exerciseId || null,
         } as never);
 
-        if (rankData && rankData.length > 0) {
-          setUserRank(rankData[0]);
+        const userRankData = rankData as UserRank[] | null;
+        if (userRankData && userRankData.length > 0) {
+          setUserRank(userRankData[0]);
         } else {
           setUserRank(null);
         }
