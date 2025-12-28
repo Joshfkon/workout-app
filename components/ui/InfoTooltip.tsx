@@ -52,6 +52,9 @@ export const InfoTooltip = memo(function InfoTooltip({
 
     const trigger = triggerRef.current.getBoundingClientRect();
     const padding = 8;
+    const tooltipWidth = 288; // w-72 = 18rem = 288px
+    const viewportWidth = window.innerWidth;
+    const viewportPadding = 12; // Minimum distance from screen edge
 
     let top = 0;
     let left = 0;
@@ -73,6 +76,22 @@ export const InfoTooltip = memo(function InfoTooltip({
         top = trigger.top + trigger.height / 2;
         left = trigger.right + padding;
         break;
+    }
+
+    // For top/bottom positions, check horizontal boundaries
+    // The tooltip is centered with -translate-x-1/2, so actual left edge is: left - tooltipWidth/2
+    if (position === 'top' || position === 'bottom') {
+      const tooltipLeft = left - tooltipWidth / 2;
+      const tooltipRight = left + tooltipWidth / 2;
+
+      // If tooltip would overflow right edge, shift left
+      if (tooltipRight > viewportWidth - viewportPadding) {
+        left = viewportWidth - viewportPadding - tooltipWidth / 2;
+      }
+      // If tooltip would overflow left edge, shift right
+      if (tooltipLeft < viewportPadding) {
+        left = viewportPadding + tooltipWidth / 2;
+      }
     }
 
     setTooltipPosition({ top, left });
