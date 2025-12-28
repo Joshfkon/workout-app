@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { Sidebar } from './Sidebar';
 import { SubscriptionBadge } from './SubscriptionBadge';
@@ -35,8 +36,14 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
           <div className="flex-1" />
 
           {/* Header actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <SubscriptionBadge />
+            <Link
+              href="/dashboard/science"
+              className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
+            >
+              About
+            </Link>
             <SignOutButton showOnMobile />
           </div>
         </header>
