@@ -54,7 +54,7 @@ export default function FeedPage() {
   const userId = useUserStore((state) => state.user?.id);
 
   // Feed state
-  const feedType = activeTab === 'profile' ? 'following' : activeTab;
+  const feedType = activeTab === 'profile' || activeTab === 'leaderboards' ? 'following' : activeTab;
   const {
     activities,
     isLoading: feedLoading,
