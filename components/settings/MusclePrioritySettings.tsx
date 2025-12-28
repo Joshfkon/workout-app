@@ -33,12 +33,12 @@ const PRIORITY_COLORS: Record<MusclePriorityLevel, string> = {
   5: 'bg-surface-700',
 };
 
-const PRIORITY_BADGE_VARIANTS: Record<MusclePriorityLevel, 'primary' | 'default' | 'secondary'> = {
-  1: 'primary',
-  2: 'primary',
+const PRIORITY_BADGE_VARIANTS: Record<MusclePriorityLevel, 'info' | 'default' | 'outline'> = {
+  1: 'info',
+  2: 'info',
   3: 'default',
-  4: 'secondary',
-  5: 'secondary',
+  4: 'outline',
+  5: 'outline',
 };
 
 // Group muscles by body region for better organization
@@ -316,7 +316,7 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
           <span className="text-xs text-surface-400">Extra volume for: </span>
           <div className="flex flex-wrap gap-1 mt-1">
             {highPriority.map((p) => (
-              <Badge key={p.muscleGroup} variant="primary" size="sm">
+              <Badge key={p.muscleGroup} variant="info" size="sm">
                 {formatMuscleName(p.muscleGroup)}
                 {p.priority === 1 && ' ++'}
                 {p.priority === 2 && ' +'}
@@ -331,7 +331,7 @@ function PrioritySummary({ priorities }: { priorities: Map<MuscleGroup, MusclePr
           <span className="text-xs text-surface-400">Maintenance volume for: </span>
           <div className="flex flex-wrap gap-1 mt-1">
             {lowPriority.map((p) => (
-              <Badge key={p.muscleGroup} variant="secondary" size="sm">
+              <Badge key={p.muscleGroup} variant="outline" size="sm">
                 {formatMuscleName(p.muscleGroup)}
               </Badge>
             ))}
