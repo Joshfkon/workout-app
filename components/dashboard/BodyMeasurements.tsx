@@ -1,8 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Button, Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import {
+  analyzeImbalances,
+  type BodyMeasurements as MeasurementsType,
+  type ImbalanceAnalysis,
+} from '@/services/measurementImbalanceEngine';
 
 interface Measurements {
   neck?: number;
@@ -28,6 +33,9 @@ interface MeasurementHistory {
 interface BodyMeasurementsProps {
   userId: string;
   unit?: 'in' | 'cm';
+  heightCm?: number;
+  wristCm?: number;
+  showImbalanceAnalysis?: boolean;
 }
 
 const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: string; instructions: string }[] = [
@@ -126,7 +134,13 @@ const cmToIn = (cm: number) => Math.round(cm / 2.54 * 10) / 10;
 // Convert inches to cm
 const inToCm = (inches: number) => Math.round(inches * 2.54 * 10) / 10;
 
-export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps) {
+export function BodyMeasurements({
+  userId,
+  unit = 'in',
+  heightCm,
+  wristCm,
+  showImbalanceAnalysis = true,
+}: BodyMeasurementsProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [measurements, setMeasurements] = useState<Measurements>({});
@@ -134,6 +148,33 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
   const [lastMeasurement, setLastMeasurement] = useState<MeasurementHistory | null>(null);
   const [displayUnit, setDisplayUnit] = useState<'in' | 'cm'>(unit);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  // Calculate imbalance analysis when measurements change
+  const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
+    if (!showImbalanceAnalysis) return null;
+    const hasMeasurements = Object.values(measurements).some(v => v !== undefined && v !== null);
+    if (!hasMeasurements) return null;
+
+    // Convert Measurements to the format expected by the imbalance engine
+    const engineMeasurements: MeasurementsType = {
+      neck: measurements.neck,
+      shoulders: measurements.shoulders,
+      chest: measurements.chest,
+      left_bicep: measurements.left_bicep,
+      right_bicep: measurements.right_bicep,
+      left_forearm: measurements.left_forearm,
+      right_forearm: measurements.right_forearm,
+      waist: measurements.waist,
+      hips: measurements.hips,
+      left_thigh: measurements.left_thigh,
+      right_thigh: measurements.right_thigh,
+      left_calf: measurements.left_calf,
+      right_calf: measurements.right_calf,
+    };
+
+    return analyzeImbalances(engineMeasurements, undefined, heightCm, wristCm);
+  }, [measurements, heightCm, wristCm, showImbalanceAnalysis]);
 
   useEffect(() => {
     const loadMeasurements = async () => {
@@ -390,6 +431,105 @@ export function BodyMeasurements({ userId, unit = 'in' }: BodyMeasurementsProps)
               <p className="text-[10px] text-surface-600 pt-1">
                 Compared to {new Date(lastMeasurement.logged_at).toLocaleDateString()}
               </p>
+            )}
+
+            {/* Imbalance Analysis Section */}
+            {imbalanceAnalysis && (
+              <div className="mt-4 pt-3 border-t border-surface-800">
+                <button
+                  onClick={() => setShowAnalysis(!showAnalysis)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-surface-300">Balance Analysis</span>
+                    <Badge
+                      variant={
+                        imbalanceAnalysis.balanceScore >= 80
+                          ? 'success'
+                          : imbalanceAnalysis.balanceScore >= 60
+                          ? 'warning'
+                          : 'danger'
+                      }
+                      size="sm"
+                    >
+                      {imbalanceAnalysis.balanceScore}%
+                    </Badge>
+                  </div>
+                  <span className="text-surface-500 text-xs">{showAnalysis ? '▲' : '▼'}</span>
+                </button>
+
+                {showAnalysis && (
+                  <div className="mt-3 space-y-3">
+                    {/* Quick Summary */}
+                    <div className="space-y-2">
+                      {/* Bilateral Asymmetries */}
+                      {imbalanceAnalysis.bilateralAsymmetries.filter(a => a.severity !== 'none').length > 0 && (
+                        <div className="p-2 bg-surface-800/50 rounded-lg">
+                          <p className="text-xs text-surface-400 mb-1.5">Asymmetries Detected:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {imbalanceAnalysis.bilateralAsymmetries
+                              .filter(a => a.severity !== 'none')
+                              .map((a, i) => (
+                                <Badge
+                                  key={i}
+                                  variant={a.severity === 'significant' ? 'danger' : 'warning'}
+                                  size="sm"
+                                >
+                                  {a.bodyPart} ({a.dominantSide} +{a.differenceCm.toFixed(1)}cm)
+                                </Badge>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Lagging Muscles */}
+                      {imbalanceAnalysis.laggingMuscles.length > 0 && (
+                        <div className="p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                          <p className="text-xs text-surface-400 mb-1.5">Needs Focus:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {imbalanceAnalysis.laggingMuscles.map(muscle => (
+                              <Badge key={muscle} variant="warning" size="sm">
+                                {muscle}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Strong Points */}
+                      {imbalanceAnalysis.dominantMuscles.length > 0 && (
+                        <div className="p-2 bg-success-500/10 border border-success-500/20 rounded-lg">
+                          <p className="text-xs text-surface-400 mb-1.5">Strong Points:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {imbalanceAnalysis.dominantMuscles.map(muscle => (
+                              <Badge key={muscle} variant="success" size="sm">
+                                {muscle}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Top Recommendation */}
+                      {imbalanceAnalysis.recommendations.length > 0 && (
+                        <div className="p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                          <p className="text-xs text-surface-200">
+                            {imbalanceAnalysis.recommendations[0]}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* All Balanced Message */}
+                    {imbalanceAnalysis.bilateralAsymmetries.every(a => a.severity === 'none') &&
+                      imbalanceAnalysis.laggingMuscles.length === 0 && (
+                        <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
+                          <p className="text-sm text-success-400">Great symmetry! Keep up the balanced training.</p>
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         ) : (

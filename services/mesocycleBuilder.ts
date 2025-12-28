@@ -580,18 +580,28 @@ export function recommendVolume(
  * Calculate volume distribution with frequency
  * Optionally adjusts volume based on regional body composition analysis (lagging areas get more volume)
  */
+/**
+ * Volume adjustment from imbalance analysis or user priorities
+ */
+export interface VolumeAdjustmentInput {
+  muscleGroup: MuscleGroup;
+  volumeMultiplier: number;
+  reason: 'lagging' | 'imbalance' | 'user_priority' | 'dominant';
+}
+
 export function calculateVolumeDistribution(
   split: Split,
   daysPerWeek: number,
   experience: Experience,
   goal: Goal,
   recoveryFactors: RecoveryFactors,
-  laggingAreas?: string[]  // From regional analysis
+  laggingAreas?: string[],  // From regional DEXA analysis
+  volumeAdjustments?: VolumeAdjustmentInput[]  // From imbalance engine or user priorities
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
-  
+
   const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
   const result: Record<MuscleGroup, { sets: number; frequency: number }> = {} as Record<MuscleGroup, { sets: number; frequency: number }>;
-  
+
   // Determine frequency based on split
   const frequencyMap: Record<Split, Record<MuscleGroup, number>> = {
     'Full Body': {
@@ -622,55 +632,71 @@ export function calculateVolumeDistribution(
       adductors: 1, forearms: 1, traps: 1
     }
   };
-  
+
   const frequencies = frequencyMap[split];
-  
-  // Map regional areas to muscle groups
+
+  // Map regional areas to muscle groups (for DEXA regional analysis)
   const regionalToMuscles: Record<string, MuscleGroup[]> = {
     'Arms': ['biceps', 'triceps'],
     'Legs': ['quads', 'hamstrings', 'glutes', 'calves'],
     'Trunk': ['chest', 'back', 'shoulders', 'abs'],
   };
-  
-  // Determine which muscles need extra volume based on regional analysis
-  const laggingMuscles: Set<MuscleGroup> = new Set();
+
+  // Build volume multiplier map from various sources
+  const muscleMultipliers: Map<MuscleGroup, number> = new Map();
+
+  // Source 1: Regional DEXA lagging areas (15% boost)
   if (laggingAreas) {
     for (const area of laggingAreas) {
       // Check if it's a general area (Arms, Legs, Trunk)
       if (regionalToMuscles[area]) {
-        regionalToMuscles[area].forEach(m => laggingMuscles.add(m));
+        regionalToMuscles[area].forEach(m => {
+          const current = muscleMultipliers.get(m) || 1.0;
+          muscleMultipliers.set(m, Math.min(1.35, current * 1.15));
+        });
       }
       // Check for specific side mentions (e.g., "Left arm", "Right leg")
       if (area.toLowerCase().includes('arm')) {
-        laggingMuscles.add('biceps');
-        laggingMuscles.add('triceps');
+        ['biceps', 'triceps'].forEach(m => {
+          const current = muscleMultipliers.get(m as MuscleGroup) || 1.0;
+          muscleMultipliers.set(m as MuscleGroup, Math.min(1.35, current * 1.15));
+        });
       }
       if (area.toLowerCase().includes('leg')) {
-        laggingMuscles.add('quads');
-        laggingMuscles.add('hamstrings');
-        laggingMuscles.add('glutes');
-        laggingMuscles.add('calves');
+        ['quads', 'hamstrings', 'glutes', 'calves'].forEach(m => {
+          const current = muscleMultipliers.get(m as MuscleGroup) || 1.0;
+          muscleMultipliers.set(m as MuscleGroup, Math.min(1.35, current * 1.15));
+        });
       }
     }
   }
-  
+
+  // Source 2: Volume adjustments from imbalance engine / user priorities
+  if (volumeAdjustments) {
+    for (const adjustment of volumeAdjustments) {
+      const current = muscleMultipliers.get(adjustment.muscleGroup) || 1.0;
+      // Combine with existing multiplier, but cap between 0.75 and 1.35
+      const combined = current * adjustment.volumeMultiplier;
+      muscleMultipliers.set(adjustment.muscleGroup, Math.min(1.35, Math.max(0.75, combined)));
+    }
+  }
+
   muscles.forEach(muscle => {
     let baseVolume = recommendVolume(experience, goal, muscle);
-    
-    // Boost volume for lagging areas (10-20% extra)
-    if (laggingMuscles.has(muscle)) {
-      baseVolume = Math.round(baseVolume * 1.15);  // 15% extra sets for lagging muscles
-    }
-    
+
+    // Apply muscle-specific multiplier
+    const muscleMultiplier = muscleMultipliers.get(muscle) || 1.0;
+    baseVolume = Math.round(baseVolume * muscleMultiplier);
+
     const adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
-    
+
     result[muscle] = {
       sets: adjustedVolume,
       frequency: Math.max(1, frequency)
     };
   });
-  
+
   return result;
 }
 
@@ -982,49 +1008,65 @@ export function buildDetailedSession(
 /**
  * Generate a complete training program based on user profile
  * @param laggingAreas - Optional array of lagging muscle areas from regional DEXA analysis
+ * @param volumeAdjustments - Optional array of volume adjustments from imbalance analysis or user priorities
  */
 export function generateFullProgram(
   daysPerWeek: number,
   profile: ExtendedUserProfile,
   sessionMinutes: number = 60,
-  laggingAreas?: string[]  // From regional body composition analysis
+  laggingAreas?: string[],  // From regional body composition analysis
+  volumeAdjustments?: VolumeAdjustmentInput[]  // From imbalance engine or user priorities
 ): FullProgramRecommendation {
-  
+
   const warnings: string[] = [];
   const programNotes: string[] = [];
-  
+
   // Step 1: Calculate recovery factors
   const recoveryFactors = calculateRecoveryFactors(profile);
   warnings.push(...recoveryFactors.warnings);
-  
+
   // Step 2: Get split recommendation
   const splitRec = recommendSplit(daysPerWeek, profile.goal, profile.experience, sessionMinutes);
-  
+
   programNotes.push(`Split: ${splitRec.split} - ${splitRec.reason}`);
   if (splitRec.alternatives.length > 0) {
     programNotes.push(`Alternatives: ${splitRec.alternatives.map(a => a.split).join(', ')}`);
   }
-  
+
   // Step 3: Build periodization plan
   const periodization = buildPeriodizationPlan(profile, recoveryFactors);
-  
+
   programNotes.push(`Periodization: ${periodization.model}`);
   programNotes.push(`Mesocycle length: ${periodization.mesocycleWeeks} weeks (${periodization.deloadFrequency} training + 1 deload)`);
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
-  
-  // Step 4: Calculate volume distribution (with extra volume for lagging areas if provided)
+
+  // Step 4: Calculate volume distribution (with adjustments for lagging areas and user priorities)
   const volumePerMuscle = calculateVolumeDistribution(
     splitRec.split,
     daysPerWeek,
     profile.experience,
     profile.goal,
     recoveryFactors,
-    laggingAreas
+    laggingAreas,
+    volumeAdjustments
   );
-  
+
   // Add note if lagging areas are being addressed
   if (laggingAreas && laggingAreas.length > 0) {
-    programNotes.push(`🎯 Extra volume allocated for: ${laggingAreas.join(', ')}`);
+    programNotes.push(`Extra volume allocated for DEXA lagging areas: ${laggingAreas.join(', ')}`);
+  }
+
+  // Add note if volume adjustments are being applied
+  if (volumeAdjustments && volumeAdjustments.length > 0) {
+    const prioritized = volumeAdjustments.filter(a => a.reason === 'user_priority' && a.volumeMultiplier > 1);
+    const imbalanced = volumeAdjustments.filter(a => (a.reason === 'imbalance' || a.reason === 'lagging') && a.volumeMultiplier > 1);
+
+    if (prioritized.length > 0) {
+      programNotes.push(`Priority muscles: ${prioritized.map(a => a.muscleGroup).join(', ')}`);
+    }
+    if (imbalanced.length > 0) {
+      programNotes.push(`Imbalance correction: ${imbalanced.map(a => a.muscleGroup).join(', ')}`);
+    }
   }
   
   // Step 5: Build session templates
