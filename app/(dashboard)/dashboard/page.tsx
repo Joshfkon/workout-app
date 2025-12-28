@@ -49,6 +49,7 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
 ];
 
 const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
+const HIDDEN_CARDS_STORAGE_KEY = 'dashboard-hidden-cards';
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
@@ -188,8 +189,9 @@ export default function DashboardPage() {
   // Edit mode state for rearranging dashboard cards
   const [isEditMode, setIsEditMode] = useState(false);
   const [cardOrder, setCardOrder] = useState<DashboardCardId[]>(DEFAULT_CARD_ORDER);
+  const [hiddenCards, setHiddenCards] = useState<Set<DashboardCardId>>(new Set());
 
-  // Load card order from localStorage on mount
+  // Load card order and hidden cards from localStorage on mount
   useEffect(() => {
     try {
       const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
@@ -202,6 +204,18 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.error('Failed to load card order:', e);
+    }
+
+    try {
+      const savedHidden = localStorage.getItem(HIDDEN_CARDS_STORAGE_KEY);
+      if (savedHidden) {
+        const parsed = JSON.parse(savedHidden) as DashboardCardId[];
+        // Only keep valid card IDs
+        const validHidden = parsed.filter(id => DEFAULT_CARD_ORDER.includes(id));
+        setHiddenCards(new Set(validHidden));
+      }
+    } catch (e) {
+      console.error('Failed to load hidden cards:', e);
     }
   }, []);
 
@@ -250,6 +264,25 @@ export default function DashboardPage() {
       saveCardOrder(newOrder);
     }
   }, [cardOrder, saveCardOrder]);
+
+  // Toggle card visibility (hide/show)
+  const toggleCardVisibility = useCallback((cardId: DashboardCardId) => {
+    setHiddenCards(prev => {
+      const newHidden = new Set(prev);
+      if (newHidden.has(cardId)) {
+        newHidden.delete(cardId);
+      } else {
+        newHidden.add(cardId);
+      }
+      // Save to localStorage
+      try {
+        localStorage.setItem(HIDDEN_CARDS_STORAGE_KEY, JSON.stringify(Array.from(newHidden)));
+      } catch (e) {
+        console.error('Failed to save hidden cards:', e);
+      }
+      return newHidden;
+    });
+  }, []);
 
   // Get volume data for atrophy risk alert - use the same data source as Weekly Volume box
   // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
@@ -1471,6 +1504,11 @@ export default function DashboardPage() {
 
     if (!cardContent) return null;
 
+    const isHidden = hiddenCards.has(cardId);
+
+    // In normal mode, don't render hidden cards
+    if (!isEditMode && isHidden) return null;
+
     return (
       <DashboardCard
         key={cardId}
@@ -1478,8 +1516,10 @@ export default function DashboardPage() {
         isEditMode={isEditMode}
         isFirst={isFirst}
         isLast={isLast}
+        isHidden={isHidden}
         onMoveUp={() => moveCardUp(cardId)}
         onMoveDown={() => moveCardDown(cardId)}
+        onToggleVisibility={() => toggleCardVisibility(cardId)}
       >
         {cardContent}
       </DashboardCard>
