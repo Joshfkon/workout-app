@@ -34,15 +34,18 @@ export function SubscriptionBadge() {
         </Link>
       )}
 
-      {/* Tier badge for paid users */}
+      {/* Tier badge for paid users - clickable to manage subscription */}
       {!needsUpgrade && !isTrialing && effectiveTier !== 'free' && (
-        <span className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${
-          effectiveTier === 'elite'
-            ? 'bg-accent-500/10 border border-accent-500/20 text-accent-400'
-            : 'bg-primary-500/10 border border-primary-500/20 text-primary-400'
-        }`}>
+        <Link
+          href="/dashboard/pricing"
+          className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            effectiveTier === 'elite'
+              ? 'bg-accent-500/10 border border-accent-500/20 text-accent-400 hover:bg-accent-500/20'
+              : 'bg-primary-500/10 border border-primary-500/20 text-primary-400 hover:bg-primary-500/20'
+          }`}
+        >
           {effectiveTier === 'elite' ? 'Elite' : 'Pro'}
-        </span>
+        </Link>
       )}
     </div>
   );
