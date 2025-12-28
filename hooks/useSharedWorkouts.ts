@@ -50,7 +50,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         .from('shared_workouts' as never)
         .select(`
           *,
-          user_profiles!inner (
+          user_profiles (
             id,
             user_id,
             username,
@@ -97,7 +97,10 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
 
       const { data, error: fetchError } = await query;
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error('Error fetching shared workouts:', fetchError);
+        throw new Error(`Failed to load workouts: ${fetchError.message || fetchError.code || 'Unknown error'}`);
+      }
 
       // Get saved workout IDs for current user
       let savedIds: string[] = [];
@@ -111,33 +114,35 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       }
 
       // Transform data
-      const transformedWorkouts: SharedWorkoutWithProfile[] = (data || []).map((workout: any) => ({
-        ...workout,
-        user_profile: {
-          id: workout.user_profiles.id,
-          user_id: workout.user_profiles.user_id,
-          username: workout.user_profiles.username,
-          display_name: workout.user_profiles.display_name,
-          avatar_url: workout.user_profiles.avatar_url,
-          bio: null,
-          profile_visibility: 'public' as const,
-          show_workouts: true,
-          show_stats: true,
-          show_progress_photos: false,
-          follower_count: 0,
-          following_count: 0,
-          workout_count: 0,
-          total_volume_kg: 0,
-          training_experience: workout.user_profiles.training_experience,
-          primary_goal: null,
-          gym_name: null,
-          badges: [],
-          featured_achievement: null,
-          created_at: '',
-          updated_at: '',
-        },
-        is_saved: savedIds.includes(workout.id),
-      }));
+      const transformedWorkouts: SharedWorkoutWithProfile[] = (data || [])
+        .filter((workout: any) => workout.user_profiles) // Filter out workouts without profiles
+        .map((workout: any) => ({
+          ...workout,
+          user_profile: {
+            id: workout.user_profiles.id,
+            user_id: workout.user_profiles.user_id,
+            username: workout.user_profiles.username,
+            display_name: workout.user_profiles.display_name,
+            avatar_url: workout.user_profiles.avatar_url,
+            bio: null,
+            profile_visibility: 'public' as const,
+            show_workouts: true,
+            show_stats: true,
+            show_progress_photos: false,
+            follower_count: 0,
+            following_count: 0,
+            workout_count: 0,
+            total_volume_kg: 0,
+            training_experience: workout.user_profiles.training_experience,
+            primary_goal: null,
+            gym_name: null,
+            badges: [],
+            featured_achievement: null,
+            created_at: '',
+            updated_at: '',
+          },
+          is_saved: savedIds.includes(workout.id),
+        }));
 
       if (isLoadMore) {
         setWorkouts(prev => [...prev, ...transformedWorkouts]);

@@ -45,10 +45,10 @@ export default function SharedWorkoutDetailPage() {
 
         // Fetch workout with user profile
         const { data, error: fetchError } = await supabase
-          .from('shared_workouts')
+          .from('shared_workouts' as never)
           .select(`
             *,
-            user_profiles!inner (
+            user_profiles (
               id,
               user_id,
               username,
@@ -63,11 +63,21 @@ export default function SharedWorkoutDetailPage() {
           .single();
 
         if (fetchError) {
+          console.error('Error fetching shared workout:', fetchError);
           if (fetchError.code === 'PGRST116') {
             setError('Workout not found');
+          } else if (fetchError.code === 'PGRST301' || fetchError.message?.includes('does not exist')) {
+            setError('The shared_workouts table does not exist. Please run the workout sharing migrations in Supabase SQL Editor.');
           } else {
-            throw fetchError;
+            setError(fetchError.message || 'Failed to load workout');
           }
+          setIsLoading(false);
+          return;
+        }
+
+        if (!data || !(data as any).user_profiles) {
+          setError('Workout not found or user profile missing');
+          setIsLoading(false);
           return;
         }
 
