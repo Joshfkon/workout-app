@@ -1,9 +1,19 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
+
+// Dynamically import ExercisesPage to avoid code duplication
+const ExercisesTab = dynamic(() => import('../exercises/page'), {
+  loading: () => (
+    <div className="flex justify-center py-12">
+      <LoadingAnimation type="random" size="lg" text="Loading exercises..." />
+    </div>
+  ),
+});
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
@@ -202,7 +212,7 @@ function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: num
   };
 }
 
-type TabType = 'workouts' | 'mesocycle' | 'history';
+type TabType = 'workouts' | 'mesocycle' | 'history' | 'exercises';
 
 export default function WorkoutPage() {
   const router = useRouter();
@@ -1062,6 +1072,16 @@ export default function WorkoutPage() {
         >
           History
         </button>
+        <button
+          onClick={() => setActiveTab('exercises')}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            activeTab === 'exercises'
+              ? 'bg-surface-700 text-surface-100'
+              : 'text-surface-400 hover:text-surface-200'
+          }`}
+        >
+          Exercises
+        </button>
       </div>
 
       {activeTab === 'workouts' ? (
@@ -1685,7 +1705,7 @@ export default function WorkoutPage() {
             </Card>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'history' ? (
         /* History Tab Content */
         <div className="space-y-6">
           <div className="flex items-start justify-between gap-4">
@@ -2004,6 +2024,9 @@ export default function WorkoutPage() {
             </div>
           )}
         </div>
+      ) : (
+        /* Exercises Tab Content */
+        <ExercisesTab />
       )}
 
       {/* Exercise History Modal */}
