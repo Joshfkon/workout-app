@@ -48,12 +48,12 @@ export function useLeaderboard({
       const currentOffset = loadMore ? offset : 0;
 
       // Fetch leaderboard entries
-      const { data, error: fetchError } = await supabase.rpc('get_leaderboard', {
+      const { data, error: fetchError } = await supabase.rpc('get_leaderboard' as never, {
         p_type: type,
         p_exercise_id: exerciseId || null,
         p_limit: limit,
         p_offset: currentOffset,
-      });
+      } as never);
 
       if (fetchError) throw fetchError;
 
@@ -105,11 +105,11 @@ export function useLeaderboard({
 
       // Fetch user's own rank if logged in
       if (user && !loadMore) {
-        const { data: rankData } = await supabase.rpc('get_user_rank', {
+        const { data: rankData } = await supabase.rpc('get_user_rank' as never, {
           p_user_id: user.id,
           p_type: type,
           p_exercise_id: exerciseId || null,
-        });
+        } as never);
 
         if (rankData && rankData.length > 0) {
           setUserRank(rankData[0]);
