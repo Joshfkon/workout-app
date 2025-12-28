@@ -1760,3 +1760,145 @@ export function calculatePercentBodyweight(
   return Math.round((effectiveLoadKg / userBodyweightKg) * 100);
 }
 
+// ============ MUSCLE PRIORITY & IMBALANCE DETECTION ============
+
+/**
+ * Priority level for muscle group training
+ * 1 = highest priority (most focus), 5 = lowest priority (maintenance only)
+ */
+export type MusclePriorityLevel = 1 | 2 | 3 | 4 | 5;
+
+/**
+ * User's muscle group training priority preference
+ */
+export interface MusclePriority {
+  /** Unique identifier */
+  id: string;
+  /** User ID */
+  userId: string;
+  /** Target muscle group */
+  muscleGroup: MuscleGroup;
+  /** Priority level: 1 = highest, 5 = lowest */
+  priority: MusclePriorityLevel;
+  /** Optional reason for this priority */
+  reason?: string;
+  /** When this priority was set */
+  createdAt: string;
+  /** When this priority was last updated */
+  updatedAt: string;
+}
+
+/**
+ * Asymmetry severity levels for bilateral measurements
+ */
+export type AsymmetrySeverity = 'none' | 'minor' | 'moderate' | 'significant';
+
+/**
+ * Bilateral asymmetry detection result
+ */
+export interface BilateralAsymmetry {
+  /** Body part being measured (e.g., 'biceps', 'thighs') */
+  bodyPart: 'biceps' | 'forearms' | 'thighs' | 'calves';
+  /** Left side measurement in cm */
+  leftCm: number;
+  /** Right side measurement in cm */
+  rightCm: number;
+  /** Percentage difference (positive = right dominant) */
+  asymmetryPercent: number;
+  /** Absolute difference in cm */
+  differenceCm: number;
+  /** Which side is dominant */
+  dominantSide: 'left' | 'right' | 'balanced';
+  /** Severity classification */
+  severity: AsymmetrySeverity;
+  /** Training recommendation if asymmetry detected */
+  recommendation?: string;
+}
+
+/**
+ * Proportionality status for a body part
+ */
+export type ProportionalityStatus = 'underdeveloped' | 'balanced' | 'overdeveloped';
+
+/**
+ * Proportionality analysis comparing actual vs ideal measurements
+ */
+export interface ProportionalityAnalysis {
+  /** Body part name */
+  bodyPart: string;
+  /** Related muscle groups */
+  muscleGroups: MuscleGroup[];
+  /** Actual measurement in cm */
+  actualCm: number;
+  /** Ideal measurement based on proportions */
+  idealCm: number;
+  /** Percentage of ideal achieved */
+  percentOfIdeal: number;
+  /** Development status */
+  status: ProportionalityStatus;
+  /** Training recommendation */
+  recommendation?: string;
+}
+
+/**
+ * Consistency status between lift performance and measurements
+ */
+export type LiftMeasurementStatus = 'consistent' | 'measurement_high' | 'measurement_low';
+
+/**
+ * Sanity check comparing lift performance to body measurements
+ */
+export interface LiftMeasurementCheck {
+  /** Name of the lift */
+  lift: string;
+  /** Lift value in kg */
+  liftValueKg: number;
+  /** Related body measurement */
+  relatedMeasurement: string;
+  /** Measurement value in cm */
+  measurementCm: number;
+  /** Expected measurement range based on lift */
+  expectedRangeCm: [number, number];
+  /** Consistency status */
+  status: LiftMeasurementStatus;
+  /** Explanation message */
+  message: string;
+}
+
+/**
+ * Complete body measurement imbalance analysis
+ */
+export interface ImbalanceAnalysis {
+  /** Left/right asymmetries detected */
+  bilateralAsymmetries: BilateralAsymmetry[];
+  /** Proportionality analysis per body part */
+  proportionalityAnalysis: ProportionalityAnalysis[];
+  /** Lift vs measurement sanity checks */
+  liftSanityChecks: LiftMeasurementCheck[];
+  /** Muscle groups identified as lagging */
+  laggingMuscles: MuscleGroup[];
+  /** Muscle groups identified as dominant */
+  dominantMuscles: MuscleGroup[];
+  /** Prioritized training recommendations */
+  recommendations: string[];
+  /** Overall balance score (0-100, higher = more balanced) */
+  balanceScore: number;
+}
+
+/**
+ * Reason for volume adjustment
+ */
+export type VolumeAdjustmentReason = 'lagging' | 'imbalance' | 'user_priority' | 'dominant';
+
+/**
+ * Volume adjustment for a muscle group based on analysis
+ */
+export interface VolumeAdjustment {
+  /** Target muscle group */
+  muscleGroup: MuscleGroup;
+  /** Volume multiplier (1.0 = normal, 1.15 = +15%, 0.85 = -15%) */
+  volumeMultiplier: number;
+  /** Reason for the adjustment */
+  reason: VolumeAdjustmentReason;
+}
+
