@@ -32,7 +32,20 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
           {/* Spacer for mobile menu button */}
           <div className="w-10 lg:hidden" />
 
-          {/* Page title - could be dynamic */}
+          {/* Logo - links to dashboard */}
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <span className="text-base font-bold text-white hidden sm:block">HyperTrack</span>
+          </Link>
+
+          {/* Spacer */}
           <div className="flex-1" />
 
           {/* Header actions */}
