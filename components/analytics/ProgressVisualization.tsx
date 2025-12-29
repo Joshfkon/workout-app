@@ -296,6 +296,114 @@ export function BenchmarkBar({
 }
 
 // ============================================================
+// PROPORTIONS BENCHMARK BAR (for Classic Proportions)
+// ============================================================
+
+interface ProportionsBenchmarkBarProps {
+  /** Current ratio value */
+  current: number;
+  /** Target/ideal value */
+  target: number;
+  /** Acceptable range [min, max] */
+  range: [number, number];
+  /** Measurement name */
+  label: string;
+  /** Status of the ratio */
+  status: 'far_below' | 'below' | 'optimal' | 'above' | 'far_above';
+}
+
+export function ProportionsBenchmarkBar({
+  current,
+  target,
+  range,
+  label,
+  status,
+}: ProportionsBenchmarkBarProps) {
+  // Calculate visual range (extend beyond the acceptable range)
+  const visualMin = Math.min(range[0] * 0.8, current * 0.85);
+  const visualMax = Math.max(range[1] * 1.2, current * 1.15);
+  const visualRange = visualMax - visualMin;
+
+  const toPercent = (val: number) => ((val - visualMin) / visualRange) * 100;
+
+  // Zone colors based on status
+  const statusConfig = {
+    far_below: { color: 'bg-danger-500', textColor: 'text-danger-400', label: 'Needs Focus' },
+    below: { color: 'bg-warning-500', textColor: 'text-warning-400', label: 'Below Target' },
+    optimal: { color: 'bg-success-500', textColor: 'text-success-400', label: 'Optimal' },
+    above: { color: 'bg-primary-500', textColor: 'text-primary-400', label: 'Above Target' },
+    far_above: { color: 'bg-surface-500', textColor: 'text-surface-400', label: 'Well Developed' },
+  };
+
+  const config = statusConfig[status];
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-medium text-surface-300">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-medium ${config.textColor}`}>
+            {current.toFixed(2)}
+          </span>
+          <span className="text-[10px] text-surface-500">→ {target.toFixed(2)}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded ${config.color} text-white`}>
+            {config.label}
+          </span>
+        </div>
+      </div>
+      <div className="relative w-full h-6 bg-surface-900 rounded overflow-hidden">
+        {/* Below target zone (left of range) */}
+        <div
+          className="absolute top-0 bottom-0 bg-warning-500/20 border-r border-warning-500/40"
+          style={{
+            left: '0%',
+            width: `${toPercent(range[0])}%`,
+          }}
+        />
+        {/* Optimal zone (within range) */}
+        <div
+          className="absolute top-0 bottom-0 bg-success-500/20 border-r border-success-500/40"
+          style={{
+            left: `${toPercent(range[0])}%`,
+            width: `${toPercent(range[1]) - toPercent(range[0])}%`,
+          }}
+        />
+        {/* Above target zone (right of range) */}
+        <div
+          className="absolute top-0 bottom-0 bg-primary-500/20"
+          style={{
+            left: `${toPercent(range[1])}%`,
+            width: `${100 - toPercent(range[1])}%`,
+          }}
+        />
+        {/* Range labels */}
+        <div className="absolute inset-0 flex items-center text-[8px] text-surface-500 px-1">
+          <span style={{ position: 'absolute', left: `${Math.max(2, toPercent(range[0]) - 4)}%` }}>
+            {range[0].toFixed(2)}
+          </span>
+          <span style={{ position: 'absolute', left: `${Math.min(92, toPercent(range[1]))}%` }}>
+            {range[1].toFixed(2)}
+          </span>
+        </div>
+        {/* Target marker */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-surface-300/50"
+          style={{ left: `${toPercent(target)}%` }}
+        />
+        {/* Current value marker */}
+        <div
+          className="absolute top-0 bottom-0 flex items-center justify-center"
+          style={{ left: `${toPercent(current)}%`, transform: 'translateX(-50%)' }}
+        >
+          <div className={`w-1 h-full ${config.color}`} />
+          <div className={`absolute -bottom-0.5 text-[10px] ${config.textColor} font-bold`}>▲</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // PROGRESS RING COMPONENT
 // ============================================================
 

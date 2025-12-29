@@ -7,6 +7,7 @@ import {
   RatioProgressBar,
   BenchmarkBar,
   ProgressRing,
+  ProportionsBenchmarkBar,
 } from './ProgressVisualization';
 import {
   formatMeasurement,
@@ -69,13 +70,27 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
           Classic Proportions (Adonis Ratios)
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        <div className="flex items-center gap-2 text-[10px] text-surface-500">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded bg-warning-500/50" />
+            <span>Below</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded bg-success-500/50" />
+            <span>Optimal</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded bg-primary-500/50" />
+            <span>Above</span>
+          </div>
+        </div>
+
         {ratios.map((ratio) => {
           const isExpanded = expandedRatio === ratio.name;
-          const badge = getStatusBadge(ratio.status);
 
           return (
-            <div key={ratio.name} className="space-y-2">
+            <div key={ratio.name}>
               <button
                 onClick={() => {
                   setExpandedRatio(isExpanded ? null : ratio.name);
@@ -83,18 +98,12 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
                 }}
                 className="w-full text-left"
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-surface-300">{ratio.name}</span>
-                  <Badge variant={badge.variant} size="sm">
-                    {badge.label}
-                  </Badge>
-                </div>
-                <RatioProgressBar
+                <ProportionsBenchmarkBar
                   current={ratio.currentValue}
                   target={ratio.idealValue}
                   range={ratio.acceptableRange}
-                  label=""
-                  size="sm"
+                  label={ratio.name}
+                  status={ratio.status}
                 />
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-[10px] text-surface-500">{ratio.formula}</span>
@@ -105,11 +114,8 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
               </button>
 
               {isExpanded && (
-                <div className="pl-2 border-l-2 border-surface-700 space-y-1">
+                <div className="pl-2 border-l-2 border-surface-700 space-y-1 mt-2">
                   <p className="text-xs text-surface-400">{ratio.description}</p>
-                  <div className="text-xs text-surface-500">
-                    <span>Optimal range: {ratio.acceptableRange[0].toFixed(2)} - {ratio.acceptableRange[1].toFixed(2)}</span>
-                  </div>
                   {ratio.recommendation && (
                     <p className="text-xs text-primary-400">{ratio.recommendation}</p>
                   )}
