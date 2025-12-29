@@ -1162,15 +1162,15 @@ export const ExerciseCard = memo(function ExerciseCard({
       {isActive && warmupSets.length > 0 && workingWeight > 0 && (
         <div className="border-b border-surface-800">
           <div className="overflow-hidden">
-            <table className="w-full text-sm table-fixed">
+            <table className="w-full text-sm">
               <thead className="bg-surface-800/50">
                 <tr>
-                  <th className="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12">Set</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20">Weight</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14">Reps</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14">Form</th>
-                  <th className="px-2 py-2 text-center text-surface-400 font-medium w-20">Purpose</th>
-                  <th className="px-1 py-2 w-10 sm:w-12"></th>
+                  <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
+                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
+                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
+                  <th className="px-1 py-2 w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-800">
@@ -1191,14 +1191,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const isEditingThis = editingWarmupId === warmup.setNumber;
                   
                   return (
-                    <tr 
+                    <tr
                       key={`warmup-${warmup.setNumber}`}
                       className={`${isWarmupCompleted ? 'bg-amber-500/5' : 'bg-amber-500/10'}`}
                     >
-                      <td className="px-2 py-2 text-amber-400 font-medium text-[10px] sm:text-xs min-w-0">
-                        <span className="truncate block">W{warmup.setNumber}</span>
+                      <td className="px-1.5 py-2 text-amber-400 font-medium text-xs">
+                        W{warmup.setNumber}
                       </td>
-                      <td className="px-1 py-2 text-center min-w-0">
+                      <td className="px-1 py-2 text-center">
                         {isEditingThis ? (
                           <input
                             type="number"
@@ -1225,7 +1225,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               }
                             }}
                             autoFocus
-                            className="w-full max-w-[4rem] px-1 py-0.5 text-center font-mono text-xs sm:text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
+                            className="w-full px-1 py-0.5 text-center font-mono text-sm bg-surface-900 border border-amber-500 rounded text-surface-100"
                           />
                         ) : (
                           <button
@@ -1233,19 +1233,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                               setEditingWarmupId(warmup.setNumber);
                               setWarmupWeightInput(warmupWeightForDisplay.toString());
                             }}
-                            className="font-mono text-surface-300 text-xs sm:text-sm hover:text-amber-400 transition-colors truncate block w-full"
+                            className="font-mono text-surface-300 hover:text-amber-400 transition-colors"
                           >
                             {displayWarmupWeight}
-                            {hasCustomWeight && <span className="text-amber-400 text-[10px] sm:text-xs ml-1">*</span>}
+                            {hasCustomWeight && <span className="text-amber-400 text-xs ml-1">*</span>}
                           </button>
                         )}
                       </td>
-                      <td className="px-1 py-2 text-center font-mono text-surface-300 text-xs sm:text-sm min-w-0">
-                        <span className="truncate block">{warmup.targetReps}</span>
+                      <td className="px-1 py-2 text-center font-mono text-surface-300">
+                        {warmup.targetReps}
                       </td>
-                      <td className="px-1 py-2 text-center text-surface-500 text-[10px] sm:text-xs">—</td>
-                      <td className="px-2 py-2 text-center min-w-0">
-                        <span className="text-[10px] sm:text-xs text-amber-400/70 truncate block">{warmup.purpose}</span>
+                      <td className="px-1 py-2 text-center text-surface-500 text-xs">—</td>
+                      <td className="px-1 py-2 text-center">
+                        <span className="text-xs text-amber-400/70">{warmup.purpose}</span>
                       </td>
                       <td className="px-1 py-2">
                         <button
@@ -1265,9 +1265,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                               onWarmupComplete(restTime);
                             }
                           }}
-                          className={`p-2 rounded-lg transition-colors ${
-                            isWarmupCompleted 
-                              ? 'bg-amber-500 text-white' 
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isWarmupCompleted
+                              ? 'bg-amber-500 text-white'
                               : 'bg-surface-700 hover:bg-surface-600 text-surface-400'
                           }`}
                         >
@@ -1459,16 +1459,16 @@ export const ExerciseCard = memo(function ExerciseCard({
       ) : (
         // Table design for non-bodyweight exercises
         <div className="overflow-hidden">
-          <table className="w-full text-sm table-fixed">
+          <table className="w-full text-sm">
             <thead className="bg-surface-800/50">
               <tr>
-                <th className="px-2 py-2 text-left text-surface-400 font-medium w-10 sm:w-12">Set</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium w-16 sm:w-20">Weight</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14">Reps</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium w-12 sm:w-14">RPE</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium w-14 sm:w-16">Form</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium w-20">Quality</th>
-                <th className="px-1 py-2 w-10 sm:w-12"></th>
+                <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
+                <th className="px-1 py-2 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -1479,7 +1479,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 
                 return editingSetId === set.id ? (
                   <tr key={set.id} className="bg-primary-500/10">
-                    <td className="px-3 py-2 text-surface-300 font-medium">{set.setNumber}</td>
+                    <td className="px-1.5 py-2 text-surface-300 font-medium">{set.setNumber}</td>
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
@@ -1488,7 +1488,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onFocus={(e) => e.target.select()}
                         onKeyDown={handleEditKeyDown}
                         step="0.5"
-                        className="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
+                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                         autoFocus
                       />
                     </td>
@@ -1499,7 +1499,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onChange={(e) => setEditReps(e.target.value)}
                         onFocus={(e) => e.target.select()}
                         onKeyDown={handleEditKeyDown}
-                        className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
+                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
                     </td>
                     <td className="px-1 py-1.5">
@@ -1510,13 +1510,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onFocus={(e) => e.target.select()}
                         onKeyDown={handleEditKeyDown}
                         step="0.5"
-                        className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
+                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
                     </td>
                     <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-500 text-[10px] sm:text-xs">—</span>
+                      <span className="text-surface-500 text-xs">—</span>
                     </td>
-                    <td className="px-2 py-1.5 text-center min-w-0">
+                    <td className="px-1 py-1.5 text-center">
                       <div className="flex justify-center">
                         <SetQualityBadge quality={set.quality} />
                       </div>
@@ -1553,26 +1553,26 @@ export const ExerciseCard = memo(function ExerciseCard({
                       onTouchEnd={() => handleTouchEnd(set.id, true)}
                       style={getSwipeTransform(set.id)}
                     >
-                      <td className="px-2 py-2.5 text-surface-300 font-medium">
+                      <td className="px-1.5 py-2.5 text-surface-300 font-medium">
                         <div className="flex items-center gap-1 min-w-0">
                           {isDropset && <span className="text-purple-400 text-xs">↓</span>}
                           <span className="truncate">{set.setNumber}</span>
                         </div>
                       </td>
-                      <td 
-                        className={`px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                      <td
+                        className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        <span className="truncate block">{displayWeight(set.weightKg)}</span>
-                      </td>
-                      <td 
-                        className={`px-1 py-2.5 text-center font-mono text-surface-200 min-w-0 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                        onClick={() => onSetEdit && startEditing(set)}
-                      >
-                        <span className="truncate block">{set.reps}</span>
+                        {displayWeight(set.weightKg)}
                       </td>
                       <td
-                        className="px-1 py-2.5 text-center min-w-0"
+                        className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        onClick={() => onSetEdit && startEditing(set)}
+                      >
+                        {set.reps}
+                      </td>
+                      <td
+                        className="px-1 py-2.5 text-center"
                       >
                         {editingRpeId === set.id ? (
                           <input
@@ -1616,12 +1616,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                             step="0.5"
                             min="0"
                             max="10"
-                            className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
+                            className="w-full px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center font-mono text-surface-100 text-sm"
                             autoFocus
                           />
                         ) : (
                           <span
-                            className={`font-mono text-surface-200 text-xs sm:text-sm truncate block ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                            className={`font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                             onClick={() => {
                               if (onSetEdit) {
                                 setEditingRpeId(set.id);
@@ -1634,7 +1634,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         )}
                       </td>
                       <td
-                        className="px-1 py-2.5 text-center min-w-0"
+                        className="px-1 py-2.5 text-center"
                       >
                         {editingFormId === set.id ? (
                           <select
@@ -1664,7 +1664,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                                 setEditFormValue(null);
                               }
                             }}
-                            className="w-full max-w-[3.5rem] px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center text-surface-100 text-[10px] sm:text-xs"
+                            className="w-full px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center text-surface-100 text-xs"
                             autoFocus
                           >
                             <option value="">—</option>
@@ -1674,7 +1674,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           </select>
                         ) : (
                           <span
-                            className={`text-surface-200 text-[10px] sm:text-xs truncate block ${onSetFeedbackUpdate ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                            className={`text-surface-200 text-xs ${onSetFeedbackUpdate ? 'cursor-pointer hover:text-primary-400' : ''}`}
                             onClick={() => {
                               if (onSetFeedbackUpdate) {
                                 setEditingFormId(set.id);
@@ -1694,7 +1694,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           </span>
                         )}
                       </td>
-                      <td className="px-2 py-2.5 text-center min-w-0">
+                      <td className="px-1 py-2.5 text-center">
                         <div className="flex justify-center">
                           <SetQualityBadge quality={set.quality} />
                         </div>
@@ -1716,7 +1716,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               e.stopPropagation();
                               onSetDelete(set.id);
                             }}
-                            className="p-2 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
+                            className="p-1.5 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
                             title="Uncheck set"
                           >
                             <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1727,7 +1727,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                             </svg>
                           </button>
                         ) : (
-                          <div className="p-2 rounded-lg bg-success-500">
+                          <div className="p-1.5 rounded-lg bg-success-500">
                             <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                             </svg>
@@ -1899,7 +1899,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onTouchEnd={() => handleTouchEnd(pendingId, false)}
                     style={getSwipeTransform(pendingId)}
                   >
-                    <td className="px-3 py-2 text-surface-400 font-medium">{setNumber}</td>
+                    <td className="px-1.5 py-2 text-surface-400 font-medium">{setNumber}</td>
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
@@ -1917,7 +1917,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           if (suggestedWeight > 0) return String(displayWeight(suggestedWeight));
                           return '???';
                         })()}
-                        className="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
                     <td className="px-1 py-1.5">
@@ -1928,14 +1928,14 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onFocus={(e) => e.target.select()}
                         min="0"
                         max="100"
-                        className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-xs sm:text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
                     <td className="px-1 py-1.5 text-center">
                       {(() => {
                         const isLastPendingSet = index === pendingInputs.length - 1;
                         const shouldShowAmrapInput = isLastPendingSet && isAmrapSuggested;
-                        
+
                         if (shouldShowAmrapInput) {
                           return (
                             <input
@@ -1946,23 +1946,23 @@ export const ExerciseCard = memo(function ExerciseCard({
                               step="0.5"
                               min="1"
                               max="10"
-                              className="w-full max-w-[3rem] px-1 py-1 bg-surface-800/50 border border-surface-600/50 rounded text-center font-mono text-surface-400 text-[10px] sm:text-xs focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50"
+                              className="w-full px-1 py-1 bg-surface-800/50 border border-surface-600/50 rounded text-center font-mono text-surface-400 text-xs focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50"
                               placeholder="9.5"
                               title="AMRAP target: Push to failure (RPE 9.5+)"
                             />
                           );
                         }
-                        
+
                         return (
-                          <span className="text-surface-600 text-[10px] sm:text-xs font-mono">—</span>
+                          <span className="text-surface-600 text-xs font-mono">—</span>
                         );
                       })()}
                     </td>
                     <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-600 text-[10px] sm:text-xs">—</span>
+                      <span className="text-surface-600 text-xs">—</span>
                     </td>
-                    <td className="px-2 py-1.5 text-center min-w-0">
-                      <span className="text-surface-600 text-[10px] sm:text-xs">???</span>
+                    <td className="px-1 py-1.5 text-center">
+                      <span className="text-surface-600 text-xs">???</span>
                     </td>
                     <td className="px-1 py-1.5 relative">
                       {/* Delete reveal background for swipe */}
@@ -1978,7 +1978,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <button
                         onClick={() => completeSetImmediately(index)}
                         disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
-                        className="p-2 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
+                        className="p-1.5 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
                         title="Complete set"
                       >
                         {isCompletingSet ? (
@@ -1996,20 +1996,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </tr>
                 );
               })}
-              
+
               {/* Show placeholder rows when not active */}
               {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
                 const inactiveSetNumber = completedSets.length + i + 1;
                 return (
                   <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
-                    <td className="px-2 py-2.5 text-surface-500 min-w-0">
-                      <span className="truncate block">{inactiveSetNumber}</span>
+                    <td className="px-1.5 py-2.5 text-surface-500">
+                      {inactiveSetNumber}
                     </td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0">???</td>
-                    <td className="px-2 py-2.5 text-center text-surface-600 text-[10px] sm:text-xs min-w-0">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
                     <td className="px-1 py-2.5"></td>
                   </tr>
                 );
