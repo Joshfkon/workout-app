@@ -136,33 +136,44 @@ export function AddFoodModal({
   const filteredCustomFoods = useMemo(() => {
     if (!filterQuery.trim()) return customFoods;
     const query = filterQuery.toLowerCase();
-    return customFoods.filter(f => 
-      f.food_name.toLowerCase().includes(query)
-    );
+    const queryNoSpaces = query.replace(/\s+/g, '');
+    return customFoods.filter(f => {
+      const name = f.food_name.toLowerCase();
+      // Match either with spaces or without (e.g., "Rx bar" matches "RXBAR")
+      return name.includes(query) || name.replace(/\s+/g, '').includes(queryNoSpaces);
+    });
   }, [customFoods, filterQuery]);
 
   // Filter recent foods based on search
   const filteredRecentFoods = useMemo(() => {
     if (!filterQuery.trim()) return recentFoods;
     const query = filterQuery.toLowerCase();
-    return recentFoods.filter(f => 
-      f.name.toLowerCase().includes(query)
-    );
+    const queryNoSpaces = query.replace(/\s+/g, '');
+    return recentFoods.filter(f => {
+      const name = f.name.toLowerCase();
+      // Match either with spaces or without (e.g., "Rx bar" matches "RXBAR")
+      return name.includes(query) || name.replace(/\s+/g, '').includes(queryNoSpaces);
+    });
   }, [recentFoods, filterQuery]);
 
   // Filter system foods based on category and search
   const filteredSystemFoods = useMemo(() => {
     let foods = systemFoods;
-    
+
     if (systemFoodCategory !== 'all') {
       foods = foods.filter(f => f.category === systemFoodCategory);
     }
-    
+
     if (filterQuery.trim()) {
       const query = filterQuery.toLowerCase();
-      foods = foods.filter(f => f.name.toLowerCase().includes(query));
+      const queryNoSpaces = query.replace(/\s+/g, '');
+      foods = foods.filter(f => {
+        const name = f.name.toLowerCase();
+        // Match either with spaces or without (e.g., "Rx bar" matches "RXBAR")
+        return name.includes(query) || name.replace(/\s+/g, '').includes(queryNoSpaces);
+      });
     }
-    
+
     return foods;
   }, [systemFoods, systemFoodCategory, filterQuery]);
 
