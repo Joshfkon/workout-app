@@ -360,11 +360,13 @@ export function BodyMeasurements({
     const supabase = createUntypedClient();
     const today = new Date().toISOString().split('T')[0];
 
-    // Convert to cm for storage if using inches
+    // Note: measurements state already stores values in cm
+    // The onChange handler converts input values to cm regardless of displayUnit
+    // So we can save measurements directly without additional conversion
     const storedMeasurements: Measurements = {};
     Object.entries(measurements).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        storedMeasurements[key as keyof Measurements] = displayUnit === 'in' ? inToCm(value) : value;
+        storedMeasurements[key as keyof Measurements] = value;
       }
     });
 
