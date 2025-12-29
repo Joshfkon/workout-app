@@ -231,14 +231,14 @@ const BASE_BENCHMARKS_INCHES = {
     superhero: [48, 52],
     elite: [46, 48],
     attainable: [44, 46],
-    muscleGroups: ['lats', 'traps', 'rhomboids'] as MuscleGroup[],
+    muscleGroups: ['back', 'traps'] as MuscleGroup[],
   },
   lower_back: {
     // Lower back - between waist and upper back
     superhero: [34, 36],
     elite: [35, 37],
     attainable: [36, 38],
-    muscleGroups: ['lower_back'] as MuscleGroup[],
+    muscleGroups: ['back'] as MuscleGroup[],
   },
   waist: {
     // Lower is better for waist
