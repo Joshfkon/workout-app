@@ -87,6 +87,8 @@ export function QuickFoodLogger({
 
   // Barcode product state
   const [barcodeProduct, setBarcodeProduct] = useState<NonNullable<BarcodeSearchResult['product']> | null>(null);
+  const [barcodeQuantity, setBarcodeQuantity] = useState('1');
+  const [barcodeUnit, setBarcodeUnit] = useState<'serving' | 'grams'>('serving');
 
   // Get frequent foods for the selected meal type
   const frequentFoodsForMeal = useMemo(() => {
@@ -145,6 +147,42 @@ export function QuickFoodLogger({
       fat: Math.round(selectedFrequentFood.avg_fat * effectiveFrequentServings * 10) / 10,
     };
   }, [selectedFrequentFood, effectiveFrequentServings]);
+
+  // Calculate nutrition for barcode product based on quantity/unit selection
+  const barcodeProductNutrition = useMemo(() => {
+    if (!barcodeProduct) return null;
+
+    const qty = parseFloat(barcodeQuantity) || 0;
+    let multiplier = 0;
+
+    if (barcodeUnit === 'serving') {
+      // qty servings
+      multiplier = qty;
+    } else {
+      // qty grams - convert to servings using servingQuantity (grams per serving)
+      multiplier = qty / barcodeProduct.servingQuantity;
+    }
+
+    return {
+      calories: Math.round(barcodeProduct.calories * multiplier),
+      protein: Math.round(barcodeProduct.protein * multiplier * 10) / 10,
+      carbs: Math.round(barcodeProduct.carbs * multiplier * 10) / 10,
+      fat: Math.round(barcodeProduct.fat * multiplier * 10) / 10,
+      multiplier,
+    };
+  }, [barcodeProduct, barcodeQuantity, barcodeUnit]);
+
+  // Get display text for barcode serving size
+  const getBarcodeServingSizeDisplay = () => {
+    if (!barcodeProduct) return '';
+    const qty = parseFloat(barcodeQuantity) || 0;
+
+    if (barcodeUnit === 'serving') {
+      return `${qty} ${qty === 1 ? 'serving' : 'servings'} (${Math.round(barcodeProduct.servingQuantity * qty)}g)`;
+    } else {
+      return `${qty}g`;
+    }
+  };
 
   const handleSelectFrequentFood = (food: FrequentFood) => {
     setSelectedFrequentFood(food);
@@ -231,23 +269,26 @@ export function QuickFoodLogger({
     try {
       console.log('[QuickFoodLogger] Product received:', product?.name);
       setBarcodeProduct(product);
+      // Reset portion selection for new product
+      setBarcodeQuantity('1');
+      setBarcodeUnit('serving');
     } catch (err) {
       console.error('[QuickFoodLogger] Error setting product:', err);
     }
   };
 
   const handleAddBarcodeProduct = async () => {
-    if (!barcodeProduct) return;
+    if (!barcodeProduct || !barcodeProductNutrition) return;
     setIsAdding(true);
     try {
       await onAdd({
         food_name: barcodeProduct.name,
-        serving_size: barcodeProduct.servingSize,
-        servings: 1,
-        calories: barcodeProduct.calories,
-        protein: barcodeProduct.protein,
-        carbs: barcodeProduct.carbs,
-        fat: barcodeProduct.fat,
+        serving_size: getBarcodeServingSizeDisplay(),
+        servings: 1, // We've already calculated the total
+        calories: barcodeProductNutrition.calories,
+        protein: barcodeProductNutrition.protein,
+        carbs: barcodeProductNutrition.carbs,
+        fat: barcodeProductNutrition.fat,
         meal_type: mealType,
         source: 'barcode',
       });
@@ -642,42 +683,140 @@ export function QuickFoodLogger({
       ) : mode === 'barcode' ? (
         /* Barcode Scanner Mode */
         barcodeProduct ? (
-          /* Show scanned product for confirmation */
+          /* Show scanned product with portion selector */
           <div className="space-y-3">
-            <div className="p-4 bg-surface-900 rounded-lg">
-              {barcodeProduct.imageUrl && (
-                <div className="flex justify-center mb-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img 
-                    src={barcodeProduct.imageUrl} 
-                    alt={barcodeProduct.name}
-                    className="h-20 w-20 object-contain rounded-lg bg-white"
-                  />
-                </div>
-              )}
-              <h3 className="text-sm font-medium text-surface-100 text-center">{barcodeProduct.name}</h3>
-              <p className="text-xs text-surface-400 text-center mt-1">{barcodeProduct.servingSize}</p>
-              
-              <div className="grid grid-cols-4 gap-2 mt-4">
-                <div className="text-center">
-                  <p className="text-lg font-bold text-primary-400">{barcodeProduct.calories}</p>
-                  <p className="text-xs text-surface-500">cal</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-red-400">{barcodeProduct.protein}g</p>
-                  <p className="text-xs text-surface-500">protein</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-yellow-400">{barcodeProduct.carbs}g</p>
-                  <p className="text-xs text-surface-500">carbs</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-lg font-bold text-blue-400">{barcodeProduct.fat}g</p>
-                  <p className="text-xs text-surface-500">fat</p>
+            <div className="p-4 bg-surface-900 rounded-lg space-y-4">
+              {/* Product Info */}
+              <div className="flex items-start gap-3">
+                {barcodeProduct.imageUrl ? (
+                  <div className="flex-shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={barcodeProduct.imageUrl}
+                      alt={barcodeProduct.name}
+                      className="h-16 w-16 object-contain rounded-lg bg-white"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-16 w-16 bg-surface-700 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl">🍽️</span>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-medium text-surface-100 leading-tight">{barcodeProduct.name}</h3>
+                  <p className="text-xs text-surface-500 mt-1">
+                    Base: {barcodeProduct.servingSize}
+                  </p>
                 </div>
               </div>
+
+              {/* Portion Selector */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-surface-400 uppercase tracking-wide">
+                  Amount
+                </label>
+
+                {/* Quick portion buttons */}
+                <div className="grid grid-cols-6 gap-1">
+                  {[0.5, 0.75, 1, 1.5, 2, 3].map((qty) => (
+                    <button
+                      key={qty}
+                      onClick={() => {
+                        setBarcodeQuantity(qty.toString());
+                        setBarcodeUnit('serving');
+                      }}
+                      className={`py-2 rounded text-xs font-medium transition-all ${
+                        parseFloat(barcodeQuantity) === qty && barcodeUnit === 'serving'
+                          ? 'bg-primary-500 text-white'
+                          : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+                      }`}
+                    >
+                      {qty === 0.5 ? '½' : qty === 0.75 ? '¾' : `${qty}×`}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom input with unit toggle */}
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    step={barcodeUnit === 'serving' ? '0.1' : '1'}
+                    min="0.1"
+                    value={barcodeQuantity}
+                    onChange={(e) => setBarcodeQuantity(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                  />
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        if (barcodeUnit === 'grams') {
+                          // Convert grams back to servings
+                          const grams = parseFloat(barcodeQuantity) || 0;
+                          const servings = grams / barcodeProduct.servingQuantity;
+                          setBarcodeQuantity(servings.toFixed(2));
+                        }
+                        setBarcodeUnit('serving');
+                      }}
+                      className={`text-xs px-2 py-1.5 rounded transition-colors ${
+                        barcodeUnit === 'serving'
+                          ? 'bg-primary-500 text-white'
+                          : 'text-surface-400 hover:bg-surface-700'
+                      }`}
+                    >
+                      serving
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (barcodeUnit === 'serving') {
+                          // Convert servings to grams
+                          const servings = parseFloat(barcodeQuantity) || 0;
+                          const grams = Math.round(servings * barcodeProduct.servingQuantity);
+                          setBarcodeQuantity(grams.toString());
+                        }
+                        setBarcodeUnit('grams');
+                      }}
+                      className={`text-xs px-2 py-1.5 rounded transition-colors ${
+                        barcodeUnit === 'grams'
+                          ? 'bg-primary-500 text-white'
+                          : 'text-surface-400 hover:bg-surface-700'
+                      }`}
+                    >
+                      grams
+                    </button>
+                  </div>
+                </div>
+
+                {/* Show serving equivalent when in grams mode */}
+                {barcodeUnit === 'grams' && barcodeProductNutrition && (
+                  <p className="text-xs text-surface-500 text-center">
+                    ≈ {barcodeProductNutrition.multiplier.toFixed(2)} servings
+                  </p>
+                )}
+              </div>
+
+              {/* Live Nutrition Display */}
+              {barcodeProductNutrition && (
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="text-center p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-primary-400">{barcodeProductNutrition.calories}</p>
+                    <p className="text-xs text-surface-500">cal</p>
+                  </div>
+                  <div className="text-center p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-red-400">{barcodeProductNutrition.protein}g</p>
+                    <p className="text-xs text-surface-500">protein</p>
+                  </div>
+                  <div className="text-center p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-yellow-400">{barcodeProductNutrition.carbs}g</p>
+                    <p className="text-xs text-surface-500">carbs</p>
+                  </div>
+                  <div className="text-center p-2 bg-surface-800 rounded">
+                    <p className="text-lg font-bold text-blue-400">{barcodeProductNutrition.fat}g</p>
+                    <p className="text-xs text-surface-500">fat</p>
+                  </div>
+                </div>
+              )}
             </div>
-            
+
             <div className="flex gap-2">
               <Button
                 onClick={() => setBarcodeProduct(null)}
@@ -689,6 +828,7 @@ export function QuickFoodLogger({
               <Button
                 onClick={handleAddBarcodeProduct}
                 isLoading={isAdding}
+                disabled={!barcodeProductNutrition?.calories}
                 className="flex-1"
               >
                 Add Food
