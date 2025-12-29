@@ -1071,7 +1071,7 @@ export default function AnalyticsPage() {
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={[...scans].reverse().map(scan => ({
-                      date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                      date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
                       leanMass: scan.leanMassKg,
                       fatMass: scan.fatMassKg,
                     }))}>
