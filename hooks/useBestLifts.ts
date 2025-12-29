@@ -130,14 +130,18 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           id,
           weight_kg,
           reps,
-          created_at,
-          exercise_block:exercise_blocks(exercise:exercises(name))
+          logged_at,
+          exercise_blocks!inner(
+            exercises!inner(name),
+            workout_sessions!inner(user_id, state)
+          )
         `)
-        .eq('user_id', userId)
+        .eq('exercise_blocks.workout_sessions.user_id', userId)
+        .eq('exercise_blocks.workout_sessions.state', 'completed')
         .is('is_warmup', false)
         .not('weight_kg', 'is', null)
         .not('reps', 'is', null)
-        .order('created_at', { ascending: false })
+        .order('logged_at', { ascending: false })
         .limit(500);
       
       if (setLogsError) {
@@ -152,14 +156,14 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           id: string;
           weight_kg: number;
           reps: number;
-          created_at: string;
-          exercise_block: {
-            exercise: { name: string } | null;
+          logged_at: string;
+          exercise_blocks: {
+            exercises: { name: string } | null;
           } | null;
         }) => {
-          if (!log.exercise_block?.exercise?.name || !log.weight_kg || !log.reps) return;
+          if (!log.exercise_blocks?.exercises?.name || !log.weight_kg || !log.reps) return;
 
-          const exerciseName = log.exercise_block.exercise.name.toLowerCase();
+          const exerciseName = log.exercise_blocks.exercises.name.toLowerCase();
           if (!keyExercises.includes(exerciseName)) return;
 
           const e1rm = calculateE1RM(log.weight_kg, log.reps);
@@ -167,11 +171,11 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
 
           if (!existing || e1rm > existing.estimated1rmKg) {
             exerciseBests.set(exerciseName, {
-              exerciseName: log.exercise_block.exercise.name,
+              exerciseName: log.exercise_blocks.exercises.name,
               weightKg: log.weight_kg,
               reps: log.reps,
               estimated1rmKg: e1rm,
-              achievedAt: log.created_at,
+              achievedAt: log.logged_at,
               source: 'auto',
             });
           }
