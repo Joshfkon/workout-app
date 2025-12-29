@@ -395,7 +395,7 @@ export function BodyTargets({
                   </p>
                 )}
               </div>
-              <Badge variant={getProgressBadge(progress.overallProgress)} size="lg">
+              <Badge variant={getProgressBadge(progress.overallProgress)} size="md">
                 {progress.overallProgress}% Complete
               </Badge>
             </div>
