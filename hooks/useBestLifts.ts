@@ -122,22 +122,29 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
       const keyExercises = Object.keys(EXERCISE_NAME_MAPPING);
 
       // Get set logs for key exercises - filter out nulls and warmups
-      // Note: set_logs -> exercise_blocks -> exercises (need to go through exercise_blocks)
-      // Updated: Using 'reps' column (not 'reps_completed')
+      // Note: set_logs -> exercise_blocks -> workout_sessions (for user_id) -> exercises (for name)
+      // Must use !inner joins to properly scope to user's completed sessions
       const { data: setLogs, error: setLogsError } = await supabase
         .from('set_logs')
         .select(`
           id,
           weight_kg,
           reps,
-          created_at,
-          exercise_block:exercise_blocks(exercise:exercises(name))
+          logged_at,
+          exercise_block:exercise_blocks!inner(
+            exercise:exercises(name),
+            workout_sessions!inner(
+              user_id,
+              state
+            )
+          )
         `)
-        .eq('user_id', userId)
+        .eq('exercise_block.workout_sessions.user_id', userId)
+        .eq('exercise_block.workout_sessions.state', 'completed')
         .is('is_warmup', false)
         .not('weight_kg', 'is', null)
         .not('reps', 'is', null)
-        .order('created_at', { ascending: false })
+        .order('logged_at', { ascending: false })
         .limit(500);
       
       if (setLogsError) {
@@ -152,9 +159,13 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           id: string;
           weight_kg: number;
           reps: number;
-          created_at: string;
+          logged_at: string;
           exercise_block: {
             exercise: { name: string } | null;
+            workout_sessions: {
+              user_id: string;
+              state: string;
+            } | null;
           } | null;
         }) => {
           if (!log.exercise_block?.exercise?.name || !log.weight_kg || !log.reps) return;
@@ -171,7 +182,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
               weightKg: log.weight_kg,
               reps: log.reps,
               estimated1rmKg: e1rm,
-              achievedAt: log.created_at,
+              achievedAt: log.logged_at,
               source: 'auto',
             });
           }
