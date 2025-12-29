@@ -42,8 +42,12 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
+import type { Mesocycle, BodyCompositionTarget } from '@/types/schema';
+import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnalytics';
+import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
+const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
 
 // Body composition chart
 const BodyCompChart = dynamic(
@@ -98,7 +102,7 @@ const HungerChart = dynamic(
 );
 
 // Tab types
-type TabType = 'body-composition' | 'strength' | 'volume' | 'wellness';
+type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
 
 interface UserProfile {
   heightCm: number | null;
@@ -316,6 +320,13 @@ export default function AnalyticsPage() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
+  // Goals tab state
+  const [activeMesocycle, setActiveMesocycle] = useState<Mesocycle | null>(null);
+  const [activeTarget, setActiveTarget] = useState<BodyCompositionTarget | null>(null);
+  const [weightHistory, setWeightHistory] = useState<Array<{ date: string; weightKg: number }>>([]);
+  const [currentMeasurements, setCurrentMeasurements] = useState<Record<string, number>>({});
+  const [proportionsAnalysis, setProportionsAnalysis] = useState<EnhancedProportionsAnalysis | null>(null);
+
   // Strength state
   const [strengthProfile, setStrengthProfile] = useState<StrengthProfile | null>(null);
   const [sex, setSex] = useState<'male' | 'female'>('male');
@@ -513,6 +524,173 @@ export default function AnalyticsPage() {
 
     fetchData();
   }, [router]);
+
+  // Fetch goals tab data (mesocycle, targets, weight history, measurements)
+  useEffect(() => {
+    async function fetchGoalsData() {
+      if (!userId) return;
+
+      const supabase = createUntypedClient();
+
+      try {
+        // Fetch active mesocycle, active body composition target, weight history, and measurements in parallel
+        const [mesocycleResult, targetResult, weighInsResult, measurementsResult] = await Promise.all([
+          // Active mesocycle
+          supabase
+            .from('mesocycles')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('state', 'active')
+            .order('started_at', { ascending: false })
+            .limit(1),
+          // Active body composition target
+          supabase
+            .from('body_composition_targets')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .limit(1),
+          // Weight history from weigh-ins (last 90 days for projection)
+          supabase
+            .from('weigh_ins')
+            .select('logged_at, weight_kg')
+            .eq('user_id', userId)
+            .gte('logged_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .order('logged_at', { ascending: true }),
+          // Latest body measurements
+          supabase
+            .from('body_measurements')
+            .select('*')
+            .eq('user_id', userId)
+            .order('logged_at', { ascending: false })
+            .limit(1),
+        ]);
+
+        // Process mesocycle
+        if (mesocycleResult.data && mesocycleResult.data.length > 0) {
+          const meso = mesocycleResult.data[0];
+          setActiveMesocycle({
+            id: meso.id,
+            userId: meso.user_id,
+            name: meso.name,
+            state: meso.state,
+            totalWeeks: meso.total_weeks,
+            currentWeek: meso.current_week,
+            deloadWeek: meso.deload_week,
+            daysPerWeek: meso.days_per_week,
+            splitType: meso.split_type,
+            fatigueScore: meso.fatigue_score || 0,
+            createdAt: meso.created_at,
+            startedAt: meso.started_at,
+            completedAt: meso.completed_at,
+          });
+        }
+
+        // Process body composition target
+        if (targetResult.data && targetResult.data.length > 0) {
+          const target = targetResult.data[0];
+          setActiveTarget({
+            id: target.id,
+            userId: target.user_id,
+            targetWeightKg: target.target_weight_kg,
+            targetBodyFatPercent: target.target_body_fat_percent,
+            targetFfmi: target.target_ffmi,
+            measurementTargets: {
+              neck: target.neck,
+              shoulders: target.shoulders,
+              chest: target.chest,
+              upper_back: target.upper_back,
+              lower_back: target.lower_back,
+              left_bicep: target.left_bicep,
+              right_bicep: target.right_bicep,
+              left_forearm: target.left_forearm,
+              right_forearm: target.right_forearm,
+              waist: target.waist,
+              hips: target.hips,
+              left_thigh: target.left_thigh,
+              right_thigh: target.right_thigh,
+              left_calf: target.left_calf,
+              right_calf: target.right_calf,
+            },
+            mesocycleId: target.mesocycle_id,
+            targetDate: target.target_date,
+            name: target.name,
+            notes: target.notes,
+            isActive: target.is_active,
+            createdAt: target.created_at,
+            updatedAt: target.updated_at,
+          });
+        }
+
+        // Process weight history
+        if (weighInsResult.data && weighInsResult.data.length > 0) {
+          setWeightHistory(
+            weighInsResult.data.map((w: { logged_at: string; weight_kg: number }) => ({
+              date: w.logged_at,
+              weightKg: w.weight_kg,
+            }))
+          );
+        }
+
+        // Process measurements and calculate proportions
+        if (measurementsResult.data && measurementsResult.data.length > 0) {
+          const m = measurementsResult.data[0];
+          const measurements: Record<string, number> = {};
+
+          if (m.neck) measurements.neck = m.neck;
+          if (m.shoulders) measurements.shoulders = m.shoulders;
+          if (m.chest) measurements.chest = m.chest;
+          if (m.upper_back) measurements.upperBack = m.upper_back;
+          if (m.lower_back) measurements.lowerBack = m.lower_back;
+          if (m.left_bicep) measurements.leftBicep = m.left_bicep;
+          if (m.right_bicep) measurements.rightBicep = m.right_bicep;
+          if (m.left_forearm) measurements.leftForearm = m.left_forearm;
+          if (m.right_forearm) measurements.rightForearm = m.right_forearm;
+          if (m.waist) measurements.waist = m.waist;
+          if (m.hips) measurements.hips = m.hips;
+          if (m.left_thigh) measurements.leftThigh = m.left_thigh;
+          if (m.right_thigh) measurements.rightThigh = m.right_thigh;
+          if (m.left_calf) measurements.leftCalf = m.left_calf;
+          if (m.right_calf) measurements.rightCalf = m.right_calf;
+
+          setCurrentMeasurements(measurements);
+
+          // Calculate proportions analysis if we have height
+          if (userProfile?.heightCm && Object.keys(measurements).length > 3) {
+            try {
+              const analysis = analyzeEnhancedProportions(
+                {
+                  neck: measurements.neck,
+                  shoulders: measurements.shoulders,
+                  chest: measurements.chest,
+                  upper_back: measurements.upperBack,
+                  waist: measurements.waist,
+                  hips: measurements.hips,
+                  left_bicep: measurements.leftBicep,
+                  right_bicep: measurements.rightBicep,
+                  left_forearm: measurements.leftForearm,
+                  right_forearm: measurements.rightForearm,
+                  left_thigh: measurements.leftThigh,
+                  right_thigh: measurements.rightThigh,
+                  left_calf: measurements.leftCalf,
+                  right_calf: measurements.rightCalf,
+                },
+                userProfile.heightCm,
+                [] // No existing asymmetries from previous analysis
+              );
+              setProportionsAnalysis(analysis);
+            } catch (err) {
+              console.error('Failed to analyze proportions:', err);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch goals data:', error);
+      }
+    }
+
+    fetchGoalsData();
+  }, [userId, userProfile?.heightCm]);
 
   // Fetch wellness data (hydration and daily check-ins)
   useEffect(() => {
@@ -902,6 +1080,7 @@ export default function AnalyticsPage() {
 
   const tabs = [
     { id: 'body-composition' as TabType, label: 'Body Composition', icon: '📊' },
+    { id: 'goals' as TabType, label: 'Goals', icon: '🎯' },
     { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
     { id: 'volume' as TabType, label: 'Volume & Trends', icon: '📈' },
     { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
@@ -1162,6 +1341,27 @@ export default function AnalyticsPage() {
             </Card>
           )}
         </div>
+      )}
+
+      {activeTab === 'goals' && (
+        <GoalsTab
+          activeMesocycle={activeMesocycle}
+          activeTarget={activeTarget}
+          currentBodyComp={{
+            weightKg: latestScan?.weightKg ?? null,
+            bodyFatPercent: latestScan?.bodyFatPercent ?? null,
+            ffmi: ffmiResult?.ffmi ?? null,
+            leanMassKg: latestScan?.leanMassKg ?? null,
+          }}
+          currentMeasurements={currentMeasurements}
+          weightHistory={weightHistory}
+          proportionsAnalysis={proportionsAnalysis}
+          heightCm={userProfile?.heightCm ?? null}
+          displayUnit={units === 'kg' ? 'cm' : 'in'}
+          weightUnit={units === 'kg' ? 'kg' : 'lb'}
+          onEditGoals={() => router.push('/dashboard/body-composition?tab=targets')}
+          onCreateMesocycle={() => router.push('/dashboard/mesocycle/new')}
+        />
       )}
 
       {activeTab === 'strength' && (
