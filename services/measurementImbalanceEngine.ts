@@ -20,6 +20,8 @@ export interface BodyMeasurements {
   neck?: number;
   shoulders?: number;
   chest?: number;
+  upper_back?: number;  // Upper back/lats at widest point
+  lower_back?: number;  // Lower back at narrowest point above hips
   left_bicep?: number;
   right_bicep?: number;
   left_forearm?: number;
@@ -178,10 +180,12 @@ const IDEAL_PROPORTIONS = {
   neck: 2.5,           // 2.5x wrist
   shoulders: 7.5,      // 7.5x wrist (biacromial)
   chest: 6.5,          // 6.5x wrist (at nipple line)
+  upper_back: 7.0,     // 7.0x wrist (lats at widest, slightly narrower than shoulders)
   bicep: 2.5,          // 2.5x wrist (flexed)
   forearm: 1.88,       // 1.88x wrist
   // Core
   waist: 4.5,          // 4.5x wrist (at navel)
+  lower_back: 4.75,    // 4.75x wrist (slightly larger than waist for V-taper)
   hips: 5.5,           // 5.5x wrist
   // Lower body
   thigh: 3.75,         // 3.75x wrist (upper thigh)
@@ -196,9 +200,11 @@ const HEIGHT_PROPORTIONS = {
   neck: 0.22,          // 22% of height
   shoulders: 0.275,    // 27.5% of height
   chest: 0.58,         // 58% of height
+  upper_back: 0.56,    // 56% of height (lats at widest)
   bicep: 0.2,          // 20% of height
   forearm: 0.17,       // 17% of height
   waist: 0.45,         // 45% of height
+  lower_back: 0.47,    // 47% of height (slightly larger than waist)
   hips: 0.5,           // 50% of height
   thigh: 0.35,         // 35% of height
   calf: 0.22,          // 22% of height
@@ -211,6 +217,8 @@ const MEASUREMENT_TO_MUSCLES: Record<string, MuscleGroup[]> = {
   neck: ['traps'],
   shoulders: ['shoulders'],
   chest: ['chest'],
+  upper_back: ['lats', 'traps', 'rhomboids'],
+  lower_back: ['lower_back', 'lats'],
   bicep: ['biceps'],
   forearm: ['forearms'],
   waist: ['abs'],
@@ -235,6 +243,11 @@ const LIFT_MEASUREMENT_RATIOS = {
   },
   deadliftKg: {
     thigh: [0.25, 0.45],    // Deadlift correlates with thigh size
+    upper_back: [0.5, 0.8], // ~100-130cm upper back for 200-250kg deadlift
+    lower_back: [0.35, 0.55], // Lower back development
+  },
+  rowKg: {
+    upper_back: [0.8, 1.2], // ~100-130cm upper back for 100-120kg row
   },
   curlKg: {
     bicep: [0.5, 0.8],      // ~35-45cm bicep for 50-60kg curl
@@ -1020,4 +1033,215 @@ function calculateBalanceScore(
   }
 
   return Math.max(0, Math.round(score));
+}
+
+// ============================================================
+// TARGET-BASED VOLUME ADJUSTMENTS
+// ============================================================
+
+/**
+ * Target measurements for comparison
+ */
+export interface MeasurementTargets {
+  neck?: number;
+  shoulders?: number;
+  chest?: number;
+  upper_back?: number;
+  lower_back?: number;
+  left_bicep?: number;
+  right_bicep?: number;
+  left_forearm?: number;
+  right_forearm?: number;
+  waist?: number;
+  hips?: number;
+  left_thigh?: number;
+  right_thigh?: number;
+  left_calf?: number;
+  right_calf?: number;
+}
+
+/**
+ * Mapping from measurements to muscle groups for target adjustments
+ */
+const TARGET_MEASUREMENT_TO_MUSCLES: Record<string, MuscleGroup[]> = {
+  neck: ['traps'],
+  shoulders: ['shoulders'],
+  chest: ['chest'],
+  upper_back: ['lats', 'traps', 'rhomboids'],
+  lower_back: ['lower_back'],
+  bicep: ['biceps'],
+  left_bicep: ['biceps'],
+  right_bicep: ['biceps'],
+  forearm: ['forearms'],
+  left_forearm: ['forearms'],
+  right_forearm: ['forearms'],
+  waist: ['abs'],
+  hips: ['glutes'],
+  thigh: ['quads', 'hamstrings'],
+  left_thigh: ['quads', 'hamstrings'],
+  right_thigh: ['quads', 'hamstrings'],
+  calf: ['calves'],
+  left_calf: ['calves'],
+  right_calf: ['calves'],
+};
+
+/**
+ * Calculate volume adjustments based on body composition targets
+ * Muscles that need to grow more to hit targets get a volume boost
+ * Muscles that are already at or above target can be maintained
+ *
+ * @param currentMeasurements - Current body measurements
+ * @param targetMeasurements - Target body measurements
+ * @returns Volume adjustments for the mesocycle builder
+ */
+export function calculateTargetBasedVolumeAdjustments(
+  currentMeasurements: BodyMeasurements,
+  targetMeasurements: MeasurementTargets
+): VolumeAdjustment[] {
+  const adjustments: VolumeAdjustment[] = [];
+  const muscleProgress: Record<MuscleGroup, { progress: number; count: number }> = {} as Record<MuscleGroup, { progress: number; count: number }>;
+
+  // Calculate progress for each measurement toward target
+  for (const [key, target] of Object.entries(targetMeasurements)) {
+    if (!target) continue;
+
+    // Get current value (handle bilateral measurements)
+    let current: number | undefined;
+    if (key.startsWith('left_') || key.startsWith('right_')) {
+      current = currentMeasurements[key as keyof BodyMeasurements];
+    } else if (key === 'bicep') {
+      // Average of both biceps
+      const left = currentMeasurements.left_bicep;
+      const right = currentMeasurements.right_bicep;
+      current = left && right ? (left + right) / 2 : left || right;
+    } else if (key === 'forearm') {
+      const left = currentMeasurements.left_forearm;
+      const right = currentMeasurements.right_forearm;
+      current = left && right ? (left + right) / 2 : left || right;
+    } else if (key === 'thigh') {
+      const left = currentMeasurements.left_thigh;
+      const right = currentMeasurements.right_thigh;
+      current = left && right ? (left + right) / 2 : left || right;
+    } else if (key === 'calf') {
+      const left = currentMeasurements.left_calf;
+      const right = currentMeasurements.right_calf;
+      current = left && right ? (left + right) / 2 : left || right;
+    } else {
+      current = currentMeasurements[key as keyof BodyMeasurements];
+    }
+
+    if (!current) continue;
+
+    // Calculate progress percentage
+    // For waist, less is better; for everything else, more is better
+    let progress: number;
+    if (key === 'waist') {
+      progress = current <= target ? 100 : (target / current) * 100;
+    } else {
+      progress = current >= target ? 100 : (current / target) * 100;
+    }
+
+    // Map to muscle groups
+    const muscles = TARGET_MEASUREMENT_TO_MUSCLES[key];
+    if (muscles) {
+      for (const muscle of muscles) {
+        if (!muscleProgress[muscle]) {
+          muscleProgress[muscle] = { progress: 0, count: 0 };
+        }
+        muscleProgress[muscle].progress += progress;
+        muscleProgress[muscle].count++;
+      }
+    }
+  }
+
+  // Convert progress to volume adjustments
+  for (const [muscle, data] of Object.entries(muscleProgress)) {
+    const avgProgress = data.progress / data.count;
+
+    let volumeMultiplier = 1.0;
+    let reason: 'lagging' | 'imbalance' | 'user_priority' | 'dominant' = 'user_priority';
+
+    if (avgProgress < 70) {
+      // Far from target - significant volume boost
+      volumeMultiplier = 1.2;
+      reason = 'lagging';
+    } else if (avgProgress < 85) {
+      // Moderate progress - moderate boost
+      volumeMultiplier = 1.1;
+      reason = 'lagging';
+    } else if (avgProgress < 100) {
+      // Close to target - small boost
+      volumeMultiplier = 1.05;
+      reason = 'user_priority';
+    } else {
+      // At or above target - maintenance (slight reduction)
+      volumeMultiplier = 0.9;
+      reason = 'dominant';
+    }
+
+    adjustments.push({
+      muscleGroup: muscle as MuscleGroup,
+      volumeMultiplier,
+      reason,
+    });
+  }
+
+  return adjustments;
+}
+
+/**
+ * Get a summary of target progress for display
+ */
+export interface TargetProgressSummary {
+  muscleGroup: MuscleGroup;
+  currentCm: number;
+  targetCm: number;
+  progress: number;
+  status: 'far' | 'close' | 'achieved';
+}
+
+export function getTargetProgressSummary(
+  currentMeasurements: BodyMeasurements,
+  targetMeasurements: MeasurementTargets
+): TargetProgressSummary[] {
+  const summaries: TargetProgressSummary[] = [];
+
+  const measurementPairs: Array<{
+    key: keyof BodyMeasurements;
+    targetKey: keyof MeasurementTargets;
+    muscle: MuscleGroup;
+  }> = [
+    { key: 'chest', targetKey: 'chest', muscle: 'chest' },
+    { key: 'shoulders', targetKey: 'shoulders', muscle: 'shoulders' },
+    { key: 'upper_back', targetKey: 'upper_back', muscle: 'lats' },
+    { key: 'left_bicep', targetKey: 'left_bicep', muscle: 'biceps' },
+    { key: 'right_bicep', targetKey: 'right_bicep', muscle: 'biceps' },
+    { key: 'left_thigh', targetKey: 'left_thigh', muscle: 'quads' },
+    { key: 'right_thigh', targetKey: 'right_thigh', muscle: 'quads' },
+    { key: 'left_calf', targetKey: 'left_calf', muscle: 'calves' },
+    { key: 'right_calf', targetKey: 'right_calf', muscle: 'calves' },
+    { key: 'waist', targetKey: 'waist', muscle: 'abs' },
+  ];
+
+  for (const { key, targetKey, muscle } of measurementPairs) {
+    const current = currentMeasurements[key];
+    const target = targetMeasurements[targetKey];
+
+    if (current && target) {
+      const isWaist = key === 'waist';
+      const progress = isWaist
+        ? (current <= target ? 100 : (target / current) * 100)
+        : (current >= target ? 100 : (current / target) * 100);
+
+      summaries.push({
+        muscleGroup: muscle,
+        currentCm: current,
+        targetCm: target,
+        progress: Math.round(progress),
+        status: progress >= 100 ? 'achieved' : progress >= 85 ? 'close' : 'far',
+      });
+    }
+  }
+
+  return summaries;
 }

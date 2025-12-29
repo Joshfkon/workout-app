@@ -1918,3 +1918,111 @@ export interface VolumeAdjustment {
   reason: VolumeAdjustmentReason;
 }
 
+// ============ BODY COMPOSITION TARGETS ============
+
+/**
+ * Measurement targets (all in cm)
+ */
+export interface MeasurementTargets {
+  neck?: number;
+  shoulders?: number;
+  chest?: number;
+  upper_back?: number;
+  lower_back?: number;
+  left_bicep?: number;
+  right_bicep?: number;
+  left_forearm?: number;
+  right_forearm?: number;
+  waist?: number;
+  hips?: number;
+  left_thigh?: number;
+  right_thigh?: number;
+  left_calf?: number;
+  right_calf?: number;
+}
+
+/**
+ * Body composition target for goal-oriented training
+ * Can be linked to a mesocycle for structured progression
+ */
+export interface BodyCompositionTarget {
+  id: string;
+  userId: string;
+
+  /** Basic composition targets */
+  targetWeightKg?: number;
+  targetBodyFatPercent?: number;
+  targetFfmi?: number;
+
+  /** Individual measurement targets (in cm) */
+  measurementTargets: MeasurementTargets;
+
+  /** Optional link to mesocycle */
+  mesocycleId?: string;
+
+  /** Target completion date */
+  targetDate?: string;
+
+  /** Optional name like "Summer Cut" or "Bulk Phase 1" */
+  name?: string;
+
+  /** Notes about this target */
+  notes?: string;
+
+  /** Whether this is the active target */
+  isActive: boolean;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Progress towards a body composition target
+ */
+export interface TargetProgress {
+  /** Current weight vs target */
+  weight?: {
+    current: number;
+    target: number;
+    progress: number; // percentage (0-100+)
+    remaining: number; // kg to go (can be negative if exceeded)
+  };
+
+  /** Current body fat vs target */
+  bodyFat?: {
+    current: number;
+    target: number;
+    progress: number;
+    remaining: number;
+  };
+
+  /** Current FFMI vs target */
+  ffmi?: {
+    current: number;
+    target: number;
+    progress: number;
+    remaining: number;
+  };
+
+  /** Individual measurement progress */
+  measurements: {
+    [key: string]: {
+      current: number;
+      target: number;
+      progress: number;
+      remaining: number;
+    };
+  };
+
+  /** Overall progress score (average of all targets) */
+  overallProgress: number;
+
+  /** Days until target date (if set) */
+  daysRemaining?: number;
+}
+
+/**
+ * Target status for display
+ */
+export type TargetStatus = 'on_track' | 'ahead' | 'behind' | 'achieved' | 'not_started';
+
