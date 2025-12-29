@@ -369,6 +369,96 @@ export function getBarbellLabel(type: BarbellType, unit: 'kg' | 'lb'): string {
   return BARBELL_WEIGHTS[unit][type].label;
 }
 
+// ============ MEASUREMENT CONVERSION (for body measurements) ============
+
+/**
+ * Convert centimeters to inches
+ */
+export function cmToIn(cm: number): number {
+  return cm / 2.54;
+}
+
+/**
+ * Convert inches to centimeters
+ */
+export function inToCm(inches: number): number {
+  return inches * 2.54;
+}
+
+/**
+ * Format a body measurement value with the user's preferred unit
+ * Always stores in cm, converts to inches for display when needed
+ * @param valueCm - The value in centimeters
+ * @param unit - The display unit preference ('in' or 'cm')
+ * @param decimals - Number of decimal places (default 1)
+ * @returns Formatted string with unit suffix
+ */
+export function formatMeasurement(valueCm: number, unit: 'in' | 'cm', decimals: number = 1): string {
+  if (unit === 'in') {
+    return `${cmToIn(valueCm).toFixed(decimals)} in`;
+  }
+  return `${valueCm.toFixed(decimals)} cm`;
+}
+
+/**
+ * Format a measurement value only (no unit suffix)
+ * @param valueCm - The value in centimeters
+ * @param unit - The display unit preference ('in' or 'cm')
+ * @param decimals - Number of decimal places (default 1)
+ * @returns The numeric value in the requested unit
+ */
+export function formatMeasurementValue(valueCm: number, unit: 'in' | 'cm', decimals: number = 1): number {
+  const value = unit === 'in' ? cmToIn(valueCm) : valueCm;
+  return parseFloat(value.toFixed(decimals));
+}
+
+/**
+ * Convert a measurement from user input to cm for storage
+ * @param value - The input value
+ * @param fromUnit - The unit of the input value
+ * @returns The value in centimeters
+ */
+export function inputMeasurementToCm(value: number, fromUnit: 'in' | 'cm'): number {
+  return fromUnit === 'in' ? inToCm(value) : value;
+}
+
+/**
+ * Format a measurement difference (e.g., for asymmetry display)
+ * Converts to appropriate unit and shows sign
+ * @param differenceCm - The difference in cm (positive or negative)
+ * @param unit - The display unit preference
+ * @param decimals - Number of decimal places
+ * @returns Formatted string like "+1.2 in" or "-0.5 cm"
+ */
+export function formatMeasurementDiff(differenceCm: number, unit: 'in' | 'cm', decimals: number = 1): string {
+  const value = unit === 'in' ? cmToIn(differenceCm) : differenceCm;
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(decimals)} ${unit}`;
+}
+
+/**
+ * Convert height from cm to a readable format
+ * @param heightCm - Height in centimeters
+ * @param unit - The display unit preference
+ * @returns Formatted string like "6'2\"" or "188 cm"
+ */
+export function formatHeight(heightCm: number, unit: 'in' | 'cm'): string {
+  if (unit === 'cm') {
+    return `${Math.round(heightCm)} cm`;
+  }
+  const totalInches = cmToIn(heightCm);
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round(totalInches % 12);
+  return `${feet}'${inches}"`;
+}
+
+/**
+ * Get height in inches from cm
+ */
+export function heightCmToInches(heightCm: number): number {
+  return cmToIn(heightCm);
+}
+
 /**
  * Get color for a plate based on its weight (follows standard Olympic color coding)
  */

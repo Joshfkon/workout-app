@@ -5,11 +5,30 @@ import { Button, Card, CardHeader, CardTitle, CardContent, Badge } from '@/compo
 import { createUntypedClient } from '@/lib/supabase/client';
 import {
   analyzeImbalances,
+  analyzeBilateralAsymmetries,
   type BodyMeasurements as MeasurementsType,
   type ImbalanceAnalysis,
   type UserLifts,
 } from '@/services/measurementImbalanceEngine';
+import {
+  analyzeEnhancedProportions,
+  type EnhancedProportionsAnalysis,
+} from '@/services/bodyProportionsAnalytics';
+import {
+  ProportionalityRatiosCard,
+  SuperheroBenchmarksCard,
+  ImprovedAsymmetryCard,
+  TrainingPrioritiesCard,
+  ScoreBreakdownCard,
+} from '@/components/analytics';
 import { useBestLifts } from '@/hooks/useBestLifts';
+import {
+  formatMeasurement,
+  formatMeasurementValue,
+  formatMeasurementDiff,
+  cmToIn,
+  inToCm,
+} from '@/lib/utils';
 
 interface Measurements {
   neck?: number;
@@ -131,10 +150,10 @@ function InfoIcon({ instructions }: { instructions: string }) {
   );
 }
 
-// Convert cm to inches
-const cmToIn = (cm: number) => Math.round(cm / 2.54 * 10) / 10;
-// Convert inches to cm
-const inToCm = (inches: number) => Math.round(inches * 2.54 * 10) / 10;
+// Note: cmToIn and inToCm are now imported from @/lib/utils
+// Local rounding helpers for display
+const roundToDecimal = (num: number, decimals: number = 1) =>
+  Math.round(num * Math.pow(10, decimals)) / Math.pow(10, decimals);
 
 export function BodyMeasurements({
   userId,
@@ -157,34 +176,12 @@ export function BodyMeasurements({
   const bestLifts = useBestLifts(userId || '');
   const userLifts = showImbalanceAnalysis && userId ? bestLifts.lifts : undefined;
 
-  // Calculate imbalance analysis when measurements or lifts change
-  const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
-    if (!showImbalanceAnalysis) return null;
-    
-    // Check if we have measurements OR lifts (works with either or both)
+  // Convert Measurements to engine format (memoized)
+  const engineMeasurements = useMemo((): MeasurementsType | undefined => {
     const hasMeasurements = Object.values(measurements).some(v => v !== undefined && v !== null);
-    const hasLifts = userLifts && Object.values(userLifts).some(v => v !== undefined && v !== null);
-    
-    // Debug logging
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[BodyMeasurements] Imbalance Analysis Check:', {
-        showImbalanceAnalysis,
-        hasMeasurements,
-        hasLifts,
-        userLifts,
-        bestLiftsLoading: bestLifts.isLoading,
-      });
-    }
-    
-    if (!hasMeasurements && !hasLifts) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[BodyMeasurements] No measurements or lifts, skipping analysis');
-      }
-      return null;
-    }
+    if (!hasMeasurements) return undefined;
 
-    // Convert Measurements to the format expected by the imbalance engine
-    const engineMeasurements: MeasurementsType | undefined = hasMeasurements ? {
+    return {
       neck: measurements.neck,
       shoulders: measurements.shoulders,
       chest: measurements.chest,
@@ -198,10 +195,37 @@ export function BodyMeasurements({
       right_thigh: measurements.right_thigh,
       left_calf: measurements.left_calf,
       right_calf: measurements.right_calf,
-    } : undefined;
+    };
+  }, [measurements]);
+
+  // Calculate imbalance analysis when measurements or lifts change
+  const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
+    if (!showImbalanceAnalysis) return null;
+
+    // Check if we have measurements OR lifts (works with either or both)
+    const hasMeasurements = engineMeasurements !== undefined;
+    const hasLifts = userLifts && Object.values(userLifts).some(v => v !== undefined && v !== null);
+
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[BodyMeasurements] Imbalance Analysis Check:', {
+        showImbalanceAnalysis,
+        hasMeasurements,
+        hasLifts,
+        userLifts,
+        bestLiftsLoading: bestLifts.isLoading,
+      });
+    }
+
+    if (!hasMeasurements && !hasLifts) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[BodyMeasurements] No measurements or lifts, skipping analysis');
+      }
+      return null;
+    }
 
     const analysis = analyzeImbalances(engineMeasurements, userLifts, heightCm, wristCm);
-    
+
     if (process.env.NODE_ENV === 'development') {
       console.log('[BodyMeasurements] Analysis Result:', {
         balanceScore: analysis.balanceScore,
@@ -210,9 +234,51 @@ export function BodyMeasurements({
         dominantMuscles: analysis.dominantMuscles.length,
       });
     }
-    
+
     return analysis;
-  }, [measurements, userLifts, heightCm, wristCm, showImbalanceAnalysis, bestLifts.isLoading]);
+  }, [engineMeasurements, userLifts, heightCm, wristCm, showImbalanceAnalysis, bestLifts.isLoading]);
+
+  // Calculate enhanced proportions analysis (new analytics system)
+  const enhancedAnalysis = useMemo((): EnhancedProportionsAnalysis | null => {
+    if (!showImbalanceAnalysis || !engineMeasurements || !heightCm) return null;
+
+    const bilateralAsymmetries = analyzeBilateralAsymmetries(engineMeasurements);
+    return analyzeEnhancedProportions(
+      engineMeasurements,
+      heightCm,
+      bilateralAsymmetries,
+      imbalanceAnalysis || undefined
+    );
+  }, [engineMeasurements, heightCm, imbalanceAnalysis, showImbalanceAnalysis]);
+
+  // Compute on-track items from enhanced analysis
+  const onTrackItems = useMemo(() => {
+    if (!enhancedAnalysis) return [];
+
+    const items: { label: string; detail: string }[] = [];
+
+    // Add ratios that are optimal
+    for (const ratio of enhancedAnalysis.proportionalityRatios) {
+      if (ratio.status === 'optimal') {
+        items.push({
+          label: ratio.name.replace(' Ratio', ''),
+          detail: `${ratio.currentValue.toFixed(2)}`,
+        });
+      }
+    }
+
+    // Add symmetry items that are balanced
+    for (const asym of enhancedAnalysis.enhancedAsymmetries) {
+      if (asym.severity === 'normal') {
+        items.push({
+          label: asym.bodyPart,
+          detail: 'symmetry 99%+',
+        });
+      }
+    }
+
+    return items.slice(0, 4); // Limit to 4
+  }, [enhancedAnalysis]);
 
   useEffect(() => {
     const loadMeasurements = async () => {
@@ -321,8 +387,7 @@ export function BodyMeasurements({
 
   const getDisplayValue = (value: number | undefined | null): string => {
     if (value === undefined || value === null) return '-';
-    const displayVal = displayUnit === 'in' ? cmToIn(value) : value;
-    return displayVal.toFixed(1);
+    return formatMeasurementValue(value, displayUnit).toFixed(1);
   };
 
   const getChange = (key: keyof Measurements): { value: number; isPositive: boolean } | null => {
@@ -330,15 +395,15 @@ export function BodyMeasurements({
     const current = measurements[key];
     const previous = lastMeasurement.measurements[key];
     if (current === undefined || previous === undefined) return null;
-    
+
     const diff = current - previous;
     if (Math.abs(diff) < 0.1) return null;
-    
+
     // For waist, decrease is positive (good)
     // For arms/chest/etc, increase is positive (good for muscle building)
     const isWaist = key === 'waist';
     return {
-      value: displayUnit === 'in' ? cmToIn(Math.abs(diff)) : Math.abs(diff),
+      value: formatMeasurementValue(Math.abs(diff), displayUnit),
       isPositive: isWaist ? diff < 0 : diff > 0,
     };
   };
@@ -476,32 +541,78 @@ export function BodyMeasurements({
               </p>
             )}
 
-            {/* Imbalance Analysis Section */}
-            {imbalanceAnalysis && (
+            {/* Enhanced Analytics Section */}
+            {(enhancedAnalysis || imbalanceAnalysis) && (
               <div className="mt-4 pt-3 border-t border-surface-800">
                 <button
                   onClick={() => setShowAnalysis(!showAnalysis)}
                   className="w-full flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-surface-300">Balance Analysis</span>
-                    <Badge
-                      variant={
-                        imbalanceAnalysis.balanceScore >= 80
-                          ? 'success'
-                          : imbalanceAnalysis.balanceScore >= 60
-                          ? 'warning'
-                          : 'danger'
-                      }
-                      size="sm"
-                    >
-                      {imbalanceAnalysis.balanceScore}%
-                    </Badge>
+                    <span className="text-sm font-medium text-surface-300">Proportions Analysis</span>
+                    {enhancedAnalysis ? (
+                      <Badge
+                        variant={
+                          enhancedAnalysis.scoreBreakdown.overall >= 80
+                            ? 'success'
+                            : enhancedAnalysis.scoreBreakdown.overall >= 60
+                            ? 'warning'
+                            : 'danger'
+                        }
+                        size="sm"
+                      >
+                        {enhancedAnalysis.scoreBreakdown.overall}%
+                      </Badge>
+                    ) : imbalanceAnalysis && (
+                      <Badge
+                        variant={
+                          imbalanceAnalysis.balanceScore >= 80
+                            ? 'success'
+                            : imbalanceAnalysis.balanceScore >= 60
+                            ? 'warning'
+                            : 'danger'
+                        }
+                        size="sm"
+                      >
+                        {imbalanceAnalysis.balanceScore}%
+                      </Badge>
+                    )}
                   </div>
                   <span className="text-surface-500 text-xs">{showAnalysis ? '▲' : '▼'}</span>
                 </button>
 
-                {showAnalysis && (
+                {showAnalysis && enhancedAnalysis && (
+                  <div className="mt-4 space-y-4">
+                    {/* Score Breakdown */}
+                    <ScoreBreakdownCard breakdown={enhancedAnalysis.scoreBreakdown} />
+
+                    {/* Proportionality Ratios (Adonis) */}
+                    <ProportionalityRatiosCard ratios={enhancedAnalysis.proportionalityRatios} />
+
+                    {/* Superhero Benchmarks */}
+                    <SuperheroBenchmarksCard
+                      benchmarks={enhancedAnalysis.benchmarkComparisons}
+                      heightCm={enhancedAnalysis.userHeightCm}
+                      heightScaleFactor={enhancedAnalysis.heightScaleFactor}
+                      displayUnit={displayUnit}
+                    />
+
+                    {/* Improved Asymmetry Analysis */}
+                    <ImprovedAsymmetryCard
+                      asymmetries={enhancedAnalysis.enhancedAsymmetries}
+                      displayUnit={displayUnit}
+                    />
+
+                    {/* Training Priorities */}
+                    <TrainingPrioritiesCard
+                      priorities={enhancedAnalysis.trainingPriorities}
+                      onTrackItems={onTrackItems}
+                    />
+                  </div>
+                )}
+
+                {/* Fallback: Show legacy analysis if no enhanced analysis available */}
+                {showAnalysis && !enhancedAnalysis && imbalanceAnalysis && (
                   <div className="mt-3 space-y-3">
                     {/* Strength Imbalances (from lift ratios) */}
                     {imbalanceAnalysis.strengthImbalances.length > 0 && (
@@ -533,72 +644,11 @@ export function BodyMeasurements({
                       </div>
                     )}
 
-                    {/* Quick Summary */}
-                    <div className="space-y-2">
-                      {/* Bilateral Asymmetries */}
-                      {imbalanceAnalysis.bilateralAsymmetries.filter(a => a.severity !== 'none').length > 0 && (
-                        <div className="p-2 bg-surface-800/50 rounded-lg">
-                          <p className="text-xs text-surface-400 mb-1.5">Asymmetries Detected:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {imbalanceAnalysis.bilateralAsymmetries
-                              .filter(a => a.severity !== 'none')
-                              .map((a, i) => (
-                                <Badge
-                                  key={i}
-                                  variant={a.severity === 'significant' ? 'danger' : 'warning'}
-                                  size="sm"
-                                >
-                                  {a.bodyPart} ({a.dominantSide} +{a.differenceCm.toFixed(1)}cm)
-                                </Badge>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Lagging Muscles */}
-                      {imbalanceAnalysis.laggingMuscles.length > 0 && (
-                        <div className="p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
-                          <p className="text-xs text-surface-400 mb-1.5">Needs Focus:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {imbalanceAnalysis.laggingMuscles.map(muscle => (
-                              <Badge key={muscle} variant="warning" size="sm">
-                                {muscle}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Strong Points */}
-                      {imbalanceAnalysis.dominantMuscles.length > 0 && (
-                        <div className="p-2 bg-success-500/10 border border-success-500/20 rounded-lg">
-                          <p className="text-xs text-surface-400 mb-1.5">Strong Points:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {imbalanceAnalysis.dominantMuscles.map(muscle => (
-                              <Badge key={muscle} variant="success" size="sm">
-                                {muscle}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Top Recommendation */}
-                      {imbalanceAnalysis.recommendations.length > 0 && (
-                        <div className="p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                          <p className="text-xs text-surface-200">
-                            {imbalanceAnalysis.recommendations[0]}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
                     {/* All Balanced Message */}
-                    {imbalanceAnalysis.bilateralAsymmetries.every(a => a.severity === 'none') &&
-                      imbalanceAnalysis.laggingMuscles.length === 0 &&
-                      imbalanceAnalysis.strengthImbalances.length === 0 && (
+                    {imbalanceAnalysis.strengthImbalances.length === 0 &&
+                      imbalanceAnalysis.laggingMuscles.length === 0 && (
                         <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
-                          <p className="text-sm text-success-400">Great symmetry! Keep up the balanced training.</p>
+                          <p className="text-sm text-success-400">Great strength balance! Add body measurements for full proportions analysis.</p>
                         </div>
                       )}
                   </div>
@@ -687,25 +737,23 @@ export function BodyMeasurements({
                       </div>
                     )}
 
-                    {/* Recommendations */}
-                    {imbalanceAnalysis.recommendations.length > 0 && (
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-medium text-surface-400 uppercase tracking-wide">Recommendations</h4>
-                        {imbalanceAnalysis.recommendations.map((rec, i) => (
-                          <div key={i} className="p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                            <p className="text-xs text-surface-200">{rec}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
                     {/* All Balanced Message */}
                     {imbalanceAnalysis.strengthImbalances.length === 0 &&
                       imbalanceAnalysis.laggingMuscles.length === 0 && (
                         <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
-                          <p className="text-sm text-success-400">Great strength balance! Keep up the balanced training.</p>
+                          <p className="text-sm text-success-400">Great strength balance!</p>
+                          <p className="text-xs text-surface-500 mt-1">Add body measurements for full proportions analysis.</p>
                         </div>
                       )}
+
+                    {/* Prompt to add measurements */}
+                    {imbalanceAnalysis.strengthImbalances.length > 0 && (
+                      <div className="p-2 bg-surface-800/50 rounded-lg">
+                        <p className="text-xs text-surface-400">
+                          Add body measurements above to unlock Classic Proportions (Adonis Ratios) and Superhero Benchmarks analysis.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
