@@ -74,6 +74,12 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
   const [error, setError] = useState<Error | null>(null);
 
   const loadLifts = useCallback(async () => {
+    if (!userId) {
+      setIsLoading(false);
+      setBestLiftRecords([]);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
