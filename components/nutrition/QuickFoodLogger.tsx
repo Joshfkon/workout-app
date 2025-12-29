@@ -102,7 +102,12 @@ export function QuickFoodLogger({
   const filteredSystemFoods = useMemo(() => {
     if (!query.trim()) return systemFoods.slice(0, 15);
     const q = query.toLowerCase();
-    return systemFoods.filter(f => f.name.toLowerCase().includes(q)).slice(0, 20);
+    const qNoSpaces = q.replace(/\s+/g, '');
+    return systemFoods.filter(f => {
+      const name = f.name.toLowerCase();
+      // Match either with spaces or without (e.g., "Rx bar" matches "RXBAR")
+      return name.includes(q) || name.replace(/\s+/g, '').includes(qNoSpaces);
+    }).slice(0, 20);
   }, [systemFoods, query]);
 
   // Calculate nutrition for selected system food
