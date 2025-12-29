@@ -20,6 +20,48 @@ import { useEducationStore } from '@/hooks/useEducationPreferences';
 
 const ALL_EQUIPMENT: Equipment[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight', 'kettlebell'];
 
+type SettingsTab = 'profile' | 'training' | 'preferences' | 'account';
+
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'profile',
+    label: 'Profile',
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'training',
+    label: 'Training',
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
+      </svg>
+    ),
+  },
+  {
+    id: 'preferences',
+    label: 'Preferences',
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'account',
+    label: 'Account',
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+];
+
 // Helper functions for unit conversion
 const cmToInches = (cm: number) => cm / 2.54;
 const inchesToCm = (inches: number) => inches * 2.54;
@@ -29,6 +71,7 @@ const lbsToKg = (lbs: number) => lbs / 2.20462;
 export default function SettingsPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
   // Store values in user's display units, convert on load/save
@@ -302,9 +345,27 @@ export default function SettingsPage() {
         <p className="text-surface-400 mt-1">Customize your training preferences</p>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="flex gap-1 p-1 bg-surface-800/50 rounded-lg overflow-x-auto">
+        {SETTINGS_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'bg-primary-500 text-white shadow-lg'
+                : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700/50'
+            }`}
+          >
+            {tab.icon}
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
       {saveMessage && (
         <div className={`p-4 rounded-lg ${
-          saveMessage.type === 'success' 
+          saveMessage.type === 'success'
             ? 'bg-success-500/10 border border-success-500/20 text-success-400'
             : 'bg-danger-500/10 border border-danger-500/20 text-danger-400'
         }`}>
@@ -312,6 +373,9 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Profile Tab */}
+      {activeTab === 'profile' && (
+        <>
       {/* Profile settings */}
       <Card>
         <CardHeader>
@@ -465,6 +529,18 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Save button for Profile tab */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} isLoading={isSaving}>
+          Save Changes
+        </Button>
+      </div>
+        </>
+      )}
+
+      {/* Training Tab */}
+      {activeTab === 'training' && (
+        <>
       {/* Equipment & Gym */}
       <Card>
         <CardHeader>
@@ -546,9 +622,25 @@ export default function SettingsPage() {
       {/* Detailed Gym Equipment */}
       <GymEquipmentSettings />
 
-      {/* Education & Tips */}
-      <EducationPreferencesCard />
+      {/* Volume Landmarks (moved to Training tab) */}
+      <VolumeLandmarksCard
+        experience={experience}
+        volumeLandmarks={volumeLandmarks}
+        setVolumeLandmarks={setVolumeLandmarks}
+      />
 
+      {/* Save button for Training tab */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} isLoading={isSaving}>
+          Save Changes
+        </Button>
+      </div>
+        </>
+      )}
+
+      {/* Preferences Tab */}
+      {activeTab === 'preferences' && (
+        <>
       {/* Preferences */}
       <Card>
         <CardHeader>
@@ -635,6 +727,21 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Education & Tips */}
+      <EducationPreferencesCard />
+
+      {/* Save button for Preferences tab */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} isLoading={isSaving}>
+          Save Changes
+        </Button>
+      </div>
+        </>
+      )}
+
+      {/* Account Tab */}
+      {activeTab === 'account' && (
+        <>
       {/* Install App */}
       <InstallAppCard />
 
@@ -722,110 +829,8 @@ export default function SettingsPage() {
 
       {/* Import & Export */}
       <ImportExportSettings />
-
-      {/* Volume Landmarks */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Volume Landmarks</CardTitle>
-          <p className="text-sm text-surface-400 mt-1">
-            Weekly sets per muscle group (based on Dr. Mike Israetel&apos;s research)
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {/* Explanation box */}
-            <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700 space-y-3">
-              <div className="flex gap-6 flex-wrap text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="w-10 h-6 bg-warning-500/20 border border-warning-500/40 rounded text-xs flex items-center justify-center font-medium text-warning-400">MEV</span>
-                  <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — Fewest sets to maintain muscle</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-10 h-6 bg-success-500/20 border border-success-500/40 rounded text-xs flex items-center justify-center font-medium text-success-400">MAV</span>
-                  <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Adaptive Volume</span> — Sweet spot for growth</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-10 h-6 bg-danger-500/20 border border-danger-500/40 rounded text-xs flex items-center justify-center font-medium text-danger-400">MRV</span>
-                  <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Recoverable Volume</span> — Upper limit before overtraining</span>
-                </div>
-              </div>
-              <p className="text-xs text-surface-500 border-t border-surface-700 pt-3">
-                These values are pre-filled based on your experience level and published hypertrophy research. Adjust based on your personal recovery capacity and response.
-              </p>
-            </div>
-            
-            {/* Column headers */}
-            <div className="flex items-center gap-4">
-              <span className="w-24 text-xs text-surface-500 font-medium">Muscle</span>
-              <div className="flex-1 grid grid-cols-3 gap-2 text-xs text-center">
-                <span className="text-warning-400 font-medium">MEV</span>
-                <span className="text-success-400 font-medium">MAV</span>
-                <span className="text-danger-400 font-medium">MRV</span>
-              </div>
-            </div>
-            
-            {MUSCLE_GROUPS.map((muscle) => {
-              const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
-              const landmarks = volumeLandmarks[muscle] || defaultLandmark;
-              return (
-                <div key={muscle} className="flex items-center gap-4">
-                  <span className="w-24 text-sm text-surface-300 capitalize">{muscle}</span>
-                  <div className="flex-1 grid grid-cols-3 gap-2">
-                    <Input
-                      type="number"
-                      value={landmarks.mev ?? 6}
-                      onChange={(e) =>
-                        setVolumeLandmarks({
-                          ...volumeLandmarks,
-                          [muscle]: { ...landmarks, mev: parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      className="text-center"
-                    />
-                    <Input
-                      type="number"
-                      value={landmarks.mav ?? 12}
-                      onChange={(e) =>
-                        setVolumeLandmarks({
-                          ...volumeLandmarks,
-                          [muscle]: { ...landmarks, mav: parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      className="text-center"
-                    />
-                    <Input
-                      type="number"
-                      value={landmarks.mrv ?? 20}
-                      onChange={(e) =>
-                        setVolumeLandmarks({
-                          ...volumeLandmarks,
-                          [muscle]: { ...landmarks, mrv: parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      className="text-center"
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            <div className="flex items-center gap-4 pt-2 border-t border-surface-800">
-              <span className="w-24 text-xs text-surface-500">Legend</span>
-              <div className="flex-1 grid grid-cols-3 gap-2 text-center text-xs text-surface-500">
-                <span>MEV</span>
-                <span>MAV</span>
-                <span>MRV</span>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Save button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} isLoading={isSaving}>
-          Save Changes
-        </Button>
-      </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1345,6 +1350,113 @@ function EducationPreferencesCard() {
             <span className="text-primary-400">Tip:</span> You can always learn more about training concepts
             in the <Link href="/dashboard/learn" className="text-primary-400 hover:underline">Learn Hub</Link>.
           </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Volume Landmarks Card Component
+interface VolumeLandmarksCardProps {
+  experience: Experience;
+  volumeLandmarks: Record<string, { mev: number; mav: number; mrv: number }>;
+  setVolumeLandmarks: React.Dispatch<React.SetStateAction<Record<string, { mev: number; mav: number; mrv: number }>>>;
+}
+
+function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }: VolumeLandmarksCardProps) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Volume Landmarks</CardTitle>
+        <p className="text-sm text-surface-400 mt-1">
+          Weekly sets per muscle group (based on Dr. Mike Israetel&apos;s research)
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {/* Explanation box */}
+          <div className="p-4 bg-surface-800/50 rounded-lg border border-surface-700 space-y-3">
+            <div className="flex gap-6 flex-wrap text-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-10 h-6 bg-warning-500/20 border border-warning-500/40 rounded text-xs flex items-center justify-center font-medium text-warning-400">MEV</span>
+                <span className="text-surface-400"><span className="font-medium text-surface-200">Minimum Effective Volume</span> — Fewest sets to maintain muscle</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 h-6 bg-success-500/20 border border-success-500/40 rounded text-xs flex items-center justify-center font-medium text-success-400">MAV</span>
+                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Adaptive Volume</span> — Sweet spot for growth</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 h-6 bg-danger-500/20 border border-danger-500/40 rounded text-xs flex items-center justify-center font-medium text-danger-400">MRV</span>
+                <span className="text-surface-400"><span className="font-medium text-surface-200">Maximum Recoverable Volume</span> — Upper limit before overtraining</span>
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 border-t border-surface-700 pt-3">
+              These values are pre-filled based on your experience level and published hypertrophy research. Adjust based on your personal recovery capacity and response.
+            </p>
+          </div>
+
+          {/* Column headers */}
+          <div className="flex items-center gap-4">
+            <span className="w-24 text-xs text-surface-500 font-medium">Muscle</span>
+            <div className="flex-1 grid grid-cols-3 gap-2 text-xs text-center">
+              <span className="text-warning-400 font-medium">MEV</span>
+              <span className="text-success-400 font-medium">MAV</span>
+              <span className="text-danger-400 font-medium">MRV</span>
+            </div>
+          </div>
+
+          {MUSCLE_GROUPS.map((muscle) => {
+            const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
+            const landmarks = volumeLandmarks[muscle] || defaultLandmark;
+            return (
+              <div key={muscle} className="flex items-center gap-4">
+                <span className="w-24 text-sm text-surface-300 capitalize">{muscle}</span>
+                <div className="flex-1 grid grid-cols-3 gap-2">
+                  <Input
+                    type="number"
+                    value={landmarks.mev ?? 6}
+                    onChange={(e) =>
+                      setVolumeLandmarks({
+                        ...volumeLandmarks,
+                        [muscle]: { ...landmarks, mev: parseInt(e.target.value) || 0 },
+                      })
+                    }
+                    className="text-center"
+                  />
+                  <Input
+                    type="number"
+                    value={landmarks.mav ?? 12}
+                    onChange={(e) =>
+                      setVolumeLandmarks({
+                        ...volumeLandmarks,
+                        [muscle]: { ...landmarks, mav: parseInt(e.target.value) || 0 },
+                      })
+                    }
+                    className="text-center"
+                  />
+                  <Input
+                    type="number"
+                    value={landmarks.mrv ?? 20}
+                    onChange={(e) =>
+                      setVolumeLandmarks({
+                        ...volumeLandmarks,
+                        [muscle]: { ...landmarks, mrv: parseInt(e.target.value) || 0 },
+                      })
+                    }
+                    className="text-center"
+                  />
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex items-center gap-4 pt-2 border-t border-surface-800">
+            <span className="w-24 text-xs text-surface-500">Legend</span>
+            <div className="flex-1 grid grid-cols-3 gap-2 text-center text-xs text-surface-500">
+              <span>MEV</span>
+              <span>MAV</span>
+              <span>MRV</span>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
