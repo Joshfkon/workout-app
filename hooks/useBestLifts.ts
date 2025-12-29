@@ -151,11 +151,13 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           weight_kg: number;
           reps_completed: number;
           created_at: string;
-          exercise: { name: string } | null;
+          exercise_block: {
+            exercise: { name: string } | null;
+          } | null;
         }) => {
-          if (!log.exercise?.name || !log.weight_kg || !log.reps_completed) return;
+          if (!log.exercise_block?.exercise?.name || !log.weight_kg || !log.reps_completed) return;
 
-          const exerciseName = log.exercise.name.toLowerCase();
+          const exerciseName = log.exercise_block.exercise.name.toLowerCase();
           if (!keyExercises.includes(exerciseName)) return;
 
           const e1rm = calculateE1RM(log.weight_kg, log.reps_completed);
@@ -163,7 +165,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
 
           if (!existing || e1rm > existing.estimated1rmKg) {
             exerciseBests.set(exerciseName, {
-              exerciseName: log.exercise.name,
+              exerciseName: log.exercise_block.exercise.name,
               weightKg: log.weight_kg,
               reps: log.reps_completed,
               estimated1rmKg: e1rm,
