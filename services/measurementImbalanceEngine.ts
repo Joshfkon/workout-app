@@ -98,6 +98,20 @@ export interface LiftMeasurementSanityCheck {
 }
 
 /**
+ * Strength imbalance detected from lift ratios
+ */
+export interface StrengthImbalance {
+  type: 'upper_lower' | 'push_pull' | 'anterior_posterior' | 'horizontal_vertical';
+  description: string;
+  severity: 'minor' | 'moderate' | 'significant';
+  recommendation: string;
+  /** Related muscle groups that need attention */
+  laggingMuscles: MuscleGroup[];
+  /** Related muscle groups that are dominant */
+  dominantMuscles: MuscleGroup[];
+}
+
+/**
  * Complete imbalance analysis result
  */
 export interface ImbalanceAnalysis {
@@ -107,6 +121,8 @@ export interface ImbalanceAnalysis {
   proportionalityAnalysis: ProportionalityAnalysis[];
   /** Lift vs measurement sanity checks */
   liftSanityChecks: LiftMeasurementSanityCheck[];
+  /** Strength imbalances from lift ratios (works without measurements) */
+  strengthImbalances: StrengthImbalance[];
   /** Overall lagging muscle groups (need more focus) */
   laggingMuscles: MuscleGroup[];
   /** Overall dominant muscle groups (well-developed) */
@@ -224,6 +240,19 @@ const LIFT_MEASUREMENT_RATIOS = {
     bicep: [0.5, 0.8],      // ~35-45cm bicep for 50-60kg curl
   },
 };
+
+/**
+ * Ideal lift ratios for balanced strength development
+ */
+const IDEAL_LIFT_RATIOS = {
+  benchToSquat: 0.75,       // Bench should be ~75% of squat
+  benchToDeadlift: 0.60,    // Bench should be ~60% of deadlift
+  ohpToBench: 0.60,         // OHP should be ~60% of bench
+  rowToBench: 0.75,         // Row should be ~75% of bench (push/pull balance)
+  squatToDeadlift: 0.80,    // Squat should be ~80% of deadlift
+};
+
+const RATIO_TOLERANCE = 0.15; // 15% deviation is acceptable
 
 // ============================================================
 // CORE ANALYSIS FUNCTIONS
@@ -424,6 +453,115 @@ export function analyzeProportionality(
 }
 
 /**
+ * Analyze strength imbalances from lift ratios (works without measurements)
+ */
+export function analyzeStrengthImbalances(lifts: UserLifts): StrengthImbalance[] {
+  const imbalances: StrengthImbalance[] = [];
+
+  // Check bench to squat ratio (upper/lower balance)
+  if (lifts.benchPressKg && lifts.squatKg && lifts.benchPressKg > 0 && lifts.squatKg > 0) {
+    const ratio = lifts.benchPressKg / lifts.squatKg;
+    const deviation = (ratio - IDEAL_LIFT_RATIOS.benchToSquat) / IDEAL_LIFT_RATIOS.benchToSquat;
+
+    if (Math.abs(deviation) > RATIO_TOLERANCE) {
+      const severity = Math.abs(deviation) > 0.3 ? 'significant' :
+                       Math.abs(deviation) > 0.2 ? 'moderate' : 'minor';
+
+      if (deviation > 0) {
+        imbalances.push({
+          type: 'upper_lower',
+          description: 'Upper body pushing is strong relative to lower body',
+          severity,
+          recommendation: 'Prioritize squat variations and leg development. Consider increasing squat frequency.',
+          laggingMuscles: ['quads', 'hamstrings', 'glutes'],
+          dominantMuscles: ['chest', 'triceps'],
+        });
+      } else {
+        imbalances.push({
+          type: 'upper_lower',
+          description: 'Lower body is strong relative to upper body pushing',
+          severity,
+          recommendation: 'Increase pressing volume and frequency. Focus on bench press and overhead press.',
+          laggingMuscles: ['chest', 'triceps', 'shoulders'],
+          dominantMuscles: ['quads', 'hamstrings', 'glutes'],
+        });
+      }
+    }
+  }
+
+  // Check row to bench ratio (push/pull balance)
+  if (lifts.benchPressKg && lifts.rowKg && lifts.benchPressKg > 0 && lifts.rowKg > 0) {
+    const ratio = lifts.rowKg / lifts.benchPressKg;
+    const deviation = (ratio - IDEAL_LIFT_RATIOS.rowToBench) / IDEAL_LIFT_RATIOS.rowToBench;
+
+    if (deviation < -RATIO_TOLERANCE) {
+      const severity = Math.abs(deviation) > 0.3 ? 'significant' :
+                       Math.abs(deviation) > 0.2 ? 'moderate' : 'minor';
+      imbalances.push({
+        type: 'push_pull',
+        description: 'Pushing strength exceeds pulling strength',
+        severity,
+        recommendation: 'Add more rowing and pulling volume. Common issue that can lead to shoulder problems. Aim for 2:1 or 1:1 pull-to-push ratio.',
+        laggingMuscles: ['back', 'biceps', 'traps'],
+        dominantMuscles: ['chest', 'triceps'],
+      });
+    }
+  }
+
+  // Check squat to deadlift ratio (anterior/posterior balance)
+  if (lifts.squatKg && lifts.deadliftKg && lifts.squatKg > 0 && lifts.deadliftKg > 0) {
+    const ratio = lifts.squatKg / lifts.deadliftKg;
+    const deviation = (ratio - IDEAL_LIFT_RATIOS.squatToDeadlift) / IDEAL_LIFT_RATIOS.squatToDeadlift;
+
+    if (Math.abs(deviation) > RATIO_TOLERANCE) {
+      const severity = Math.abs(deviation) > 0.3 ? 'significant' :
+                       Math.abs(deviation) > 0.2 ? 'moderate' : 'minor';
+
+      if (deviation > 0) {
+        imbalances.push({
+          type: 'anterior_posterior',
+          description: 'Quad-dominant: squat is strong relative to deadlift',
+          severity,
+          recommendation: 'Add more hip hinge work (RDLs, good mornings) and posterior chain development. Focus on hamstring and glute strength.',
+          laggingMuscles: ['hamstrings', 'glutes'],
+          dominantMuscles: ['quads'],
+        });
+      } else {
+        imbalances.push({
+          type: 'anterior_posterior',
+          description: 'Hip-dominant: deadlift is strong relative to squat',
+          severity,
+          recommendation: 'Focus on squat technique and quad-focused accessories. Consider front squats and leg press.',
+          laggingMuscles: ['quads'],
+          dominantMuscles: ['hamstrings', 'glutes'],
+        });
+      }
+    }
+  }
+
+  // Check OHP to bench ratio (horizontal/vertical pressing)
+  if (lifts.overheadPressKg && lifts.benchPressKg && lifts.overheadPressKg > 0 && lifts.benchPressKg > 0) {
+    const ratio = lifts.overheadPressKg / lifts.benchPressKg;
+    const deviation = (ratio - IDEAL_LIFT_RATIOS.ohpToBench) / IDEAL_LIFT_RATIOS.ohpToBench;
+
+    if (deviation < -RATIO_TOLERANCE) {
+      const severity = Math.abs(deviation) > 0.3 ? 'significant' :
+                       Math.abs(deviation) > 0.2 ? 'moderate' : 'minor';
+      imbalances.push({
+        type: 'horizontal_vertical',
+        description: 'Overhead pressing is weak relative to horizontal pressing',
+        severity,
+        recommendation: 'Increase overhead pressing frequency. Consider shoulder mobility work and strict press variations.',
+        laggingMuscles: ['shoulders', 'triceps'],
+        dominantMuscles: ['chest'],
+      });
+    }
+  }
+
+  return imbalances;
+}
+
+/**
  * Check if measurements are consistent with lift performance
  */
 export function checkLiftMeasurementConsistency(
@@ -515,17 +653,21 @@ export function checkLiftMeasurementConsistency(
 
 /**
  * Complete imbalance analysis combining all checks
+ * Works with just lifts (no measurements required) or with both
  */
 export function analyzeImbalances(
-  measurements: BodyMeasurements,
+  measurements?: BodyMeasurements,
   lifts?: UserLifts,
   heightCm?: number,
   wristCm?: number
 ): ImbalanceAnalysis {
-  // Run all analyses
-  const bilateralAsymmetries = analyzeBilateralAsymmetries(measurements);
-  const proportionalityAnalysis = analyzeProportionality(measurements, heightCm, wristCm);
-  const liftSanityChecks = lifts ? checkLiftMeasurementConsistency(measurements, lifts) : [];
+  // Run measurement-based analyses (only if measurements provided)
+  const bilateralAsymmetries = measurements ? analyzeBilateralAsymmetries(measurements) : [];
+  const proportionalityAnalysis = measurements ? analyzeProportionality(measurements, heightCm, wristCm) : [];
+  const liftSanityChecks = (measurements && lifts) ? checkLiftMeasurementConsistency(measurements, lifts) : [];
+
+  // Run lift-based strength imbalance analysis (works without measurements)
+  const strengthImbalances = lifts ? analyzeStrengthImbalances(lifts) : [];
 
   // Identify lagging and dominant muscles
   const laggingMuscles: Set<MuscleGroup> = new Set();
@@ -572,20 +714,36 @@ export function analyzeImbalances(
     }
   }
 
+  // From strength imbalances (lift ratios)
+  for (const imbalance of strengthImbalances) {
+    for (const muscle of imbalance.laggingMuscles) {
+      laggingMuscles.add(muscle);
+    }
+    for (const muscle of imbalance.dominantMuscles) {
+      dominantMuscles.add(muscle);
+    }
+  }
+
   // Generate recommendations
   const recommendations = generateRecommendations(
     bilateralAsymmetries,
     proportionalityAnalysis,
-    liftSanityChecks
+    liftSanityChecks,
+    strengthImbalances
   );
 
-  // Calculate balance score
-  const balanceScore = calculateBalanceScore(bilateralAsymmetries, proportionalityAnalysis);
+  // Calculate balance score (includes strength imbalances if no measurements)
+  const balanceScore = calculateBalanceScore(
+    bilateralAsymmetries,
+    proportionalityAnalysis,
+    strengthImbalances
+  );
 
   return {
     bilateralAsymmetries,
     proportionalityAnalysis,
     liftSanityChecks,
+    strengthImbalances,
     laggingMuscles: Array.from(laggingMuscles),
     dominantMuscles: Array.from(dominantMuscles),
     recommendations,
@@ -778,32 +936,47 @@ function createSanityCheck(
 function generateRecommendations(
   asymmetries: BilateralAsymmetry[],
   proportionality: ProportionalityAnalysis[],
-  sanityChecks: LiftMeasurementSanityCheck[]
+  sanityChecks: LiftMeasurementSanityCheck[],
+  strengthImbalances: StrengthImbalance[] = []
 ): string[] {
   const recommendations: string[] = [];
 
-  // Priority 1: Significant asymmetries
+  // Priority 1: Significant strength imbalances (from lifts)
+  for (const imbalance of strengthImbalances) {
+    if (imbalance.severity === 'significant') {
+      recommendations.push(imbalance.recommendation);
+    }
+  }
+
+  // Priority 2: Significant asymmetries (from measurements)
   for (const asymmetry of asymmetries) {
     if (asymmetry.severity === 'significant' && asymmetry.recommendation) {
       recommendations.push(asymmetry.recommendation);
     }
   }
 
-  // Priority 2: Underdeveloped body parts
+  // Priority 3: Underdeveloped body parts (from measurements)
   for (const analysis of proportionality) {
     if (analysis.status === 'underdeveloped' && analysis.recommendation) {
       recommendations.push(analysis.recommendation);
     }
   }
 
-  // Priority 3: Moderate asymmetries
+  // Priority 4: Moderate strength imbalances
+  for (const imbalance of strengthImbalances) {
+    if (imbalance.severity === 'moderate') {
+      recommendations.push(imbalance.recommendation);
+    }
+  }
+
+  // Priority 5: Moderate asymmetries
   for (const asymmetry of asymmetries) {
     if (asymmetry.severity === 'moderate' && asymmetry.recommendation) {
       recommendations.push(asymmetry.recommendation);
     }
   }
 
-  // Priority 4: Lift consistency issues
+  // Priority 6: Lift consistency issues
   for (const check of sanityChecks) {
     if (check.status === 'measurement_low') {
       recommendations.push(check.message);
@@ -816,18 +989,26 @@ function generateRecommendations(
 
 function calculateBalanceScore(
   asymmetries: BilateralAsymmetry[],
-  proportionality: ProportionalityAnalysis[]
+  proportionality: ProportionalityAnalysis[],
+  strengthImbalances: StrengthImbalance[] = []
 ): number {
   let score = 100;
 
-  // Deduct for asymmetries
+  // Deduct for strength imbalances (from lifts)
+  for (const imbalance of strengthImbalances) {
+    if (imbalance.severity === 'minor') score -= 8;
+    if (imbalance.severity === 'moderate') score -= 12;
+    if (imbalance.severity === 'significant') score -= 18;
+  }
+
+  // Deduct for asymmetries (from measurements)
   for (const asymmetry of asymmetries) {
     if (asymmetry.severity === 'minor') score -= 5;
     if (asymmetry.severity === 'moderate') score -= 10;
     if (asymmetry.severity === 'significant') score -= 15;
   }
 
-  // Deduct for proportionality issues
+  // Deduct for proportionality issues (from measurements)
   for (const analysis of proportionality) {
     if (analysis.status === 'underdeveloped') {
       const deviation = 100 - analysis.percentOfIdeal;

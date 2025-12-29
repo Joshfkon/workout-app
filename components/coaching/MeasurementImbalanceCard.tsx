@@ -9,10 +9,11 @@ import {
   type ImbalanceAnalysis,
   type BilateralAsymmetry,
   type ProportionalityAnalysis,
+  type StrengthImbalance,
 } from '@/services/measurementImbalanceEngine';
 
 interface MeasurementImbalanceCardProps {
-  measurements: BodyMeasurements;
+  measurements?: BodyMeasurements;
   lifts?: UserLifts;
   heightCm?: number;
   wristCm?: number;
@@ -22,6 +23,7 @@ interface MeasurementImbalanceCardProps {
 
 /**
  * Card displaying body measurement imbalance analysis
+ * Works with just lifts (no measurements required) or with both
  */
 export function MeasurementImbalanceCard({
   measurements,
@@ -72,6 +74,38 @@ export function MeasurementImbalanceCard({
             <div className="space-y-2">
               {analysis.proportionalityAnalysis.map((analysis, i) => (
                 <ProportionalityRow key={i} analysis={analysis} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Strength Imbalances (from lift ratios) */}
+        {analysis.strengthImbalances.length > 0 && (
+          <section>
+            <h3 className="text-sm font-medium text-surface-300 mb-3">Strength Balance</h3>
+            <div className="space-y-2">
+              {analysis.strengthImbalances.map((imbalance, i) => (
+                <div
+                  key={i}
+                  className={`p-3 rounded-lg border ${
+                    imbalance.severity === 'significant'
+                      ? 'bg-danger-500/10 border-danger-500/30'
+                      : imbalance.severity === 'moderate'
+                      ? 'bg-warning-500/10 border-warning-500/30'
+                      : 'bg-surface-800/50 border-surface-700'
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <p className="text-sm font-medium text-surface-200">{imbalance.description}</p>
+                    <Badge
+                      variant={imbalance.severity === 'significant' ? 'danger' : imbalance.severity === 'moderate' ? 'warning' : 'default'}
+                      size="sm"
+                    >
+                      {imbalance.severity}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-surface-300 mt-1">{imbalance.recommendation}</p>
+                </div>
               ))}
             </div>
           </section>

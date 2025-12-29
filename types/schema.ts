@@ -1846,6 +1846,20 @@ export interface ProportionalityAnalysis {
 export type LiftMeasurementStatus = 'consistent' | 'measurement_high' | 'measurement_low';
 
 /**
+ * Strength imbalance detected from lift ratios
+ */
+export interface StrengthImbalance {
+  type: 'upper_lower' | 'push_pull' | 'anterior_posterior' | 'horizontal_vertical';
+  description: string;
+  severity: 'minor' | 'moderate' | 'significant';
+  recommendation: string;
+  /** Related muscle groups that need attention */
+  laggingMuscles: MuscleGroup[];
+  /** Related muscle groups that are dominant */
+  dominantMuscles: MuscleGroup[];
+}
+
+/**
  * Sanity check comparing lift performance to body measurements
  */
 export interface LiftMeasurementCheck {
@@ -1875,6 +1889,8 @@ export interface ImbalanceAnalysis {
   proportionalityAnalysis: ProportionalityAnalysis[];
   /** Lift vs measurement sanity checks */
   liftSanityChecks: LiftMeasurementCheck[];
+  /** Strength imbalances from lift ratios (works without measurements) */
+  strengthImbalances: StrengthImbalance[];
   /** Muscle groups identified as lagging */
   laggingMuscles: MuscleGroup[];
   /** Muscle groups identified as dominant */

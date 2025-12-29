@@ -15,6 +15,7 @@ import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
+import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -29,6 +30,7 @@ const lbsToKg = (lbs: number) => lbs / 2.20462;
 export default function SettingsPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
+  const [userId, setUserId] = useState<string | null>(null);
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
   // Store values in user's display units, convert on load/save
@@ -97,6 +99,7 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        setUserId(user.id);
         const { data } = await supabase
           .from('users')
           .select('*')
@@ -722,6 +725,21 @@ export default function SettingsPage() {
 
       {/* Import & Export */}
       <ImportExportSettings />
+
+      {/* Muscle Priorities */}
+      {userId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Muscle Group Priorities</CardTitle>
+            <p className="text-sm text-surface-400 mt-1">
+              Set training priorities for each muscle group. Higher priority muscles will receive more volume in program generation.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <MusclePrioritySettings userId={userId} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Volume Landmarks */}
       <Card>

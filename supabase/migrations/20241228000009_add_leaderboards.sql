@@ -171,6 +171,12 @@ BEGIN
   FROM workout_sessions ws
   JOIN exercise_blocks eb ON eb.workout_session_id = ws.id
   JOIN set_logs sl ON sl.exercise_block_id = eb.id
+  LEFT JOIN LATERAL (
+    SELECT rank FROM leaderboard_entries le
+    WHERE le.user_id = ws.user_id
+    AND le.leaderboard_type = 'total_volume_week'
+    AND le.period_start = v_period_start - INTERVAL '7 days'
+  ) prev ON true
   WHERE ws.completed_at >= v_period_start
     AND ws.completed_at < v_period_end + INTERVAL '1 day'
     AND sl.is_warmup = false
@@ -179,13 +185,7 @@ BEGIN
       WHERE up.user_id = ws.user_id
       AND up.show_on_leaderboards = true
     )
-  GROUP BY ws.user_id
-  LEFT JOIN LATERAL (
-    SELECT rank FROM leaderboard_entries le
-    WHERE le.user_id = ws.user_id
-    AND le.leaderboard_type = 'total_volume_week'
-    AND le.period_start = v_period_start - INTERVAL '7 days'
-  ) prev ON true
+  GROUP BY ws.user_id, prev.rank
   HAVING SUM(sl.weight_kg * sl.reps) > 0
   ORDER BY total_volume DESC;
 END;
@@ -220,6 +220,12 @@ BEGIN
     v_period_start,
     v_period_end
   FROM workout_sessions ws
+  LEFT JOIN LATERAL (
+    SELECT rank FROM leaderboard_entries le
+    WHERE le.user_id = ws.user_id
+    AND le.leaderboard_type = 'workouts_completed_week'
+    AND le.period_start = v_period_start - INTERVAL '7 days'
+  ) prev ON true
   WHERE ws.completed_at >= v_period_start
     AND ws.completed_at < v_period_end + INTERVAL '1 day'
     AND ws.state = 'completed'
@@ -228,13 +234,7 @@ BEGIN
       WHERE up.user_id = ws.user_id
       AND up.show_on_leaderboards = true
     )
-  GROUP BY ws.user_id
-  LEFT JOIN LATERAL (
-    SELECT rank FROM leaderboard_entries le
-    WHERE le.user_id = ws.user_id
-    AND le.leaderboard_type = 'workouts_completed_week'
-    AND le.period_start = v_period_start - INTERVAL '7 days'
-  ) prev ON true
+  GROUP BY ws.user_id, prev.rank
   HAVING COUNT(*) > 0
   ORDER BY workout_count DESC;
 END;

@@ -37,166 +37,321 @@ if (!API_KEY) {
 const MUSCLEWIKI_API_URL = 'https://musclewiki-api.p.rapidapi.com';
 const API_HOST = 'musclewiki-api.p.rapidapi.com';
 
-// Map our exercise names to ExerciseDB search terms
+// Map our exercise names to MuscleWiki search terms
+// Priority: simpler, more generic terms first (MuscleWiki uses simpler naming)
 const EXERCISE_MAPPINGS = {
   // Chest
   'Barbell Bench Press': ['bench press', 'barbell bench press'],
-  'Dumbbell Bench Press': ['dumbbell bench press', 'dumbbell press'],
-  'Incline Dumbbell Press': ['incline dumbbell press', 'incline press'],
-  'Cable Fly': ['cable fly', 'cable crossover', 'pec fly'],
+  'Dumbbell Bench Press': ['dumbbell press', 'dumbbell bench press'],
+  'Incline Barbell Press': ['incline press', 'incline bench press'],
+  'Incline Dumbbell Press': ['incline press', 'incline dumbbell press'],
+  'Cable Fly': ['cable fly', 'pec fly', 'cable crossover'],
   'Dips (Chest Focus)': ['dips', 'chest dips'],
-  'Machine Chest Press': ['machine chest press', 'chest press machine', 'pec deck'],
+  'Machine Chest Press': ['chest press', 'machine chest press', 'pec deck'],
+  'Pec Deck': ['pec deck', 'pec fly'],
+  'Smith Machine Bench Press': ['bench press', 'smith machine bench press'],
+  'Smith Machine Incline Press': ['incline press', 'smith machine incline press'],
+  'Decline Barbell Press': ['decline press', 'decline bench press'],
+  'Seated Cable Fly': ['cable fly', 'seated cable fly'],
   
   // Back
-  'Barbell Row': ['barbell row', 'bent over row'],
-  'Dumbbell Row': ['dumbbell row', 'one arm row'],
-  'Lat Pulldown': ['lat pulldown', 'lat pull down'],
+  'Barbell Row': ['barbell row', 'bent over row', 'row'],
+  'Dumbbell Row': ['dumbbell row', 'one arm row', 'row'],
+  'Lat Pulldown': ['lat pulldown', 'pulldown'],
   'Pull-Ups': ['pull up', 'pullup', 'chin up'],
-  'Cable Row': ['cable row', 'seated row'],
-  'Deadlift': ['deadlift', 'conventional deadlift'],
-  'Chest Supported Row': ['chest supported row', 'chest supported t-bar row'],
+  'Pull-Up': ['pull up', 'pullup', 'chin up'],
+  'Cable Row': ['cable row', 'seated row', 'row'],
+  'Deadlift': ['deadlift'],
+  'Chest Supported Row': ['chest supported row', 'row'],
+  'Seated Machine Row': ['seated row', 'machine row', 'row'],
+  'Assisted Pull-Up Machine': ['assisted pull up', 'assisted pullup'],
+  'Assisted Pull-Up': ['assisted pull up', 'assisted pullup'],
+  'Straight Arm Pulldown': ['straight arm pulldown', 'pulldown'],
+  'Close Grip Lat Pulldown': ['close grip pulldown', 'lat pulldown'],
+  'Back Extension': ['back extension', 'hyperextension'],
+  'Meadows Row': ['meadows row', 'landmine row', 'row'],
+  'Romanian Deadlift': ['romanian deadlift', 'rdl', 'deadlift'],
+  'Stiff Leg Deadlift': ['stiff leg deadlift', 'deadlift'],
+  'Sumo Deadlift': ['sumo deadlift', 'deadlift'],
   
   // Shoulders
-  'Overhead Press': ['overhead press', 'military press', 'shoulder press'],
+  'Overhead Press': ['overhead press', 'shoulder press', 'military press'],
+  'Standing Overhead Press': ['overhead press', 'shoulder press'],
   'Lateral Raise': ['lateral raise', 'side raise'],
   'Rear Delt Fly': ['rear delt fly', 'rear delt raise'],
-  'Dumbbell Shoulder Press': ['dumbbell shoulder press', 'dumbbell press', 'seated dumbbell press'],
-  'Face Pull': ['face pull', 'cable face pull'],
+  'Dumbbell Shoulder Press': ['shoulder press', 'dumbbell press'],
+  'Face Pull': ['face pull'],
+  'Rear Delt Machine': ['rear delt machine', 'rear delt fly'],
+  'Machine Lateral Raise': ['lateral raise', 'machine lateral raise'],
+  'Smith Machine Shoulder Press': ['shoulder press', 'smith machine shoulder press'],
+  'Upright Row': ['upright row', 'row'],
+  'Cable Upright Row': ['upright row', 'cable upright row', 'row'],
+  'Front Raise': ['front raise'],
+  'Behind-the-Back Cable Lateral Raise': ['lateral raise', 'rear lateral raise'],
+  'Cable Y-Raise': ['y raise', 'cable y raise'],
+  'Reverse Cable Crossover': ['reverse cable crossover', 'rear delt fly'],
+  'Cable Cross Body Lateral Raise': ['lateral raise', 'cross body raise'],
+  'Barbell Shrug': ['shrug', 'barbell shrug'],
+  'Reverse Fly': ['reverse fly', 'rear delt fly'],
   
-  // Legs
-  'Barbell Back Squat': ['squat', 'barbell squat', 'back squat'],
+  // Legs - Quads
+  'Barbell Back Squat': ['squat', 'back squat'],
   'Leg Press': ['leg press'],
-  'Romanian Deadlift': ['romanian deadlift', 'rdl'],
-  'Lying Leg Curl': ['lying leg curl', 'leg curl'],
-  'Leg Extension': ['leg extension', 'quad extension'],
-  'Dumbbell Lunges': ['dumbbell lunge', 'lunge'],
-  'Walking Lunges': ['walking lunge', 'walking lunges', 'lunge'],
-  'Bulgarian Split Squat': ['bulgarian split squat', 'bulgarian squat', 'split squat'],
-  'Hack Squat': ['hack squat', 'hack squat machine'],
-  'Good Morning': ['good morning', 'good morning exercise'],
-  'Seated Leg Curl': ['seated leg curl', 'seated hamstring curl'],
+  'Leg Extension': ['leg extension'],
+  'Dumbbell Lunges': ['lunge', 'dumbbell lunge'],
+  'Walking Lunges': ['lunge', 'walking lunge'],
+  'Bulgarian Split Squat': ['bulgarian split squat', 'split squat', 'squat'],
+  'Hack Squat': ['hack squat', 'squat'],
+  'Goblet Squat': ['goblet squat', 'squat'],
+  'Smith Machine Squat': ['squat', 'smith machine squat'],
+  'Pendulum Squat': ['pendulum squat', 'squat'],
+  'Sissy Squat': ['sissy squat', 'squat'],
+  'Reverse Lunge': ['lunge', 'reverse lunge'],
+  'Step Up': ['step up'],
+  'Incline Leg Press': ['leg press', 'incline leg press'],
   
-  // Glutes
-  'Cable Pull Through': ['cable pull through', 'pull through'],
-  'Glute Bridge': ['glute bridge', 'hip bridge'],
-  'Hip Thrust': ['hip thrust', 'barbell hip thrust'],
-  
-  // Calves
-  'Calf Raise': ['calf raise', 'standing calf raise'],
-  'Standing Calf Raise': ['standing calf raise', 'calf raise'],
-  'Seated Calf Raise': ['seated calf raise'],
-  'Leg Press Calf Raise': ['leg press calf raise', 'calf press'],
-  
-  // Arms - Biceps
-  'Barbell Curl': ['barbell curl', 'bb curl'],
-  'Dumbbell Curl': ['dumbbell curl', 'bicep curl'],
-  'Hammer Curl': ['hammer curl'],
-  'Cable Curl': ['cable curl', 'cable bicep curl'],
-  'Incline Dumbbell Curl': ['incline dumbbell curl', 'incline curl'],
-  'Preacher Curl': ['preacher curl', 'preacher bench curl'],
-  
-  // Arms - Triceps
-  'Tricep Pushdown': ['tricep pushdown', 'tricep extension'],
-  'Skull Crusher': ['skull crusher', 'lying tricep extension', 'french press'],
-  'Close Grip Bench Press': ['close grip bench press', 'close grip press'],
-  'Dips (Tricep Focus)': ['dips', 'tricep dips', 'bench dips'],
-  'Overhead Tricep Extension': ['overhead tricep extension', 'overhead extension'],
-  
-  // Abs
-  'Cable Crunch': ['cable crunch', 'cable ab crunch'],
-  'Hanging Leg Raise': ['hanging leg raise', 'hanging knee raise'],
-  'Ab Wheel Rollout': ['ab wheel rollout', 'ab wheel', 'ab roller'],
-  'Plank': ['plank', 'forearm plank'],
-  
-  // Additional exercises from migrations
-  // Chest
-  'Pec Deck': ['pec deck', 'pec fly machine'],
-  'Smith Machine Bench Press': ['smith machine bench press', 'smith bench press'],
-  'Smith Machine Incline Press': ['smith machine incline press', 'smith incline'],
-  'Decline Barbell Press': ['decline bench press', 'decline barbell press'],
-  'Seated Cable Fly': ['seated cable fly', 'seated pec fly'],
-  
-  // Back
-  'Seated Machine Row': ['seated machine row', 'seated row machine'],
-  'Assisted Pull-Up Machine': ['assisted pull up', 'assisted pullup machine'],
-  'Straight Arm Pulldown': ['straight arm pulldown', 'straight arm lat pulldown'],
-  'Close Grip Lat Pulldown': ['close grip lat pulldown', 'close grip pulldown'],
-  'Back Extension': ['back extension', 'hyperextension'],
-  'Meadows Row': ['meadows row', 'landmine row'],
-  'Assisted Pull-Up': ['assisted pull up', 'assisted pullup'],
-  
-  // Shoulders
-  'Rear Delt Machine': ['rear delt machine', 'rear delt fly machine'],
-  'Machine Lateral Raise': ['machine lateral raise', 'lateral raise machine'],
-  'Smith Machine Shoulder Press': ['smith machine shoulder press', 'smith shoulder press'],
-  'Upright Row': ['upright row', 'barbell upright row'],
-  'Cable Upright Row': ['cable upright row'],
-  'Front Raise': ['front raise', 'dumbbell front raise'],
-  'Behind-the-Back Cable Lateral Raise': ['behind back lateral raise', 'rear lateral raise'],
-  'Cable Y-Raise': ['cable y raise', 'y raise'],
-  'Reverse Cable Crossover': ['reverse cable crossover', 'rear delt cable fly'],
-  'Cable Cross Body Lateral Raise': ['cable cross body lateral raise', 'cross body raise'],
-  'Barbell Shrug': ['barbell shrug', 'shrug'],
-  
-  // Biceps
-  'Machine Bicep Curl': ['machine bicep curl', 'bicep curl machine'],
-  'Concentration Curl': ['concentration curl'],
-  'EZ Bar Curl': ['ez bar curl', 'ez curl bar'],
-  'Bayesian Cable Curl': ['bayesian curl', 'cable bayesian curl'],
-  '45° Preacher Curl': ['45 degree preacher curl', 'incline preacher curl'],
-  'Cable Bicep Curl': ['cable bicep curl', 'cable curl'],
-  
-  // Triceps
-  'Machine Tricep Extension': ['machine tricep extension', 'tricep extension machine'],
-  'Rope Tricep Pushdown': ['rope tricep pushdown', 'rope pushdown'],
-  'Assisted Dip Machine': ['assisted dip machine', 'assisted dips'],
-  'Dumbbell Kickback': ['dumbbell kickback', 'tricep kickback'],
-  'Cable Overhead Tricep Extension': ['cable overhead tricep extension', 'overhead cable extension'],
-  'Cable Tricep Pushdown': ['cable tricep pushdown', 'cable pushdown'],
-  'Katana Tricep Extension': ['katana tricep extension', 'katana extension'],
-  
-  // Quads
-  'Smith Machine Squat': ['smith machine squat', 'smith squat'],
-  'Pendulum Squat': ['pendulum squat', 'pendulum leg press'],
-  'Sissy Squat': ['sissy squat'],
-  'Reverse Lunge': ['reverse lunge', 'reverse walking lunge'],
-  'Step Up': ['step up', 'dumbbell step up'],
-  'Incline Leg Press': ['incline leg press', '45 degree leg press'],
-  
-  // Hamstrings
-  'Stiff Leg Deadlift': ['stiff leg deadlift', 'sldl'],
-  'Single Leg RDL': ['single leg rdl', 'single leg romanian deadlift'],
+  // Legs - Hamstrings
+  'Lying Leg Curl': ['leg curl', 'lying leg curl'],
+  'Seated Leg Curl': ['leg curl', 'seated leg curl'],
+  'Single Leg RDL': ['single leg rdl', 'romanian deadlift'],
   'Nordic Curl': ['nordic curl', 'nordic hamstring curl'],
   
   // Glutes
-  'Glute Drive Machine': ['glute drive machine', 'hip thrust machine'],
-  'Hip Abduction Machine': ['hip abduction machine', 'abductor machine'],
-  'Hip Adduction Machine': ['hip adduction machine', 'adductor machine'],
-  'Single Leg Hip Thrust': ['single leg hip thrust', 'one leg hip thrust'],
-  'Sumo Deadlift': ['sumo deadlift', 'sumo dl'],
+  'Cable Pull Through': ['pull through', 'cable pull through'],
+  'Glute Bridge': ['glute bridge', 'hip bridge'],
+  'Hip Thrust': ['hip thrust', 'barbell hip thrust'],
+  'Glute Drive Machine': ['hip thrust', 'glute drive machine'],
+  'Hip Abduction Machine': ['hip abduction', 'abductor machine'],
+  'Hip Adduction Machine': ['hip adduction', 'adductor machine'],
+  'Single Leg Hip Thrust': ['hip thrust', 'single leg hip thrust'],
   
   // Calves
-  'Smith Machine Calf Raise': ['smith machine calf raise', 'smith calf raise'],
-  'Donkey Calf Raise': ['donkey calf raise', 'donkey raise'],
-  'Calf Press Machine': ['calf press machine', 'calf press'],
+  'Calf Raise': ['calf raise'],
+  'Standing Calf Raise': ['calf raise', 'standing calf raise'],
+  'Seated Calf Raise': ['calf raise', 'seated calf raise'],
+  'Leg Press Calf Raise': ['calf raise', 'leg press calf raise'],
+  'Smith Machine Calf Raise': ['calf raise', 'smith machine calf raise'],
+  'Donkey Calf Raise': ['calf raise', 'donkey calf raise'],
+  'Calf Press Machine': ['calf raise', 'calf press'],
+  
+  // Arms - Biceps
+  'Barbell Curl': ['barbell curl', 'curl'],
+  'Dumbbell Curl': ['dumbbell curl', 'bicep curl', 'curl'],
+  'Hammer Curl': ['hammer curl', 'curl'],
+  'Cable Curl': ['cable curl', 'curl'],
+  'Cable Bicep Curl': ['cable curl', 'bicep curl', 'curl'],
+  'Incline Dumbbell Curl': ['incline curl', 'dumbbell curl', 'curl'],
+  'Preacher Curl': ['preacher curl', 'curl'],
+  'Machine Bicep Curl': ['bicep curl', 'machine curl', 'curl'],
+  'Concentration Curl': ['concentration curl', 'curl'],
+  'EZ Bar Curl': ['ez bar curl', 'curl'],
+  'Bayesian Cable Curl': ['cable curl', 'bayesian curl', 'curl'],
+  '45° Preacher Curl': ['preacher curl', 'curl'],
+  
+  // Arms - Triceps
+  'Tricep Pushdown': ['tricep pushdown', 'tricep extension'],
+  'Skull Crusher': ['skull crusher', 'lying tricep extension'],
+  'Close Grip Bench Press': ['barbell close grip bench press', 'close grip bench press', 'close grip press'],
+  'Close-Grip Bench Press': ['barbell close grip bench press', 'close grip bench press', 'close grip press'],
+  'Bench Press - Close Grip (Barbell)': ['barbell close grip bench press', 'close grip bench press', 'close grip press'],
+  'Dips (Tricep Focus)': ['dips', 'tricep dips'],
+  'Dip': ['dips'],
+  'Overhead Tricep Extension': ['overhead tricep extension', 'tricep extension'],
+  'Machine Tricep Extension': ['tricep extension', 'machine tricep extension'],
+  'Rope Tricep Pushdown': ['tricep pushdown', 'rope pushdown'],
+  'Assisted Dip Machine': ['dips', 'assisted dips'],
+  'Dumbbell Kickback': ['tricep kickback', 'dumbbell kickback'],
+  'Cable Overhead Tricep Extension': ['overhead tricep extension', 'tricep extension'],
+  'Cable Tricep Pushdown': ['tricep pushdown', 'cable pushdown'],
+  'Katana Tricep Extension': ['tricep extension', 'katana extension'],
   
   // Abs
-  'Machine Ab Crunch': ['machine ab crunch', 'ab crunch machine'],
-  'Decline Crunch': ['decline crunch', 'decline sit up'],
-  'Captain\'s Chair Leg Raise': ['captains chair leg raise', 'captain chair'],
-  'Pallof Press': ['pallof press', 'cable pallof press'],
-  'Dead Bug': ['dead bug', 'dead bug exercise'],
-  'Russian Twist': ['russian twist', 'russian twist abs'],
-  'Cable Woodchop': ['cable woodchop', 'wood chop'],
-  'Hammer Strength Ab Crunch': ['hammer strength ab crunch', 'ab machine'],
+  'Cable Crunch': ['cable crunch', 'crunch'],
+  'Hanging Leg Raise': ['hanging leg raise', 'leg raise'],
+  'Ab Wheel Rollout': ['ab wheel', 'ab wheel rollout'],
+  'Plank': ['plank'],
+  'Machine Ab Crunch': ['ab crunch', 'crunch'],
+  'Decline Crunch': ['crunch', 'decline crunch'],
+  'Captain\'s Chair Leg Raise': ['leg raise', 'captains chair'],
+  'Pallof Press': ['pallof press'],
+  'Dead Bug': ['dead bug'],
+  'Russian Twist': ['russian twist'],
+  'Cable Woodchop': ['woodchop', 'cable woodchop'],
+  'Hammer Strength Ab Crunch': ['ab crunch', 'crunch'],
   
   // Functional
   'Farmer\'s Carry': ['farmers carry', 'farmer walk'],
-  'Suitcase Carry': ['suitcase carry', 'suitcase walk'],
+  'Suitcase Carry': ['suitcase carry'],
+  'Good Morning': ['good morning'],
+  
+  // Push-ups
+  'Push-Up': ['push up', 'pushup'],
 };
 
+// Helper to generate simplified search terms for exercises not in mappings
+function generateSimplifiedSearchTerms(exerciseName) {
+  const terms = [];
+  const lower = exerciseName.toLowerCase();
+  
+  // Handle patterns like "Bench Press - Close Grip (Barbell)" or "Exercise - Modifier (Equipment)"
+  let simplified = exerciseName
+    .replace(/\(.*?\)/g, '') // Remove parentheses like "(Barbell)" or "(Chest Focus)"
+    .replace(/\s*-\s*/g, ' ') // Replace dashes with spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Extract equipment from parentheses if present
+  const equipmentMatch = exerciseName.match(/\(([^)]+)\)/);
+  const equipment = equipmentMatch ? equipmentMatch[1].toLowerCase() : null;
+  
+  // Try to reorder to match MuscleWiki pattern: Equipment + Modifier + Exercise
+  // Pattern detection: "Close Grip Bench Press" -> "Barbell Close Grip Bench Press"
+  // Or "Bench Press - Close Grip (Barbell)" -> "Barbell Close Grip Bench Press"
+  
+  // Common exercise base names
+  const exerciseBases = ['bench press', 'squat', 'deadlift', 'row', 'press', 'curl', 'extension', 'raise', 'lunge', 'pulldown', 'fly'];
+  const modifiers = ['close grip', 'wide grip', 'incline', 'decline', 'seated', 'standing', 'lying', 'reverse', 'single leg', 'bulgarian'];
+  
+  // Check if we have a modifier + exercise pattern
+  for (const modifier of modifiers) {
+    for (const base of exerciseBases) {
+      if (simplified.toLowerCase().includes(modifier) && simplified.toLowerCase().includes(base)) {
+        // Found pattern like "Close Grip Bench Press"
+        // Try to construct MuscleWiki format: Equipment + Modifier + Exercise
+        if (equipment) {
+          terms.push(`${equipment} ${modifier} ${base}`);
+        }
+        // Also try with common equipment if not specified
+        if (base.includes('bench press') || base.includes('press') || base.includes('row')) {
+          terms.push(`barbell ${modifier} ${base}`);
+          terms.push(`dumbbell ${modifier} ${base}`);
+        }
+        // Add the simplified version
+        terms.push(`${modifier} ${base}`);
+        break;
+      }
+    }
+  }
+  
+  // Remove equipment prefixes for simpler search
+  simplified = simplified
+    .replace(/^(barbell|dumbbell|machine|cable|smith machine|incline|decline|seated|standing|lying|assisted)\s+/i, '')
+    .trim();
+  
+  if (simplified && simplified.toLowerCase() !== lower) {
+    terms.push(simplified.toLowerCase());
+  }
+  
+  // Add the full name
+  terms.push(lower);
+  
+  // Add common base terms
+  if (simplified.includes('Press')) terms.push('press');
+  if (simplified.includes('Squat')) terms.push('squat');
+  if (simplified.includes('Deadlift')) terms.push('deadlift');
+  if (simplified.includes('Row')) terms.push('row');
+  if (simplified.includes('Curl')) terms.push('curl');
+  if (simplified.includes('Extension')) terms.push('extension');
+  if (simplified.includes('Raise')) terms.push('raise');
+  if (simplified.includes('Lunge')) terms.push('lunge');
+  if (simplified.includes('Pull')) terms.push('pull');
+  
+  return [...new Set(terms)];
+}
+
+// Calculate similarity between two exercise names (0-1, higher is more similar)
+function calculateSimilarity(name1, name2) {
+  const n1 = name1.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+  const n2 = name2.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+  
+  // Exact match
+  if (n1 === n2) return 1.0;
+  
+  // Check if one contains the other (high similarity)
+  if (n1.includes(n2) || n2.includes(n1)) {
+    const shorter = n1.length < n2.length ? n1 : n2;
+    const longer = n1.length >= n2.length ? n1 : n2;
+    return shorter.length / longer.length;
+  }
+  
+  // Count matching words
+  const words1 = new Set(n1.split(/\s+/).filter(w => w.length > 2));
+  const words2 = new Set(n2.split(/\s+/).filter(w => w.length > 2));
+  
+  if (words1.size === 0 || words2.size === 0) return 0;
+  
+  let matches = 0;
+  for (const word of words1) {
+    if (words2.has(word)) matches++;
+  }
+  
+  // Require at least 2 matching words for decent similarity
+  if (matches < 2) return 0;
+  
+  // Calculate Jaccard similarity
+  const union = new Set([...words1, ...words2]);
+  return matches / union.size;
+}
+
+// Validate that a matched exercise is actually similar to what we're looking for
+function isValidMatch(ourExerciseName, matchedExerciseName) {
+  const similarity = calculateSimilarity(ourExerciseName, matchedExerciseName);
+  
+  // Require at least 0.4 similarity (40% word overlap) for a valid match
+  if (similarity < 0.4) {
+    return false;
+  }
+  
+  // Additional checks: ensure key words match
+  const ourLower = ourExerciseName.toLowerCase();
+  const matchedLower = matchedExerciseName.toLowerCase();
+  
+  // Extract key movement words
+  const keyWords = ['bench', 'squat', 'deadlift', 'row', 'press', 'curl', 'extension', 'raise', 'lunge', 'pulldown', 'fly', 'dip'];
+  const ourKeyWords = keyWords.filter(w => ourLower.includes(w));
+  const matchedKeyWords = keyWords.filter(w => matchedLower.includes(w));
+  
+  // If we have key words, at least one should match
+  if (ourKeyWords.length > 0 && matchedKeyWords.length > 0) {
+    const hasCommonKeyWord = ourKeyWords.some(w => matchedKeyWords.includes(w));
+    if (!hasCommonKeyWord) {
+      return false;
+    }
+  }
+  
+  // Check for conflicting key words (e.g., "bench press" shouldn't match "overhead press")
+  const conflictingPairs = [
+    ['bench', 'overhead'],
+    ['bench', 'shoulder'],
+    ['bicep', 'tricep'],
+    ['curl', 'extension'],
+    ['squat', 'deadlift'],
+    ['row', 'pulldown'], // These are related but different enough
+  ];
+  
+  for (const [word1, word2] of conflictingPairs) {
+    const hasWord1 = ourLower.includes(word1) && matchedLower.includes(word2);
+    const hasWord2 = ourLower.includes(word2) && matchedLower.includes(word1);
+    if (hasWord1 || hasWord2) {
+      // Unless both exercises have the same modifier (e.g., "close grip bench" vs "close grip overhead")
+      const ourModifiers = ['close grip', 'wide grip', 'incline', 'decline'];
+      const hasSharedModifier = ourModifiers.some(m => ourLower.includes(m) && matchedLower.includes(m));
+      if (!hasSharedModifier) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+}
+
 async function searchMuscleWiki(exerciseName) {
-  const searchTerms = EXERCISE_MAPPINGS[exerciseName] || [exerciseName.toLowerCase()];
+  const searchTerms = EXERCISE_MAPPINGS[exerciseName] || generateSimplifiedSearchTerms(exerciseName);
+  
+  // Track best match across all search terms
+  let bestMatch = null;
+  let bestSimilarity = 0;
+  let bestTerm = null;
   
   for (const term of searchTerms) {
     try {
@@ -241,38 +396,59 @@ async function searchMuscleWiki(exerciseName) {
         continue;
       }
       
-      // Search endpoint returns results sorted by relevance
-      // Find exact match first, then use first result (already sorted by relevance)
-      const exactMatch = exercises.find(ex => 
-        ex.name?.toLowerCase() === term.toLowerCase() ||
-        ex.name?.toLowerCase() === exerciseName.toLowerCase()
-      );
-      
-      const exercise = exactMatch || exercises[0];
-      
-      // If we only have basic info, fetch full details by ID
-      if (exercise.id && (!exercise.videos || exercise.videos.length === 0)) {
-        try {
-          const detailResponse = await fetch(`${MUSCLEWIKI_API_URL}/exercises/${exercise.id}?gender=male`, {
+      // Check each result for validity and similarity
+      for (const result of exercises) {
+        if (!result.name || !result.id) continue;
+        
+        // Validate the match
+        if (!isValidMatch(exerciseName, result.name)) {
+          continue;
+        }
+        
+        const similarity = calculateSimilarity(exerciseName, result.name);
+        
+        // If this is a very good match (high similarity), use it immediately
+        if (similarity >= 0.7) {
+          // Get detailed exercise info by ID
+          const detailResponse = await fetch(`${MUSCLEWIKI_API_URL}/exercises/${result.id}?gender=male`, {
             headers: {
               'X-RapidAPI-Key': API_KEY,
               'X-RapidAPI-Host': API_HOST
             }
           });
+          
           if (detailResponse.ok) {
             const detailData = await detailResponse.json();
+            console.log(`   ✓ Matched: "${result.name}" (similarity: ${(similarity * 100).toFixed(0)}%, term: "${term}")`);
             return detailData;
           }
-        } catch (err) {
-          // Continue with basic exercise data
+        }
+        
+        // Track best match so far
+        if (similarity > bestSimilarity) {
+          bestSimilarity = similarity;
+          bestMatch = result;
+          bestTerm = term;
         }
       }
-      
-      // Search endpoint may return full exercise details with videos
-      return exercise;
     } catch (err) {
-      // Continue to next search term
       continue;
+    }
+  }
+  
+  // If we found a reasonable match, use it (but require higher threshold)
+  if (bestMatch && bestSimilarity >= 0.5) {
+    const detailResponse = await fetch(`${MUSCLEWIKI_API_URL}/exercises/${bestMatch.id}?gender=male`, {
+      headers: {
+        'X-RapidAPI-Key': API_KEY,
+        'X-RapidAPI-Host': API_HOST
+      }
+    });
+    
+    if (detailResponse.ok) {
+      const detailData = await detailResponse.json();
+      console.log(`   ⚠️  Best match: "${bestMatch.name}" (similarity: ${(bestSimilarity * 100).toFixed(0)}%, term: "${bestTerm}")`);
+      return detailData;
     }
   }
   

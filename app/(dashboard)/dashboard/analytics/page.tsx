@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
+import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup } from '@/types/schema';
@@ -962,6 +963,20 @@ export default function AnalyticsPage() {
       {/* Tab Content */}
       {activeTab === 'body-composition' && (
         <div className="space-y-6">
+          {/* Muscle Priorities Display - Show at top of body comp tab */}
+          {userId ? (
+            <MusclePrioritiesDisplay userId={userId} />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Muscle Group Priorities</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-4 text-surface-400 text-sm">Loading user data...</div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Quick Stats */}
           {latestScan && (
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1121,7 +1136,12 @@ export default function AnalyticsPage() {
 
           {/* Body Measurements */}
           {userId && (
-            <BodyMeasurements userId={userId} unit={units === 'lb' ? 'in' : 'cm'} />
+            <BodyMeasurements 
+              userId={userId} 
+              unit={units === 'lb' ? 'in' : 'cm'}
+              heightCm={userProfile?.heightCm || undefined}
+              showImbalanceAnalysis={true}
+            />
           )}
 
           {/* No data state */}
@@ -2221,6 +2241,147 @@ export default function AnalyticsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Muscle Priorities Display Component (read-only for analytics)
+function MusclePrioritiesDisplay({ userId }: { userId: string }) {
+  const { priorities, isLoading } = useMusclePriorities(userId);
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Muscle Group Priorities</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-4 text-surface-400 text-sm">Loading...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Group priorities by level
+  const highPriority = priorities.filter(p => p.priority <= 2);
+  const normalPriority = priorities.filter(p => p.priority === 3);
+  const lowPriority = priorities.filter(p => p.priority >= 4);
+
+  // Check if user has set custom priorities (not all default priority 3)
+  const hasCustomPriorities = priorities.length > 0 && !priorities.every(p => p.priority === 3);
+
+  const PRIORITY_LABELS: Record<number, string> = {
+    1: 'High Priority',
+    2: 'Focus',
+    3: 'Normal',
+    4: 'Maintenance',
+    5: 'Low Priority',
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <span>Muscle Group Priorities</span>
+          <Link href="/dashboard/settings">
+            <Button variant="ghost" size="sm">Edit in Settings</Button>
+          </Link>
+        </CardTitle>
+        <p className="text-sm text-surface-400 mt-1">
+          These priorities influence volume allocation in program generation
+        </p>
+      </CardHeader>
+      <CardContent>
+        {!hasCustomPriorities ? (
+          <div className="text-center py-4">
+            <p className="text-surface-400 text-sm mb-2">No custom priorities set</p>
+            <p className="text-xs text-surface-500 mb-3">
+              All muscle groups are set to normal priority (3). Set custom priorities in Settings to influence program generation.
+            </p>
+            <Link href="/dashboard/settings">
+              <Button variant="outline" size="sm">Go to Settings</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {highPriority.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+                High Priority ({highPriority.length})
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {highPriority.map((p) => (
+                  <Badge
+                    key={p.muscleGroup}
+                    variant="info"
+                    size="sm"
+                    className="capitalize"
+                  >
+                    {p.muscleGroup} ({PRIORITY_LABELS[p.priority]})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {normalPriority.length > 0 && normalPriority.length < priorities.length && (
+            <div>
+              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+                Normal Priority ({normalPriority.length})
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {normalPriority.map((p) => (
+                  <Badge
+                    key={p.muscleGroup}
+                    variant="default"
+                    size="sm"
+                    className="capitalize"
+                  >
+                    {p.muscleGroup}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {lowPriority.length > 0 && (
+            <div>
+              <h4 className="text-xs font-medium text-surface-400 mb-2 uppercase tracking-wide">
+                Low Priority ({lowPriority.length})
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {lowPriority.map((p) => (
+                  <Badge
+                    key={p.muscleGroup}
+                    variant="outline"
+                    size="sm"
+                    className="capitalize"
+                  >
+                    {p.muscleGroup} ({PRIORITY_LABELS[p.priority]})
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {priorities.some(p => p.reason) && (
+            <div className="pt-3 border-t border-surface-800">
+              <h4 className="text-xs font-medium text-surface-400 mb-2">Notes</h4>
+              <div className="space-y-1">
+                {priorities
+                  .filter(p => p.reason)
+                  .map((p) => (
+                    <div key={p.muscleGroup} className="text-xs text-surface-400">
+                      <span className="font-medium text-surface-300 capitalize">{p.muscleGroup}:</span>{' '}
+                      {p.reason}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

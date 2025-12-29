@@ -7,6 +7,7 @@ import {
   analyzeImbalances,
   type BodyMeasurements as MeasurementsType,
   type ImbalanceAnalysis,
+  type UserLifts,
 } from '@/services/measurementImbalanceEngine';
 
 interface Measurements {
@@ -149,15 +150,55 @@ export function BodyMeasurements({
   const [displayUnit, setDisplayUnit] = useState<'in' | 'cm'>(unit);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [userLifts, setUserLifts] = useState<UserLifts | undefined>(undefined);
 
-  // Calculate imbalance analysis when measurements change
+  // Fetch user's best lifts for imbalance analysis
+  useEffect(() => {
+    const loadLifts = async () => {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('user_best_lifts')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (data && data.length > 0) {
+        const lifts: UserLifts = {};
+        data.forEach((lift: any) => {
+          if (lift.exercise_name === 'Barbell Bench Press' && lift.best_weight_kg) {
+            lifts.benchPressKg = lift.best_weight_kg;
+          } else if (lift.exercise_name === 'Barbell Back Squat' && lift.best_weight_kg) {
+            lifts.squatKg = lift.best_weight_kg;
+          } else if (lift.exercise_name === 'Conventional Deadlift' && lift.best_weight_kg) {
+            lifts.deadliftKg = lift.best_weight_kg;
+          } else if (lift.exercise_name === 'Standing Overhead Press' && lift.best_weight_kg) {
+            lifts.overheadPressKg = lift.best_weight_kg;
+          } else if (lift.exercise_name === 'Barbell Row' && lift.best_weight_kg) {
+            lifts.rowKg = lift.best_weight_kg;
+          } else if (lift.exercise_name === 'Barbell Curl' && lift.best_weight_kg) {
+            lifts.curlKg = lift.best_weight_kg;
+          }
+        });
+        setUserLifts(Object.keys(lifts).length > 0 ? lifts : undefined);
+      }
+    };
+
+    if (showImbalanceAnalysis) {
+      loadLifts();
+    }
+  }, [userId, showImbalanceAnalysis]);
+
+  // Calculate imbalance analysis when measurements or lifts change
   const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
     if (!showImbalanceAnalysis) return null;
+    
+    // Check if we have measurements OR lifts (works with either or both)
     const hasMeasurements = Object.values(measurements).some(v => v !== undefined && v !== null);
-    if (!hasMeasurements) return null;
+    const hasLifts = userLifts && Object.values(userLifts).some(v => v !== undefined && v !== null);
+    
+    if (!hasMeasurements && !hasLifts) return null;
 
     // Convert Measurements to the format expected by the imbalance engine
-    const engineMeasurements: MeasurementsType = {
+    const engineMeasurements: MeasurementsType | undefined = hasMeasurements ? {
       neck: measurements.neck,
       shoulders: measurements.shoulders,
       chest: measurements.chest,
@@ -171,10 +212,10 @@ export function BodyMeasurements({
       right_thigh: measurements.right_thigh,
       left_calf: measurements.left_calf,
       right_calf: measurements.right_calf,
-    };
+    } : undefined;
 
-    return analyzeImbalances(engineMeasurements, undefined, heightCm, wristCm);
-  }, [measurements, heightCm, wristCm, showImbalanceAnalysis]);
+    return analyzeImbalances(engineMeasurements, userLifts, heightCm, wristCm);
+  }, [measurements, userLifts, heightCm, wristCm, showImbalanceAnalysis]);
 
   useEffect(() => {
     const loadMeasurements = async () => {
