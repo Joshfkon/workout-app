@@ -150,42 +150,10 @@ export function BodyMeasurements({
   const [displayUnit, setDisplayUnit] = useState<'in' | 'cm'>(unit);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [userLifts, setUserLifts] = useState<UserLifts | undefined>(undefined);
-
-  // Fetch user's best lifts for imbalance analysis
-  useEffect(() => {
-    const loadLifts = async () => {
-      const supabase = createUntypedClient();
-      const { data } = await supabase
-        .from('user_best_lifts')
-        .select('*')
-        .eq('user_id', userId);
-
-      if (data && data.length > 0) {
-        const lifts: UserLifts = {};
-        data.forEach((lift: any) => {
-          if (lift.exercise_name === 'Barbell Bench Press' && lift.best_weight_kg) {
-            lifts.benchPressKg = lift.best_weight_kg;
-          } else if (lift.exercise_name === 'Barbell Back Squat' && lift.best_weight_kg) {
-            lifts.squatKg = lift.best_weight_kg;
-          } else if (lift.exercise_name === 'Conventional Deadlift' && lift.best_weight_kg) {
-            lifts.deadliftKg = lift.best_weight_kg;
-          } else if (lift.exercise_name === 'Standing Overhead Press' && lift.best_weight_kg) {
-            lifts.overheadPressKg = lift.best_weight_kg;
-          } else if (lift.exercise_name === 'Barbell Row' && lift.best_weight_kg) {
-            lifts.rowKg = lift.best_weight_kg;
-          } else if (lift.exercise_name === 'Barbell Curl' && lift.best_weight_kg) {
-            lifts.curlKg = lift.best_weight_kg;
-          }
-        });
-        setUserLifts(Object.keys(lifts).length > 0 ? lifts : undefined);
-      }
-    };
-
-    if (showImbalanceAnalysis) {
-      loadLifts();
-    }
-  }, [userId, showImbalanceAnalysis]);
+  
+  // Use the useBestLifts hook to fetch user's best lifts
+  const bestLifts = showImbalanceAnalysis && userId ? useBestLifts(userId) : { lifts: undefined, isLoading: false };
+  const userLifts = bestLifts.lifts;
 
   // Calculate imbalance analysis when measurements or lifts change
   const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
@@ -349,6 +317,7 @@ export function BodyMeasurements({
   }, {} as Record<string, typeof MEASUREMENT_FIELDS>);
 
   const hasMeasurements = Object.values(measurements).some(v => v !== undefined && v !== null);
+  const hasLifts = userLifts && Object.values(userLifts).some(v => v !== undefined && v !== null);
 
   return (
     <Card>
@@ -501,6 +470,36 @@ export function BodyMeasurements({
 
                 {showAnalysis && (
                   <div className="mt-3 space-y-3">
+                    {/* Strength Imbalances (from lift ratios) */}
+                    {imbalanceAnalysis.strengthImbalances.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-medium text-surface-400 uppercase tracking-wide">Strength Balance</h4>
+                        {imbalanceAnalysis.strengthImbalances.map((imbalance, i) => (
+                          <div
+                            key={i}
+                            className={`p-3 rounded-lg border ${
+                              imbalance.severity === 'significant'
+                                ? 'bg-danger-500/10 border-danger-500/30'
+                                : imbalance.severity === 'moderate'
+                                ? 'bg-warning-500/10 border-warning-500/30'
+                                : 'bg-surface-800/50 border-surface-700'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-1">
+                              <p className="text-sm font-medium text-surface-200">{imbalance.description}</p>
+                              <Badge
+                                variant={imbalance.severity === 'significant' ? 'danger' : imbalance.severity === 'moderate' ? 'warning' : 'default'}
+                                size="sm"
+                              >
+                                {imbalance.severity}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-surface-300 mt-1">{imbalance.recommendation}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Quick Summary */}
                     <div className="space-y-2">
                       {/* Bilateral Asymmetries */}
@@ -563,7 +562,8 @@ export function BodyMeasurements({
 
                     {/* All Balanced Message */}
                     {imbalanceAnalysis.bilateralAsymmetries.every(a => a.severity === 'none') &&
-                      imbalanceAnalysis.laggingMuscles.length === 0 && (
+                      imbalanceAnalysis.laggingMuscles.length === 0 &&
+                      imbalanceAnalysis.strengthImbalances.length === 0 && (
                         <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
                           <p className="text-sm text-success-400">Great symmetry! Keep up the balanced training.</p>
                         </div>
@@ -574,12 +574,109 @@ export function BodyMeasurements({
             )}
           </div>
         ) : (
-          <div className="text-center py-4">
-            <p className="text-surface-400 text-sm mb-2">No measurements logged yet</p>
-            <p className="text-xs text-surface-500 mb-3">Track your progress by logging body measurements</p>
-            <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              Log First Measurement
-            </Button>
+          <div className="space-y-4">
+            <div className="text-center py-4">
+              <p className="text-surface-400 text-sm mb-2">No measurements logged yet</p>
+              <p className="text-xs text-surface-500 mb-3">Track your progress by logging body measurements</p>
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                Log First Measurement
+              </Button>
+            </div>
+
+            {/* Show imbalance analysis even without measurements if we have lifts */}
+            {imbalanceAnalysis && hasLifts && (
+              <div className="pt-3 border-t border-surface-800">
+                <button
+                  onClick={() => setShowAnalysis(!showAnalysis)}
+                  className="w-full flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-surface-300">Balance Analysis (from lifts)</span>
+                    <Badge
+                      variant={
+                        imbalanceAnalysis.balanceScore >= 80
+                          ? 'success'
+                          : imbalanceAnalysis.balanceScore >= 60
+                          ? 'warning'
+                          : 'danger'
+                      }
+                      size="sm"
+                    >
+                      {imbalanceAnalysis.balanceScore}%
+                    </Badge>
+                  </div>
+                  <span className="text-surface-500 text-xs">{showAnalysis ? '▲' : '▼'}</span>
+                </button>
+
+                {showAnalysis && (
+                  <div className="mt-3 space-y-3">
+                    {/* Strength Imbalances (from lift ratios) */}
+                    {imbalanceAnalysis.strengthImbalances.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-medium text-surface-400 uppercase tracking-wide">Strength Balance</h4>
+                        {imbalanceAnalysis.strengthImbalances.map((imbalance, i) => (
+                          <div
+                            key={i}
+                            className={`p-3 rounded-lg border ${
+                              imbalance.severity === 'significant'
+                                ? 'bg-danger-500/10 border-danger-500/30'
+                                : imbalance.severity === 'moderate'
+                                ? 'bg-warning-500/10 border-warning-500/30'
+                                : 'bg-surface-800/50 border-surface-700'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-1">
+                              <p className="text-sm font-medium text-surface-200">{imbalance.description}</p>
+                              <Badge
+                                variant={imbalance.severity === 'significant' ? 'danger' : imbalance.severity === 'moderate' ? 'warning' : 'default'}
+                                size="sm"
+                              >
+                                {imbalance.severity}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-surface-300 mt-1">{imbalance.recommendation}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Lagging Muscles from strength imbalances */}
+                    {imbalanceAnalysis.laggingMuscles.length > 0 && (
+                      <div className="p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                        <p className="text-xs text-surface-400 mb-1.5">Needs Focus:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {imbalanceAnalysis.laggingMuscles.map(muscle => (
+                            <Badge key={muscle} variant="warning" size="sm">
+                              {muscle}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recommendations */}
+                    {imbalanceAnalysis.recommendations.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-medium text-surface-400 uppercase tracking-wide">Recommendations</h4>
+                        {imbalanceAnalysis.recommendations.map((rec, i) => (
+                          <div key={i} className="p-2 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                            <p className="text-xs text-surface-200">{rec}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* All Balanced Message */}
+                    {imbalanceAnalysis.strengthImbalances.length === 0 &&
+                      imbalanceAnalysis.laggingMuscles.length === 0 && (
+                        <div className="p-3 bg-success-500/10 border border-success-500/20 rounded-lg text-center">
+                          <p className="text-sm text-success-400">Great strength balance! Keep up the balanced training.</p>
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </CardContent>
