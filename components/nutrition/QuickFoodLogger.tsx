@@ -744,9 +744,9 @@ export function QuickFoodLogger({
                     min="0.1"
                     value={barcodeQuantity}
                     onChange={(e) => setBarcodeQuantity(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                    className="min-w-0 flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
                   />
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-shrink-0">
                     <button
                       onClick={() => {
                         if (barcodeUnit === 'grams') {
