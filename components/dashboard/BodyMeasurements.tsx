@@ -613,7 +613,7 @@ export function BodyMeasurements({
             </div>
 
             {/* Show imbalance analysis even without measurements if we have lifts */}
-            {imbalanceAnalysis && hasLifts && (
+            {imbalanceAnalysis && (
               <div className="pt-3 border-t border-surface-800">
                 <button
                   onClick={() => setShowAnalysis(!showAnalysis)}
