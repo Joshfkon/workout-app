@@ -34,6 +34,8 @@ interface Measurements {
   neck?: number;
   shoulders?: number;
   chest?: number;
+  upper_back?: number;
+  lower_back?: number;
   left_bicep?: number;
   right_bicep?: number;
   left_forearm?: number;
@@ -63,6 +65,8 @@ const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: strin
   { key: 'neck', label: 'Neck', group: 'Upper Body', instructions: 'Measure around the middle of your neck, just below the Adam\'s apple. Keep the tape level and snug but not tight.' },
   { key: 'shoulders', label: 'Shoulders', group: 'Upper Body', instructions: 'Measure around your shoulders at the widest point, typically across the deltoids. Keep your arms relaxed at your sides.' },
   { key: 'chest', label: 'Chest', group: 'Upper Body', instructions: 'Measure around the fullest part of your chest, usually at nipple level. Keep the tape level and breathe normally.' },
+  { key: 'upper_back', label: 'Upper Back', group: 'Back', instructions: 'Measure around the widest part of your upper back/lats, just under your armpits. Keep arms at sides and stand relaxed.' },
+  { key: 'lower_back', label: 'Lower Back', group: 'Back', instructions: 'Measure around your lower back at the narrowest point above your hips. Keep the tape level and breathe normally.' },
   { key: 'left_bicep', label: 'Left Bicep', group: 'Arms', instructions: 'Measure around the largest part of your flexed bicep. Keep your arm at a 90-degree angle with fist clenched.' },
   { key: 'right_bicep', label: 'Right Bicep', group: 'Arms', instructions: 'Measure around the largest part of your flexed bicep. Keep your arm at a 90-degree angle with fist clenched.' },
   { key: 'left_forearm', label: 'Left Forearm', group: 'Arms', instructions: 'Measure around the thickest part of your forearm, usually about 1 inch below the elbow. Keep your arm straight.' },
@@ -185,6 +189,8 @@ export function BodyMeasurements({
       neck: measurements.neck,
       shoulders: measurements.shoulders,
       chest: measurements.chest,
+      upper_back: measurements.upper_back,
+      lower_back: measurements.lower_back,
       left_bicep: measurements.left_bicep,
       right_bicep: measurements.right_bicep,
       left_forearm: measurements.left_forearm,
@@ -302,6 +308,8 @@ export function BodyMeasurements({
           neck: todayData.neck,
           shoulders: todayData.shoulders,
           chest: todayData.chest,
+          upper_back: todayData.upper_back,
+          lower_back: todayData.lower_back,
           left_bicep: todayData.left_bicep,
           right_bicep: todayData.right_bicep,
           left_forearm: todayData.left_forearm,
@@ -330,6 +338,8 @@ export function BodyMeasurements({
             neck: entry.neck as number | undefined,
             shoulders: entry.shoulders as number | undefined,
             chest: entry.chest as number | undefined,
+            upper_back: entry.upper_back as number | undefined,
+            lower_back: entry.lower_back as number | undefined,
             left_bicep: entry.left_bicep as number | undefined,
             right_bicep: entry.right_bicep as number | undefined,
             left_forearm: entry.left_forearm as number | undefined,

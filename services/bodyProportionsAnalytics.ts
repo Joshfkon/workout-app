@@ -172,6 +172,20 @@ const RATIO_DEFINITIONS = {
     ideal: 1.35,
     range: [1.2, 1.5] as [number, number],
   },
+  backToWaist: {
+    name: 'Back-to-Waist Ratio',
+    description: 'Lat width for V-taper from behind',
+    formula: 'Upper Back ÷ Waist',
+    ideal: 1.5,
+    range: [1.35, 1.65] as [number, number],
+  },
+  chestToBack: {
+    name: 'Chest-to-Back Ratio',
+    description: 'Front/back balance for proportional torso',
+    formula: 'Chest ÷ Upper Back',
+    ideal: 0.95, // Slightly smaller chest than back for balanced development
+    range: [0.9, 1.05] as [number, number],
+  },
   armToNeck: {
     name: 'Arm-to-Neck Ratio',
     description: 'Classic arm development - arms should approximate neck',
@@ -211,6 +225,20 @@ const BASE_BENCHMARKS_INCHES = {
     elite: [44, 46],
     attainable: [42, 44],
     muscleGroups: ['chest'] as MuscleGroup[],
+  },
+  upper_back: {
+    // Upper back/lats - slightly wider than chest for V-taper
+    superhero: [48, 52],
+    elite: [46, 48],
+    attainable: [44, 46],
+    muscleGroups: ['back', 'traps'] as MuscleGroup[],
+  },
+  lower_back: {
+    // Lower back - between waist and upper back
+    superhero: [34, 36],
+    elite: [35, 37],
+    attainable: [36, 38],
+    muscleGroups: ['back'] as MuscleGroup[],
   },
   waist: {
     // Lower is better for waist
@@ -285,25 +313,39 @@ export function calculateProportionalityRatios(
     ratios.push(createRatioAnalysis(def, value, 2));
   }
 
+  // Back-to-Waist Ratio (V-taper from behind)
+  if (measurements.upper_back && measurements.waist) {
+    const value = measurements.upper_back / measurements.waist;
+    const def = RATIO_DEFINITIONS.backToWaist;
+    ratios.push(createRatioAnalysis(def, value, 3));
+  }
+
+  // Chest-to-Back Ratio (front/back balance)
+  if (measurements.chest && measurements.upper_back) {
+    const value = measurements.chest / measurements.upper_back;
+    const def = RATIO_DEFINITIONS.chestToBack;
+    ratios.push(createRatioAnalysis(def, value, 4));
+  }
+
   // Arm-to-Neck Ratio
   if (avgBicep && measurements.neck) {
     const value = avgBicep / measurements.neck;
     const def = RATIO_DEFINITIONS.armToNeck;
-    ratios.push(createRatioAnalysis(def, value, 3));
+    ratios.push(createRatioAnalysis(def, value, 5));
   }
 
   // Thigh-to-Calf Ratio
   if (avgThigh && avgCalf) {
     const value = avgThigh / avgCalf;
     const def = RATIO_DEFINITIONS.thighToCalf;
-    ratios.push(createRatioAnalysis(def, value, 4));
+    ratios.push(createRatioAnalysis(def, value, 6));
   }
 
   // Thigh-to-Waist Ratio
   if (avgThigh && measurements.waist) {
     const value = avgThigh / measurements.waist;
     const def = RATIO_DEFINITIONS.thighToWaist;
-    ratios.push(createRatioAnalysis(def, value, 5));
+    ratios.push(createRatioAnalysis(def, value, 7));
   }
 
   return ratios;
