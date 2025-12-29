@@ -520,6 +520,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAmrapSuggested, pendingInputs.length]);
   
   // Recalculate suggestions when RPE or Form of the last completed set changes

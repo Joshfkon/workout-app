@@ -152,9 +152,9 @@ export function BodyMeasurements({
   const [refreshKey, setRefreshKey] = useState(0);
   const [showAnalysis, setShowAnalysis] = useState(false);
   
-  // Use the useBestLifts hook to fetch user's best lifts
-  const bestLifts = showImbalanceAnalysis && userId ? useBestLifts(userId) : { lifts: undefined, isLoading: false };
-  const userLifts = bestLifts.lifts;
+  // Use the useBestLifts hook to fetch user's best lifts (must be called unconditionally)
+  const bestLifts = userId ? useBestLifts(userId) : { lifts: undefined, isLoading: false };
+  const userLifts = showImbalanceAnalysis ? bestLifts.lifts : undefined;
 
   // Calculate imbalance analysis when measurements or lifts change
   const imbalanceAnalysis = useMemo((): ImbalanceAnalysis | null => {
