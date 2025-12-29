@@ -446,17 +446,17 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}
     >
-      <Card 
-        variant="elevated" 
-        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+      <Card
+        variant="elevated"
+        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 space-y-6">
           {/* Header */}
           <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <h2 className="text-2xl font-bold text-surface-100">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <h2 className="text-2xl font-bold text-surface-100 break-words">
                   {exercise.name}
                 </h2>
                 {getExerciseProp(exercise, 'hypertrophyScore', 'hypertrophy_score')?.tier && (
@@ -465,7 +465,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-3 text-sm text-surface-400">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-surface-400">
                 <span className="capitalize">{getExerciseProp(exercise, 'primaryMuscle', 'primary_muscle')}</span>
                 {(() => {
                   const secondary = getExerciseProp(exercise, 'secondaryMuscles', 'secondary_muscles');
@@ -1191,7 +1191,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                 {history.chartData && history.chartData.length >= 2 && (
                   <div className="bg-surface-800/30 rounded-lg p-4">
                     {/* Chart tabs */}
-                    <div className="flex gap-2 mb-4">
+                    <div className="flex flex-wrap gap-2 mb-4">
                       <button
                         onClick={() => setActiveChart('e1rm')}
                         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
