@@ -128,14 +128,14 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         .select(`
           id,
           weight_kg,
-          reps_completed,
+          reps,
           created_at,
           exercise_block:exercise_blocks(exercise:exercises(name))
         `)
         .eq('user_id', userId)
         .is('is_warmup', false)
         .not('weight_kg', 'is', null)
-        .not('reps_completed', 'is', null)
+        .not('reps', 'is', null)
         .order('created_at', { ascending: false })
         .limit(500);
       
@@ -150,25 +150,25 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         setLogs.forEach((log: {
           id: string;
           weight_kg: number;
-          reps_completed: number;
+          reps: number;
           created_at: string;
           exercise_block: {
             exercise: { name: string } | null;
           } | null;
         }) => {
-          if (!log.exercise_block?.exercise?.name || !log.weight_kg || !log.reps_completed) return;
+          if (!log.exercise_block?.exercise?.name || !log.weight_kg || !log.reps) return;
 
           const exerciseName = log.exercise_block.exercise.name.toLowerCase();
           if (!keyExercises.includes(exerciseName)) return;
 
-          const e1rm = calculateE1RM(log.weight_kg, log.reps_completed);
+          const e1rm = calculateE1RM(log.weight_kg, log.reps);
           const existing = exerciseBests.get(exerciseName);
 
           if (!existing || e1rm > existing.estimated1rmKg) {
             exerciseBests.set(exerciseName, {
               exerciseName: log.exercise_block.exercise.name,
               weightKg: log.weight_kg,
-              reps: log.reps_completed,
+              reps: log.reps,
               estimated1rmKg: e1rm,
               achievedAt: log.created_at,
               source: 'auto',
