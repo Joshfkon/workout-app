@@ -165,7 +165,23 @@ export function BodyMeasurements({
     const hasMeasurements = Object.values(measurements).some(v => v !== undefined && v !== null);
     const hasLifts = userLifts && Object.values(userLifts).some(v => v !== undefined && v !== null);
     
-    if (!hasMeasurements && !hasLifts) return null;
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[BodyMeasurements] Imbalance Analysis Check:', {
+        showImbalanceAnalysis,
+        hasMeasurements,
+        hasLifts,
+        userLifts,
+        bestLiftsLoading: bestLifts.isLoading,
+      });
+    }
+    
+    if (!hasMeasurements && !hasLifts) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[BodyMeasurements] No measurements or lifts, skipping analysis');
+      }
+      return null;
+    }
 
     // Convert Measurements to the format expected by the imbalance engine
     const engineMeasurements: MeasurementsType | undefined = hasMeasurements ? {
@@ -184,8 +200,19 @@ export function BodyMeasurements({
       right_calf: measurements.right_calf,
     } : undefined;
 
-    return analyzeImbalances(engineMeasurements, userLifts, heightCm, wristCm);
-  }, [measurements, userLifts, heightCm, wristCm, showImbalanceAnalysis]);
+    const analysis = analyzeImbalances(engineMeasurements, userLifts, heightCm, wristCm);
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[BodyMeasurements] Analysis Result:', {
+        balanceScore: analysis.balanceScore,
+        strengthImbalances: analysis.strengthImbalances.length,
+        laggingMuscles: analysis.laggingMuscles.length,
+        dominantMuscles: analysis.dominantMuscles.length,
+      });
+    }
+    
+    return analysis;
+  }, [measurements, userLifts, heightCm, wristCm, showImbalanceAnalysis, bestLifts.isLoading]);
 
   useEffect(() => {
     const loadMeasurements = async () => {
