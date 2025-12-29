@@ -56,7 +56,7 @@ export function ProportionalityRatiosCard({ ratios, onRatioClick }: Proportional
       far_below: { variant: 'danger' as const, label: 'Needs Focus' },
       below: { variant: 'warning' as const, label: 'Below Target' },
       optimal: { variant: 'success' as const, label: 'Optimal' },
-      above: { variant: 'primary' as const, label: 'Above Target' },
+      above: { variant: 'info' as const, label: 'Above Target' },
       far_above: { variant: 'default' as const, label: 'Well Developed' },
     };
     return config[status];
