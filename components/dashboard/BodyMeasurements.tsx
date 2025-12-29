@@ -9,6 +9,7 @@ import {
   type ImbalanceAnalysis,
   type UserLifts,
 } from '@/services/measurementImbalanceEngine';
+import { useBestLifts } from '@/hooks/useBestLifts';
 
 interface Measurements {
   neck?: number;
