@@ -220,12 +220,16 @@ export function BodyMeasurements({
       const today = new Date().toISOString().split('T')[0];
 
       // Get today's measurements
-      const { data: todayData } = await supabase
+      const { data: todayData, error: todayError } = await supabase
         .from('body_measurements')
         .select('*')
         .eq('user_id', userId)
         .eq('logged_at', today)
-        .single();
+        .maybeSingle();
+      
+      if (todayError && todayError.code !== 'PGRST116') {
+        console.error('Error fetching today\'s measurements:', todayError);
+      }
 
       if (todayData) {
         setMeasurements({

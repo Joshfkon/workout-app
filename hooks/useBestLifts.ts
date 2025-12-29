@@ -133,8 +133,9 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         .eq('user_id', userId)
         .not('weight_kg', 'is', null)
         .not('reps_completed', 'is', null)
+        .is('is_warmup', false)
         .order('created_at', { ascending: false })
-        .limit(1000);
+        .limit(500);
 
       if (!setLogsError && setLogs) {
         // Calculate best E1RM for each key exercise from history
