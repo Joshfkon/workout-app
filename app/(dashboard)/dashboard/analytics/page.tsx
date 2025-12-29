@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
+import { BodyTargets } from '@/components/dashboard/BodyTargets';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
@@ -1136,11 +1137,23 @@ export default function AnalyticsPage() {
 
           {/* Body Measurements */}
           {userId && (
-            <BodyMeasurements 
-              userId={userId} 
+            <BodyMeasurements
+              userId={userId}
               unit={units === 'lb' ? 'in' : 'cm'}
               heightCm={userProfile?.heightCm || undefined}
               showImbalanceAnalysis={true}
+            />
+          )}
+
+          {/* Body Composition Goals */}
+          {userId && (
+            <BodyTargets
+              userId={userId}
+              unit={units === 'lb' ? 'in' : 'cm'}
+              weightUnit={units}
+              currentWeightKg={latestScan?.totalMassKg}
+              currentBodyFatPercent={latestScan?.bodyFatPercent}
+              currentFfmi={ffmiResult?.ffmi}
             />
           )}
 
