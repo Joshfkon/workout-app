@@ -1151,7 +1151,7 @@ export default function AnalyticsPage() {
               userId={userId}
               unit={units === 'lb' ? 'in' : 'cm'}
               weightUnit={units}
-              currentWeightKg={latestScan?.totalMassKg}
+              currentWeightKg={latestScan?.weightKg}
               currentBodyFatPercent={latestScan?.bodyFatPercent}
               currentFfmi={ffmiResult?.ffmi}
             />
