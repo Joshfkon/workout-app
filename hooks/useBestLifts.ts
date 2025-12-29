@@ -122,6 +122,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
       const keyExercises = Object.keys(EXERCISE_NAME_MAPPING);
 
       // Get set logs for key exercises - filter out nulls and warmups
+      // Note: set_logs -> exercise_blocks -> exercises (need to go through exercise_blocks)
       const { data: setLogs, error: setLogsError } = await supabase
         .from('set_logs')
         .select(`
@@ -129,7 +130,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           weight_kg,
           reps_completed,
           created_at,
-          exercise:exercises(name)
+          exercise_block:exercise_blocks(exercise:exercises(name))
         `)
         .eq('user_id', userId)
         .is('is_warmup', false)
