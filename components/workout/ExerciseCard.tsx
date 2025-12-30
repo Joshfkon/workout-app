@@ -362,16 +362,16 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
     if (pendingSetsCount === 0) return;
-    
+
     const targetRpe = 10 - effectiveTargetRir;
     const lastCompleted = completedSets[completedSets.length - 1];
-    
+
     if (!lastCompleted) return;
-    
+
     // Calculate smart defaults based on the last completed set
     let smartWeight: number;
     let smartReps: number;
-    
+
     const lastRpe = lastCompleted.rpe || targetRpe;
     // Adjust weight and reps based on RPE difference
     if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
@@ -382,19 +382,32 @@ export const ExerciseCard = memo(function ExerciseCard({
       smartWeight = lastCompleted.weightKg;
       smartReps = lastCompleted.reps;
     }
-    
+
     // Update all pending inputs
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
     for (let i = 0; i < pendingSetsCount; i++) {
+      const isLastSet = i === pendingSetsCount - 1;
+      // If this is the last set and AMRAP is suggested, use 9.5 for RPE
+      const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
+
+      // For AMRAP sets, predict max reps at failure based on last set's RPE
+      // Formula: predicted max reps = lastReps + (10 - lastRpe)
+      let setReps = smartReps;
+      if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
+        const repsInReserve = 10 - lastCompleted.rpe;
+        const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
+        setReps = Math.max(predictedMaxReps, smartReps); // Use higher of predicted or smart
+      }
+
       updatedInputs.push({
         weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
-        reps: String(smartReps),
-        rpe: String(targetRpe),
+        reps: String(setReps),
+        rpe: String(setRpe),
       });
     }
-    
+
     setPendingInputs(updatedInputs);
-  }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, displayWeight]);
+  }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, displayWeight, isAmrapSuggested]);
   
   // Initialize pending inputs when component mounts or when we need a full reset
   // Only reinitialize when pendingSetsCount increases (sets were added) or on first mount
@@ -432,13 +445,25 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Create updated pending inputs - all based on the last completed set
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
+        const isLastSet = i === pendingSetsCount - 1;
+        // If this is the last set and AMRAP is suggested, use 9.5 for RPE
+        const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
+
+        // For AMRAP sets, predict max reps at failure based on last set's RPE
+        let setReps = smartReps;
+        if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
+          const repsInReserve = 10 - lastCompleted.rpe;
+          const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
+          setReps = Math.max(predictedMaxReps, smartReps);
+        }
+
         updatedInputs.push({
           weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
-          reps: String(smartReps),
-          rpe: String(targetRpe),
+          reps: String(setReps),
+          rpe: String(setRpe),
         });
       }
-      
+
       setPendingInputs(updatedInputs);
       return;
     }
@@ -494,10 +519,16 @@ export const ExerciseCard = memo(function ExerciseCard({
         // If this is the last set and AMRAP is suggested, pre-fill RPE with 9.5
         if (isLastSet && isAmrapSuggested) {
           defaultRpe = 9.5;
+          // For AMRAP sets, predict max reps at failure based on last set's RPE
+          if (lastCompleted?.rpe) {
+            const repsInReserve = 10 - lastCompleted.rpe;
+            const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
+            defaultReps = Math.max(predictedMaxReps, defaultReps);
+          }
         } else {
           defaultRpe = targetRpe;
         }
-        
+
         newPendingInputs.push({
           weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
           reps: String(defaultReps),
@@ -510,21 +541,40 @@ export const ExerciseCard = memo(function ExerciseCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSets.length, pendingSetsCount, isAmrapSuggested]);
   
-  // Update RPE to 9.5 when AMRAP suggestion appears for the last pending set
+  // Update RPE to 9.5 and predicted reps when AMRAP suggestion appears for the last pending set
   useEffect(() => {
     if (isAmrapSuggested && pendingInputs.length > 0) {
       const lastIndex = pendingInputs.length - 1;
       const lastInput = pendingInputs[lastIndex];
-      if (lastInput && parseFloat(lastInput.rpe) !== 9.5) {
+      const lastCompleted = completedSets[completedSets.length - 1];
+
+      // Check if we need to update RPE or reps
+      const currentRpe = parseFloat(lastInput?.rpe || '0');
+      const needsRpeUpdate = lastInput && currentRpe !== 9.5;
+
+      // Calculate predicted max reps for AMRAP
+      let predictedReps: number | null = null;
+      if (lastCompleted?.rpe) {
+        const repsInReserve = 10 - lastCompleted.rpe;
+        predictedReps = Math.round(lastCompleted.reps + repsInReserve);
+      }
+
+      const currentReps = parseInt(lastInput?.reps || '0', 10);
+      const needsRepsUpdate = predictedReps !== null && currentReps < predictedReps;
+
+      if (needsRpeUpdate || needsRepsUpdate) {
         setPendingInputs(prev => {
           const updated = [...prev];
-          updated[lastIndex] = { ...updated[lastIndex], rpe: '9.5' };
+          const updates: { rpe?: string; reps?: string } = {};
+          if (needsRpeUpdate) updates.rpe = '9.5';
+          if (needsRepsUpdate && predictedReps !== null) updates.reps = String(predictedReps);
+          updated[lastIndex] = { ...updated[lastIndex], ...updates };
           return updated;
         });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAmrapSuggested, pendingInputs.length]);
+  }, [isAmrapSuggested, pendingInputs.length, completedSets]);
   
   // Recalculate suggestions when RPE or Form of the last completed set changes
   const lastCompletedSetRef = useRef<{ id: string; rpe: number | null; form: string | null } | null>(null);
