@@ -485,13 +485,38 @@ export async function getEnhancedDailyDataPoints(
     .gte('date', cutoffStr);
 
   // Create a map of dates to weight (convert to lbs for TDEE calculations)
+  // Add validation to detect and fix unit errors
   const weightByDate = new Map<string, number>();
   weightData?.forEach((w) => {
+    if (!w.weight || w.weight <= 0) return; // Skip invalid weights
+    
     const weightUnit = w.unit || 'lb';
     let weightInLbs = w.weight;
-    if (weightUnit === 'kg') {
+    
+    // Validation: detect mislabeled units
+    // If unit says 'lb' but weight > 500, it's probably stored in kg (convert)
+    // If unit says 'kg' but weight is in human range (50-150), it's probably mislabeled as kg but actually in lbs
+    if (weightUnit === 'lb' && w.weight > 500) {
+      // Weight > 500 lbs is probably in kg, convert
+      weightInLbs = w.weight * 2.20462;
+      console.warn(`Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg. Converting.`);
+    } else if (weightUnit === 'kg' && w.weight >= 50 && w.weight <= 150) {
+      // Common weights 50-150 kg are actually human weights in lbs, mislabeled as kg
+      // The weight is already in lbs, just mislabeled - don't convert, use as-is
+      weightInLbs = w.weight;
+      console.warn(`Detected unit error: weight ${w.weight} labeled as 'kg' but likely in lbs. Using as-is.`);
+    } else if (weightUnit === 'kg') {
+      // Normal kg to lbs conversion
       weightInLbs = w.weight * 2.20462;
     }
+    // else: weightUnit === 'lb', use as-is
+    
+    // Final sanity check: weight should be in reasonable human range (50-500 lbs)
+    if (weightInLbs < 50 || weightInLbs > 500) {
+      console.warn(`Skipping invalid weight: ${weightInLbs} lbs (original: ${w.weight} ${weightUnit})`);
+      return; // Skip this weight entry
+    }
+    
     weightByDate.set(w.logged_at, weightInLbs);
   });
 
@@ -527,9 +552,15 @@ export async function getEnhancedDailyDataPoints(
   ]);
 
   Array.from(allDates).forEach((date) => {
-    const weight = weightByDate.get(date) || 0;
+    const weight = weightByDate.get(date); // Don't default to 0 - use undefined if missing
     const calories = caloriesByDate.get(date) || 0;
     const activity = activityByDate.get(date);
+
+    // Only include days with valid weight data (skip days with 0 or missing weight)
+    // This prevents creating invalid pairs in regression
+    if (!weight || weight <= 0) {
+      return; // Skip this date - no valid weight data
+    }
 
     // Consider day complete if we have weight and calories
     const isComplete = weight > 0 && calories > 0;
