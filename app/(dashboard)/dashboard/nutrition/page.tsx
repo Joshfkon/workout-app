@@ -174,6 +174,7 @@ interface UserProfileData {
 export default function NutritionPage() {
   // Defer date initialization to client to prevent hydration mismatches
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
