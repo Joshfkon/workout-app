@@ -140,11 +140,13 @@ export async function getAdaptiveTDEE(
   }));
 
   // Prepare debug data for logging and return
+  // NOTE: basicDataPoints already has corrected weights (from getEnhancedDailyDataPoints)
+  // This shows the weights AFTER unit validation/conversion
   const validPairs = basicDataPoints.filter(dp => dp.weight > 0 && dp.calories > 0);
   const debugData = {
     weightCaloriePairs: validPairs.map(dp => ({
       date: dp.date,
-      weight: dp.weight,
+      weight: dp.weight, // This is already in lbs after unit conversion
       calories: dp.calories,
       isComplete: dp.isComplete,
     })),
