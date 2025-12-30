@@ -1581,11 +1581,27 @@ export default function WorkoutPage() {
     // Save to database first - let DB generate the UUID
     try {
       const supabase = createUntypedClient();
+
+      // Query max set_number from database to avoid race conditions and stale state
+      const { data: maxSetResult } = await supabase
+        .from('set_logs')
+        .select('set_number')
+        .eq('exercise_block_id', currentBlock.id)
+        .eq('is_warmup', false)
+        .order('set_number', { ascending: false })
+        .limit(1)
+        .single();
+
+      // Use database max + 1, falling back to local state if no sets exist
+      const nextSetNumber = maxSetResult?.set_number != null
+        ? maxSetResult.set_number + 1
+        : currentSetNumber;
+
       const { data: insertedData, error: insertError } = await supabase
         .from('set_logs')
         .insert({
           exercise_block_id: currentBlock.id,
-          set_number: currentSetNumber,
+          set_number: nextSetNumber,
           weight_kg: data.weightKg,
           reps: data.reps,
           set_type: setType,
@@ -1612,7 +1628,7 @@ export default function WorkoutPage() {
       const newSet: SetLog = {
         id: insertedData.id,
         exerciseBlockId: currentBlock.id,
-        setNumber: currentSetNumber,
+        setNumber: nextSetNumber,
         weightKg: data.weightKg,
         reps: data.reps,
         rpe: data.rpe,
@@ -1627,10 +1643,10 @@ export default function WorkoutPage() {
         feedback: data.feedback,
         bodyweightData: data.bodyweightData,
       };
-      
-      // Update local state using functional updates to avoid stale closures
+
+      // Update local state - sync currentSetNumber with database-derived value
       setCompletedSets(prevSets => [...prevSets, newSet]);
-      setCurrentSetNumber(prev => prev + 1);
+      setCurrentSetNumber(nextSetNumber + 1);
 
       // Sync to store for resume functionality
       logSetToStore(currentBlock.id, newSet);
@@ -2794,9 +2810,10 @@ export default function WorkoutPage() {
       setBlocks(prevBlocks => [...prevBlocks, newBlockWithExercise]);
       setExerciseSearch('');
       setSelectedMuscle('');
-      
-      // Navigate to the new exercise
+
+      // Navigate to the new exercise and reset set number to 1 (new block has no sets)
       setCurrentBlockIndex(blocks.length);
+      setCurrentSetNumber(1);
     } catch (err) {
       console.error('Failed to add exercise:', err);
       setError(err instanceof Error ? err.message : 'Failed to add exercise');
