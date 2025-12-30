@@ -1479,6 +1479,7 @@ export default function NutritionPage() {
           biologicalSex={userProfile.sex || 'male'}
           chronologicalAge={userAge}
           latestDexaScan={latestDexaScan}
+          regressionAnalysis={tdeeData.regressionAnalysis}
           targetCalories={nutritionTargets?.calories}
           onRefresh={loadData}
           onSetTarget={() => setShowMacroCalculator(true)}

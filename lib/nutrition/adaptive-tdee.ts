@@ -89,6 +89,30 @@ export interface AdaptiveTDEEOptions {
   excludeIncomplete?: boolean;
 }
 
+/**
+ * Data point for regression visualization
+ */
+export interface RegressionDataPoint {
+  date: string;
+  weight: number;
+  calories: number;
+  actualChange: number;
+  predictedChange: number;
+  residual: number;
+}
+
+/**
+ * Full regression analysis result for visualization
+ */
+export interface RegressionAnalysis {
+  dataPoints: RegressionDataPoint[];
+  burnRatePerLb: number;
+  estimatedTDEE: number;
+  rSquared: number;
+  standardError: number;
+  currentWeight: number;
+}
+
 // === CONSTANTS ===
 
 /** Calories per lb of body weight (fat tissue) */
@@ -534,6 +558,83 @@ function addDays(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() + days);
   return result;
+}
+
+// === REGRESSION VISUALIZATION ===
+
+/**
+ * Generate regression analysis data for visualization.
+ * Returns the data points with actual vs predicted weight changes.
+ */
+export function getRegressionAnalysis(
+  dataPoints: DailyDataPoint[],
+  currentWeight: number,
+  options: AdaptiveTDEEOptions = {}
+): RegressionAnalysis | null {
+  const {
+    windowDays = DEFAULT_WINDOW_DAYS,
+    excludeIncomplete = true,
+  } = options;
+
+  // Filter and validate data
+  const filtered = filterDataPoints(dataPoints, windowDays, excludeIncomplete);
+
+  if (filtered.length < 2) {
+    return null;
+  }
+
+  // Build pairs of consecutive days
+  const pairs: Array<{
+    date: string;
+    weight: number;
+    calories: number;
+    actualChange: number;
+  }> = [];
+
+  for (let i = 0; i < filtered.length - 1; i++) {
+    if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
+      pairs.push({
+        date: filtered[i].date,
+        weight: filtered[i].weight,
+        calories: filtered[i].calories,
+        actualChange: filtered[i + 1].weight - filtered[i].weight,
+      });
+    }
+  }
+
+  if (pairs.length < 5) {
+    return null;
+  }
+
+  // Run regression to get alpha
+  const result = runLeastSquaresRegression(filtered);
+  if (!result) {
+    return null;
+  }
+
+  const clampedAlpha = clampBurnRate(result.alpha);
+
+  // Build visualization data points
+  const regressionDataPoints: RegressionDataPoint[] = pairs.map((pair) => {
+    const predictedChange = (pair.calories - clampedAlpha * pair.weight) / CALORIES_PER_LB;
+    return {
+      date: pair.date,
+      weight: pair.weight,
+      calories: pair.calories,
+      actualChange: pair.actualChange,
+      predictedChange,
+      residual: pair.actualChange - predictedChange,
+    };
+  });
+
+  return {
+    dataPoints: regressionDataPoints,
+    burnRatePerLb: clampedAlpha,
+    estimatedTDEE: Math.round(clampedAlpha * currentWeight),
+    rSquared: result.rSquared,
+    standardError: result.standardError,
+    currentWeight,
+  };
 }
 
 // === COMPARISON HELPERS ===

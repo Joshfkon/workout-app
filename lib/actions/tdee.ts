@@ -7,11 +7,13 @@ import {
   predictFutureWeight,
   checkDataQuality,
   getBestTDEEEstimate,
+  getRegressionAnalysis,
   type TDEEEstimate,
   type WeightPrediction,
   type DataQualityCheck,
   type DailyDataPoint,
   type BurnRateHistoryPoint,
+  type RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
 
@@ -22,6 +24,7 @@ export interface TDEEData {
   predictions: WeightPrediction[];
   dataQuality: DataQualityCheck;
   currentWeight: number | null;
+  regressionAnalysis: RegressionAnalysis | null;
 }
 
 /**
@@ -192,6 +195,11 @@ export async function getAdaptiveTDEE(
     }
   }
 
+  // Get regression analysis for visualization
+  const regressionAnalysis = currentWeight
+    ? getRegressionAnalysis(dataPoints, currentWeight)
+    : null;
+
   return {
     adaptiveEstimate,
     formulaEstimate,
@@ -199,6 +207,7 @@ export async function getAdaptiveTDEE(
     predictions,
     dataQuality,
     currentWeight,
+    regressionAnalysis,
   };
 }
 
