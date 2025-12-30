@@ -19,7 +19,9 @@ import type {
   WeightPrediction,
   DataQualityCheck,
   BurnRateHistoryPoint,
+  RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
+import { TDEERegressionGraph } from './TDEERegressionGraph';
 import { calculateFFMI } from '@/services/bodyCompEngine';
 import {
   calculatePRatio,
@@ -50,6 +52,7 @@ interface TDEEDashboardProps {
     lean_mass_kg: number;
     fat_mass_kg: number;
   } | null;
+  regressionAnalysis?: RegressionAnalysis | null;
   onRefresh?: () => void;
   onSetTarget?: () => void;
 }
@@ -71,6 +74,7 @@ export function TDEEDashboard({
   biologicalSex,
   chronologicalAge,
   latestDexaScan,
+  regressionAnalysis,
   onRefresh,
   onSetTarget,
 }: TDEEDashboardProps) {
@@ -263,6 +267,11 @@ export function TDEEDashboard({
           </svg>
         </button>
       </Card>
+
+      {/* TDEE Regression Analysis Graph - prominently displayed when we have data */}
+      {regressionAnalysis && regressionAnalysis.dataPoints.length >= 5 && (
+        <TDEERegressionGraph regressionAnalysis={regressionAnalysis} />
+      )}
 
       {/* Convergence Chart (shown when expanded) */}
       {showDetails && activeEstimate.estimateHistory.length > 0 && (
