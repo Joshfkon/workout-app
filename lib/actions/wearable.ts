@@ -494,27 +494,43 @@ export async function getEnhancedDailyDataPoints(
     let weightInLbs = w.weight;
     
     // Validation: detect mislabeled units
-    // If unit says 'lb' but weight > 500, it's probably stored in kg (convert)
-    // If unit says 'kg' but weight is in human range (50-150), it's probably mislabeled as kg but actually in lbs
-    if (weightUnit === 'lb' && w.weight > 500) {
-      // Weight > 500 lbs is probably in kg, convert
-      weightInLbs = w.weight * 2.20462;
-      console.warn(`Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg. Converting.`);
-    } else if (weightUnit === 'kg' && w.weight >= 50 && w.weight <= 150) {
-      // Common weights 50-150 kg are actually human weights in lbs, mislabeled as kg
-      // The weight is already in lbs, just mislabeled - don't convert, use as-is
-      weightInLbs = w.weight;
-      console.warn(`Detected unit error: weight ${w.weight} labeled as 'kg' but likely in lbs. Using as-is.`);
+    // Reasonable adult human weight range: 80-600 lbs (36-272 kg)
+    // Anything outside this range is suspicious and likely a unit error
+    
+    if (weightUnit === 'lb') {
+      if (w.weight > 500) {
+        // Weight > 500 lbs is probably in kg, convert
+        weightInLbs = w.weight * 2.20462;
+        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too high). Converting to ${weightInLbs.toFixed(1)} lbs.`);
+      } else if (w.weight < 80 && w.weight >= 30) {
+        // Weight 30-80 lbs when labeled as 'lb' is suspicious - likely in kg
+        // Convert from kg to lbs
+        weightInLbs = w.weight * 2.20462;
+        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too low for adult). Converting to ${weightInLbs.toFixed(1)} lbs.`);
+      } else {
+        // Normal lbs, use as-is
+        weightInLbs = w.weight;
+      }
     } else if (weightUnit === 'kg') {
-      // Normal kg to lbs conversion
-      weightInLbs = w.weight * 2.20462;
+      if (w.weight >= 30 && w.weight <= 150) {
+        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
+        // The weight is already in lbs, just mislabeled - don't convert, use as-is
+        weightInLbs = w.weight;
+        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'kg' but likely in lbs. Using as-is (${weightInLbs.toFixed(1)} lbs).`);
+      } else {
+        // Normal kg to lbs conversion
+        weightInLbs = w.weight * 2.20462;
+      }
+    } else {
+      // Unknown unit, assume lbs
+      weightInLbs = w.weight;
+      console.warn(`[TDEE] Unknown weight unit '${weightUnit}', assuming lbs`);
     }
-    // else: weightUnit === 'lb', use as-is
     
     // Final sanity check: weight should be in reasonable human range (30-600 lbs)
     // Using wider range to avoid false positives, outlier detection will catch extreme values
     if (weightInLbs < 30 || weightInLbs > 600) {
-      console.warn(`Skipping invalid weight: ${weightInLbs} lbs (original: ${w.weight} ${weightUnit})`);
+      console.warn(`[TDEE] Skipping invalid weight: ${weightInLbs.toFixed(1)} lbs (original: ${w.weight} ${weightUnit}) - outside reasonable human range`);
       return; // Skip this weight entry
     }
     
