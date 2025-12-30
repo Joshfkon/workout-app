@@ -13,6 +13,7 @@ const NutritionTargetsModal = dynamic(() => import('@/components/nutrition/Nutri
 const MacroCalculatorModal = dynamic(() => import('@/components/nutrition/MacroCalculatorModal').then(m => ({ default: m.MacroCalculatorModal })), { ssr: false });
 const CreateCustomFoodModal = dynamic(() => import('@/components/nutrition/CreateCustomFoodModal').then(m => ({ default: m.CreateCustomFoodModal })), { ssr: false });
 const EditFoodModal = dynamic(() => import('@/components/nutrition/EditFoodModal').then(m => ({ default: m.EditFoodModal })), { ssr: false });
+const NutritionTrendGraph = dynamic(() => import('@/components/nutrition/NutritionTrendGraph').then(m => ({ default: m.NutritionTrendGraph })), { ssr: false });
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -1377,6 +1378,9 @@ export default function NutritionPage() {
           </Card>
         ))}
       </div>
+
+      {/* Nutrition Trends Graph */}
+      <NutritionTrendGraph targets={nutritionTargets} />
 
       {/* Weight Trend */}
       {weightEntries.length > 0 && (
