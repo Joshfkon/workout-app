@@ -1811,50 +1811,24 @@ function NewWorkoutContent() {
             ))
           )}
 
-          <Card className="sticky bottom-4">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-surface-400">
-                    {selectedExercises.length} exercises selected
-                  </p>
-                  {selectedExercises.length > 0 && (() => {
-                    // Calculate estimated time for selected exercises
-                    let estimatedMinutes = 0;
-                    const warmupMuscles = new Set<string>();
-                    selectedExercises.forEach(exId => {
-                      const ex = exercises.find(e => e.id === exId);
-                      if (ex) {
-                        const isCompound = ex.mechanic === 'compound';
-                        const needsWarmup = isCompound && !warmupMuscles.has(ex.primary_muscle);
-                        if (needsWarmup) warmupMuscles.add(ex.primary_muscle);
-                        estimatedMinutes += estimateExerciseTime(isCompound, 'maintain', 3, needsWarmup);
-                      }
-                    });
-                    const isOverTime = estimatedMinutes > workoutDuration + 5;
-                    return (
-                      <p className={`text-xs ${isOverTime ? 'text-warning-400' : 'text-surface-500'}`}>
-                        ~{Math.round(estimatedMinutes)} min estimated
-                        {isOverTime && ` (${Math.round(estimatedMinutes - workoutDuration)} min over)`}
-                      </p>
-                    );
-                  })()}
-                </div>
-                <div className="flex gap-3">
-                  <Button variant="ghost" onClick={() => setStep(1)}>
-                    Back
-                  </Button>
-                  <Button
-                    onClick={handleStartWorkout}
-                    disabled={selectedExercises.length === 0 || isCreating}
-                    isLoading={isCreating}
-                  >
-                    Start Workout
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        </div>
+      )}
+
+      {/* Floating Start Workout Button */}
+      {step === 2 && selectedExercises.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+          <Button
+            onClick={handleStartWorkout}
+            disabled={isCreating}
+            isLoading={isCreating}
+            className="shadow-lg shadow-primary-500/25 px-6 py-3 text-base"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Start Workout ({selectedExercises.length})
+          </Button>
         </div>
       )}
 
