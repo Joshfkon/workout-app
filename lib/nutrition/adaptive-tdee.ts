@@ -35,6 +35,8 @@ export interface TDEEEstimate {
   confidenceScore: number;
   /** Number of data points used in calculation */
   dataPointsUsed: number;
+  /** Data points after outlier exclusion (if applicable) */
+  dataPointsAfterOutlierExclusion?: number;
   /** Window of days analyzed */
   windowDays: number;
   /** Standard error of the estimate (lower = more accurate) */
@@ -87,6 +89,10 @@ export interface AdaptiveTDEEOptions {
   minDataPoints?: number;
   /** Whether to exclude incomplete days (default: true) */
   excludeIncomplete?: boolean;
+  /** Window size for weight smoothing (default: 3) */
+  smoothingWindow?: number;
+  /** Standard deviations for outlier exclusion (default: 2.0) */
+  outlierThreshold?: number;
 }
 
 /**
@@ -127,6 +133,13 @@ const DEFAULT_MIN_DATA_POINTS = 14;
 /** Typical α range for most people */
 const TYPICAL_BURN_RATE_MIN = 11; // cal/lb (sedentary)
 const TYPICAL_BURN_RATE_MAX = 18; // cal/lb (very active)
+const INITIAL_BURN_RATE = 13.5; // Default starting point for regression
+
+/** Default smoothing window for weight averaging */
+const DEFAULT_SMOOTHING_WINDOW = 3;
+
+/** Default outlier threshold in standard deviations */
+const DEFAULT_OUTLIER_THRESHOLD = 2.0;
 
 // === MAIN FUNCTIONS ===
 
@@ -143,6 +156,8 @@ export function calculateAdaptiveTDEE(
     windowDays = DEFAULT_WINDOW_DAYS,
     minDataPoints = DEFAULT_MIN_DATA_POINTS,
     excludeIncomplete = true,
+    smoothingWindow = DEFAULT_SMOOTHING_WINDOW,
+    outlierThreshold = DEFAULT_OUTLIER_THRESHOLD,
   } = options;
 
   // Filter and validate data
@@ -152,8 +167,8 @@ export function calculateAdaptiveTDEE(
     return null; // Not enough data
   }
 
-  // Run least-squares regression
-  const result = runLeastSquaresRegression(filtered);
+  // Run least-squares regression with smoothing and outlier exclusion
+  const result = runLeastSquaresRegression(filtered, smoothingWindow, outlierThreshold);
 
   if (!result) {
     return null;
@@ -162,12 +177,13 @@ export function calculateAdaptiveTDEE(
   // Validate the burn rate is reasonable
   const clampedAlpha = clampBurnRate(result.alpha);
 
-  // Calculate confidence
-  const confidence = calculateConfidence(result, filtered.length);
-  const confidenceScore = calculateConfidenceScore(result.standardError, filtered.length);
+  // Calculate confidence using effective data points (after outlier exclusion)
+  const effectiveDataPoints = result.dataPointsAfterExclusion ?? filtered.length;
+  const confidence = calculateConfidence(result, effectiveDataPoints);
+  const confidenceScore = calculateConfidenceScore(result.standardError, effectiveDataPoints);
 
   // Build history from rolling calculations
-  const estimateHistory = buildEstimateHistory(dataPoints, windowDays);
+  const estimateHistory = buildEstimateHistory(dataPoints, windowDays, smoothingWindow, outlierThreshold);
 
   return {
     burnRatePerLb: clampedAlpha,
@@ -175,6 +191,7 @@ export function calculateAdaptiveTDEE(
     confidence,
     confidenceScore,
     dataPointsUsed: filtered.length,
+    dataPointsAfterOutlierExclusion: effectiveDataPoints,
     windowDays,
     standardError: result.standardError,
     lastUpdated: new Date(),
@@ -348,44 +365,121 @@ export function checkDataQuality(dataPoints: DailyDataPoint[]): DataQualityCheck
 
 // === REGRESSION ALGORITHM ===
 
+interface RegressionPair {
+  weight: number;
+  calories: number;
+  actualChange: number;
+  date: string; // For debugging/logging
+}
+
 interface RegressionResult {
   alpha: number; // Personal burn rate (cal/lb)
   standardError: number;
   rSquared: number; // How well the model fits
+  outliersExcluded: number; // Number of outliers removed
+  dataPointsAfterExclusion: number; // Effective data points after exclusion
 }
 
 /**
- * Run least-squares regression to find the burn rate (α) that minimizes
- * prediction error.
- *
- * Model:
- *   predicted_change[i] = (calories[i] - α * weight[i]) / 3500
- *   actual_change[i] = weight[i+1] - weight[i]
- *
- * Minimize: Σ(predicted_change[i] - actual_change[i])²
+ * Calculate smoothed weight using a rolling average.
+ * This reduces day-to-day noise from water weight, sodium, etc.
+ * Uses a centered window (includes future days) for better smoothing.
  */
-function runLeastSquaresRegression(data: DailyDataPoint[]): RegressionResult | null {
-  if (data.length < 2) return null;
+function getSmoothedWeight(
+  data: DailyDataPoint[],
+  index: number,
+  window: number
+): number {
+  const halfWindow = Math.floor(window / 2);
+  const start = Math.max(0, index - halfWindow);
+  const end = Math.min(data.length - 1, index + halfWindow);
+  
+  let sum = 0;
+  let count = 0;
+  
+  for (let i = start; i <= end; i++) {
+    if (data[i].weight > 0) {
+      sum += data[i].weight;
+      count++;
+    }
+  }
+  
+  return count > 0 ? sum / count : data[index].weight;
+}
 
-  // We need pairs of consecutive days
-  const pairs: Array<{
-    weight: number;
-    calories: number;
-    actualChange: number;
-  }> = [];
+/**
+ * Create regression pairs using smoothed weight changes.
+ */
+function createSmoothedPairs(
+  data: DailyDataPoint[],
+  smoothingWindow: number
+): RegressionPair[] {
+  const pairs: RegressionPair[] = [];
 
   for (let i = 0; i < data.length - 1; i++) {
     if (data[i].weight > 0 && data[i + 1].weight > 0 && data[i].calories > 0) {
+      const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
+      const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
+      
       pairs.push({
-        weight: data[i].weight,
+        weight: data[i].weight, // Use actual weight for TDEE calculation
         calories: data[i].calories,
-        actualChange: data[i + 1].weight - data[i].weight,
+        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Smoothed change
+        date: data[i].date,
       });
     }
   }
 
-  if (pairs.length < 5) return null;
+  return pairs;
+}
 
+/**
+ * Calculate residuals for outlier detection.
+ */
+function calculateResiduals(
+  pairs: RegressionPair[],
+  alpha: number
+): number[] {
+  return pairs.map((pair) => {
+    const predictedChange = (pair.calories - alpha * pair.weight) / CALORIES_PER_LB;
+    return predictedChange - pair.actualChange;
+  });
+}
+
+/**
+ * Exclude outliers based on residual standard deviations.
+ * Returns filtered pairs and count of excluded points.
+ */
+function excludeOutliers(
+  pairs: RegressionPair[],
+  alpha: number,
+  threshold: number
+): { filtered: RegressionPair[]; excluded: number } {
+  const residuals = calculateResiduals(pairs, alpha);
+  const mean = average(residuals);
+  const sd = calculateStandardDeviation(residuals);
+
+  // If SD is very small, don't exclude anything (data is already clean)
+  if (sd < 0.1) {
+    return { filtered: pairs, excluded: 0 };
+  }
+
+  const filtered = pairs.filter((_, i) => {
+    const zScore = Math.abs((residuals[i] - mean) / sd);
+    return zScore <= threshold;
+  });
+
+  return {
+    filtered,
+    excluded: pairs.length - filtered.length,
+  };
+}
+
+/**
+ * Solve for α using the normal equation (closed-form solution).
+ * Separated out so it can be called multiple times (for two-pass approach).
+ */
+function runNormalEquation(pairs: RegressionPair[]): number {
   // Solve for α using the normal equation
   // Minimize: Σ[(calories/3500 - α*weight/3500) - actualChange]²
   //
@@ -403,31 +497,76 @@ function runLeastSquaresRegression(data: DailyDataPoint[]): RegressionResult | n
     denominator += (pair.weight * pair.weight) / CALORIES_PER_LB;
   }
 
-  if (denominator === 0) return null;
+  if (denominator === 0) return INITIAL_BURN_RATE;
 
-  const alpha = numerator / denominator;
+  return numerator / denominator;
+}
 
-  // Calculate residuals and standard error
-  const residuals: number[] = [];
-  for (const pair of pairs) {
-    const predictedChange = (pair.calories - alpha * pair.weight) / CALORIES_PER_LB;
-    const residual = predictedChange - pair.actualChange;
-    residuals.push(residual);
+/**
+ * Run least-squares regression to find the burn rate (α) that minimizes
+ * prediction error.
+ *
+ * Now includes smoothed weights and two-pass outlier exclusion.
+ *
+ * Model:
+ *   predicted_change[i] = (calories[i] - α * weight[i]) / 3500
+ *   actual_change[i] = smoothed_weight[i+1] - smoothed_weight[i]
+ *
+ * Minimize: Σ(predicted_change[i] - actual_change[i])²
+ */
+function runLeastSquaresRegression(
+  data: DailyDataPoint[],
+  smoothingWindow: number,
+  outlierThreshold: number
+): RegressionResult | null {
+  if (data.length < 2) return null;
+
+  // Create pairs with smoothed weight changes
+  let pairs = createSmoothedPairs(data, smoothingWindow);
+
+  if (pairs.length < 5) return null;
+
+  // === FIRST PASS: Initial regression ===
+  let alpha = runNormalEquation(pairs);
+
+  // === OUTLIER EXCLUSION ===
+  const { filtered: cleanedPairs, excluded } = excludeOutliers(
+    pairs,
+    alpha,
+    outlierThreshold
+  );
+
+  // Need at least 5 pairs after exclusion
+  if (cleanedPairs.length < 5) {
+    // Fall back to using all data if too many excluded
+    console.warn(`Too many outliers excluded (${excluded}), using all data`);
+  } else {
+    pairs = cleanedPairs;
   }
 
+  // === SECOND PASS: Re-run regression on cleaned data ===
+  alpha = runNormalEquation(pairs);
+
+  // Calculate final error metrics on cleaned data
+  const residuals = calculateResiduals(pairs, alpha);
   const standardError = calculateStandardDeviation(residuals);
 
-  // Calculate R² (coefficient of determination)
+  // Calculate R²
   const actualChanges = pairs.map((p) => p.actualChange);
-  const meanActualChange = actualChanges.reduce((a, b) => a + b, 0) / actualChanges.length;
-  const ssTot = actualChanges.reduce((sum, ac) => sum + (ac - meanActualChange) ** 2, 0);
+  const meanActualChange = average(actualChanges);
+  const ssTot = actualChanges.reduce(
+    (sum, ac) => sum + (ac - meanActualChange) ** 2,
+    0
+  );
   const ssRes = residuals.reduce((sum, r) => sum + r ** 2, 0);
-  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+  const rSquared = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
 
   return {
     alpha,
     standardError,
     rSquared,
+    outliersExcluded: excluded,
+    dataPointsAfterExclusion: pairs.length,
   };
 }
 
@@ -489,7 +628,9 @@ function calculateConfidenceScore(standardError: number, dataPoints: number): nu
 
 function buildEstimateHistory(
   dataPoints: DailyDataPoint[],
-  windowDays: number
+  windowDays: number,
+  smoothingWindow: number,
+  outlierThreshold: number
 ): BurnRateHistoryPoint[] {
   const history: BurnRateHistoryPoint[] = [];
 
@@ -500,13 +641,14 @@ function buildEstimateHistory(
   // Calculate rolling estimates starting from day 7
   for (let i = 7; i <= sorted.length; i++) {
     const windowData = sorted.slice(Math.max(0, i - windowDays), i);
-    const result = runLeastSquaresRegression(windowData);
+    const result = runLeastSquaresRegression(windowData, smoothingWindow, outlierThreshold);
 
     if (result) {
+      const effectiveDataPoints = result.dataPointsAfterExclusion ?? windowData.length;
       history.push({
         date: sorted[i - 1].date,
         burnRate: clampBurnRate(result.alpha),
-        confidence: calculateConfidenceScore(result.standardError, windowData.length),
+        confidence: calculateConfidenceScore(result.standardError, effectiveDataPoints),
       });
     }
   }
@@ -552,6 +694,11 @@ function calculateStandardDeviation(values: number[]): number {
   const squaredDiffs = values.map((v) => (v - mean) ** 2);
   const variance = squaredDiffs.reduce((a, b) => a + b, 0) / values.length;
   return Math.sqrt(variance);
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -606,8 +753,8 @@ export function getRegressionAnalysis(
     return null;
   }
 
-  // Run regression to get alpha
-  const result = runLeastSquaresRegression(filtered);
+  // Run regression to get alpha (use default smoothing/outlier settings for visualization)
+  const result = runLeastSquaresRegression(filtered, DEFAULT_SMOOTHING_WINDOW, DEFAULT_OUTLIER_THRESHOLD);
   if (!result) {
     return null;
   }

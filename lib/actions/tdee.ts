@@ -143,7 +143,12 @@ export async function getAdaptiveTDEE(
     if (hasActivityData) {
       // Use enhanced TDEE with gradient descent
       adaptiveEstimate = calculateEnhancedTDEE(enhancedPoints, currentWeight);
-      isEnhanced = true;
+      if (adaptiveEstimate) {
+        isEnhanced = true;
+      } else {
+        // Enhanced TDEE failed (not enough data after outlier exclusion, etc.), fall back to basic
+        adaptiveEstimate = calculateAdaptiveTDEE(basicDataPoints, currentWeight);
+      }
     } else {
       // Fall back to basic TDEE if no activity data
       adaptiveEstimate = calculateAdaptiveTDEE(basicDataPoints, currentWeight);
