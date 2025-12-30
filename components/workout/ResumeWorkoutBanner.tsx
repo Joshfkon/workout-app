@@ -100,7 +100,7 @@ export function ResumeWorkoutBanner() {
                   onClick={handleResume}
                   variant="secondary"
                   size="sm"
-                  className="bg-white text-primary-600 hover:bg-white/90 font-semibold whitespace-nowrap"
+                  className="!bg-white !text-primary-700 hover:!bg-white/90 !border-transparent font-semibold whitespace-nowrap shadow-sm"
                 >
                   Resume Workout
                 </Button>
