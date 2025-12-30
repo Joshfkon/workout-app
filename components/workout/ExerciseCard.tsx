@@ -1045,16 +1045,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
 
-        {/* Compact header: Target prescription + Weight mode selector (for bodyweight) */}
-        <div className="flex items-center justify-between gap-3 mt-2">
-          <div className="flex items-center gap-2 text-xs text-surface-400">
-            <span>{block.targetRepRange[0]}-{block.targetRepRange[1]} reps</span>
-            <span>@</span>
-            <span>RIR {adjustedTargetRir ?? block.targetRir}</span>
-          </div>
-          
-          {/* Weight mode segmented control for bodyweight exercises */}
-          {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
+        {/* Weight mode segmented control for bodyweight exercises */}
+        {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
+          <div className="mt-2">
             <SegmentedControl
               options={[
                 { value: 'bodyweight', label: 'Bodyweight', disabled: false },
@@ -1064,14 +1057,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               value={weightMode}
               onChange={(value) => setWeightMode(value as 'bodyweight' | 'weighted' | 'assisted')}
             />
-          )}
-        </div>
-
-        {/* Suggestion reason */}
-        {block.suggestionReason && (
-          <p className="mt-2 text-xs text-primary-400/80 italic">
-            {block.suggestionReason}
-          </p>
+          </div>
         )}
 
         {/* Exercise Stats & History */}
