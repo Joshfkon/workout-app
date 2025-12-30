@@ -584,11 +584,20 @@ export default function NutritionPage() {
       setUserProfile(profileData);
 
       // Load adaptive TDEE data
+      console.log('[Nutrition] Starting TDEE calculation...');
       try {
         const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+        console.log('[Nutrition] TDEE calculation completed:', {
+          hasData: !!tdee,
+          hasAdaptiveEstimate: !!tdee?.adaptiveEstimate,
+          hasRegressionAnalysis: !!tdee?.regressionAnalysis,
+          dataPoints: tdee?.regressionAnalysis?.dataPoints?.length || 0,
+          isEnhanced: tdee?.isEnhanced || false,
+        });
         setTdeeData(tdee);
       } catch (tdeeError) {
-        console.error('Error loading TDEE data:', tdeeError);
+        console.error('[Nutrition] Error loading TDEE data:', tdeeError);
+        setTdeeData(null); // Explicitly set to null on error
       }
     } catch (error) {
       console.error('Error loading nutrition data:', error);
