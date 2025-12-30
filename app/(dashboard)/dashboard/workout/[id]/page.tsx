@@ -1688,7 +1688,7 @@ export default function WorkoutPage() {
                 confidence_level: calibResult.confidenceLevel,
                 data_points: calibResult.dataPoints,
                 calibrated_at: calibResult.lastCalibrated.toISOString(),
-              }).then(({ error }) => {
+              }).then(({ error }: { error: Error | null }) => {
                 if (error) console.error('Failed to save AMRAP calibration:', error);
               });
             }
