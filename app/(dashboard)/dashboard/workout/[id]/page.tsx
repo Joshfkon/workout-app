@@ -475,6 +475,7 @@ export default function WorkoutPage() {
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
+  const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | undefined>(undefined);
   const [selectedInjuryArea, setSelectedInjuryArea] = useState<string>('');
@@ -4070,6 +4071,10 @@ export default function WorkoutPage() {
                       restTimer.markComplete();
                       setShowRestTimer(false);
                     }}
+                    onPlateCalculatorOpen={(initialWeightKg) => {
+                      setPlateCalculatorWeight(initialWeightKg);
+                      setShowPlateCalculator(true);
+                    }}
                   />
 
                     {/* Exercise complete actions - only show for current exercise */}
@@ -4715,8 +4720,11 @@ export default function WorkoutPage() {
       {/* Plate Calculator Modal */}
       <PlateCalculatorModal
         isOpen={showPlateCalculator}
-        onClose={() => setShowPlateCalculator(false)}
-        initialWeightKg={currentBlock?.targetWeightKg}
+        onClose={() => {
+          setShowPlateCalculator(false);
+          setPlateCalculatorWeight(undefined);
+        }}
+        initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
       />
 
       {/* Page-level Swap Modal for injury-related swaps */}

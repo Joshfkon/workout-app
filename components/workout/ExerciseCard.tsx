@@ -176,6 +176,8 @@ interface ExerciseCardProps {
   adjustedTargetRir?: number;  // If user has +2 bias, this would be 0 when block.targetRir is 2
   // AMRAP suggestion - indicates this is the last set and user should push to failure
   isAmrapSuggested?: boolean;  // If true, pre-fill RPE with 9.5 as a target
+  // Plate calculator
+  onPlateCalculatorOpen?: (initialWeightKg?: number) => void;  // Callback to open plate calculator modal
 }
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
@@ -219,6 +221,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   userBodyweightKg,
   adjustedTargetRir,
   isAmrapSuggested = false,
+  onPlateCalculatorOpen,
 }: ExerciseCardProps) {
   // Use adjusted RIR if available, otherwise fall back to block target RIR
   const effectiveTargetRir = adjustedTargetRir ?? block.targetRir;
@@ -1016,6 +1019,22 @@ export const ExerciseCard = memo(function ExerciseCard({
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            )}
+            {/* Plate calculator button */}
+            {onPlateCalculatorOpen && isActive && (
+              <button
+                onClick={() => {
+                  // Use target weight, working weight, or recommended weight
+                  const initialWeight = block.targetWeightKg || workingWeight || recommendedWeight || 0;
+                  onPlateCalculatorOpen(initialWeight > 0 ? initialWeight : undefined);
+                }}
+                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-primary-400 transition-colors"
+                title="Plate Calculator"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
               </button>
             )}
