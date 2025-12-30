@@ -143,7 +143,8 @@ function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
   userProfile?: UserProfileForWeights,
   userContext?: UserContext,
-  unit: 'kg' | 'lb' = 'kg'
+  unit: 'kg' | 'lb' = 'kg',
+  exerciseHistories?: Record<string, ExerciseHistoryData>
 ): {
   greeting: string;
   overview: string;
@@ -302,6 +303,11 @@ function generateCoachMessage(
     let weightRec: WorkingWeightRecommendation | undefined;
     if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
       try {
+        // Get known E1RM from exercise history if available
+        // This provides much more accurate suggestions than bodyweight-based estimation
+        const exerciseHistory = exerciseHistories?.[block.exerciseId];
+        const knownE1RM = exerciseHistory?.estimatedE1RM;
+
         // Use calibration data if available for more accurate estimates
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -314,7 +320,8 @@ function generateCoachMessage(
             userProfile.experience,
             userProfile.calibratedLifts,
             userProfile.regionalData,
-            unit
+            unit,
+            knownE1RM
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -326,7 +333,8 @@ function generateCoachMessage(
             userProfile.bodyFatPercent || 20,
             userProfile.experience,
             userProfile.regionalData,
-            unit
+            unit,
+            knownE1RM
           );
         }
       } catch (e) {
@@ -890,9 +898,9 @@ export default function WorkoutPage() {
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
 
-        // Generate coach message with profile and context
-        setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
-        
+        // Coach message will be generated after exercise histories are loaded
+        // to provide accurate weight suggestions based on user's training history
+
         // Check for existing injuries from session's pre_workout_check_in
         const existingCheckIn = sessionData.pre_workout_check_in as { temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }> } | null;
         const existingInjuries = existingCheckIn?.temporaryInjuries || [];
@@ -1023,8 +1031,14 @@ export default function WorkoutPage() {
           }
           
           setExerciseHistories(histories);
+
+          // Generate coach message with exercise history for accurate weight suggestions
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories));
+        } else {
+          // No exercise history available, generate coach message without it
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units));
         }
-        
+
         // Set phase based on workout state
         if (sessionData.state === 'completed') {
           setPhase('summary');  // Show summary for completed workouts (read-only)
@@ -2485,7 +2499,11 @@ export default function WorkoutPage() {
         const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
         const targetRir = 2;
         let weightRec: WorkingWeightRecommendation;
-        
+
+        // Check if we have exercise history for this exercise (using exercise.id)
+        const exerciseHistory = exerciseHistories[exercise.id];
+        const knownE1RM = exerciseHistory?.estimatedE1RM;
+
         // Use calibration data if available
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -2498,7 +2516,8 @@ export default function WorkoutPage() {
             userProfile.experience,
             userProfile.calibratedLifts,
             userProfile.regionalData,
-            preferences.units
+            preferences.units,
+            knownE1RM
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -2510,10 +2529,11 @@ export default function WorkoutPage() {
             userProfile.bodyFatPercent,
             userProfile.experience,
             userProfile.regionalData,
-            preferences.units
+            preferences.units,
+            knownE1RM
           );
         }
-        
+
         if (weightRec.confidence !== 'find_working_weight') {
           suggestedWeight = weightRec.recommendedWeight;
         }
