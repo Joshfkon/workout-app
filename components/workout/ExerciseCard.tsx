@@ -1392,6 +1392,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               isSkipped={timerIsSkipped}
               restedSeconds={timerRestedSeconds}
               onShowControls={onShowTimerControls}
+              variant="div"
             />
           )}
 

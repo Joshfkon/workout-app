@@ -96,9 +96,13 @@ export const CompactSetRow = memo(function CompactSetRow({
 
   // If completed, show completed state (clickable to edit)
   if (isCompleted && completedSet) {
-    const displayWeight = isBodyweight && completedSet.bodyweightData
+    const completedDisplayWeight = isBodyweight && completedSet.bodyweightData
       ? formatWeightValue(completedSet.bodyweightData.effectiveLoadKg, unit)
       : formatWeightValue(completedSet.weightKg, unit);
+
+    // Determine modification display for bodyweight exercises
+    const bwModification = completedSet.bodyweightData?.modification;
+    const showBwPrefix = isBodyweight && (!bwModification || bwModification === 'none');
 
     return (
       <div
@@ -112,7 +116,8 @@ export const CompactSetRow = memo(function CompactSetRow({
       >
         <div className="w-8 text-xs text-surface-500 font-medium">{setNumber}</div>
         <div className="flex-1 text-xs text-surface-400 font-mono">
-          {displayWeight} {unit}
+          {showBwPrefix && <span className="text-surface-500">BW </span>}
+          {completedDisplayWeight} {unit}
         </div>
         <div className="w-20 text-center text-sm font-semibold text-surface-300">
           {completedSet.reps}
