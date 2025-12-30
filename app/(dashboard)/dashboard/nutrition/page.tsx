@@ -1045,14 +1045,27 @@ export default function NutritionPage() {
   ).slice(0, 20);
 
   // Handle null date in rendering
-  // Always return the same structure to prevent hydration mismatch
-  if (!isMounted || !selectedDate) {
-    // Return consistent loading state for both server and client
+  // CRITICAL: Server and client must render identical HTML to prevent hydration errors
+  // Return null on server, loading state only after client mount
+  if (typeof window === 'undefined') {
+    // Server: return minimal placeholder that matches client's first render
     return (
-      <div className="max-w-7xl mx-auto p-4 md:p-6" suppressHydrationWarning>
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
-          <LoadingAnimation type="random" size="lg" />
-          <p className="mt-4 text-surface-400">Initializing...</p>
+          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-4 text-surface-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Client: show loading until mounted and date is set
+  if (!isMounted || !selectedDate) {
+    return (
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+          <p className="mt-4 text-surface-400">Loading...</p>
         </div>
       </div>
     );
