@@ -3716,9 +3716,9 @@ export default function WorkoutPage() {
                 }
               }}
             >
-              {/* Exercise header with status */}
+              {/* Exercise header with drag handle and collapse - simplified since name is now in grouped container */}
               <div 
-                className={`flex items-center gap-3 mb-2 ${!isCurrent ? 'cursor-pointer' : ''}`}
+                className={`flex items-center gap-3 mb-3 ${!isCurrent ? 'cursor-pointer' : ''}`}
               >
                 {/* Drag handle - long press here to reorder */}
                 <div
@@ -3749,6 +3749,7 @@ export default function WorkoutPage() {
                   <div className="w-5 h-0.5 bg-current rounded" />
                 </div>
                 
+                {/* Exercise number indicator */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
                   isComplete 
                     ? 'bg-success-500/20 text-success-400' 
@@ -3764,105 +3765,43 @@ export default function WorkoutPage() {
                     index + 1
                   )}
                 </div>
-                <div className="flex-1">
+                
+                {/* Status badges */}
+                <div className="flex items-center gap-2 flex-1">
+                  {isCurrent && (
+                    <Badge variant="info" size="sm">Current</Badge>
+                  )}
+                  {isComplete && !isCurrent && (
+                    <Badge variant="success" size="sm">Done</Badge>
+                  )}
+                  {/* Injury risk warning */}
                   {(() => {
                     const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
-                    return (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              if (isCurrent) {
-                                // Only open details if this is the active exercise
-                                setSelectedExerciseForDetails(block.exercise);
-                              } else {
-                                // Switch to this exercise if it's not active
-                                setCurrentBlockIndex(index);
-                              }
-                            }}
-                            className={`font-medium text-left hover:text-primary-400 transition-colors ${isCurrent ? 'text-surface-100' : 'text-surface-300'}`}
-                          >
-                            {block.exercise.name}
-                            {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
-                              <span className="text-surface-500 font-normal text-sm ml-1">
-                                ({block.exercise.equipmentRequired[0]})
-                              </span>
-                            )}
-                          </button>
-                          {/* Tier badge */}
-                          {block.exercise.hypertrophyScore?.tier && (
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
-                              block.exercise.hypertrophyScore.tier === 'S' 
-                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
-                                : block.exercise.hypertrophyScore.tier === 'A' 
-                                  ? 'bg-emerald-500/30 text-emerald-400'
-                                  : block.exercise.hypertrophyScore.tier === 'B'
-                                    ? 'bg-blue-500/30 text-blue-400'
-                                    : 'bg-surface-600 text-surface-400'
-                            }`}>
-                              {block.exercise.hypertrophyScore.tier}
-                            </span>
-                          )}
-                          {/* Superset badge */}
-                          {block.supersetGroupId && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 bg-cyan-500/20 text-cyan-400">
-                              SS{block.supersetOrder}
-                            </span>
-                          )}
-                          {/* Injury risk warning */}
-                          {injuryRisk.isRisky && (
-                            <span 
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                                injuryRisk.severity === 3 
-                                  ? 'bg-danger-500/20 text-danger-400' 
-                                  : injuryRisk.severity === 2
-                                    ? 'bg-warning-500/20 text-warning-400'
-                                    : 'bg-surface-600 text-surface-400'
-                              }`}
-                              title={injuryRisk.reasons.join(', ')}
-                            >
-                              ⚠️ {injuryRisk.severity === 3 ? 'Avoid' : injuryRisk.severity === 2 ? 'Caution' : 'Note'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-surface-500">
-                          {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                        </p>
-                        {/* Show injury warning detail */}
-                        {injuryRisk.isRisky && isCurrent && (
-                          <div className={`mt-1 text-xs ${
-                            injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
-                          }`}>
-                            ⚠️ {injuryRisk.reasons[0]}
-                            <button 
-                              className="ml-2 underline font-medium"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // Open page-level swap modal
-                                setSwapTargetBlockId(block.id);
-                                setSwapSearchQuery('');
-                                // Fetch exercises if not loaded
-                                if (availableExercises.length === 0) {
-                                  fetchExercises();
-                                }
-                                setShowPageLevelSwapModal(true);
-                              }}
-                            >
-                              Swap exercise?
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    );
+                    return injuryRisk.isRisky && isCurrent ? (
+                      <div className={`text-xs ${
+                        injuryRisk.severity === 3 ? 'text-danger-400' : 'text-warning-400'
+                      }`}>
+                        ⚠️ {injuryRisk.reasons[0]}
+                        <button 
+                          className="ml-2 underline font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSwapTargetBlockId(block.id);
+                            setSwapSearchQuery('');
+                            if (availableExercises.length === 0) {
+                              fetchExercises();
+                            }
+                            setShowPageLevelSwapModal(true);
+                          }}
+                        >
+                          Swap exercise?
+                        </button>
+                      </div>
+                    ) : null;
                   })()}
                 </div>
-                {isCurrent && (
-                  <Badge variant="info" size="sm">Current</Badge>
-                )}
-                {isComplete && !isCurrent && (
-                  <Badge variant="success" size="sm">Done</Badge>
-                )}
-                {/* Delete exercise button - visible without expanding */}
+                
+                {/* Delete exercise button */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -3906,7 +3845,62 @@ export default function WorkoutPage() {
                 const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
                 
                 return (
-                <div className="mt-3 space-y-3">
+                  // Exercise group container - visually connects name with card
+                  <div className={`mt-4 mb-6 rounded-xl border-l-4 ${
+                    isCurrent 
+                      ? 'border-primary-500 bg-primary-500/5' 
+                      : isComplete
+                        ? 'border-success-500/50 bg-success-500/5'
+                        : 'border-surface-700 bg-surface-800/30'
+                  } transition-all`}>
+                    {/* Exercise name header - now visually connected to card */}
+                    <div className={`px-4 py-3 border-b ${
+                      isCurrent 
+                        ? 'border-primary-500/20' 
+                        : isComplete
+                          ? 'border-success-500/20'
+                          : 'border-surface-700'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <h3 className={`text-base font-semibold ${
+                          isCurrent ? 'text-surface-100' : 'text-surface-200'
+                        }`}>
+                          {block.exercise.name}
+                          {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
+                            <span className="text-surface-500 font-normal text-sm ml-1">
+                              ({block.exercise.equipmentRequired[0]})
+                            </span>
+                          )}
+                        </h3>
+                        {/* Tier badge */}
+                        {block.exercise.hypertrophyScore?.tier && (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
+                            block.exercise.hypertrophyScore.tier === 'S' 
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
+                              : block.exercise.hypertrophyScore.tier === 'A' 
+                                ? 'bg-emerald-500/30 text-emerald-400'
+                                : block.exercise.hypertrophyScore.tier === 'B'
+                                  ? 'bg-blue-500/30 text-blue-400'
+                                  : 'bg-surface-600 text-surface-400'
+                          }`}>
+                            {block.exercise.hypertrophyScore.tier}
+                          </span>
+                        )}
+                        {/* Superset badge */}
+                        {block.supersetGroupId && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 bg-cyan-500/20 text-cyan-400">
+                            SS{block.supersetOrder}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-surface-400 mt-1">
+                        {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
+                        {block.targetRir !== undefined && ` @ RIR ${block.targetRir}`}
+                      </p>
+                    </div>
+                    
+                    {/* Card content area */}
+                    <div className="px-4 py-3 space-y-3">
                   {/* AMRAP Suggestion Banner */}
                   {amrapSuggestion && amrapSuggestion.blockId === block.id && (
                     <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
@@ -3952,9 +3946,9 @@ export default function WorkoutPage() {
                     </Card>
                   )}
 
-                  {/* Exercise card with integrated set inputs and warmups - hideHeader on mobile since name shows above */}
-                  <ExerciseCard
-                    hideHeader
+                    {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
+                    <ExerciseCard
+                      hideHeader
                     exercise={block.exercise}
                     block={addingExtraSet === block.id 
                       ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
@@ -4078,23 +4072,24 @@ export default function WorkoutPage() {
                     }}
                   />
 
-                  {/* Exercise complete actions - only show for current exercise */}
-                  {isCurrent && isComplete && addingExtraSet !== block.id && (
-                    <div className="flex justify-center gap-3 py-4">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setAddingExtraSet(block.id)}
-                      >
-                        + Add Extra Set
-                      </Button>
-                      {index < blocks.length - 1 && (
-                        <Button variant="secondary" onClick={handleNextExercise}>
-                          Next Exercise →
+                    {/* Exercise complete actions - only show for current exercise */}
+                    {isCurrent && isComplete && addingExtraSet !== block.id && (
+                      <div className="flex justify-center gap-3 py-4">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setAddingExtraSet(block.id)}
+                        >
+                          + Add Extra Set
                         </Button>
-                      )}
-                    </div>
-                  )}
+                        {index < blocks.length - 1 && (
+                          <Button variant="secondary" onClick={handleNextExercise}>
+                            Next Exercise →
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 );
               })()}

@@ -893,7 +893,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     <Card
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
-      className={`overflow-hidden transition-all ${isActive ? 'ring-2 ring-primary-500/50' : ''}`}
+      className={`overflow-hidden transition-all ${
+        isActive ? 'ring-2 ring-primary-500/50' : ''
+      } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
     >
       {/* Header - compact when hideHeader is true */}
       <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800 sticky top-0 bg-surface-900 z-10`}>
