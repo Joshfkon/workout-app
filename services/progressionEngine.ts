@@ -365,7 +365,9 @@ function calculateWorkingWeightFromE1RM(
 ): number {
   const avgReps = Math.round((repRange[0] + repRange[1]) / 2);
   const effectiveReps = avgReps + targetRir;
-  const percentage = (37 - effectiveReps) / 36;
+  // Exact inverse of Epley formula: E1RM = weight * (1 + reps/30)
+  // Therefore: weight = E1RM / (1 + reps/30) = E1RM * 30 / (30 + reps)
+  const percentage = 30 / (30 + effectiveReps);
   const safetyMargin = 0.95;
   return roundToIncrement(e1rm * percentage * safetyMargin, 2.5);
 }
