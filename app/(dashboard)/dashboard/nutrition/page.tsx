@@ -1033,18 +1033,9 @@ export default function NutritionPage() {
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
 
-  // Calculate 7-day weight average (with unit validation and conversion)
-  const last7Days = weightEntries.slice(0, 7);
-  const sevenDayAverage =
-    last7Days.length > 0
-      ? last7Days.reduce((sum, e) => {
-          const validatedWeight = validateAndConvertWeight(e.weight, (e as any).unit || 'lb');
-          return sum + validatedWeight;
-        }, 0) / last7Days.length
-      : null;
-
   // Helper function to validate and convert weight (same logic as TDEE calculation)
   // Returns weight in the user's preferred display unit (weightUnit)
+  // MUST be defined before use in sevenDayAverage and weightChartData
   const validateAndConvertWeight = (weight: number, unit: string | null | undefined): number => {
     const entryUnit = unit || 'lb';
     let weightInLbs = weight;
@@ -1076,6 +1067,16 @@ export default function NutritionPage() {
     }
     return weightInLbs; // Already in lbs, return as-is
   };
+
+  // Calculate 7-day weight average (with unit validation and conversion)
+  const last7Days = weightEntries.slice(0, 7);
+  const sevenDayAverage =
+    last7Days.length > 0
+      ? last7Days.reduce((sum, e) => {
+          const validatedWeight = validateAndConvertWeight(e.weight, (e as any).unit || 'lb');
+          return sum + validatedWeight;
+        }, 0) / last7Days.length
+      : null;
 
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
