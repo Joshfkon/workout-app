@@ -731,7 +731,9 @@ export function getRegressionAnalysis(
   }
 
   // Build pairs of consecutive days using ACTUAL (non-smoothed) weight changes for visualization
-  // This ensures users see all their real weight fluctuations, not smoothed ones
+  // Apply sanity check: exclude obviously erroneous data (> 5 lbs/day change is physically impossible)
+  const MAX_REASONABLE_DAILY_CHANGE = 5.0; // lbs/day - anything beyond this is clearly an error
+  
   const pairs: Array<{
     date: string;
     weight: number;
@@ -743,6 +745,13 @@ export function getRegressionAnalysis(
     if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
       // Use actual weight changes (not smoothed) for visualization
       const actualChange = filtered[i + 1].weight - filtered[i].weight;
+      
+      // Sanity check: exclude physically impossible weight changes
+      if (Math.abs(actualChange) > MAX_REASONABLE_DAILY_CHANGE) {
+        console.warn(`Excluding outlier: ${filtered[i].date} to ${filtered[i + 1].date}: ${actualChange.toFixed(2)} lbs/day change`);
+        continue; // Skip this pair
+      }
+      
       pairs.push({
         date: filtered[i].date,
         weight: filtered[i].weight,
@@ -757,7 +766,6 @@ export function getRegressionAnalysis(
   }
 
   // Run regression to get alpha (use smoothing/outlier exclusion for calculation accuracy)
-  // But visualization will show actual (non-smoothed) changes
   const result = runLeastSquaresRegression(filtered, DEFAULT_SMOOTHING_WINDOW, DEFAULT_OUTLIER_THRESHOLD);
   if (!result) {
     return null;
@@ -765,15 +773,30 @@ export function getRegressionAnalysis(
 
   const clampedAlpha = clampBurnRate(result.alpha);
 
-  // Build visualization data points using ACTUAL weight changes
-  // The regression line is based on smoothed data, but points show real fluctuations
-  const regressionDataPoints: RegressionDataPoint[] = pairs.map((pair) => {
+  // Apply the same outlier exclusion logic to visualization pairs
+  // This ensures we only show data points that were actually used in the regression
+  const visualizationPairs: RegressionPair[] = pairs.map(p => ({
+    weight: p.weight,
+    calories: p.calories,
+    actualChange: p.actualChange,
+    date: p.date,
+  }));
+
+  // Calculate residuals and exclude outliers using the same logic as regression
+  const { filtered: cleanedPairs } = excludeOutliers(
+    visualizationPairs,
+    clampedAlpha,
+    DEFAULT_OUTLIER_THRESHOLD
+  );
+
+  // Build visualization data points using only cleaned (non-outlier) pairs
+  const regressionDataPoints: RegressionDataPoint[] = cleanedPairs.map((pair) => {
     const predictedChange = (pair.calories - clampedAlpha * pair.weight) / CALORIES_PER_LB;
     return {
       date: pair.date,
       weight: pair.weight,
       calories: pair.calories,
-      actualChange: pair.actualChange, // Actual (non-smoothed) change - shows all fluctuations
+      actualChange: pair.actualChange, // Actual (non-smoothed) change - but only for valid data
       predictedChange, // Predicted based on smoothed regression
       residual: pair.actualChange - predictedChange,
     };
