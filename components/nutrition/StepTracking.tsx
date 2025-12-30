@@ -68,12 +68,18 @@ export function StepTracking({ date, userWeightKg }: StepTrackingProps) {
     }
   }
 
-  const isToday = date === getLocalDateString(new Date());
-  const displayDate = isToday ? 'Today' : new Date(date).toLocaleDateString('en-US', { 
-    weekday: 'short', 
-    month: 'short', 
-    day: 'numeric' 
-  });
+  // Only calculate on client to prevent hydration mismatch
+  const isClient = typeof window !== 'undefined';
+  const isToday = isClient && date === getLocalDateString(new Date());
+  const displayDate = isToday 
+    ? 'Today' 
+    : isClient
+      ? new Date(date).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric' 
+        })
+      : date; // Fallback for SSR
 
   return (
     <Card>

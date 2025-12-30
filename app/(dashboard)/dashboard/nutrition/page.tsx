@@ -1,6 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+// Debug: Track hydration
+if (typeof window !== 'undefined') {
+  console.log('[Nutrition] Component mounting on client');
+} else {
+  console.log('[Nutrition] Component rendering on server');
+}
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, SwipeableRow } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -243,17 +250,22 @@ export default function NutritionPage() {
 
   const supabase = createUntypedClient();
 
-  // Initialize date on client side only
+  // Initialize date on client side only (after mount)
   useEffect(() => {
-    if (selectedDate === null) {
-      setSelectedDate(getLocalDateString());
+    if (isMounted && selectedDate === null) {
+      const initialDate = getLocalDateString();
+      console.log('[Nutrition] Initializing date on client:', initialDate, 'isMounted:', isMounted);
+      setSelectedDate(initialDate);
     }
-  }, [selectedDate]);
+  }, [isMounted, selectedDate]);
 
   // Guard data loading until date is available
   useEffect(() => {
     if (selectedDate) {
+      console.log('[Nutrition] Date available, loading data:', selectedDate);
       loadData();
+    } else {
+      console.log('[Nutrition] Date not yet initialized, waiting...');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
@@ -261,14 +273,17 @@ export default function NutritionPage() {
   async function loadData() {
     // Guard: don't load data if date is not available
     if (!selectedDate) {
+      console.warn('[Nutrition] loadData called but selectedDate is null');
       setIsLoading(false);
       return;
     }
 
+    console.log('[Nutrition] Starting loadData for date:', selectedDate);
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
+        console.warn('[Nutrition] No user found, aborting loadData');
         setIsLoading(false);
         return;
       }
@@ -1031,6 +1046,7 @@ export default function NutritionPage() {
 
   // Handle null date in rendering
   if (!selectedDate) {
+    console.log('[Nutrition] Rendering: selectedDate is null, showing loading state');
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
         <div className="flex flex-col items-center justify-center py-20">
@@ -1041,15 +1057,24 @@ export default function NutritionPage() {
     );
   }
 
-  const isToday = selectedDate === getLocalDateString();
-  const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-  const dateDisplay = isToday
+  // Calculate date display on client side only to prevent hydration mismatch
+  const isClient = typeof window !== 'undefined';
+  const todayDateString = isClient ? getLocalDateString() : selectedDate;
+  const isToday = selectedDate === todayDateString;
+  const todayDayOfWeek = isClient 
+    ? new Date().toLocaleDateString('en-US', { weekday: 'long' })
+    : '';
+  const dateDisplay = isToday && isClient
     ? `Today (${todayDayOfWeek})`
-    : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
+    : isClient
+      ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
+      : selectedDate; // Fallback for SSR
+  
+  console.log('[Nutrition] Rendering with date:', selectedDate, 'isToday:', isToday, 'isClient:', isClient);
 
   if (isLoading) {
     return (
@@ -1111,7 +1136,9 @@ export default function NutritionPage() {
           </svg>
         </button>
         <div className="text-center min-w-[140px]">
-          <span className="text-base font-medium text-surface-100">{dateDisplay}</span>
+          <span className="text-base font-medium text-surface-100" suppressHydrationWarning>
+            {dateDisplay}
+          </span>
           {!isToday && (
             <button
               onClick={goToToday}
