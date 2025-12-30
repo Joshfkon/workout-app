@@ -129,18 +129,16 @@ export async function getAdaptiveTDEE(
     isComplete: dp.isComplete,
   }));
 
-  // Log weight/calorie pairs for debugging
-  if (process.env.NODE_ENV === 'development' || true) { // Always log for now
-    console.log('[TDEE] Weight/Calorie pairs being used:', basicDataPoints
-      .filter(dp => dp.weight > 0 && dp.calories > 0)
-      .map(dp => ({
-        date: dp.date,
-        weight: `${dp.weight.toFixed(1)} lbs`,
-        calories: `${dp.calories.toFixed(0)} cal`,
-        isComplete: dp.isComplete,
-      }))
-    );
-    console.log(`[TDEE] Total data points: ${basicDataPoints.length}, With weight & calories: ${basicDataPoints.filter(dp => dp.weight > 0 && dp.calories > 0).length}`);
+  // Log weight/calorie pairs for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    const validPairs = basicDataPoints.filter(dp => dp.weight > 0 && dp.calories > 0);
+    console.log('[TDEE] Weight/Calorie pairs being used:', validPairs.map(dp => ({
+      date: dp.date,
+      weight: `${dp.weight.toFixed(1)} lbs`,
+      calories: `${dp.calories.toFixed(0)} cal`,
+      isComplete: dp.isComplete,
+    })));
+    console.log(`[TDEE] Total data points: ${basicDataPoints.length}, With weight & calories: ${validPairs.length}`);
   }
 
   // Check data quality using basic data points

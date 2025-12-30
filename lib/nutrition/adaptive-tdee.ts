@@ -803,8 +803,8 @@ export function getRegressionAnalysis(
     };
   });
 
-  // Log pairs used in regression graph for debugging
-  if (process.env.NODE_ENV === 'development' || true) { // Always log for now
+  // Log pairs used in regression graph for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
     console.log('[TDEE Regression Graph] Pairs being displayed:', regressionDataPoints.map(dp => ({
       date: dp.date,
       weight: `${dp.weight.toFixed(1)} lbs`,
