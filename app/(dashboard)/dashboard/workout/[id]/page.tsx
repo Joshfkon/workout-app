@@ -3894,10 +3894,6 @@ export default function WorkoutPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-surface-400 mt-1">
-                        {blockSets.length}/{block.targetSets} sets • {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                        {block.targetRir !== undefined && ` @ RIR ${block.targetRir}`}
-                      </p>
                     </div>
                     
                     {/* Card content area */}
