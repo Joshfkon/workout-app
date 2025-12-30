@@ -731,8 +731,9 @@ export function getRegressionAnalysis(
   }
 
   // Build pairs of consecutive days using ACTUAL (non-smoothed) weight changes for visualization
-  // Apply sanity check: exclude obviously erroneous data (> 5 lbs/day change is physically impossible)
-  const MAX_REASONABLE_DAILY_CHANGE = 5.0; // lbs/day - anything beyond this is clearly an error
+  // Apply sanity check: exclude obviously erroneous data (> 10 lbs/day change is physically impossible)
+  // Using 10 lbs to be less strict - outlier detection will catch statistical outliers
+  const MAX_REASONABLE_DAILY_CHANGE = 10.0; // lbs/day - anything beyond this is clearly an error
   
   const pairs: Array<{
     date: string;

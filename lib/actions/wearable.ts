@@ -511,8 +511,9 @@ export async function getEnhancedDailyDataPoints(
     }
     // else: weightUnit === 'lb', use as-is
     
-    // Final sanity check: weight should be in reasonable human range (50-500 lbs)
-    if (weightInLbs < 50 || weightInLbs > 500) {
+    // Final sanity check: weight should be in reasonable human range (30-600 lbs)
+    // Using wider range to avoid false positives, outlier detection will catch extreme values
+    if (weightInLbs < 30 || weightInLbs > 600) {
       console.warn(`Skipping invalid weight: ${weightInLbs} lbs (original: ${w.weight} ${weightUnit})`);
       return; // Skip this weight entry
     }
@@ -545,8 +546,10 @@ export async function getEnhancedDailyDataPoints(
     activityLevel: string;
   }> = [];
 
+  // Only include dates that have weight data (regression needs weight)
+  // But we'll still include dates with calories/activity for completeness
   const allDates = new Set([
-    ...Array.from(weightByDate.keys()),
+    ...Array.from(weightByDate.keys()), // Must have weight
     ...Array.from(caloriesByDate.keys()),
     ...Array.from(activityByDate.keys()),
   ]);
@@ -576,7 +579,8 @@ export async function getEnhancedDailyDataPoints(
       activityLevel: activity?.activity_level || 'sedentary',
     });
   });
-
+  
+  // Sort by date to ensure proper ordering
   return dataPoints.sort((a, b) => a.date.localeCompare(b.date));
 }
 
