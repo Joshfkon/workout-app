@@ -533,6 +533,8 @@ export default function WorkoutPage() {
     blockId: string;
     setNumber: number;
   } | null>(null);
+  // Track which block the user accepted AMRAP for (persists after banner dismissed)
+  const [amrapAcceptedBlockId, setAmrapAcceptedBlockId] = useState<string | null>(null);
   // Track all calibration results for this session (for summary display)
   const [sessionCalibrations, setSessionCalibrations] = useState<Array<CalibrationResult & { exerciseId?: string; weightKg: number; setLogId?: string }>>([]);
 
@@ -1798,6 +1800,11 @@ export default function WorkoutPage() {
             timestamp: new Date(),
           });
         }
+
+        // Clear AMRAP accepted state when last set is completed
+        if (isLastSet) {
+          setAmrapAcceptedBlockId(null);
+        }
       }
 
       // Return the set ID for optional feedback
@@ -2606,6 +2613,8 @@ export default function WorkoutPage() {
     if (currentBlockIndex < blocks.length - 1) {
       setCurrentBlockIndex(currentBlockIndex + 1);
       setCurrentSetNumber(1);
+      // Clear AMRAP accepted state when changing blocks
+      setAmrapAcceptedBlockId(null);
       // Keep rest timer running - need rest between sets even when switching exercises
     }
   };
@@ -3921,6 +3930,8 @@ export default function WorkoutPage() {
                               size="sm"
                               variant="primary"
                               onClick={() => {
+                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
+                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
                                 // The user will complete the set normally, but we'll track it as AMRAP
                                 // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
                                 setAmrapSuggestion(null);
@@ -4009,7 +4020,11 @@ export default function WorkoutPage() {
                         return adjusted.hasAdjustment ? adjusted.prescribedRIR : undefined;
                       })()
                     }
-                    isAmrapSuggested={amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)}
+                    isAmrapSuggested={
+                      // Show AMRAP when either the suggestion is active OR user already accepted it
+                      (amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)) ||
+                      amrapAcceptedBlockId === block.id
+                    }
                     warmupSets={(() => {
                       if (!isCurrent) return undefined;
                       
