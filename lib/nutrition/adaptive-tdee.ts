@@ -727,6 +727,7 @@ export function getRegressionAnalysis(
   const filtered = filterDataPoints(dataPoints, windowDays, excludeIncomplete);
 
   if (filtered.length < 2) {
+    console.warn(`[TDEE Regression] Insufficient data points: only ${filtered.length} (need at least 2)`);
     return null;
   }
 
@@ -749,7 +750,9 @@ export function getRegressionAnalysis(
       
       // Sanity check: exclude physically impossible weight changes
       if (Math.abs(actualChange) > MAX_REASONABLE_DAILY_CHANGE) {
-        console.warn(`Excluding outlier: ${filtered[i].date} to ${filtered[i + 1].date}: ${actualChange.toFixed(2)} lbs/day change`);
+        console.warn(`[TDEE Regression] Excluding extreme outlier: ${filtered[i].date} to ${filtered[i + 1].date}: ${actualChange.toFixed(2)} lbs/day change (threshold: ${MAX_REASONABLE_DAILY_CHANGE} lbs/day)`);
+        console.warn(`  - Weight ${i}: ${filtered[i].weight.toFixed(1)} lbs, Weight ${i+1}: ${filtered[i + 1].weight.toFixed(1)} lbs`);
+        console.warn(`  - Calories: ${filtered[i].calories.toFixed(0)} cal`);
         continue; // Skip this pair
       }
       
@@ -762,8 +765,15 @@ export function getRegressionAnalysis(
     }
   }
 
-  if (pairs.length < 5) {
+  // Reduced minimum: allow graph with just 2 pairs (was 5)
+  // This helps users see their data even when they have limited history
+  if (pairs.length < 2) {
+    console.warn(`[TDEE Regression] Insufficient data: only ${pairs.length} pairs (need at least 2)`);
     return null;
+  }
+  
+  if (pairs.length < 5) {
+    console.warn(`[TDEE Regression] Limited data: only ${pairs.length} pairs (recommend at least 5 for accuracy)`);
   }
 
   // Run regression to get alpha (use smoothing/outlier exclusion for calculation accuracy)
@@ -784,11 +794,32 @@ export function getRegressionAnalysis(
   }));
 
   // Calculate residuals and exclude outliers using the same logic as regression
-  const { filtered: cleanedPairs } = excludeOutliers(
+  const { filtered: cleanedPairs, excluded } = excludeOutliers(
     visualizationPairs,
     clampedAlpha,
     DEFAULT_OUTLIER_THRESHOLD
   );
+  
+  // Log excluded outliers for debugging
+  if (excluded > 0) {
+    console.warn(`[TDEE Regression] Excluded ${excluded} statistical outlier(s) (threshold: ${DEFAULT_OUTLIER_THRESHOLD} SD)`);
+    const excludedPairs = visualizationPairs.filter(p => {
+      const predictedChange = (p.calories - clampedAlpha * p.weight) / CALORIES_PER_LB;
+      const residual = p.actualChange - predictedChange;
+      const residuals = visualizationPairs.map(p2 => {
+        const pred2 = (p2.calories - clampedAlpha * p2.weight) / CALORIES_PER_LB;
+        return p2.actualChange - pred2;
+      });
+      const meanResidual = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+      const stdDev = Math.sqrt(residuals.reduce((sum, r) => sum + (r - meanResidual) ** 2, 0) / residuals.length);
+      return Math.abs(residual - meanResidual) > DEFAULT_OUTLIER_THRESHOLD * stdDev;
+    });
+    excludedPairs.forEach(p => {
+      const predictedChange = (p.calories - clampedAlpha * p.weight) / CALORIES_PER_LB;
+      const residual = p.actualChange - predictedChange;
+      console.warn(`  - Excluded: ${p.date} | Weight: ${p.weight.toFixed(1)} lbs | Calories: ${p.calories.toFixed(0)} cal | Actual: ${p.actualChange > 0 ? '+' : ''}${p.actualChange.toFixed(2)} lbs/day | Predicted: ${predictedChange > 0 ? '+' : ''}${predictedChange.toFixed(2)} lbs/day | Residual: ${residual > 0 ? '+' : ''}${residual.toFixed(2)} lbs`);
+    });
+  }
 
   // Build visualization data points using only cleaned (non-outlier) pairs
   const regressionDataPoints: RegressionDataPoint[] = cleanedPairs.map((pair) => {
