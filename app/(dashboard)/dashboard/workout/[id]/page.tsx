@@ -515,6 +515,8 @@ export default function WorkoutPage() {
     blockId: string;
     setNumber: number;
   } | null>(null);
+  // Track all calibration results for this session (for summary display)
+  const [sessionCalibrations, setSessionCalibrations] = useState<Array<CalibrationResult & { exerciseId?: string; weightKg: number; setLogId?: string }>>([]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -1028,6 +1030,30 @@ export default function WorkoutPage() {
         // Set phase based on workout state
         if (sessionData.state === 'completed') {
           setPhase('summary');  // Show summary for completed workouts (read-only)
+
+          // Load AMRAP calibrations for this session
+          const { data: calibrationsData } = await supabase
+            .from('amrap_calibrations')
+            .select('*')
+            .eq('workout_session_id', sessionId)
+            .order('calibrated_at');
+
+          if (calibrationsData && calibrationsData.length > 0) {
+            const loadedCalibrations = calibrationsData.map((cal: any) => ({
+              exerciseName: cal.exercise_name,
+              predictedMaxReps: cal.predicted_max_reps,
+              actualMaxReps: cal.actual_max_reps,
+              bias: cal.bias,
+              biasInterpretation: cal.bias_interpretation,
+              confidenceLevel: cal.confidence_level as 'low' | 'medium' | 'high',
+              lastCalibrated: new Date(cal.calibrated_at),
+              dataPoints: cal.data_points,
+              exerciseId: cal.exercise_id,
+              weightKg: cal.weight_kg,
+              setLogId: cal.set_log_id,
+            }));
+            setSessionCalibrations(loadedCalibrations);
+          }
         } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
@@ -1635,6 +1661,37 @@ export default function WorkoutPage() {
 
           if (calibResult) {
             setCalibrationResult(calibResult);
+
+            // Track calibration for session summary
+            const calibWithMeta = {
+              ...calibResult,
+              exerciseId: currentExercise.id,
+              weightKg: data.weightKg,
+              setLogId: insertedData.id,
+            };
+            setSessionCalibrations(prev => [...prev, calibWithMeta]);
+
+            // Persist calibration to database
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              supabase.from('amrap_calibrations').insert({
+                user_id: user.id,
+                workout_session_id: sessionId,
+                set_log_id: insertedData.id,
+                exercise_id: currentExercise.id,
+                exercise_name: calibResult.exerciseName,
+                weight_kg: data.weightKg,
+                predicted_max_reps: calibResult.predictedMaxReps,
+                actual_max_reps: calibResult.actualMaxReps,
+                bias: calibResult.bias,
+                bias_interpretation: calibResult.biasInterpretation,
+                confidence_level: calibResult.confidenceLevel,
+                data_points: calibResult.dataPoints,
+                calibrated_at: calibResult.lastCalibrated.toISOString(),
+              }).then(({ error }) => {
+                if (error) console.error('Failed to save AMRAP calibration:', error);
+              });
+            }
           }
         }
         
@@ -2867,6 +2924,7 @@ export default function WorkoutPage() {
           exerciseBlocks={blocks}
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
+          amrapCalibrations={sessionCalibrations}
           unit={preferences.units}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
