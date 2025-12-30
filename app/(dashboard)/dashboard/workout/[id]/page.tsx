@@ -4097,7 +4097,7 @@ export default function WorkoutPage() {
 
               {/* Collapsed preview - show when all collapsed */}
               {allCollapsed && (
-                <div 
+                <div
                   className={`ml-11 p-3 rounded-lg cursor-pointer transition-colors ${
                     isComplete ? 'bg-success-500/5 border border-success-500/20' : 'bg-surface-800/30 hover:bg-surface-800/50'
                   }`}
@@ -4107,25 +4107,31 @@ export default function WorkoutPage() {
                   }}
                 >
                   {isComplete ? (
-                    <div className="flex items-center justify-between">
-                      <div className="flex gap-3 flex-wrap">
-                        {blockSets.map((set, setIdx) => (
-                          <span key={set.id} className="text-xs text-surface-400">
-                            Set {setIdx + 1}: {set.weightKg}kg × {set.reps}
-                          </span>
-                        ))}
+                    <div className="flex flex-col gap-1">
+                      <p className="text-sm font-medium text-surface-100">{block.exercise.name}</p>
+                      <div className="flex items-center justify-between">
+                        <div className="flex gap-3 flex-wrap">
+                          {blockSets.map((set, setIdx) => (
+                            <span key={set.id} className="text-xs text-surface-400">
+                              Set {setIdx + 1}: {set.weightKg}kg × {set.reps}
+                            </span>
+                          ))}
+                        </div>
+                        <button className="text-xs text-primary-400 hover:text-primary-300">
+                          Edit
+                        </button>
                       </div>
-                      <button className="text-xs text-primary-400 hover:text-primary-300">
-                        Edit
-                      </button>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between text-surface-500">
-                      <span className="text-sm">
-                        {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
-                        {block.targetWeightKg > 0 && ` @ ${block.targetWeightKg}kg`}
-                      </span>
-                      <span className="text-xs">Tap to start</span>
+                    <div className="flex flex-col gap-1">
+                      <p className="text-sm font-medium text-surface-100">{block.exercise.name}</p>
+                      <div className="flex items-center justify-between text-surface-500">
+                        <span className="text-sm">
+                          {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
+                          {block.targetWeightKg > 0 && ` @ ${block.targetWeightKg}kg`}
+                        </span>
+                        <span className="text-xs">Tap to start</span>
+                      </div>
                     </div>
                   )}
                 </div>
