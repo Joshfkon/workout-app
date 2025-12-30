@@ -37,6 +37,16 @@ export function WeightLogModal({
       if (weight > 400) {
         // Weight > 400 lbs is probably in kg, convert
         weightInLbs = weight * 2.20462;
+      } else if (weight > 300) {
+        // Weight 300-400 lbs is suspicious - might be in kg (e.g., 176.6 kg = 389 lbs)
+        // Check if converting from kg makes more sense (176.6 kg is reasonable)
+        const asKg = weight / 2.20462;
+        if (asKg >= 100 && asKg <= 200) {
+          // If treating as kg gives a reasonable human weight, it's probably in kg
+          weightInLbs = weight * 2.20462;
+        } else {
+          weightInLbs = weight;
+        }
       } else if (weight <= 85 && weight >= 30) {
         // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
         weightInLbs = weight * 2.20462;
@@ -66,7 +76,18 @@ export function WeightLogModal({
       const today = new Date().toISOString().split('T')[0];
       // Show validated weight in edit modal (matches what user sees in history list)
       if (existingEntry) {
-        const validatedWeight = validateAndConvertWeight(existingEntry.weight, (existingEntry as any).unit);
+        const rawWeight = existingEntry.weight;
+        const rawUnit = (existingEntry as any).unit || 'lb';
+        const validatedWeight = validateAndConvertWeight(rawWeight, rawUnit);
+        
+        // Debug logging
+        console.log('[WeightLogModal] Editing entry:', {
+          rawWeight,
+          rawUnit,
+          validatedWeight,
+          date: existingEntry.logged_at,
+        });
+        
         setWeight(validatedWeight.toFixed(1));
       } else {
         setWeight('');
@@ -75,7 +96,7 @@ export function WeightLogModal({
       setNotes(existingEntry?.notes || '');
       setError('');
     }
-  }, [isOpen, existingEntry, preferredUnit]);
+  }, [isOpen, existingEntry, preferredUnit, validateAndConvertWeight]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
