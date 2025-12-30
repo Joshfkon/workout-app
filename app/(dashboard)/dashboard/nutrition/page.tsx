@@ -594,6 +594,35 @@ export default function NutritionPage() {
           dataPoints: tdee?.regressionAnalysis?.dataPoints?.length || 0,
           isEnhanced: tdee?.isEnhanced || false,
         });
+        
+        // Log regression analysis details client-side
+        if (tdee?.regressionAnalysis) {
+          const ra = tdee.regressionAnalysis;
+          console.log('[TDEE Regression Analysis] Summary:', {
+            totalDataPoints: ra.dataPoints.length,
+            burnRatePerLb: ra.burnRatePerLb.toFixed(2),
+            estimatedTDEE: ra.estimatedTDEE,
+            rSquared: ra.rSquared.toFixed(3),
+            standardError: ra.standardError.toFixed(3),
+            currentWeight: ra.currentWeight.toFixed(1),
+          });
+          console.log('[TDEE Regression Analysis] Data points:', ra.dataPoints.map(dp => ({
+            date: dp.date,
+            weight: `${dp.weight.toFixed(1)} lbs`,
+            calories: `${dp.calories.toFixed(0)} cal`,
+            actualChange: `${dp.actualChange > 0 ? '+' : ''}${dp.actualChange.toFixed(2)} lbs/day`,
+            predictedChange: `${dp.predictedChange > 0 ? '+' : ''}${dp.predictedChange.toFixed(2)} lbs/day`,
+            residual: `${dp.residual > 0 ? '+' : ''}${dp.residual.toFixed(2)} lbs`,
+          })));
+        } else {
+          console.warn('[TDEE Regression Analysis] No regression analysis available - check server logs for details');
+        }
+        
+        // Log debug data if available
+        if (tdee?.debugData) {
+          console.log('[TDEE Debug Data]', tdee.debugData);
+        }
+        
         setTdeeData(tdee);
       } catch (tdeeError) {
         console.error('[Nutrition] Error loading TDEE data:', tdeeError);
