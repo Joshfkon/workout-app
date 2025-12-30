@@ -1044,24 +1044,12 @@ export default function NutritionPage() {
     ).values()
   ).slice(0, 20);
 
-  // Handle null date in rendering - but only show loading on client after mount
-  // This prevents hydration mismatch: server renders nothing, client renders loading until mounted
+  // Handle null date in rendering
+  // Always return the same structure to prevent hydration mismatch
   if (!isMounted || !selectedDate) {
-    if (!isMounted) {
-      // On server or initial client render, return minimal structure to prevent hydration mismatch
-      return (
-        <div className="max-w-7xl mx-auto p-4 md:p-6">
-          <div className="flex flex-col items-center justify-center py-20">
-            <LoadingAnimation type="random" size="lg" />
-            <p className="mt-4 text-surface-400">Initializing...</p>
-          </div>
-        </div>
-      );
-    }
-    // After mount but before date is set, show loading
-    console.log('[Nutrition] Rendering: selectedDate is null, showing loading state');
+    // Return consistent loading state for both server and client
     return (
-      <div className="max-w-7xl mx-auto p-4 md:p-6">
+      <div className="max-w-7xl mx-auto p-4 md:p-6" suppressHydrationWarning>
         <div className="flex flex-col items-center justify-center py-20">
           <LoadingAnimation type="random" size="lg" />
           <p className="mt-4 text-surface-400">Initializing...</p>
@@ -1096,7 +1084,7 @@ export default function NutritionPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6" suppressHydrationWarning>
       {/* Macro Update Notification */}
       {macroUpdateNotification && (
         <div className="bg-success-500/10 border border-success-500/20 rounded-lg p-3 flex items-center justify-between">
