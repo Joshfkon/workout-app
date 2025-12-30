@@ -165,7 +165,8 @@ interface UserProfileData {
 }
 
 export default function NutritionPage() {
-  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
+  // Defer date initialization to client to prevent hydration mismatches
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
@@ -242,16 +243,35 @@ export default function NutritionPage() {
 
   const supabase = createUntypedClient();
 
+  // Initialize date on client side only
   useEffect(() => {
-    loadData();
+    if (selectedDate === null) {
+      setSelectedDate(getLocalDateString());
+    }
+  }, [selectedDate]);
+
+  // Guard data loading until date is available
+  useEffect(() => {
+    if (selectedDate) {
+      loadData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
 
   async function loadData() {
+    // Guard: don't load data if date is not available
+    if (!selectedDate) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -280,12 +300,12 @@ export default function NutritionPage() {
           .eq('user_id', user.id)
           .eq('logged_at', selectedDate)
           .order('created_at', { ascending: true }),
-        // Nutrition targets
+        // Nutrition targets - use maybeSingle() to handle missing targets
         supabase
           .from('nutrition_targets')
           .select('*')
           .eq('user_id', user.id)
-          .single(),
+          .maybeSingle(),
         // Weight entries (last 30 days)
         supabase
           .from('weight_log')
@@ -312,39 +332,39 @@ export default function NutritionPage() {
           .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
           .eq('is_active', true)
           .order('name'),
-        // User profile data - use .single() and handle error
+        // User profile data - use maybeSingle() to handle missing data
         supabase
           .from('users')
           .select('height_cm, age, sex')
           .eq('id', user.id)
-          .single(),
-        // DEXA scan data
+          .maybeSingle(),
+        // DEXA scan data - use maybeSingle() to handle missing scans
         supabase
           .from('dexa_scans')
           .select('body_fat_percent, weight_kg')
           .eq('user_id', user.id)
           .order('scan_date', { ascending: false })
           .limit(1)
-          .single(),
-        // Active mesocycle
+          .maybeSingle(),
+        // Active mesocycle - use maybeSingle() to handle missing mesocycle
         supabase
           .from('mesocycles')
           .select('days_per_week')
           .eq('user_id', user.id)
           .eq('state', 'active')
-          .single(),
-        // User preferences (for weight unit)
+          .maybeSingle(),
+        // User preferences (for weight unit) - use maybeSingle() to handle missing preferences
         supabase
           .from('user_preferences')
           .select('weight_unit')
           .eq('user_id', user.id)
-          .single(),
-        // User volume profile (for training age and enhanced status)
+          .maybeSingle(),
+        // User volume profile (for training age and enhanced status) - use maybeSingle()
         supabase
           .from('user_volume_profiles')
           .select('training_age, is_enhanced')
           .eq('user_id', user.id)
-          .single(),
+          .maybeSingle(),
         // Average daily protein (last 30 days)
         supabase
           .from('food_log')
@@ -577,6 +597,11 @@ export default function NutritionPage() {
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
+
+    if (!selectedDate) {
+      console.error('Cannot add food: date not initialized');
+      return;
+    }
 
     const { error } = await supabase.from('food_log').insert({
       user_id: user.id,
@@ -924,6 +949,7 @@ export default function NutritionPage() {
   }
 
   function changeDate(delta: number) {
+    if (!selectedDate) return; // Guard: don't change date if not initialized
     // Use T00:00:00 to force local timezone interpretation (not UTC)
     const date = new Date(selectedDate + 'T00:00:00');
     date.setDate(date.getDate() + delta);
@@ -1002,6 +1028,18 @@ export default function NutritionPage() {
         ])
     ).values()
   ).slice(0, 20);
+
+  // Handle null date in rendering
+  if (!selectedDate) {
+    return (
+      <div className="max-w-7xl mx-auto p-4 md:p-6">
+        <div className="flex flex-col items-center justify-center py-20">
+          <LoadingAnimation type="random" size="lg" />
+          <p className="mt-4 text-surface-400">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
 
   const isToday = selectedDate === getLocalDateString();
   const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
