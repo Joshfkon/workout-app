@@ -11,6 +11,7 @@ interface WeightLogModalProps {
   onClose: () => void;
   onSave: (weight: number, date: string, notes?: string) => Promise<void>;
   existingEntry?: WeightLogEntry;
+  preferredUnit?: 'lb' | 'kg'; // User's preferred unit for display
 }
 
 export function WeightLogModal({
@@ -18,6 +19,7 @@ export function WeightLogModal({
   onClose,
   onSave,
   existingEntry,
+  preferredUnit = 'lb',
 }: WeightLogModalProps) {
   const [weight, setWeight] = useState('');
   const [date, setDate] = useState('');
@@ -25,16 +27,55 @@ export function WeightLogModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // Helper function to validate and convert weight (same logic as history modal and graph)
+  const validateAndConvertWeight = (weight: number, unit: string | null | undefined): number => {
+    const entryUnit = unit || 'lb';
+    let weightInLbs = weight;
+    
+    // Apply same unit validation as TDEE calculation and weight graph
+    if (entryUnit === 'lb') {
+      if (weight > 400) {
+        // Weight > 400 lbs is probably in kg, convert
+        weightInLbs = weight * 2.20462;
+      } else if (weight <= 85 && weight >= 30) {
+        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
+        weightInLbs = weight * 2.20462;
+      } else {
+        weightInLbs = weight;
+      }
+    } else if (entryUnit === 'kg') {
+      if (weight >= 30 && weight <= 150) {
+        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
+        weightInLbs = weight; // Already in lbs, just mislabeled
+      } else {
+        weightInLbs = weight * 2.20462; // Normal kg to lbs conversion
+      }
+    }
+    
+    // Convert to display unit (preferredUnit is the user's preference: 'lb' or 'kg')
+    // weightInLbs is now in lbs, convert to display unit
+    if (preferredUnit === 'kg') {
+      return weightInLbs / 2.20462;
+    }
+    return weightInLbs; // Already in lbs, return as-is
+  };
+
   // Sync state with existingEntry when modal opens or entry changes
   useEffect(() => {
     if (isOpen) {
       const today = new Date().toISOString().split('T')[0];
-      setWeight(existingEntry?.weight.toString() || '');
+      // Show validated weight in edit modal (matches what user sees in history list)
+      if (existingEntry) {
+        const validatedWeight = validateAndConvertWeight(existingEntry.weight, (existingEntry as any).unit);
+        setWeight(validatedWeight.toFixed(1));
+      } else {
+        setWeight('');
+      }
       setDate(existingEntry?.logged_at || today);
       setNotes(existingEntry?.notes || '');
       setError('');
     }
-  }, [isOpen, existingEntry]);
+  }, [isOpen, existingEntry, preferredUnit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

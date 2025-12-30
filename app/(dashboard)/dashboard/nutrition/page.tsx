@@ -1692,6 +1692,7 @@ export default function NutritionPage() {
         onClose={() => setEditingWeight(null)}
         onSave={handleUpdateWeight}
         existingEntry={editingWeight || undefined}
+        preferredUnit={weightUnit}
       />
 
       <WeightHistoryModal
