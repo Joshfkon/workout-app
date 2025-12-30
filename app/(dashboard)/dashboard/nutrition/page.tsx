@@ -1,13 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-// Debug: Track hydration
-if (typeof window !== 'undefined') {
-  console.log('[Nutrition] Component mounting on client');
-} else {
-  console.log('[Nutrition] Component rendering on server');
-}
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, SwipeableRow } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -1051,8 +1044,21 @@ export default function NutritionPage() {
     ).values()
   ).slice(0, 20);
 
-  // Handle null date in rendering
-  if (!selectedDate) {
+  // Handle null date in rendering - but only show loading on client after mount
+  // This prevents hydration mismatch: server renders nothing, client renders loading until mounted
+  if (!isMounted || !selectedDate) {
+    if (!isMounted) {
+      // On server or initial client render, return minimal structure to prevent hydration mismatch
+      return (
+        <div className="max-w-7xl mx-auto p-4 md:p-6">
+          <div className="flex flex-col items-center justify-center py-20">
+            <LoadingAnimation type="random" size="lg" />
+            <p className="mt-4 text-surface-400">Initializing...</p>
+          </div>
+        </div>
+      );
+    }
+    // After mount but before date is set, show loading
     console.log('[Nutrition] Rendering: selectedDate is null, showing loading state');
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -1064,24 +1070,19 @@ export default function NutritionPage() {
     );
   }
 
-  // Calculate date display on client side only to prevent hydration mismatch
-  const isClient = typeof window !== 'undefined';
-  const todayDateString = isClient ? getLocalDateString() : selectedDate;
+  // Calculate date display - now safe because we're only here after mount and date is set
+  const todayDateString = getLocalDateString();
   const isToday = selectedDate === todayDateString;
-  const todayDayOfWeek = isClient 
-    ? new Date().toLocaleDateString('en-US', { weekday: 'long' })
-    : '';
-  const dateDisplay = isToday && isClient
+  const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  const dateDisplay = isToday
     ? `Today (${todayDayOfWeek})`
-    : isClient
-      ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        })
-      : selectedDate; // Fallback for SSR
+    : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
   
-  console.log('[Nutrition] Rendering with date:', selectedDate, 'isToday:', isToday, 'isClient:', isClient);
+  console.log('[Nutrition] Rendering with date:', selectedDate, 'isToday:', isToday);
 
   if (isLoading) {
     return (
