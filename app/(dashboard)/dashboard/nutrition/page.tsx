@@ -1033,14 +1033,46 @@ export default function NutritionPage() {
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
 
-  // Calculate 7-day weight average (with unit conversion)
+  // Calculate 7-day weight average (with unit validation and conversion)
   const last7Days = weightEntries.slice(0, 7);
   const sevenDayAverage =
     last7Days.length > 0
-      ? last7Days.reduce((sum, e) => sum + convertWeight(e.weight, (e as any).unit || 'lb'), 0) / last7Days.length
+      ? last7Days.reduce((sum, e) => {
+          const validatedWeight = validateAndConvertWeight(e.weight, (e as any).unit || 'lb');
+          return sum + validatedWeight;
+        }, 0) / last7Days.length
       : null;
 
-  // Prepare weight chart data (with unit conversion)
+  // Helper function to validate and convert weight (same logic as TDEE calculation)
+  const validateAndConvertWeight = (weight: number, unit: string | null | undefined): number => {
+    const weightUnit = unit || 'lb';
+    let weightInLbs = weight;
+    
+    // Apply same unit validation as TDEE calculation
+    if (weightUnit === 'lb') {
+      if (weight > 400) {
+        // Weight > 400 lbs is probably in kg, convert
+        weightInLbs = weight * 2.20462;
+      } else if (weight <= 85 && weight >= 30) {
+        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
+        weightInLbs = weight * 2.20462;
+      } else {
+        weightInLbs = weight;
+      }
+    } else if (weightUnit === 'kg') {
+      if (weight >= 30 && weight <= 150) {
+        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
+        weightInLbs = weight;
+      } else {
+        weightInLbs = weight * 2.20462;
+      }
+    }
+    
+    // Convert to display unit
+    return convertWeight(weightInLbs, 'lb'); // weightInLbs is already in lbs, convert to display unit
+  };
+
+  // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
   const weightChartData = [...weightEntries]
     .sort((a, b) => new Date(a.logged_at).getTime() - new Date(b.logged_at).getTime())
@@ -1049,7 +1081,7 @@ export default function NutritionPage() {
       // Use logged_at directly as date string to avoid timezone issues
       const dateStr = entry.logged_at;
       const entryUnit = (entry as any).unit || 'lb';
-      const convertedWeight = convertWeight(entry.weight, entryUnit);
+      const validatedWeight = validateAndConvertWeight(entry.weight, entryUnit);
 
       return {
         date: dateStr,
@@ -1057,7 +1089,7 @@ export default function NutritionPage() {
           month: 'short',
           day: 'numeric',
         }),
-        weight: Number(convertedWeight.toFixed(1)),
+        weight: Number(validatedWeight.toFixed(1)),
       };
     });
 
@@ -1512,7 +1544,7 @@ export default function NutritionPage() {
                 <div>
                   <div className="text-sm text-surface-400">Current Weight</div>
                   <div className="text-2xl font-bold text-surface-100">
-                    {convertWeight(weightEntries[0]?.weight || 0, (weightEntries[0] as any)?.unit || 'lb').toFixed(1)} {weightUnit}
+                    {weightEntries[0] ? validateAndConvertWeight(weightEntries[0].weight, (weightEntries[0] as any)?.unit || 'lb').toFixed(1) : '0.0'} {weightUnit}
                   </div>
                   <div className="text-xs text-surface-500">
                     {new Date(weightEntries[0]?.logged_at).toLocaleDateString()}
