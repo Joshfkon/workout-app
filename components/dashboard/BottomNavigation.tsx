@@ -60,7 +60,10 @@ export function BottomNavigation() {
   const activeSession = useWorkoutStore((state) => state.activeSession);
 
   // Hide bottom nav during active workout
-  if (activeSession) {
+  // Check both store state AND pathname to handle hydration race conditions
+  const isInActiveWorkoutPage = pathname?.match(/^\/dashboard\/workout\/[^/]+$/);
+
+  if (activeSession || isInActiveWorkoutPage) {
     return null;
   }
 
