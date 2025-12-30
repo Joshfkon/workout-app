@@ -803,6 +803,19 @@ export function getRegressionAnalysis(
     };
   });
 
+  // Log pairs used in regression graph for debugging
+  if (process.env.NODE_ENV === 'development' || true) { // Always log for now
+    console.log('[TDEE Regression Graph] Pairs being displayed:', regressionDataPoints.map(dp => ({
+      date: dp.date,
+      weight: `${dp.weight.toFixed(1)} lbs`,
+      calories: `${dp.calories.toFixed(0)} cal`,
+      actualChange: `${dp.actualChange > 0 ? '+' : ''}${dp.actualChange.toFixed(2)} lbs/day`,
+      predictedChange: `${dp.predictedChange > 0 ? '+' : ''}${dp.predictedChange.toFixed(2)} lbs/day`,
+      residual: `${dp.residual > 0 ? '+' : ''}${dp.residual.toFixed(2)} lbs`,
+    })));
+    console.log(`[TDEE Regression Graph] Total pairs: ${regressionDataPoints.length} (need at least 5 to show graph)`);
+  }
+
   return {
     dataPoints: regressionDataPoints,
     burnRatePerLb: clampedAlpha,
