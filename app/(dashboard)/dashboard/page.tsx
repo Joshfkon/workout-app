@@ -577,28 +577,15 @@ export default function DashboardPage() {
           });
         }
 
-        // Process weight history with unit validation
+        // Process weight history - simple pass-through, no guessing
         if (weightHistoryResult.data && weightHistoryResult.data.length > 0) {
           const defaultUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
 
-          const processedHistory = weightHistoryResult.data.map((w: any) => {
-            // Handle NULL or undefined unit - use default
-            let unit = (w.unit === null || w.unit === undefined) ? defaultUnit : w.unit;
-
-            // Validate: if unit says 'lb' but weight > 500, it's probably in kg
-            // If unit says 'kg' but weight > 250, it's probably in lb
-            if (unit === 'lb' && w.weight > 500) {
-              unit = 'kg';
-            } else if (unit === 'kg' && w.weight > 250) {
-              unit = 'lb';
-            }
-
-            return {
-              date: w.logged_at,
-              weight: w.weight,
-              unit: unit,
-            };
-          });
+          const processedHistory = weightHistoryResult.data.map((w: any) => ({
+            date: w.logged_at,
+            weight: w.weight,
+            unit: w.unit || defaultUnit,
+          }));
 
           setWeightHistory(processedHistory);
 
@@ -1288,20 +1275,13 @@ export default function DashboardPage() {
                         <div>
                           <p className="text-2xl font-bold text-surface-100">
                             {(() => {
+                              const storedUnit = (todaysWeight.unit || weightUnit) as 'kg' | 'lb';
+                              // Simple conversion from stored unit to display unit
                               let displayWeight = todaysWeight.weight;
-                              const storedUnit = todaysWeight.unit || weightUnit;
-                              let actualStoredUnit = storedUnit;
-                              if (storedUnit === 'lb' && todaysWeight.weight > 500) {
-                                actualStoredUnit = 'kg';
-                              } else if (storedUnit === 'kg' && todaysWeight.weight > 250) {
-                                actualStoredUnit = 'lb';
-                              }
-                              if (actualStoredUnit !== weightUnit) {
-                                if (actualStoredUnit === 'kg' && weightUnit === 'lb') {
-                                  displayWeight = todaysWeight.weight * 2.20462;
-                                } else if (actualStoredUnit === 'lb' && weightUnit === 'kg') {
-                                  displayWeight = todaysWeight.weight / 2.20462;
-                                }
+                              if (storedUnit !== weightUnit) {
+                                displayWeight = storedUnit === 'kg'
+                                  ? todaysWeight.weight * 2.20462
+                                  : todaysWeight.weight / 2.20462;
                               }
                               return displayWeight.toFixed(1);
                             })()} <span className="text-base font-normal text-surface-400">{weightUnit}</span>

@@ -13,7 +13,7 @@ interface WeightHistoryModalProps {
   entries: WeightLogEntry[];
   onEdit: (entry: WeightLogEntry) => void;
   onDelete: (id: string) => Promise<void>;
-  preferredUnit?: 'lb' | 'kg'; // User's preferred unit for display
+  preferredUnit?: 'lb' | 'kg';
 }
 
 export function WeightHistoryModal({
@@ -35,44 +35,17 @@ export function WeightHistoryModal({
     }
   };
 
-  // Convert weight to preferred unit with validation (same logic as nutrition page graph)
-  const convertWeightWithValidation = (weight: number, fromUnit: string | null | undefined): number => {
-    const entryUnit = fromUnit || 'lb';
-    let weightInLbs = weight;
-    
-    // Apply same unit validation as TDEE calculation and weight graph
-    if (entryUnit === 'lb') {
-      if (weight > 400) {
-        // Weight > 400 lbs is probably in kg, convert
-        weightInLbs = weight * 2.20462;
-      } else if (weight <= 85 && weight >= 30) {
-        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
-        weightInLbs = weight * 2.20462;
-      } else {
-        weightInLbs = weight;
-      }
-    } else if (entryUnit === 'kg') {
-      if (weight >= 30 && weight <= 150) {
-        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
-        weightInLbs = weight; // Already in lbs, just mislabeled
-      } else {
-        weightInLbs = weight * 2.20462; // Normal kg to lbs conversion
-      }
-    }
-    
-    // Convert to display unit (preferredUnit is the user's preference: 'lb' or 'kg')
-    // weightInLbs is now in lbs, convert to display unit
-    if (preferredUnit === 'kg') {
-      return weightInLbs / 2.20462;
-    }
-    return weightInLbs; // Already in lbs, return as-is
+  // Simple conversion from stored unit to display unit
+  const getDisplayWeight = (weight: number, storedUnit: string | null | undefined): number => {
+    const fromUnit = (storedUnit || 'lb') as 'kg' | 'lb';
+    return convertWeight(weight, fromUnit, preferredUnit);
   };
 
   // Calculate change from previous entry (in preferred unit)
   const getChange = (index: number) => {
     if (index >= entries.length - 1) return null;
-    const current = convertWeightWithValidation(entries[index].weight, entries[index].unit);
-    const previous = convertWeightWithValidation(entries[index + 1].weight, entries[index + 1].unit);
+    const current = getDisplayWeight(entries[index].weight, entries[index].unit);
+    const previous = getDisplayWeight(entries[index + 1].weight, entries[index + 1].unit);
     return current - previous;
   };
 
@@ -90,6 +63,8 @@ export function WeightHistoryModal({
         ) : (
           entries.map((entry, index) => {
             const change = getChange(index);
+            const displayWeight = getDisplayWeight(entry.weight, entry.unit);
+
             return (
               <SwipeableRow
                 key={entry.id}
@@ -119,10 +94,7 @@ export function WeightHistoryModal({
                   {/* Weight */}
                   <div className="flex-1">
                     <div className="text-lg font-semibold text-surface-100">
-                      {(() => {
-                        const displayWeight = convertWeightWithValidation(entry.weight, entry.unit);
-                        return `${displayWeight.toFixed(1)} ${preferredUnit === 'kg' ? 'kg' : 'lbs'}`;
-                      })()}
+                      {displayWeight.toFixed(1)} {preferredUnit === 'kg' ? 'kg' : 'lbs'}
                     </div>
                     {entry.notes && (
                       <div className="text-xs text-surface-500 truncate max-w-[200px]">
@@ -164,4 +136,3 @@ export function WeightHistoryModal({
     </Modal>
   );
 }
-
