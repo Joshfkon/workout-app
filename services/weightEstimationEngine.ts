@@ -724,7 +724,7 @@ export class WeightEstimationEngine {
       'Face Pull': 0.25,
       'Rear Delt Fly': 0.06,
       'Cable Fly': 0.15,
-      'Leg Extension': 0.40,
+      'Leg Extension': 0.85,
       'Lying Leg Curl': 0.30,
       'Seated Leg Curl': 0.30,
       'Standing Calf Raise': 0.80,
@@ -1137,7 +1137,8 @@ export function quickWeightEstimate(
   bodyFatPercent: number,
   experience: Experience,
   regionalData?: DexaRegionalData,
-  unit: 'kg' | 'lb' = 'kg'
+  unit: 'kg' | 'lb' = 'kg',
+  knownE1RM?: number
 ): WorkingWeightRecommendation {
   const profile = createStrengthProfile(
     heightCm,
@@ -1148,7 +1149,19 @@ export function quickWeightEstimate(
     [],
     regionalData
   );
-  
+
+  // If we have a known E1RM from exercise history, add it to knownMaxes
+  // This takes priority over bodyweight-based estimation
+  if (knownE1RM && knownE1RM > 0) {
+    profile.knownMaxes.push({
+      exercise: exerciseName,
+      estimated1RM: knownE1RM,
+      confidence: 'high',
+      source: 'direct_history',
+      lastUpdated: new Date()
+    });
+  }
+
   const engine = new WeightEstimationEngine(profile, unit);
   return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
 }
@@ -1194,13 +1207,26 @@ export function quickWeightEstimateWithCalibration(
     tested_at: string;
   }>,
   regionalData?: DexaRegionalData,
-  unit: 'kg' | 'lb' = 'kg'
+  unit: 'kg' | 'lb' = 'kg',
+  knownE1RM?: number
 ): WorkingWeightRecommendation {
   // Create estimated maxes from calibrated lifts
   const calibratedMaxes = createEstimatedMaxesFromCalibration(calibratedLifts);
-  
+
+  // If we have a known E1RM from exercise history, add it with highest priority
+  // This takes precedence over calibrated lifts for this specific exercise
+  if (knownE1RM && knownE1RM > 0) {
+    calibratedMaxes.push({
+      exercise: exerciseName,
+      estimated1RM: knownE1RM,
+      confidence: 'high',
+      source: 'direct_history',
+      lastUpdated: new Date()
+    });
+  }
+
   const bodyComposition = calculateBodyComposition(userWeightKg, bodyFatPercent, heightCm);
-  
+
   const profile: UserStrengthProfile = {
     bodyComposition,
     experience,
@@ -1210,7 +1236,7 @@ export function quickWeightEstimateWithCalibration(
     regionalData,
     regionalAnalysis: regionalData ? analyzeRegionalComposition(regionalData, bodyComposition.leanMassKg) : undefined
   };
-  
+
   const engine = new WeightEstimationEngine(profile, unit);
   return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
 }
