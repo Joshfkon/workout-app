@@ -144,7 +144,8 @@ function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
   userProfile?: UserProfileForWeights,
   userContext?: UserContext,
-  unit: 'kg' | 'lb' = 'kg'
+  unit: 'kg' | 'lb' = 'kg',
+  exerciseHistories?: Record<string, ExerciseHistoryData>
 ): {
   greeting: string;
   overview: string;
@@ -303,6 +304,11 @@ function generateCoachMessage(
     let weightRec: WorkingWeightRecommendation | undefined;
     if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
       try {
+        // Get known E1RM from exercise history if available
+        // This provides much more accurate suggestions than bodyweight-based estimation
+        const exerciseHistory = exerciseHistories?.[block.exerciseId];
+        const knownE1RM = exerciseHistory?.estimatedE1RM;
+
         // Use calibration data if available for more accurate estimates
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -315,7 +321,8 @@ function generateCoachMessage(
             userProfile.experience,
             userProfile.calibratedLifts,
             userProfile.regionalData,
-            unit
+            unit,
+            knownE1RM
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -327,7 +334,8 @@ function generateCoachMessage(
             userProfile.bodyFatPercent || 20,
             userProfile.experience,
             userProfile.regionalData,
-            unit
+            unit,
+            knownE1RM
           );
         }
       } catch (e) {
@@ -524,6 +532,8 @@ export default function WorkoutPage() {
     blockId: string;
     setNumber: number;
   } | null>(null);
+  // Track all calibration results for this session (for summary display)
+  const [sessionCalibrations, setSessionCalibrations] = useState<Array<CalibrationResult & { exerciseId?: string; weightKg: number; setLogId?: string }>>([]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -910,9 +920,9 @@ export default function WorkoutPage() {
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
 
-        // Generate coach message with profile and context
-        setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext));
-        
+        // Coach message will be generated after exercise histories are loaded
+        // to provide accurate weight suggestions based on user's training history
+
         // Check for existing injuries from session's pre_workout_check_in
         const existingCheckIn = sessionData.pre_workout_check_in as { temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }> } | null;
         const existingInjuries = existingCheckIn?.temporaryInjuries || [];
@@ -1043,11 +1053,41 @@ export default function WorkoutPage() {
           }
           
           setExerciseHistories(histories);
+
+          // Generate coach message with exercise history for accurate weight suggestions
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories));
+        } else {
+          // No exercise history available, generate coach message without it
+          setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units));
         }
-        
+
         // Set phase based on workout state
         if (sessionData.state === 'completed') {
           setPhase('summary');  // Show summary for completed workouts (read-only)
+
+          // Load AMRAP calibrations for this session
+          const { data: calibrationsData } = await supabase
+            .from('amrap_calibrations')
+            .select('*')
+            .eq('workout_session_id', sessionId)
+            .order('calibrated_at');
+
+          if (calibrationsData && calibrationsData.length > 0) {
+            const loadedCalibrations = calibrationsData.map((cal: any) => ({
+              exerciseName: cal.exercise_name,
+              predictedMaxReps: cal.predicted_max_reps,
+              actualMaxReps: cal.actual_max_reps,
+              bias: cal.bias,
+              biasInterpretation: cal.bias_interpretation,
+              confidenceLevel: cal.confidence_level as 'low' | 'medium' | 'high',
+              lastCalibrated: new Date(cal.calibrated_at),
+              dataPoints: cal.data_points,
+              exerciseId: cal.exercise_id,
+              weightKg: cal.weight_kg,
+              setLogId: cal.set_log_id,
+            }));
+            setSessionCalibrations(loadedCalibrations);
+          }
         } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
@@ -1097,6 +1137,21 @@ export default function WorkoutPage() {
   useEffect(() => {
     setStoreBlockIndex(currentBlockIndex);
   }, [currentBlockIndex, setStoreBlockIndex]);
+
+  // Fetch available exercises on mount for swap functionality
+  useEffect(() => {
+    async function loadAvailableExercises() {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('exercises')
+        .select('id, name, primary_muscle, mechanic')
+        .order('name');
+      if (data) {
+        setAvailableExercises(data);
+      }
+    }
+    loadAvailableExercises();
+  }, []);
 
   // Load historical set logs for RPE calibration
   useEffect(() => {
@@ -1678,6 +1733,37 @@ export default function WorkoutPage() {
 
           if (calibResult) {
             setCalibrationResult(calibResult);
+
+            // Track calibration for session summary
+            const calibWithMeta = {
+              ...calibResult,
+              exerciseId: currentExercise.id,
+              weightKg: data.weightKg,
+              setLogId: insertedData.id,
+            };
+            setSessionCalibrations(prev => [...prev, calibWithMeta]);
+
+            // Persist calibration to database
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              supabase.from('amrap_calibrations').insert({
+                user_id: user.id,
+                workout_session_id: sessionId,
+                set_log_id: insertedData.id,
+                exercise_id: currentExercise.id,
+                exercise_name: calibResult.exerciseName,
+                weight_kg: data.weightKg,
+                predicted_max_reps: calibResult.predictedMaxReps,
+                actual_max_reps: calibResult.actualMaxReps,
+                bias: calibResult.bias,
+                bias_interpretation: calibResult.biasInterpretation,
+                confidence_level: calibResult.confidenceLevel,
+                data_points: calibResult.dataPoints,
+                calibrated_at: calibResult.lastCalibrated.toISOString(),
+              }).then(({ error }: { error: Error | null }) => {
+                if (error) console.error('Failed to save AMRAP calibration:', error);
+              });
+            }
           }
         }
         
@@ -2553,7 +2639,11 @@ export default function WorkoutPage() {
         const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
         const targetRir = 2;
         let weightRec: WorkingWeightRecommendation;
-        
+
+        // Check if we have exercise history for this exercise (using exercise.id)
+        const exerciseHistory = exerciseHistories[exercise.id];
+        const knownE1RM = exerciseHistory?.estimatedE1RM;
+
         // Use calibration data if available
         if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
           weightRec = quickWeightEstimateWithCalibration(
@@ -2566,7 +2656,8 @@ export default function WorkoutPage() {
             userProfile.experience,
             userProfile.calibratedLifts,
             userProfile.regionalData,
-            preferences.units
+            preferences.units,
+            knownE1RM
           );
         } else {
           weightRec = quickWeightEstimate(
@@ -2578,10 +2669,11 @@ export default function WorkoutPage() {
             userProfile.bodyFatPercent,
             userProfile.experience,
             userProfile.regionalData,
-            preferences.units
+            preferences.units,
+            knownE1RM
           );
         }
-        
+
         if (weightRec.confidence !== 'find_working_weight') {
           suggestedWeight = weightRec.recommendedWeight;
         }
@@ -2939,6 +3031,7 @@ export default function WorkoutPage() {
           exerciseBlocks={blocks}
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
+          amrapCalibrations={sessionCalibrations}
           unit={preferences.units}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
