@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useCallback, useEffect, memo } from 'react';
+import React, { useMemo, useState, useEffect, memo } from 'react';
 import {
   LineChart,
   Line,
@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { formatDate } from '@/lib/utils';
+import { formatDate, convertWeight } from '@/lib/utils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 
 type Timeframe = '7d' | '30d' | '90d';
@@ -20,11 +20,8 @@ interface WeightChartDataPoint {
   date: string;
   displayDate: string;
   weight: number;
-  originalWeight: number;
-  originalUnit: string;
 }
 
-// Define outside component for stable reference
 const TIMEFRAME_DAYS: Record<Timeframe, number> = {
   '7d': 7,
   '30d': 30,
@@ -43,7 +40,6 @@ interface WeightGraphProps {
   className?: string;
 }
 
-// Moved outside component to prevent re-creation on every render
 const WeightTooltip = memo(function WeightTooltip({
   active,
   payload,
@@ -57,7 +53,7 @@ const WeightTooltip = memo(function WeightTooltip({
     <div className="bg-surface-800 border border-surface-700 rounded-lg p-3 shadow-lg">
       <p className="text-sm text-surface-400 mb-1">{formatDate(data.date)}</p>
       <p className="text-surface-100 font-semibold">
-        {data.weight} <span className="text-surface-400 font-normal">{preferredUnit}</span>
+        {data.weight.toFixed(1)} <span className="text-surface-400 font-normal">{preferredUnit}</span>
       </p>
     </div>
   );
@@ -67,51 +63,11 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
   const [timeframe, setTimeframe] = useState<Timeframe>('30d');
   const [isMounted, setIsMounted] = useState(false);
 
-  // Prevent hydration errors by only rendering after mount
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Use module-level TIMEFRAME_DAYS constant for stable reference
-
-  // Convert weight to preferred unit with validation - wrapped in useCallback for stable reference
-  const convertWeight = useCallback((weight: number, fromUnit: string | null | undefined): number => {
-    // If unit is missing, try to infer from weight value
-    // If weight > 300 in preferred unit 'lb', it's likely in kg
-    // If weight > 150 in preferred unit 'kg', it's likely in lb
-    if (!fromUnit) {
-      if (preferredUnit === 'lb' && weight > 300) {
-        // Likely stored in kg, convert
-        return weight * 2.20462;
-      } else if (preferredUnit === 'kg' && weight > 150) {
-        // Likely stored in lb, convert
-        return weight / 2.20462;
-      }
-      // Assume already in preferred unit
-      return weight;
-    }
-
-    // Validate: if unit says 'lb' but weight > 500, it's probably in kg
-    // If unit says 'kg' but weight > 250 OR in human weight range (150-200), it's probably in lb
-    // Common weights 150-200 lbs are often mislabeled as kg
-    if (fromUnit === 'lb' && weight > 500) {
-      // Probably stored in kg, convert
-      return weight * 2.20462;
-    } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
-      // Common weights 150-200 are human weights in lbs, mislabeled as kg
-      // The weight is already in lbs, just mislabeled - don't convert, use as-is
-      return weight; // Already in lbs, just mislabeled
-    } else if (fromUnit === 'kg' && weight > 250) {
-      // Weight > 250 kg is probably in lbs, convert
-      return weight / 2.20462;
-    }
-
-    // Normal conversion
-    if (fromUnit === preferredUnit) return weight;
-    return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
-  }, [preferredUnit]);
-
-  // Filter and prepare chart data based on timeframe
+  // Simple, straightforward conversion - no guessing
   const chartData = useMemo(() => {
     const now = new Date();
     const cutoffDate = new Date();
@@ -120,21 +76,19 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     const filtered = weightHistory
       .filter((entry) => new Date(entry.date) >= cutoffDate)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    
-    const mapped = filtered.map((entry) => {
-      const convertedWeight = convertWeight(entry.weight, entry.unit);
+
+    return filtered.map((entry) => {
+      // Simple conversion: from stored unit to display unit
+      const storedUnit = (entry.unit || 'lb') as 'kg' | 'lb';
+      const displayWeight = convertWeight(entry.weight, storedUnit, preferredUnit);
 
       return {
         date: entry.date,
         displayDate: formatDate(entry.date, { month: 'short', day: 'numeric' }),
-        weight: Number(convertedWeight.toFixed(1)),
-        originalWeight: entry.weight,
-        originalUnit: entry.unit,
+        weight: Number(displayWeight.toFixed(1)),
       };
     });
-
-    return mapped;
-  }, [weightHistory, timeframe, convertWeight]);
+  }, [weightHistory, timeframe, preferredUnit]);
 
   // Calculate trend
   const trend = useMemo(() => {
@@ -151,17 +105,26 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
     };
   }, [chartData]);
 
-  // Calculate stats
+  // Calculate stats for reference line
   const stats = useMemo(() => {
     if (chartData.length === 0) return null;
 
     const weights = chartData.map((d) => d.weight);
-    const current = weights[weights.length - 1];
-    const max = Math.max(...weights);
-    const min = Math.min(...weights);
     const avg = weights.reduce((a, b) => a + b, 0) / weights.length;
 
-    return { current, max, min, avg };
+    return { avg };
+  }, [chartData]);
+
+  // Calculate Y-axis domain with padding
+  const yDomain = useMemo(() => {
+    if (chartData.length === 0) return [0, 100];
+
+    const weights = chartData.map((d) => d.weight);
+    const min = Math.min(...weights);
+    const max = Math.max(...weights);
+    const padding = Math.max(2, (max - min) * 0.1);
+
+    return [Math.floor(min - padding), Math.ceil(max + padding)];
   }, [chartData]);
 
   if (chartData.length === 0) {
@@ -215,7 +178,7 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       {/* Chart */}
       <div className="h-32">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+          <LineChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
             <XAxis
               dataKey="displayDate"
@@ -231,9 +194,9 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
               fontSize={10}
               tickLine={false}
               axisLine={false}
-              domain={['dataMin - 2', 'dataMax + 2']}
-              tickFormatter={(v) => `${v}`}
-              width={35}
+              domain={yDomain}
+              tickFormatter={(v) => Math.round(v).toString()}
+              width={40}
             />
             <Tooltip content={<WeightTooltip preferredUnit={preferredUnit} />} />
             {stats && (
