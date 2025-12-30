@@ -1098,6 +1098,21 @@ export default function WorkoutPage() {
     loadWorkout();
   }, [sessionId]);
 
+  // Fetch available exercises on mount for swap functionality
+  useEffect(() => {
+    async function loadAvailableExercises() {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('exercises')
+        .select('id, name, primary_muscle, mechanic')
+        .order('name');
+      if (data) {
+        setAvailableExercises(data);
+      }
+    }
+    loadAvailableExercises();
+  }, []);
+
   // Load historical set logs for RPE calibration
   useEffect(() => {
     async function loadCalibrationHistory() {
