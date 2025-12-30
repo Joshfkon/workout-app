@@ -52,6 +52,7 @@ import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } 
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
+import { useWorkoutStore } from '@/stores/workoutStore';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -396,6 +397,14 @@ export default function WorkoutPage() {
   const fromCreate = searchParams.get('fromCreate') === 'true';
   const { preferences, updatePreference, isLoading: preferencesLoading } = useUserPreferences();
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+  const pauseSession = useWorkoutStore((state) => state.pauseSession);
+  const resumeSession = useWorkoutStore((state) => state.resumeSession);
+  const startWorkoutSession = useWorkoutStore((state) => state.startSession);
+  const endWorkoutSession = useWorkoutStore((state) => state.endSession);
+  const logSetToStore = useWorkoutStore((state) => state.logSet);
+  const updateSetInStore = useWorkoutStore((state) => state.updateSet);
+  const deleteSetFromStore = useWorkoutStore((state) => state.deleteSet);
+  const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [isFirstWorkout, setIsFirstWorkout] = useState(false);
@@ -571,39 +580,50 @@ export default function WorkoutPage() {
     hasWorkoutProgressRef.current = phase === 'workout' && completedSets.length > 0;
   }, [phase, completedSets.length]);
 
-  // Prevent accidental navigation away from active workout
+  // Resume session when entering workout phase (in case it was paused)
+  useEffect(() => {
+    if (phase === 'workout') {
+      resumeSession();
+    }
+  }, [phase, resumeSession]);
+
+  // Handle navigation away from active workout - pause session so it can be resumed
   useEffect(() => {
     // Only set up protection when in workout phase
     if (phase !== 'workout') return;
 
     // Handle browser close/refresh - shows native browser confirmation dialog
+    // This warns users that they might lose timing data (workout state is persisted)
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasWorkoutProgressRef.current) {
+        // Pause the session before leaving
+        pauseSession();
         e.preventDefault();
         e.returnValue = '';
         return '';
       }
     };
 
-    // Handle browser back button - intercepts navigation and shows cancel modal
-    const handlePopState = () => {
-      if (hasWorkoutProgressRef.current) {
-        // Push state back to stay on page and show cancel modal
-        window.history.pushState(null, '', window.location.href);
-        setShowCancelModal(true);
+    // Handle visibility change (tab switch, app switch on mobile)
+    // Pause the session when the page is hidden
+    const handleVisibilityChange = () => {
+      if (document.hidden && hasWorkoutProgressRef.current) {
+        pauseSession();
       }
     };
 
-    // Push an initial history state to detect back button press
-    window.history.pushState(null, '', window.location.href);
     window.addEventListener('beforeunload', handleBeforeUnload);
-    window.addEventListener('popstate', handlePopState);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      window.removeEventListener('popstate', handlePopState);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      // Pause when navigating away via React router (component unmount)
+      if (hasWorkoutProgressRef.current) {
+        pauseSession();
+      }
     };
-  }, [phase]);
+  }, [phase, pauseSession]);
 
   // Load workout data
   useEffect(() => {
@@ -1097,6 +1117,26 @@ export default function WorkoutPage() {
 
     loadWorkout();
   }, [sessionId]);
+
+  // Sync workout state to store for resume functionality
+  useEffect(() => {
+    if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
+      // Extract exercises from blocks
+      const exercisesList = blocks
+        .map(block => block.exercise)
+        .filter((ex): ex is Exercise => ex !== undefined);
+
+      // Extract base blocks (without exercise property) for the store
+      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
+
+      startWorkoutSession(session, baseBlocks, exercisesList);
+    }
+  }, [session, blocks, phase, startWorkoutSession]);
+
+  // Sync current block index to store
+  useEffect(() => {
+    setStoreBlockIndex(currentBlockIndex);
+  }, [currentBlockIndex, setStoreBlockIndex]);
 
   // Fetch available exercises on mount for swap functionality
   useEffect(() => {
@@ -1592,6 +1632,9 @@ export default function WorkoutPage() {
       setCompletedSets(prevSets => [...prevSets, newSet]);
       setCurrentSetNumber(prev => prev + 1);
 
+      // Sync to store for resume functionality
+      logSetToStore(currentBlock.id, newSet);
+
       // Dropset logic: check if we need to show dropset prompt instead of rest timer
       const dropsetsConfigured = (currentBlock.dropsetsPerSet ?? 0) > 0;
       const isNormalSet = setType === 'normal';
@@ -1795,6 +1838,12 @@ export default function WorkoutPage() {
           : set
       )
     );
+
+    // Sync to store for resume functionality
+    const setToUpdate = completedSets.find(s => s.id === setId);
+    if (setToUpdate) {
+      updateSetInStore(setToUpdate.exerciseBlockId, setId, { feedback, quality, qualityReason, rpe });
+    }
   };
 
   const handleSetEdit = async (setId: string, data: { weightKg: number; reps: number; rpe: number; bodyweightData?: BodyweightData }) => {
@@ -1805,18 +1854,29 @@ export default function WorkoutPage() {
     const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
     
     // Update local state using functional update to avoid stale closure
-    setCompletedSets(prevSets => prevSets.map(set => 
-      set.id === setId 
-        ? { 
-            ...set, 
-            weightKg: data.weightKg, 
-            reps: data.reps, 
+    setCompletedSets(prevSets => prevSets.map(set =>
+      set.id === setId
+        ? {
+            ...set,
+            weightKg: data.weightKg,
+            reps: data.reps,
             rpe: data.rpe,
             quality,
             bodyweightData: updatedBodyweightData,
           }
         : set
     ));
+
+    // Sync to store for resume functionality
+    if (existingSet) {
+      updateSetInStore(existingSet.exerciseBlockId, setId, {
+        weightKg: data.weightKg,
+        reps: data.reps,
+        rpe: data.rpe,
+        quality,
+        bodyweightData: updatedBodyweightData,
+      });
+    }
 
     // Update in database
     try {
@@ -1850,14 +1910,17 @@ export default function WorkoutPage() {
   };
 
   const handleDeleteSet = async (setId: string) => {
+    // Find the set before deleting to get the blockId for store sync
+    const setToDelete = completedSets.find(s => s.id === setId);
+
     // Remove from local state using functional update to avoid stale closure
     setCompletedSets(prevSets => {
-      const setToDelete = prevSets.find(s => s.id === setId);
-      if (!setToDelete) return prevSets;
+      const setInPrev = prevSets.find(s => s.id === setId);
+      if (!setInPrev) return prevSets;
 
       // Filter out the deleted set and renumber remaining sets in the same block
       const filteredSets = prevSets.filter(set => set.id !== setId);
-      const blockId = setToDelete.exerciseBlockId;
+      const blockId = setInPrev.exerciseBlockId;
 
       // Renumber sets in the same block (immutably)
       let blockSetNumber = 1;
@@ -1868,6 +1931,11 @@ export default function WorkoutPage() {
         return set;
       });
     });
+
+    // Sync to store for resume functionality
+    if (setToDelete) {
+      deleteSetFromStore(setToDelete.exerciseBlockId, setId);
+    }
 
     // Delete from database
     try {
@@ -2849,7 +2917,8 @@ export default function WorkoutPage() {
         })
         .eq('id', session.id);
 
-      // Navigate back to dashboard
+      // Clear store state and navigate back to dashboard
+      endWorkoutSession();
       router.push('/dashboard');
     } catch (err) {
       console.error('Failed to cancel workout:', err);
@@ -2875,9 +2944,12 @@ export default function WorkoutPage() {
         })
         .eq('id', sessionId);
 
+      // Clear store state and navigate to history
+      endWorkoutSession();
       router.push('/dashboard/history');
     } catch (err) {
       console.error('Failed to complete workout:', err);
+      endWorkoutSession();
       router.push('/dashboard/history');
     }
   };

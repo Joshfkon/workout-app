@@ -14,16 +14,22 @@ interface WorkoutState {
   exerciseBlocks: ExerciseBlock[];
   setLogs: Map<string, SetLog[]>; // blockId -> sets
   currentBlockIndex: number;
-  
+
+  // Pause state
+  isPaused: boolean;
+  pausedAt: number | null; // Timestamp when paused
+
   // Cached exercise data
   exercises: Map<string, Exercise>;
-  
+
   // Timer state
   restTimerEnd: number | null;
-  
+
   // Actions
   startSession: (session: WorkoutSession, blocks: ExerciseBlock[], exercises: Exercise[]) => void;
   endSession: () => void;
+  pauseSession: () => void;
+  resumeSession: () => void;
   setCheckIn: (checkIn: PreWorkoutCheckIn) => void;
   
   // Exercise navigation
@@ -57,18 +63,22 @@ export const useWorkoutStore = create<WorkoutState>()(
       exerciseBlocks: [],
       setLogs: new Map(),
       currentBlockIndex: 0,
+      isPaused: false,
+      pausedAt: null,
       exercises: new Map(),
       restTimerEnd: null,
 
       startSession: (session, blocks, exercises) => {
         const exerciseMap = new Map<string, Exercise>();
         exercises.forEach((ex) => exerciseMap.set(ex.id, ex));
-        
+
         set({
           activeSession: session,
           exerciseBlocks: blocks,
           setLogs: new Map(),
           currentBlockIndex: 0,
+          isPaused: false,
+          pausedAt: null,
           exercises: exerciseMap,
           restTimerEnd: null,
         });
@@ -80,8 +90,27 @@ export const useWorkoutStore = create<WorkoutState>()(
           exerciseBlocks: [],
           setLogs: new Map(),
           currentBlockIndex: 0,
+          isPaused: false,
+          pausedAt: null,
           exercises: new Map(),
           restTimerEnd: null,
+        });
+      },
+
+      pauseSession: () => {
+        const { activeSession } = get();
+        if (!activeSession) return;
+
+        set({
+          isPaused: true,
+          pausedAt: Date.now(),
+        });
+      },
+
+      resumeSession: () => {
+        set({
+          isPaused: false,
+          pausedAt: null,
         });
       },
 
@@ -190,11 +219,17 @@ export const useWorkoutStore = create<WorkoutState>()(
         exerciseBlocks: state.exerciseBlocks,
         setLogs: Array.from(state.setLogs.entries()),
         currentBlockIndex: state.currentBlockIndex,
+        isPaused: state.isPaused,
+        pausedAt: state.pausedAt,
+        exercises: Array.from(state.exercises.entries()),
       }),
       onRehydrateStorage: () => (state) => {
-        // Convert setLogs back to Map after rehydration
+        // Convert Maps back after rehydration
         if (state && Array.isArray(state.setLogs)) {
           state.setLogs = new Map(state.setLogs as any);
+        }
+        if (state && Array.isArray(state.exercises)) {
+          state.exercises = new Map(state.exercises as any);
         }
       },
     }
