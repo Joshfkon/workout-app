@@ -1044,12 +1044,13 @@ export default function NutritionPage() {
       : null;
 
   // Helper function to validate and convert weight (same logic as TDEE calculation)
+  // Returns weight in the user's preferred display unit (weightUnit)
   const validateAndConvertWeight = (weight: number, unit: string | null | undefined): number => {
-    const weightUnit = unit || 'lb';
+    const entryUnit = unit || 'lb';
     let weightInLbs = weight;
     
     // Apply same unit validation as TDEE calculation
-    if (weightUnit === 'lb') {
+    if (entryUnit === 'lb') {
       if (weight > 400) {
         // Weight > 400 lbs is probably in kg, convert
         weightInLbs = weight * 2.20462;
@@ -1059,17 +1060,21 @@ export default function NutritionPage() {
       } else {
         weightInLbs = weight;
       }
-    } else if (weightUnit === 'kg') {
+    } else if (entryUnit === 'kg') {
       if (weight >= 30 && weight <= 150) {
         // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
-        weightInLbs = weight;
+        weightInLbs = weight; // Already in lbs, just mislabeled
       } else {
-        weightInLbs = weight * 2.20462;
+        weightInLbs = weight * 2.20462; // Normal kg to lbs conversion
       }
     }
     
-    // Convert to display unit
-    return convertWeight(weightInLbs, 'lb'); // weightInLbs is already in lbs, convert to display unit
+    // Convert to display unit (weightUnit is the user's preference: 'lb' or 'kg')
+    // weightInLbs is now in lbs, convert to display unit
+    if (weightUnit === 'kg') {
+      return weightInLbs / 2.20462;
+    }
+    return weightInLbs; // Already in lbs, return as-is
   };
 
   // Prepare weight chart data (with unit validation and conversion)
