@@ -498,13 +498,13 @@ export async function getEnhancedDailyDataPoints(
     // Anything outside this range is suspicious and likely a unit error
     
     if (weightUnit === 'lb') {
-      if (w.weight > 500) {
-        // Weight > 500 lbs is probably in kg, convert
+      if (w.weight > 400) {
+        // Weight > 400 lbs is probably in kg, convert (lowered from 500 to catch more errors)
         weightInLbs = w.weight * 2.20462;
         console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too high). Converting to ${weightInLbs.toFixed(1)} lbs.`);
-      } else if (w.weight <= 80 && w.weight >= 30) {
-        // Weight 30-80 lbs when labeled as 'lb' is suspicious - likely in kg
-        // Convert from kg to lbs (includes 80.0, 80.1, etc.)
+      } else if (w.weight <= 85 && w.weight >= 30) {
+        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
+        // Convert from kg to lbs (includes 80.0, 80.1, 85.0, etc.)
         weightInLbs = w.weight * 2.20462;
         console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too low for adult). Converting to ${weightInLbs.toFixed(1)} lbs.`);
       } else {

@@ -17,9 +17,9 @@ SELECT
   weight,
   unit,
   CASE 
-    WHEN unit = 'lb' AND weight BETWEEN 30 AND 80 THEN 
+    WHEN unit = 'lb' AND weight BETWEEN 30 AND 85 THEN 
       'Likely kg mislabeled as lb - will convert to ' || ROUND(weight * 2.20462, 1) || ' lbs'
-    WHEN unit = 'lb' AND weight > 500 THEN 
+    WHEN unit = 'lb' AND weight > 400 THEN 
       'Likely kg mislabeled as lb - will convert to ' || ROUND(weight * 2.20462, 1) || ' lbs'
     WHEN unit = 'kg' AND weight BETWEEN 30 AND 150 THEN 
       'Likely lbs mislabeled as kg - will change unit to lb, keep weight ' || weight
@@ -27,30 +27,32 @@ SELECT
   END as action
 FROM weight_log
 WHERE 
-  (unit = 'lb' AND weight BETWEEN 30 AND 80)
-  OR (unit = 'lb' AND weight > 500)
+  (unit = 'lb' AND weight BETWEEN 30 AND 85)
+  OR (unit = 'lb' AND weight > 400)
   OR (unit = 'kg' AND weight BETWEEN 30 AND 150)
 ORDER BY logged_at DESC;
 */
 
--- Fix weights 30-80 lbs labeled as 'lb' (actually in kg) - convert to lbs
+-- Fix weights 30-85 lbs labeled as 'lb' (actually in kg) - convert to lbs
+-- Increased upper bound to catch 80.1, 80.5, etc.
 UPDATE weight_log
 SET 
   weight = ROUND(weight * 2.20462, 1),
   unit = 'lb'
 WHERE 
   unit = 'lb' 
-  AND weight BETWEEN 30 AND 80
+  AND weight BETWEEN 30 AND 85
   AND weight > 0;
 
--- Fix weights > 500 lbs labeled as 'lb' (actually in kg) - convert to lbs
+-- Fix weights > 400 lbs labeled as 'lb' (actually in kg) - convert to lbs
+-- Lowered threshold from 500 to catch more errors (like 389 lbs)
 UPDATE weight_log
 SET 
   weight = ROUND(weight * 2.20462, 1),
   unit = 'lb'
 WHERE 
   unit = 'lb' 
-  AND weight > 500
+  AND weight > 400
   AND weight > 0;
 
 -- Fix weights 30-150 kg labeled as 'kg' (actually in lbs) - change unit to lb, keep weight
