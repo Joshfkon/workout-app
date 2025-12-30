@@ -279,7 +279,8 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   }
 
   // Analyze last performance to determine progression type
-  const analysis = analyzePerformance(lastPerformance, exercise);
+  // Pass phase-adjusted rep range so analysis uses the correct range for the current phase
+  const analysis = analyzePerformance(lastPerformance, exercise, phaseRepRange);
   
   // Phase-specific progression logic
   let targets: ProgressionTargets;
@@ -490,9 +491,11 @@ interface PerformanceAnalysis {
 
 function analyzePerformance(
   performance: LastSessionPerformance,
-  exercise: Exercise
+  exercise: Exercise,
+  phaseRepRange?: [number, number] // Optional phase-adjusted rep range
 ): PerformanceAnalysis {
-  const [minReps, maxReps] = exercise.defaultRepRange;
+  // Use phase-adjusted range if provided, otherwise fall back to default
+  const [minReps, maxReps] = phaseRepRange || exercise.defaultRepRange;
   const hitTopOfRange = performance.reps >= maxReps;
   const completedAllSets = performance.allSetsCompleted;
   const averageRpeAppropriate = performance.averageRpe >= 7 && performance.averageRpe <= 9;

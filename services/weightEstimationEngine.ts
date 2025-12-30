@@ -415,6 +415,13 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // 1RM ESTIMATION FROM REPS
 // ============================================================
 
+/**
+ * Estimate 1RM from weight, reps, and optional RPE
+ * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy
+ * 
+ * NOTE: This function is duplicated in lib/training/programEngine.ts
+ * Both implementations should be kept in sync. Consider consolidating in the future.
+ */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   if (reps === 1) return weight;
   if (reps > 12) {
@@ -1044,10 +1051,10 @@ export class WeightEstimationEngine {
     const newEstimate = estimate1RM(bestSet.weight, bestSet.reps, bestSet.rpe);
     const existing = this.estimatedMaxes.get(exerciseName.toLowerCase());
     
-    if (!existing || 
-        newEstimate > existing.estimated1RM * 0.95 ||
-        newEstimate > existing.estimated1RM * 1.05) {
-      
+    // Only update if new estimate is significantly different (5% threshold)
+    // This prevents overwriting a better max with a lower one
+    if (!existing) {
+      // No existing estimate - always add
       this.estimatedMaxes.set(exerciseName.toLowerCase(), {
         exercise: exerciseName,
         estimated1RM: Math.round(newEstimate * 10) / 10,
@@ -1055,6 +1062,21 @@ export class WeightEstimationEngine {
         source: 'direct_history',
         lastUpdated: new Date()
       });
+    } else {
+      // Only update if new estimate is significantly higher (>5%) or significantly lower (<95%)
+      // This ensures we track improvements and meaningful declines, but not minor fluctuations
+      const isSignificantlyHigher = newEstimate > existing.estimated1RM * 1.05;
+      const isSignificantlyLower = newEstimate < existing.estimated1RM * 0.95;
+      
+      if (isSignificantlyHigher || isSignificantlyLower) {
+        this.estimatedMaxes.set(exerciseName.toLowerCase(), {
+          exercise: exerciseName,
+          estimated1RM: Math.round(newEstimate * 10) / 10,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date()
+        });
+      }
     }
   }
 }

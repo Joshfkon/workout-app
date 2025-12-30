@@ -79,6 +79,13 @@ export function calculateBodyComposition(
   };
 }
 
+/**
+ * Estimate 1RM from weight, reps, and optional RPE
+ * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy
+ * 
+ * NOTE: This function is duplicated in services/weightEstimationEngine.ts
+ * Both implementations should be kept in sync. Consider consolidating in the future.
+ */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   if (reps === 1) return weight;
   if (reps > 12) {
@@ -215,15 +222,47 @@ export class ProgramEngine {
   
   private async loadCalibrations(): Promise<void> {
     // Try strength_calibrations first, fall back to calibrated_lifts
-    const { data } = await this.supabase
+    // Query strength_calibrations first (primary source)
+    const { data: strengthData } = await this.supabase
+      .from('strength_calibrations')
+      .select('*')
+      .eq('user_id', this.userId)
+      .order('tested_at', { ascending: false });
+    
+    if (strengthData) {
+      for (const row of strengthData) {
+        const exerciseName = row.exercise_name;
+        if (exerciseName && !this.calibrations.has(exerciseName)) {
+          this.calibrations.set(exerciseName, {
+            id: row.id,
+            user_id: row.user_id,
+            exercise_name: exerciseName,
+            tested_weight_kg: row.tested_weight_kg,
+            tested_reps: row.tested_reps,
+            tested_rpe: row.tested_rpe,
+            estimated_1rm_kg: row.estimated_1rm_kg,
+            confidence: row.confidence || 'high',
+            source: 'calibration',
+            percentile_general: row.percentile_general,
+            percentile_trained: row.percentile_trained,
+            strength_level: row.strength_level,
+            tested_at: row.tested_at,
+          });
+        }
+      }
+    }
+    
+    // Fall back to calibrated_lifts if strength_calibrations didn't have data
+    const { data: calibratedData } = await this.supabase
       .from('calibrated_lifts')
       .select('*')
       .eq('user_id', this.userId)
       .order('tested_at', { ascending: false });
     
-    if (data) {
-      for (const row of data) {
+    if (calibratedData) {
+      for (const row of calibratedData) {
         const exerciseName = row.lift_name || row.exercise_name;
+        // Only add if not already in calibrations (strength_calibrations takes precedence)
         if (exerciseName && !this.calibrations.has(exerciseName)) {
           this.calibrations.set(exerciseName, {
             id: row.id,
@@ -359,14 +398,15 @@ export class ProgramEngine {
     let localLimit = 80;
     let minSFRThreshold = 0.6;
     
-    if (profile.age >= 45) {
-      systemicLimit *= 0.85;
-      localLimit *= 0.9;
-      minSFRThreshold = 0.7;
-    } else if (profile.age >= 55) {
+    // Check more specific age ranges first (55+ before 45+)
+    if (profile.age >= 55) {
       systemicLimit *= 0.7;
       localLimit *= 0.8;
       minSFRThreshold = 0.8;
+    } else if (profile.age >= 45) {
+      systemicLimit *= 0.85;
+      localLimit *= 0.9;
+      minSFRThreshold = 0.7;
     }
     
     if (profile.experience === 'novice') {
