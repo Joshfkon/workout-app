@@ -34,7 +34,12 @@ type Goal = 'bulk' | 'cut' | 'maintain';
  * - Cutting: shorter rest for metabolic demand
  * - Bulking: full rest for maximum performance
  */
-function getRestPeriod(isCompound: boolean, goal: Goal): number {
+function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
+  // Ab exercises need shorter rest periods (recover faster)
+  if (primaryMuscle === 'abs') {
+    return goal === 'cut' ? 30 : 45;
+  }
+
   if (goal === 'cut') {
     return isCompound ? 120 : 60;  // 2min / 1min
   }
@@ -307,7 +312,7 @@ export default function MesocyclePage() {
               target_rep_range: exercise.default_rep_range || [8, 12],
               target_rir: exercise.default_rir || 2,
               target_weight_kg: 0, // Will be filled from history or user input
-              target_rest_seconds: getRestPeriod(isCompound, userGoal),
+              target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
               suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
               warmup_protocol: { sets: warmupSets },
             });

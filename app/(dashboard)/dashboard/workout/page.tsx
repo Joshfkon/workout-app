@@ -143,7 +143,12 @@ const QUICK_TEMPLATES = [
 /**
  * Get rest period based on exercise type and user's goal
  */
-function getRestPeriod(isCompound: boolean, goal: Goal): number {
+function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
+  // Ab exercises need shorter rest periods (recover faster)
+  if (primaryMuscle === 'abs') {
+    return goal === 'cut' ? 30 : 45;
+  }
+
   if (goal === 'cut') {
     return isCompound ? 120 : 60;
   }
@@ -1202,7 +1207,7 @@ export default function WorkoutPage() {
               target_rep_range: exercise.default_rep_range || [8, 12],
               target_rir: exercise.default_rir || 2,
               target_weight_kg: 0,
-              target_rest_seconds: getRestPeriod(isCompound, userGoal),
+              target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
               suggestion_reason: `${todayWorkout.dayName} - Week ${activeMeso.current_week}`,
               warmup_protocol: { sets: warmupSets },
             });
