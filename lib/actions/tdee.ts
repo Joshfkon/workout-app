@@ -32,6 +32,16 @@ export interface TDEEData {
   currentWeight: number | null;
   regressionAnalysis: RegressionAnalysis | null;
   isEnhanced: boolean; // Whether enhanced TDEE was used
+  debugData?: {
+    weightCaloriePairs: Array<{
+      date: string;
+      weight: number;
+      calories: number;
+      isComplete: boolean;
+    }>;
+    totalDataPoints: number;
+    validPairs: number;
+  };
 }
 
 /**
@@ -129,16 +139,30 @@ export async function getAdaptiveTDEE(
     isComplete: dp.isComplete,
   }));
 
-  // Log weight/calorie pairs for debugging (only in development)
-  if (process.env.NODE_ENV === 'development') {
-    const validPairs = basicDataPoints.filter(dp => dp.weight > 0 && dp.calories > 0);
-    console.log('[TDEE] Weight/Calorie pairs being used:', validPairs.map(dp => ({
+  // Prepare debug data for logging and return
+  const validPairs = basicDataPoints.filter(dp => dp.weight > 0 && dp.calories > 0);
+  const debugData = {
+    weightCaloriePairs: validPairs.map(dp => ({
+      date: dp.date,
+      weight: dp.weight,
+      calories: dp.calories,
+      isComplete: dp.isComplete,
+    })),
+    totalDataPoints: basicDataPoints.length,
+    validPairs: validPairs.length,
+  };
+
+  // Log weight/calorie pairs for debugging (safe for production)
+  try {
+    console.log('[TDEE] Weight/Calorie pairs being used:', debugData.weightCaloriePairs.map(dp => ({
       date: dp.date,
       weight: `${dp.weight.toFixed(1)} lbs`,
       calories: `${dp.calories.toFixed(0)} cal`,
       isComplete: dp.isComplete,
     })));
-    console.log(`[TDEE] Total data points: ${basicDataPoints.length}, With weight & calories: ${validPairs.length}`);
+    console.log(`[TDEE] Total data points: ${debugData.totalDataPoints}, With weight & calories: ${debugData.validPairs}`);
+  } catch (e) {
+    // Silently fail if console.log causes issues
   }
 
   // Check data quality using basic data points
@@ -224,6 +248,7 @@ export async function getAdaptiveTDEE(
     currentWeight,
     regressionAnalysis,
     isEnhanced,
+    debugData, // Include debug data so it can be displayed in UI
   };
 }
 
