@@ -2979,7 +2979,7 @@ export default function WorkoutPage() {
     }
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
-        <LoadingAnimation type="random" size="lg" />
+        <LoadingAnimation type="spinner" size="lg" />
         <p className="mt-4 text-surface-400">Loading workout...</p>
       </div>
     );
