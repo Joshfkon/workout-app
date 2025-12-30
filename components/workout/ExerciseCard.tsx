@@ -948,7 +948,21 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
             </div>
           )}
-          <div className={`flex items-center gap-1 ${hideHeader ? 'flex-1 justify-between' : ''}`}>
+          <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-between' : ''}`}>
+            {/* Watch Form button - compact icon only */}
+            {isActive && (
+              <a
+                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-red-500 transition-colors"
+                title="Watch Form"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+              </a>
+            )}
             {/* Set controls */}
             {onTargetSetsChange && isActive && (
               <div className="flex items-center gap-1">
@@ -1005,6 +1019,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </svg>
               </button>
             )}
+            {/* Progress badge */}
             <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
               {completedSets.length}/{block.targetSets}
             </Badge>
@@ -1110,19 +1125,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   </div>
                 )}
 
-                {/* Exercise resources */}
+                {/* Exercise resources - only show Exercise Info link here (Watch Form is in header) */}
                 <div className="flex gap-2">
-                  <a
-                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
-                  >
-                    <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                    </svg>
-                    Watch Form
-                  </a>
                   <a
                     href={`https://exrx.net/Lists/Directory`}
                     target="_blank"
@@ -1140,24 +1144,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
-        {/* Quick links when no history */}
-        {!exerciseHistory && (
-          <div className="mt-3 pt-3 border-t border-surface-800">
-            <div className="flex gap-2">
-              <a
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
-              >
-                <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-                Watch Form
-              </a>
-            </div>
-          </div>
-        )}
+        {/* Quick links when no history - removed Watch Form (now in header) */}
       </div>
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
@@ -2033,17 +2020,6 @@ export const ExerciseCard = memo(function ExerciseCard({
               + Add Set
             </button>
           )}
-          <a
-            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-surface-400 hover:text-surface-200 transition-colors flex items-center gap-1"
-          >
-            <svg className="w-3 h-3 text-red-500" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-            </svg>
-            Watch Form
-          </a>
           {onBlockNoteUpdate && (
             <button
               onClick={() => setIsEditingNote(true)}
