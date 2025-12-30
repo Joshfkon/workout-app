@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { Button } from '@/components/ui';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from '@/lib/utils';
 
 export function ResumeWorkoutBanner() {
   const router = useRouter();
@@ -42,7 +42,7 @@ export function ResumeWorkoutBanner() {
     ? new Date(activeSession.startedAt)
     : null;
   const timeAgo = startedAt
-    ? formatDistanceToNow(startedAt, { addSuffix: true })
+    ? formatDistanceToNow(startedAt)
     : null;
 
   const handleResume = () => {
