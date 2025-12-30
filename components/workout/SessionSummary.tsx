@@ -16,11 +16,25 @@ interface ExerciseWithHistory {
   };
 }
 
+interface AMRAPCalibration {
+  exerciseName: string;
+  predictedMaxReps: number;
+  actualMaxReps: number;
+  bias: number;
+  biasInterpretation: string;
+  confidenceLevel: 'low' | 'medium' | 'high';
+  lastCalibrated: Date;
+  dataPoints: number;
+  exerciseId?: string;
+  weightKg: number;
+}
+
 interface SessionSummaryProps {
   session: WorkoutSession;
   exerciseBlocks: ExerciseBlock[];
   allSets: SetLog[];
   exerciseHistories?: Record<string, ExerciseWithHistory>;
+  amrapCalibrations?: AMRAPCalibration[];
   unit?: WeightUnit;
   onSubmit?: (data: {
     sessionRpe: number;
@@ -52,6 +66,7 @@ export function SessionSummary({
   exerciseBlocks,
   allSets,
   exerciseHistories,
+  amrapCalibrations = [],
   unit = 'kg',
   onSubmit,
   readOnly = false,
@@ -405,13 +420,78 @@ export function SessionSummary({
               </div>
             ))}
             {personalRecords.length > 3 && (
-              <button 
+              <button
                 onClick={() => setShowAllPRs(!showAllPRs)}
                 className="text-sm text-yellow-400 hover:text-yellow-300"
               >
                 {showAllPRs ? 'Show less' : `+${personalRecords.length - 3} more PRs`}
               </button>
             )}
+          </div>
+        </Card>
+      )}
+
+      {/* AMRAP Calibration Results */}
+      {amrapCalibrations.length > 0 && (
+        <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-500/30">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">🎯</span>
+            <h3 className="font-semibold text-cyan-400">RPE Calibration Results</h3>
+          </div>
+          <p className="text-xs text-surface-400 mb-4">
+            AMRAP sets help calibrate your RPE perception for more accurate training prescriptions.
+          </p>
+          <div className="space-y-3">
+            {amrapCalibrations.map((cal, idx) => {
+              const biasLevel = cal.bias >= 1.5 ? 'sandbagging' : cal.bias <= -1.5 ? 'overreaching' : 'accurate';
+              const biasColor = biasLevel === 'accurate' ? 'green' : biasLevel === 'sandbagging' ? 'yellow' : 'red';
+              const colorClasses = {
+                green: { bg: 'bg-success-500/20', text: 'text-success-400', border: 'border-success-500/30' },
+                yellow: { bg: 'bg-warning-500/20', text: 'text-warning-400', border: 'border-warning-500/30' },
+                red: { bg: 'bg-danger-500/20', text: 'text-danger-400', border: 'border-danger-500/30' },
+              };
+              const colors = colorClasses[biasColor];
+
+              return (
+                <div key={idx} className={`p-3 rounded-lg border ${colors.border} ${colors.bg}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-surface-100">{cal.exerciseName}</span>
+                    <Badge
+                      variant={biasLevel === 'accurate' ? 'success' : biasLevel === 'sandbagging' ? 'warning' : 'danger'}
+                      size="sm"
+                    >
+                      {biasLevel === 'accurate' && 'Well Calibrated'}
+                      {biasLevel === 'sandbagging' && 'Sandbagging'}
+                      {biasLevel === 'overreaching' && 'Pushing Too Hard'}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center mb-2">
+                    <div>
+                      <p className="text-xs text-surface-500">Predicted</p>
+                      <p className="text-lg font-semibold text-surface-200">{cal.predictedMaxReps.toFixed(0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-surface-500">Actual</p>
+                      <p className="text-lg font-semibold text-surface-100">{cal.actualMaxReps}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-surface-500">Bias</p>
+                      <p className={`text-lg font-semibold ${colors.text}`}>
+                        {cal.bias >= 0 ? '+' : ''}{cal.bias.toFixed(1)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className={`text-xs ${colors.text}`}>{cal.biasInterpretation}</p>
+                  <div className="flex items-center gap-2 mt-2 text-xs text-surface-500">
+                    <span>@ {displayWeight(cal.weightKg)}{weightUnit}</span>
+                    <span>•</span>
+                    <span className="capitalize">{cal.confidenceLevel} confidence</span>
+                    <span>•</span>
+                    <span>{cal.dataPoints} data points</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}
