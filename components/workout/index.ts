@@ -21,3 +21,6 @@ export { SegmentedControl } from './SegmentedControl';
 export { PlateCalculator } from './PlateCalculator';
 export { PlateCalculatorModal } from './PlateCalculatorModal';
 
+// Resume Banner
+export { ResumeWorkoutBanner } from './ResumeWorkoutBanner';
+

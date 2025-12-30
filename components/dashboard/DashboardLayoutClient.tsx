@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
+import { ResumeWorkoutBanner } from '@/components/workout';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -68,6 +69,9 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
       {/* Bottom navigation for mobile */}
       <BottomNavigation />
+
+      {/* Resume workout banner - shows when there's an active workout */}
+      <ResumeWorkoutBanner />
     </div>
   );
 }
