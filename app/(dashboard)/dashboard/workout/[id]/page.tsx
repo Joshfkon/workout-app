@@ -1082,25 +1082,15 @@ export default function WorkoutPage() {
   useEffect(() => {
     if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
       // Extract exercises from blocks
-      const exercises = blocks
+      const exercisesList = blocks
         .map(block => block.exercise)
         .filter((ex): ex is Exercise => ex !== undefined);
 
       // Extract base blocks (without exercise property) for the store
-      const baseBlocks: ExerciseBlock[] = blocks.map(block => ({
-        id: block.id,
-        workoutSessionId: block.workoutSessionId,
-        exerciseId: block.exerciseId,
-        order: block.order,
-        targetSets: block.targetSets,
-        targetRepRange: block.targetRepRange,
-        targetRpe: block.targetRpe,
-        restSeconds: block.restSeconds,
-        notes: block.notes,
-        substitutedFrom: block.substitutedFrom,
-      }));
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise, ...rest }) => rest);
 
-      startWorkoutSession(session, baseBlocks, exercises);
+      startWorkoutSession(session, baseBlocks, exercisesList);
     }
   }, [session, blocks, phase, startWorkoutSession]);
 
