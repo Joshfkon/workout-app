@@ -1087,8 +1087,7 @@ export default function WorkoutPage() {
         .filter((ex): ex is Exercise => ex !== undefined);
 
       // Extract base blocks (without exercise property) for the store
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise, ...rest }) => rest);
+      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
 
       startWorkoutSession(session, baseBlocks, exercisesList);
     }
