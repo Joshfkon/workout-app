@@ -251,11 +251,17 @@ export default function NutritionPage() {
 
   const supabase = createUntypedClient();
 
+  // Track when component is mounted on client
+  useEffect(() => {
+    setIsMounted(true);
+    console.log('[Nutrition] Component mounted on client');
+  }, []);
+
   // Initialize date on client side only (after mount)
   useEffect(() => {
     if (isMounted && selectedDate === null) {
       const initialDate = getLocalDateString();
-      console.log('[Nutrition] Initializing date on client:', initialDate, 'isMounted:', isMounted);
+      console.log('[Nutrition] Initializing date on client:', initialDate);
       setSelectedDate(initialDate);
     }
   }, [isMounted, selectedDate]);
