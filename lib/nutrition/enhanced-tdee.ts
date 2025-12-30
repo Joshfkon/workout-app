@@ -1,17 +1,12 @@
 /**
  * Enhanced Adaptive TDEE Estimation with Activity Data
- *
- * Extends the base adaptive TDEE model to incorporate step data and
- * workout calories for more accurate daily calorie burn estimates.
+ * 
+ * UPDATED: Now includes smoothed weight averaging and outlier exclusion
+ * for more robust regression with noisy daily weight data.
  *
  * The enhanced model:
  * Daily TDEE = BMR + (beta x net_steps) + (gamma x workout_expenditure)
  * Where BMR = alpha x weight (the base burn rate we already estimate)
- *
- * This separates the signal:
- * - alpha captures resting metabolism
- * - beta captures step efficiency
- * - gamma captures workout calorie accuracy
  */
 
 import type {
@@ -32,6 +27,10 @@ interface EnhancedTDEEOptions {
   minDataPoints?: number;
   /** Whether to exclude incomplete days (default: true) */
   excludeIncomplete?: boolean;
+  /** Window size for weight smoothing (default: 3) */
+  smoothingWindow?: number;
+  /** Standard deviations for outlier exclusion (default: 2.0) */
+  outlierThreshold?: number;
 }
 
 interface EnhancedRegressionResult {
@@ -40,6 +39,16 @@ interface EnhancedRegressionResult {
   gamma: number; // Workout multiplier
   standardError: number;
   rSquared: number;
+  outliersExcluded: number; // Track how many outliers were removed
+}
+
+interface RegressionPair {
+  weight: number;
+  calories: number;
+  netSteps: number;
+  workoutCalories: number;
+  actualChange: number;
+  date: string; // For debugging/logging
 }
 
 // === CONSTANTS ===
@@ -63,20 +72,28 @@ const GAMMA_MAX = 1.5;
 const LEARNING_RATE = 0.01;
 const ITERATIONS = 100;
 
+// Smoothing and outlier defaults
+const DEFAULT_SMOOTHING_WINDOW = 3;
+const DEFAULT_OUTLIER_THRESHOLD = 2.0; // Standard deviations
+
 // === MAIN FUNCTIONS ===
 
 /**
  * Calculate enhanced TDEE using activity data (steps + workouts).
- *
- * Uses gradient descent to find optimal alpha, beta, gamma parameters
- * that minimize prediction error.
+ * Now with smoothed weight data and outlier exclusion.
  */
 export function calculateEnhancedTDEE(
   dataPoints: EnhancedDailyDataPoint[],
   currentWeight: number,
   options: EnhancedTDEEOptions = {}
 ): EnhancedTDEEEstimate | null {
-  const { windowDays = 21, minDataPoints = 14, excludeIncomplete = true } = options;
+  const {
+    windowDays = 21,
+    minDataPoints = 14,
+    excludeIncomplete = true,
+    smoothingWindow = DEFAULT_SMOOTHING_WINDOW,
+    outlierThreshold = DEFAULT_OUTLIER_THRESHOLD,
+  } = options;
 
   // Filter data points
   const filtered = filterDataPoints(dataPoints, windowDays, excludeIncomplete);
@@ -123,8 +140,8 @@ export function calculateEnhancedTDEE(
     };
   }
 
-  // Run enhanced regression with gradient descent
-  const result = runEnhancedRegression(filtered);
+  // Run enhanced regression with smoothing and outlier exclusion
+  const result = runEnhancedRegression(filtered, smoothingWindow, outlierThreshold);
 
   if (!result) {
     return null;
@@ -140,12 +157,16 @@ export function calculateEnhancedTDEE(
   const avgWorkoutExpenditure = result.gamma * avgWorkout;
   const estimatedTDEE = baseTDEE + avgStepExpenditure + avgWorkoutExpenditure;
 
-  // Calculate confidence
-  const confidence = calculateConfidence(result, filtered.length);
-  const confidenceScore = calculateConfidenceScore(result.standardError, filtered.length);
+  // Calculate confidence (boosted slightly due to outlier handling)
+  const effectiveDataPoints = filtered.length - result.outliersExcluded;
+  const confidence = calculateConfidence(result, effectiveDataPoints);
+  const confidenceScore = calculateConfidenceScore(
+    result.standardError,
+    effectiveDataPoints
+  );
 
   // Build history from rolling calculations
-  const estimateHistory = buildEstimateHistory(filtered, windowDays);
+  const estimateHistory = buildEstimateHistory(filtered, windowDays, smoothingWindow, outlierThreshold);
 
   return {
     baseBurnRate: result.alpha,
@@ -164,6 +185,7 @@ export function calculateEnhancedTDEE(
     confidence,
     confidenceScore,
     dataPointsUsed: filtered.length,
+    dataPointsAfterOutlierExclusion: effectiveDataPoints,
     windowDays,
     standardError: result.standardError,
     lastUpdated: new Date(),
@@ -228,36 +250,44 @@ export function getBestEnhancedEstimate(
   return basicEstimate;
 }
 
-// === REGRESSION ALGORITHM ===
+// === SMOOTHING FUNCTIONS ===
 
 /**
- * Run gradient descent to find optimal alpha, beta, gamma parameters.
- *
- * Model:
- *   predicted_TDEE[i] = alpha * weight[i] + beta * netSteps[i] + gamma * workoutCal[i]
- *   predicted_change[i] = (calories[i] - predicted_TDEE[i]) / 3500
- *   actual_change[i] = weight[i+1] - weight[i]
- *
- * Minimize: Σ(predicted_change[i] - actual_change[i])²
+ * Calculate smoothed weight using a rolling average.
+ * This reduces day-to-day noise from water weight, sodium, etc.
+ * Uses a centered window (includes future days) for better smoothing.
  */
-function runEnhancedRegression(
-  data: EnhancedDailyDataPoint[]
-): EnhancedRegressionResult | null {
-  if (data.length < 7) return null;
+function getSmoothedWeight(
+  data: EnhancedDailyDataPoint[],
+  index: number,
+  window: number
+): number {
+  // For early days, use what we have (centered where possible)
+  const halfWindow = Math.floor(window / 2);
+  const start = Math.max(0, index - halfWindow);
+  const end = Math.min(data.length - 1, index + halfWindow);
+  
+  let sum = 0;
+  let count = 0;
+  
+  for (let i = start; i <= end; i++) {
+    if (data[i].weight > 0) {
+      sum += data[i].weight;
+      count++;
+    }
+  }
+  
+  return count > 0 ? sum / count : data[index].weight;
+}
 
-  // Initialize parameters
-  let alpha = INITIAL_ALPHA;
-  let beta = INITIAL_BETA;
-  let gamma = INITIAL_GAMMA;
-
-  // Create consecutive day pairs
-  const pairs: Array<{
-    weight: number;
-    calories: number;
-    netSteps: number;
-    workoutCalories: number;
-    actualChange: number;
-  }> = [];
+/**
+ * Create regression pairs using smoothed weight changes.
+ */
+function createSmoothedPairs(
+  data: EnhancedDailyDataPoint[],
+  smoothingWindow: number
+): RegressionPair[] {
+  const pairs: RegressionPair[] = [];
 
   for (let i = 0; i < data.length - 1; i++) {
     if (
@@ -265,53 +295,184 @@ function runEnhancedRegression(
       data[i + 1].weight > 0 &&
       data[i].calories > 0
     ) {
+      const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
+      const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
+      
       pairs.push({
-        weight: data[i].weight,
+        weight: data[i].weight, // Use actual weight for TDEE calculation
         calories: data[i].calories,
         netSteps: data[i].netSteps,
         workoutCalories: data[i].workoutCalories,
-        actualChange: data[i + 1].weight - data[i].weight,
+        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Smoothed change
+        date: data[i].date,
       });
     }
   }
 
+  return pairs;
+}
+
+// === OUTLIER DETECTION ===
+
+/**
+ * Calculate residuals for outlier detection.
+ */
+function calculateResiduals(
+  pairs: RegressionPair[],
+  alpha: number,
+  beta: number,
+  gamma: number
+): number[] {
+  return pairs.map((pair) => {
+    const predictedTDEE =
+      alpha * pair.weight +
+      beta * pair.netSteps +
+      gamma * pair.workoutCalories;
+    const predictedChange = (pair.calories - predictedTDEE) / CALORIES_PER_LB;
+    return predictedChange - pair.actualChange;
+  });
+}
+
+/**
+ * Exclude outliers based on residual standard deviations.
+ * Returns filtered pairs and count of excluded points.
+ */
+function excludeOutliers(
+  pairs: RegressionPair[],
+  alpha: number,
+  beta: number,
+  gamma: number,
+  threshold: number
+): { filtered: RegressionPair[]; excluded: number } {
+  const residuals = calculateResiduals(pairs, alpha, beta, gamma);
+  const mean = average(residuals);
+  const sd = calculateStandardDeviation(residuals);
+
+  // If SD is very small, don't exclude anything (data is already clean)
+  if (sd < 0.1) {
+    return { filtered: pairs, excluded: 0 };
+  }
+
+  const filtered = pairs.filter((_, i) => {
+    const zScore = Math.abs((residuals[i] - mean) / sd);
+    return zScore <= threshold;
+  });
+
+  return {
+    filtered,
+    excluded: pairs.length - filtered.length,
+  };
+}
+
+// === REGRESSION ALGORITHM ===
+
+/**
+ * Run gradient descent with smoothed weights and outlier exclusion.
+ * 
+ * Two-pass approach:
+ * 1. First pass: Run regression on smoothed data to get initial estimates
+ * 2. Identify and exclude outliers based on residuals
+ * 3. Second pass: Re-run regression on cleaned data
+ */
+function runEnhancedRegression(
+  data: EnhancedDailyDataPoint[],
+  smoothingWindow: number,
+  outlierThreshold: number
+): EnhancedRegressionResult | null {
+  if (data.length < 7) return null;
+
+  // Create pairs with smoothed weight changes
+  let pairs = createSmoothedPairs(data, smoothingWindow);
+
   if (pairs.length < 5) return null;
 
-  // Gradient descent
+  // === FIRST PASS: Initial regression ===
+  let { alpha, beta, gamma } = runGradientDescent(pairs);
+
+  // === OUTLIER EXCLUSION ===
+  const { filtered: cleanedPairs, excluded } = excludeOutliers(
+    pairs,
+    alpha,
+    beta,
+    gamma,
+    outlierThreshold
+  );
+
+  // Need at least 5 pairs after exclusion
+  if (cleanedPairs.length < 5) {
+    // Fall back to using all data if too many excluded
+    console.warn(`Too many outliers excluded (${excluded}), using all data`);
+  } else {
+    pairs = cleanedPairs;
+  }
+
+  // === SECOND PASS: Re-run regression on cleaned data ===
+  const finalParams = runGradientDescent(pairs);
+  alpha = finalParams.alpha;
+  beta = finalParams.beta;
+  gamma = finalParams.gamma;
+
+  // Calculate final error metrics on cleaned data
+  const residuals = calculateResiduals(pairs, alpha, beta, gamma);
+  const standardError = calculateStandardDeviation(residuals);
+
+  // Calculate R²
+  const actualChanges = pairs.map((p) => p.actualChange);
+  const meanActualChange = average(actualChanges);
+  const ssTot = actualChanges.reduce(
+    (sum, ac) => sum + (ac - meanActualChange) ** 2,
+    0
+  );
+  const ssRes = residuals.reduce((sum, r) => sum + r ** 2, 0);
+  const rSquared = ssTot > 0 ? Math.max(0, 1 - ssRes / ssTot) : 0;
+
+  return {
+    alpha: Math.round(alpha * 10) / 10,
+    beta: Math.round(beta * 1000) / 1000,
+    gamma: Math.round(gamma * 100) / 100,
+    standardError,
+    rSquared,
+    outliersExcluded: excluded,
+  };
+}
+
+/**
+ * Core gradient descent optimization.
+ * Separated out so it can be called multiple times (for two-pass approach).
+ */
+function runGradientDescent(pairs: RegressionPair[]): {
+  alpha: number;
+  beta: number;
+  gamma: number;
+} {
+  let alpha = INITIAL_ALPHA;
+  let beta = INITIAL_BETA;
+  let gamma = INITIAL_GAMMA;
+
   for (let iter = 0; iter < ITERATIONS; iter++) {
     let alphaGradient = 0;
     let betaGradient = 0;
     let gammaGradient = 0;
 
     for (const pair of pairs) {
-      // Predicted TDEE for this day
       const predictedTDEE =
         alpha * pair.weight +
         beta * pair.netSteps +
         gamma * pair.workoutCalories;
 
-      // Predicted weight change
       const predictedChange = (pair.calories - predictedTDEE) / CALORIES_PER_LB;
-
-      // Error
       const error = predictedChange - pair.actualChange;
 
-      // Gradients (partial derivatives of error^2)
-      // d/d(alpha) of error = -weight / 3500
-      // d/d(beta) of error = -netSteps / 3500
-      // d/d(gamma) of error = -workoutCalories / 3500
       alphaGradient += error * (-pair.weight / CALORIES_PER_LB);
       betaGradient += error * (-pair.netSteps / CALORIES_PER_LB);
       gammaGradient += error * (-pair.workoutCalories / CALORIES_PER_LB);
     }
 
-    // Average gradients
     const n = pairs.length;
     alphaGradient /= n;
     betaGradient /= n;
     gammaGradient /= n;
 
-    // Update parameters (gradient descent step)
     alpha -= LEARNING_RATE * alphaGradient;
     beta -= LEARNING_RATE * betaGradient;
     gamma -= LEARNING_RATE * gammaGradient;
@@ -322,36 +483,7 @@ function runEnhancedRegression(
     gamma = Math.max(GAMMA_MIN, Math.min(GAMMA_MAX, gamma));
   }
 
-  // Calculate final error metrics
-  const residuals: number[] = [];
-  for (const pair of pairs) {
-    const predictedTDEE =
-      alpha * pair.weight + beta * pair.netSteps + gamma * pair.workoutCalories;
-    const predictedChange = (pair.calories - predictedTDEE) / CALORIES_PER_LB;
-    const residual = predictedChange - pair.actualChange;
-    residuals.push(residual);
-  }
-
-  const standardError = calculateStandardDeviation(residuals);
-
-  // Calculate R²
-  const actualChanges = pairs.map((p) => p.actualChange);
-  const meanActualChange =
-    actualChanges.reduce((a, b) => a + b, 0) / actualChanges.length;
-  const ssTot = actualChanges.reduce(
-    (sum, ac) => sum + (ac - meanActualChange) ** 2,
-    0
-  );
-  const ssRes = residuals.reduce((sum, r) => sum + r ** 2, 0);
-  const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : 0;
-
-  return {
-    alpha: Math.round(alpha * 10) / 10,
-    beta: Math.round(beta * 1000) / 1000,
-    gamma: Math.round(gamma * 100) / 100,
-    standardError,
-    rSquared,
-  };
+  return { alpha, beta, gamma };
 }
 
 // === HELPER FUNCTIONS ===
@@ -377,15 +509,15 @@ function filterDataPoints(
 
 function calculateConfidence(
   result: EnhancedRegressionResult,
-  dataPoints: number
+  effectiveDataPoints: number
 ): 'unstable' | 'stabilizing' | 'stable' {
   // Stable: low error, decent R², enough data
-  if (result.standardError < 0.5 && result.rSquared > 0.25 && dataPoints >= 18) {
+  if (result.standardError < 0.5 && result.rSquared > 0.25 && effectiveDataPoints >= 18) {
     return 'stable';
   }
 
   // Stabilizing: trending toward stability
-  if (result.standardError < 1.0 || dataPoints >= 14) {
+  if (result.standardError < 1.0 || effectiveDataPoints >= 14) {
     return 'stabilizing';
   }
 
@@ -393,7 +525,6 @@ function calculateConfidence(
 }
 
 function calculateConfidenceScore(standardError: number, dataPoints: number): number {
-  // Score from 0-100
   const dataScore = Math.min(dataPoints / 28, 1) * 50;
   const accuracyScore = Math.max(0, 50 - standardError * 30);
   return Math.round(dataScore + accuracyScore);
@@ -401,7 +532,9 @@ function calculateConfidenceScore(standardError: number, dataPoints: number): nu
 
 function buildEstimateHistory(
   dataPoints: EnhancedDailyDataPoint[],
-  windowDays: number
+  windowDays: number,
+  smoothingWindow: number,
+  outlierThreshold: number
 ): BurnRateHistoryPoint[] {
   const history: BurnRateHistoryPoint[] = [];
   const sorted = [...dataPoints].sort((a, b) => a.date.localeCompare(b.date));
@@ -411,13 +544,16 @@ function buildEstimateHistory(
   // Calculate rolling estimates starting from day 7
   for (let i = 7; i <= sorted.length; i++) {
     const windowData = sorted.slice(Math.max(0, i - windowDays), i);
-    const result = runEnhancedRegression(windowData);
+    const result = runEnhancedRegression(windowData, smoothingWindow, outlierThreshold);
 
     if (result) {
       history.push({
         date: sorted[i - 1].date,
         burnRate: result.alpha,
-        confidence: calculateConfidenceScore(result.standardError, windowData.length),
+        confidence: calculateConfidenceScore(
+          result.standardError,
+          windowData.length - result.outliersExcluded
+        ),
       });
     }
   }

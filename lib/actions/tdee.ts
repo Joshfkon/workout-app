@@ -15,16 +15,23 @@ import {
   type BurnRateHistoryPoint,
   type RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
+import {
+  calculateEnhancedTDEE,
+  getBestEnhancedEstimate,
+} from '@/lib/nutrition/enhanced-tdee';
+import type { EnhancedTDEEEstimate } from '@/types/wearable';
+import { getEnhancedDailyDataPoints } from '@/lib/actions/wearable';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
 
 export interface TDEEData {
-  adaptiveEstimate: TDEEEstimate | null;
+  adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   formulaEstimate: TDEEEstimate;
-  bestEstimate: TDEEEstimate;
+  bestEstimate: TDEEEstimate | EnhancedTDEEEstimate;
   predictions: WeightPrediction[];
   dataQuality: DataQualityCheck;
   currentWeight: number | null;
   regressionAnalysis: RegressionAnalysis | null;
+  isEnhanced: boolean; // Whether enhanced TDEE was used
 }
 
 /**
@@ -62,28 +69,6 @@ export async function getAdaptiveTDEE(
       } | null;
     };
 
-  // Get weight log entries (last 35 days for a good window)
-  const thirtyFiveDaysAgo = new Date();
-  thirtyFiveDaysAgo.setDate(thirtyFiveDaysAgo.getDate() - 35);
-
-  const { data: weightLogs } = await supabase
-    .from('weight_log')
-    .select('logged_at, weight, unit')
-    .eq('user_id', user.id)
-    .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
-    .order('logged_at', { ascending: true }) as {
-      data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
-    };
-
-  // Get food log entries (daily totals)
-  const { data: foodLogs } = await supabase
-    .from('food_log')
-    .select('logged_at, calories')
-    .eq('user_id', user.id)
-    .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0]) as {
-      data: Array<{ logged_at: string; calories: number }> | null;
-    };
-
   // Get nutrition targets
   const { data: nutritionTargets } = await supabase
     .from('nutrition_targets')
@@ -93,74 +78,76 @@ export async function getAdaptiveTDEE(
       data: { calories?: number } | null;
     };
 
-  // Aggregate food logs by day
-  const dailyCalories: Record<string, { total: number; entries: number }> = {};
-  for (const log of foodLogs || []) {
-    const date = log.logged_at;
-    if (!dailyCalories[date]) {
-      dailyCalories[date] = { total: 0, entries: 0 };
-    }
-    dailyCalories[date].total += log.calories || 0;
-    dailyCalories[date].entries += 1;
-  }
-
-  // Build data points
-  const dataPoints: DailyDataPoint[] = [];
-  const weightByDate: Record<string, number> = {};
-
-  // Get user's preferred weight unit (default to lbs)
-  // Note: userPrefs doesn't include weight_unit in the type, so we'll fetch it separately or use 'lb' as default
-  const preferredUnit = 'lb'; // Default - weights will be converted based on their stored unit
-
-  for (const wl of weightLogs || []) {
-    // Convert weight to lbs for TDEE calculations (which use CALORIES_PER_LB)
-    let weightInLbs = wl.weight;
-    const weightUnit = wl.unit || preferredUnit;
-    if (weightUnit === 'kg') {
-      weightInLbs = wl.weight * 2.20462;
-    }
-    weightByDate[wl.logged_at] = weightInLbs;
-  }
-
-  // Create data points for days where we have both weight and calories
-  const allDates = Array.from(new Set([
-    ...Object.keys(dailyCalories),
-    ...Object.keys(weightByDate),
-  ]));
-
-  for (const date of allDates) {
-    const weight = weightByDate[date];
-    const calories = dailyCalories[date]?.total || 0;
-    const entries = dailyCalories[date]?.entries || 0;
-
-    if (weight && calories > 0) {
-      dataPoints.push({
-        date,
-        weight,
-        calories,
-        isComplete: entries >= 3, // Consider complete if 3+ food entries
-      });
-    }
-  }
-
-  // Sort by date
-  dataPoints.sort((a, b) => a.date.localeCompare(b.date));
-
-  // Get current weight (most recent) - convert to lbs if needed
+  // Try to get enhanced data points (includes steps and workout calories)
+  const enhancedDataPoints = await getEnhancedDailyDataPoints(35);
+  
+  // Get current weight from enhanced data points or fall back to weight_log
   let currentWeight: number | null = null;
-  if (weightLogs && weightLogs.length > 0) {
-    const latest = weightLogs[weightLogs.length - 1];
-    const weightUnit = latest.unit || preferredUnit;
-    currentWeight = weightUnit === 'kg' ? latest.weight * 2.20462 : latest.weight;
+  if (enhancedDataPoints.length > 0) {
+    // Get most recent weight from enhanced data points
+    const latestPoint = enhancedDataPoints[enhancedDataPoints.length - 1];
+    currentWeight = latestPoint.weight;
+  } else {
+    // Fall back to weight_log if no enhanced data
+    const thirtyFiveDaysAgo = new Date();
+    thirtyFiveDaysAgo.setDate(thirtyFiveDaysAgo.getDate() - 35);
+    const { data: weightLogs } = await supabase
+      .from('weight_log')
+      .select('logged_at, weight, unit')
+      .eq('user_id', user.id)
+      .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
+      .order('logged_at', { ascending: false })
+      .limit(1) as {
+        data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
+      };
+    
+    if (weightLogs && weightLogs.length > 0) {
+      const latest = weightLogs[0];
+      const weightUnit = latest.unit || 'lb';
+      currentWeight = weightUnit === 'kg' ? latest.weight * 2.20462 : latest.weight;
+    }
   }
 
-  // Check data quality
-  const dataQuality = checkDataQuality(dataPoints);
+  // Convert enhanced data points to format needed for TDEE calculation
+  // Enhanced data points already have weight in lbs, calories, steps, and workout calories
+  const enhancedPoints = enhancedDataPoints.map(dp => ({
+    date: dp.date,
+    weight: dp.weight,
+    calories: dp.calories,
+    isComplete: dp.isComplete,
+    steps: dp.steps,
+    netSteps: dp.netSteps,
+    workoutCalories: dp.workoutCalories,
+    activityLevel: (dp.activityLevel || 'sedentary') as 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active',
+  }));
 
-  // Calculate adaptive TDEE if we have enough data
-  let adaptiveEstimate: TDEEEstimate | null = null;
-  if (currentWeight && dataPoints.length >= 10) {
-    adaptiveEstimate = calculateAdaptiveTDEE(dataPoints, currentWeight);
+  // Also build basic data points for fallback
+  const basicDataPoints: DailyDataPoint[] = enhancedPoints.map(dp => ({
+    date: dp.date,
+    weight: dp.weight,
+    calories: dp.calories,
+    isComplete: dp.isComplete,
+  }));
+
+  // Check data quality using basic data points
+  const dataQuality = checkDataQuality(basicDataPoints);
+
+  // Try enhanced TDEE first (if we have activity data)
+  let adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null = null;
+  let isEnhanced = false;
+
+  if (currentWeight && enhancedPoints.length >= 10) {
+    // Check if we have any activity data (steps or workout calories)
+    const hasActivityData = enhancedPoints.some(dp => dp.steps > 0 || dp.workoutCalories > 0);
+    
+    if (hasActivityData) {
+      // Use enhanced TDEE with gradient descent
+      adaptiveEstimate = calculateEnhancedTDEE(enhancedPoints, currentWeight);
+      isEnhanced = true;
+    } else {
+      // Fall back to basic TDEE if no activity data
+      adaptiveEstimate = calculateAdaptiveTDEE(basicDataPoints, currentWeight);
+    }
   }
 
   // Calculate formula-based TDEE as fallback/comparison
@@ -181,8 +168,18 @@ export async function getAdaptiveTDEE(
 
   const formulaEstimate = getFormulaTDEE(userStats, activityConfig);
 
-  // Get best estimate
-  const bestEstimate = getBestTDEEEstimate(adaptiveEstimate, formulaEstimate);
+  // Get best estimate (handle both basic and enhanced)
+  let bestEstimate: TDEEEstimate | EnhancedTDEEEstimate;
+  if (isEnhanced && adaptiveEstimate) {
+    // Use enhanced estimate if available
+    bestEstimate = adaptiveEstimate;
+  } else if (adaptiveEstimate) {
+    // Use basic estimate
+    bestEstimate = getBestTDEEEstimate(adaptiveEstimate as TDEEEstimate, formulaEstimate);
+  } else {
+    // Fall back to formula
+    bestEstimate = formulaEstimate;
+  }
 
   // Calculate predictions
   const predictions: WeightPrediction[] = [];
@@ -190,14 +187,15 @@ export async function getAdaptiveTDEE(
 
   if (currentWeight) {
     for (const days of predictionDays) {
-      const prediction = predictFutureWeight(currentWeight, bestEstimate, caloriesToUse, days);
+      // predictFutureWeight expects TDEEEstimate, but EnhancedTDEEEstimate has all the same fields
+      const prediction = predictFutureWeight(currentWeight, bestEstimate as TDEEEstimate, caloriesToUse, days);
       predictions.push(prediction);
     }
   }
 
-  // Get regression analysis for visualization
-  const regressionAnalysis = currentWeight
-    ? getRegressionAnalysis(dataPoints, currentWeight)
+  // Get regression analysis for visualization (use basic data points)
+  const regressionAnalysis = currentWeight && basicDataPoints.length > 0
+    ? getRegressionAnalysis(basicDataPoints, currentWeight)
     : null;
 
   return {
@@ -208,13 +206,14 @@ export async function getAdaptiveTDEE(
     dataQuality,
     currentWeight,
     regressionAnalysis,
+    isEnhanced,
   };
 }
 
 /**
  * Save a TDEE estimate to the database
  */
-export async function saveTDEEEstimate(estimate: TDEEEstimate): Promise<boolean> {
+export async function saveTDEEEstimate(estimate: TDEEEstimate | EnhancedTDEEEstimate): Promise<boolean> {
   const supabase = await createClient();
 
   const {
@@ -225,6 +224,9 @@ export async function saveTDEEEstimate(estimate: TDEEEstimate): Promise<boolean>
     return false;
   }
 
+  // Check if this is an enhanced estimate
+  const isEnhanced = 'baseBurnRate' in estimate;
+  
   // Use type assertion since tdee_estimates is a new table not in generated types
   const { error } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>).upsert(
     {
@@ -240,6 +242,14 @@ export async function saveTDEEEstimate(estimate: TDEEEstimate): Promise<boolean>
       source: estimate.source,
       estimate_history: estimate.estimateHistory,
       updated_at: new Date().toISOString(),
+      // Enhanced-specific fields (will be null for basic estimates)
+      ...(isEnhanced ? {
+        base_burn_rate: estimate.baseBurnRate,
+        step_burn_rate: estimate.stepBurnRate,
+        workout_multiplier: estimate.workoutMultiplier,
+        average_steps: estimate.averageSteps,
+        average_workout_calories: estimate.averageWorkoutCalories,
+      } : {}),
     },
     {
       onConflict: 'user_id',
@@ -468,7 +478,7 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
  * Call this from the weight logging flow.
  */
 export async function onWeightLoggedRecalculateTDEE(): Promise<{
-  estimate: TDEEEstimate | null;
+  estimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   syncResult: SyncResult | null;
 }> {
   // Get fresh TDEE calculation
@@ -480,7 +490,7 @@ export async function onWeightLoggedRecalculateTDEE(): Promise<{
 
   // Save the estimate if we have one
   if (tdeeData.adaptiveEstimate) {
-    await saveTDEEEstimate(tdeeData.adaptiveEstimate);
+    await saveTDEEEstimate(tdeeData.adaptiveEstimate as TDEEEstimate | EnhancedTDEEEstimate);
   }
 
   // Try to sync with targets

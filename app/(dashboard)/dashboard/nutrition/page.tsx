@@ -27,6 +27,7 @@ import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
+import { StepTracking } from '@/components/nutrition/StepTracking';
 import { getLocalDateString, formatDate } from '@/lib/utils';
 import {
   LineChart,
@@ -1462,6 +1463,27 @@ export default function NutritionPage() {
         </Card>
       )}
 
+      {/* Step Tracking */}
+      {(() => {
+        // Calculate userWeightKg from current weight or weight entries
+        let userWeightKg = 80; // Default fallback
+        if (tdeeData?.currentWeight) {
+          // Convert from lbs to kg
+          userWeightKg = tdeeData.currentWeight / 2.20462;
+        } else if (weightEntries && weightEntries.length > 0) {
+          const latestWeight = weightEntries[0];
+          const weightValue = latestWeight.weight || 0;
+          const entryUnit = latestWeight.unit || weightUnit || 'lb';
+          userWeightKg = entryUnit === 'kg' ? weightValue : weightValue * 0.453592;
+        }
+        return (
+          <StepTracking
+            date={selectedDate}
+            userWeightKg={userWeightKg}
+          />
+        );
+      })()}
+
       {/* Adaptive TDEE Dashboard */}
       {tdeeData && (
         <TDEEDashboard
@@ -1475,7 +1497,7 @@ export default function NutritionPage() {
           avgDailyProteinGrams={avgDailyProteinGrams}
           avgWeeklyTrainingSets={avgWeeklyTrainingSets}
           trainingAge={trainingAge}
-          isEnhanced={isEnhanced}
+          isEnhanced={tdeeData.isEnhanced}
           biologicalSex={userProfile.sex || 'male'}
           chronologicalAge={userAge}
           latestDexaScan={latestDexaScan}

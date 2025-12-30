@@ -227,6 +227,7 @@ export interface EnhancedTDEEEstimate {
   confidence: 'unstable' | 'stabilizing' | 'stable';
   confidenceScore: number;
   dataPointsUsed: number;
+  dataPointsAfterOutlierExclusion?: number; // Data points after removing outliers
   windowDays: number;
   standardError: number;
   lastUpdated: Date;

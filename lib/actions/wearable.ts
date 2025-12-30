@@ -462,10 +462,10 @@ export async function getEnhancedDailyDataPoints(
   cutoffDate.setDate(cutoffDate.getDate() - windowDays);
   const cutoffStr = cutoffDate.toISOString().split('T')[0];
 
-  // Get weight log data
+  // Get weight log data (with unit for conversion)
   const { data: weightData } = await supabase
     .from('weight_log')
-    .select('logged_at, weight')
+    .select('logged_at, weight, unit')
     .eq('user_id', user.id)
     .gte('logged_at', cutoffStr)
     .order('logged_at', { ascending: true });
@@ -484,10 +484,15 @@ export async function getEnhancedDailyDataPoints(
     .eq('user_id', user.id)
     .gte('date', cutoffStr);
 
-  // Create a map of dates to weight
+  // Create a map of dates to weight (convert to lbs for TDEE calculations)
   const weightByDate = new Map<string, number>();
   weightData?.forEach((w) => {
-    weightByDate.set(w.logged_at, w.weight);
+    const weightUnit = w.unit || 'lb';
+    let weightInLbs = w.weight;
+    if (weightUnit === 'kg') {
+      weightInLbs = w.weight * 2.20462;
+    }
+    weightByDate.set(w.logged_at, weightInLbs);
   });
 
   // Aggregate calories by date

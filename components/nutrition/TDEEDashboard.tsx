@@ -21,6 +21,7 @@ import type {
   BurnRateHistoryPoint,
   RegressionAnalysis,
 } from '@/lib/nutrition/adaptive-tdee';
+import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { TDEERegressionGraph } from './TDEERegressionGraph';
 import { calculateFFMI } from '@/services/bodyCompEngine';
 import {
@@ -31,7 +32,7 @@ import {
 } from '@/lib/body-composition/p-ratio';
 
 interface TDEEDashboardProps {
-  estimate: TDEEEstimate | null;
+  estimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   formulaEstimate: TDEEEstimate | null;
   predictions: WeightPrediction[];
   dataQuality: DataQualityCheck;
