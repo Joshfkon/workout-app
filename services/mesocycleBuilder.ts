@@ -835,7 +835,13 @@ function getRepRange(exercise: ExerciseEntry, goal: Goal): string {
  */
 function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
   const isCompound = exercise.pattern !== 'isolation';
-  
+  const isAbExercise = exercise.primaryMuscle === 'abs';
+
+  // Ab exercises need shorter rest periods (recover faster)
+  if (isAbExercise) {
+    return goal === 'cut' ? 30 : 45;
+  }
+
   if (goal === 'cut') {
     // Shorter rest, keep metabolic demand
     return isCompound ? 120 : 60;

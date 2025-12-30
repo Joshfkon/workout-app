@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
 import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
@@ -89,7 +89,12 @@ type Goal = 'bulk' | 'cut' | 'maintain';
 /**
  * Get rest period based on exercise type and user's goal
  */
-function getRestPeriod(isCompound: boolean, goal: Goal): number {
+function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
+  // Ab exercises need shorter rest periods (recover faster)
+  if (primaryMuscle === 'abs') {
+    return goal === 'cut' ? 30 : 45;
+  }
+
   if (goal === 'cut') {
     return isCompound ? 120 : 60;  // 2min / 1min
   }
@@ -1345,7 +1350,7 @@ function NewWorkoutContent() {
           target_rep_range: isCompound ? [6, 10] : [10, 15], // Lower reps for compounds
           target_rir: 2,
           target_weight_kg: 0, // Will be set during workout
-          target_rest_seconds: getRestPeriod(isCompound, userGoal),
+          target_rest_seconds: getRestPeriod(isCompound, userGoal, muscleGroup as MuscleGroup),
           suggestion_reason: 'Selected by user',
           warmup_protocol: { sets: warmupSets },
         };
