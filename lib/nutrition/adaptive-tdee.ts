@@ -834,18 +834,16 @@ export function getRegressionAnalysis(
     };
   });
 
-  // Log pairs used in regression graph for debugging (only in development)
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[TDEE Regression Graph] Pairs being displayed:', regressionDataPoints.map(dp => ({
-      date: dp.date,
-      weight: `${dp.weight.toFixed(1)} lbs`,
-      calories: `${dp.calories.toFixed(0)} cal`,
-      actualChange: `${dp.actualChange > 0 ? '+' : ''}${dp.actualChange.toFixed(2)} lbs/day`,
-      predictedChange: `${dp.predictedChange > 0 ? '+' : ''}${dp.predictedChange.toFixed(2)} lbs/day`,
-      residual: `${dp.residual > 0 ? '+' : ''}${dp.residual.toFixed(2)} lbs`,
-    })));
-    console.log(`[TDEE Regression Graph] Total pairs: ${regressionDataPoints.length} (need at least 5 to show graph)`);
-  }
+  // Log pairs used in regression graph for debugging
+  console.log(`[TDEE Regression Graph] Total pairs: ${regressionDataPoints.length} (${pairs.length} original, ${excluded} excluded)`);
+  console.log('[TDEE Regression Graph] Pairs being displayed:', regressionDataPoints.map(dp => ({
+    date: dp.date,
+    weight: `${dp.weight.toFixed(1)} lbs`,
+    calories: `${dp.calories.toFixed(0)} cal`,
+    actualChange: `${dp.actualChange > 0 ? '+' : ''}${dp.actualChange.toFixed(2)} lbs/day`,
+    predictedChange: `${dp.predictedChange > 0 ? '+' : ''}${dp.predictedChange.toFixed(2)} lbs/day`,
+    residual: `${dp.residual > 0 ? '+' : ''}${dp.residual.toFixed(2)} lbs`,
+  })));
 
   return {
     dataPoints: regressionDataPoints,
