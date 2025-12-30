@@ -52,7 +52,9 @@ export function TDEERegressionGraph({ regressionAnalysis }: TDEERegressionGraphP
     const changes = dataPoints.map((d) => d.actualChange);
     const min = Math.min(...changes);
     const max = Math.max(...changes);
-    const padding = Math.max(Math.abs(max - min) * 0.2, 0.5);
+    // Use smaller padding to make small weight changes more visible
+    // Minimum padding of 0.2 lbs instead of 0.5 to show subtle fluctuations
+    const padding = Math.max(Math.abs(max - min) * 0.2, 0.2);
     return [min - padding, max + padding];
   }, [dataPoints]);
 

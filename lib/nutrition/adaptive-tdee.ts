@@ -730,7 +730,8 @@ export function getRegressionAnalysis(
     return null;
   }
 
-  // Build pairs of consecutive days
+  // Build pairs of consecutive days using ACTUAL (non-smoothed) weight changes for visualization
+  // This ensures users see all their real weight fluctuations, not smoothed ones
   const pairs: Array<{
     date: string;
     weight: number;
@@ -740,11 +741,13 @@ export function getRegressionAnalysis(
 
   for (let i = 0; i < filtered.length - 1; i++) {
     if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
+      // Use actual weight changes (not smoothed) for visualization
+      const actualChange = filtered[i + 1].weight - filtered[i].weight;
       pairs.push({
         date: filtered[i].date,
         weight: filtered[i].weight,
         calories: filtered[i].calories,
-        actualChange: filtered[i + 1].weight - filtered[i].weight,
+        actualChange, // Raw actual change - shows all fluctuations
       });
     }
   }
@@ -753,7 +756,8 @@ export function getRegressionAnalysis(
     return null;
   }
 
-  // Run regression to get alpha (use default smoothing/outlier settings for visualization)
+  // Run regression to get alpha (use smoothing/outlier exclusion for calculation accuracy)
+  // But visualization will show actual (non-smoothed) changes
   const result = runLeastSquaresRegression(filtered, DEFAULT_SMOOTHING_WINDOW, DEFAULT_OUTLIER_THRESHOLD);
   if (!result) {
     return null;
@@ -761,15 +765,16 @@ export function getRegressionAnalysis(
 
   const clampedAlpha = clampBurnRate(result.alpha);
 
-  // Build visualization data points
+  // Build visualization data points using ACTUAL weight changes
+  // The regression line is based on smoothed data, but points show real fluctuations
   const regressionDataPoints: RegressionDataPoint[] = pairs.map((pair) => {
     const predictedChange = (pair.calories - clampedAlpha * pair.weight) / CALORIES_PER_LB;
     return {
       date: pair.date,
       weight: pair.weight,
       calories: pair.calories,
-      actualChange: pair.actualChange,
-      predictedChange,
+      actualChange: pair.actualChange, // Actual (non-smoothed) change - shows all fluctuations
+      predictedChange, // Predicted based on smoothed regression
       residual: pair.actualChange - predictedChange,
     };
   });
