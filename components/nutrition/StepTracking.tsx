@@ -69,11 +69,16 @@ export function StepTracking({ date, userWeightKg }: StepTrackingProps) {
   }
 
   // Only calculate on client to prevent hydration mismatch
-  const isClient = typeof window !== 'undefined';
-  const isToday = isClient && date === getLocalDateString(new Date());
+  const [mounted, setMounted] = useState(false);
+  
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isToday = mounted && date === getLocalDateString(new Date());
   const displayDate = isToday 
     ? 'Today' 
-    : isClient
+    : mounted
       ? new Date(date).toLocaleDateString('en-US', { 
           weekday: 'short', 
           month: 'short', 
