@@ -12,6 +12,8 @@ interface InlineRestTimerBarProps {
   restedSeconds?: number;
   onShowControls?: () => void;
   colSpan?: number;
+  /** 'table' renders as tr/td (default), 'div' renders as a standalone div */
+  variant?: 'table' | 'div';
 }
 
 export const InlineRestTimerBar = memo(function InlineRestTimerBar({
@@ -23,6 +25,7 @@ export const InlineRestTimerBar = memo(function InlineRestTimerBar({
   restedSeconds = 0,
   onShowControls,
   colSpan = 6,
+  variant = 'table',
 }: InlineRestTimerBarProps) {
   const progressPercent = ((initialSeconds - seconds) / initialSeconds) * 100;
   
@@ -49,28 +52,40 @@ export const InlineRestTimerBar = memo(function InlineRestTimerBar({
     bgColor = 'bg-primary-500/10';
   }
 
+  const timerContent = (
+    <div
+      onClick={onShowControls}
+      className={`relative h-10 rounded-lg overflow-hidden border-2 cursor-pointer transition-opacity hover:opacity-80 ${borderColor} ${bgColor}`}
+    >
+      {/* Progress fill */}
+      <div
+        className={`absolute inset-y-0 left-0 transition-all duration-1000 ease-linear ${
+          isFinished ? 'bg-success-500/40' : isSkipped ? 'bg-primary-500/30' : 'bg-primary-500/30'
+        }`}
+        style={{ width: `${progressPercent}%` }}
+      />
+
+      {/* Timer display */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className={`font-mono text-lg font-semibold ${textColor}`}>
+          {displayText}
+        </span>
+      </div>
+    </div>
+  );
+
+  if (variant === 'div') {
+    return (
+      <div className="px-3 py-2">
+        {timerContent}
+      </div>
+    );
+  }
+
   return (
     <tr>
       <td colSpan={colSpan} className="px-3 py-2">
-        <div
-          onClick={onShowControls}
-          className={`relative h-10 rounded-lg overflow-hidden border-2 cursor-pointer transition-opacity hover:opacity-80 ${borderColor} ${bgColor}`}
-        >
-          {/* Progress fill */}
-          <div
-            className={`absolute inset-y-0 left-0 transition-all duration-1000 ease-linear ${
-              isFinished ? 'bg-success-500/40' : isSkipped ? 'bg-primary-500/30' : 'bg-primary-500/30'
-            }`}
-            style={{ width: `${progressPercent}%` }}
-          />
-
-          {/* Timer display */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className={`font-mono text-lg font-semibold ${textColor}`}>
-              {displayText}
-            </span>
-          </div>
-        </div>
+        {timerContent}
       </td>
     </tr>
   );
