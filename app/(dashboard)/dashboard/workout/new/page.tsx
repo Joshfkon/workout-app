@@ -1307,15 +1307,15 @@ function NewWorkoutContent() {
         const isCompound = exercise?.mechanic === 'compound';
         const muscleGroup = exercise?.primary_muscle || '';
         
-        // Only generate warmup for first compound exercise of each muscle group
+        // Generate warmup for first exercise of each muscle group (compound or isolation)
         const isFirstForMuscle = !warmedUpMuscles.has(muscleGroup);
-        const shouldWarmup = isCompound && isFirstForMuscle;
-        
+        const shouldWarmup = isFirstForMuscle;
+
         if (shouldWarmup && muscleGroup) {
           warmedUpMuscles.add(muscleGroup);
         }
-        
-        // Generate warmup for first compound exercise of each muscle group
+
+        // Generate warmup for first exercise of each muscle group
         const warmupSets = shouldWarmup ? generateWarmupProtocol({
           workingWeight: 60, // Default starting weight, user can adjust
           exercise: {
