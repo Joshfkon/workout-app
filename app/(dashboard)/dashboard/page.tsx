@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
+import { StepTracking } from '@/components/nutrition/StepTracking';
 import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
 import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
 import { ActivityCard } from '@/components/dashboard/ActivityCard';
@@ -32,7 +33,8 @@ type DashboardCardId =
   | 'activity'
   | 'atrophy-alert'
   | 'weekly-volume'
-  | 'cardio';
+  | 'cardio'
+  | 'steps';
 
 const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   'quick-actions',
@@ -44,6 +46,7 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   'weight',
   'hydration',
   'activity',
+  'steps',
   'atrophy-alert',
   'weekly-volume',
 ];
@@ -1351,6 +1354,26 @@ export default function DashboardPage() {
 
         case 'activity':
           return userId ? <ActivityCard userId={userId} /> : null;
+
+        case 'steps':
+          // Calculate userWeightKg from available weight data
+          const userWeightKg = (() => {
+            if (todaysWeight) {
+              const storedUnit = (todaysWeight.unit || weightUnit) as 'kg' | 'lb';
+              return storedUnit === 'kg'
+                ? todaysWeight.weight
+                : todaysWeight.weight * 0.453592;
+            }
+            if (weightHistory.length > 0) {
+              const latest = weightHistory[weightHistory.length - 1];
+              const storedUnit = (latest.unit || weightUnit) as 'kg' | 'lb';
+              return storedUnit === 'kg'
+                ? latest.weight
+                : latest.weight * 0.453592;
+            }
+            return 80; // Default fallback
+          })();
+          return <StepTracking date={getLocalDateString()} userWeightKg={userWeightKg} />;
 
         case 'atrophy-alert':
           return musclesBelowMev.length > 0 ? (
