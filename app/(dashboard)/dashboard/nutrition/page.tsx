@@ -30,7 +30,7 @@ import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { StepTracking } from '@/components/nutrition/StepTracking';
 import { getLocalDateString, formatDate } from '@/lib/utils';
-import { getDisplayWeight } from '@/lib/weightUtils';
+import { getDisplayWeight, prepareWeightForStorage } from '@/lib/weightUtils';
 import {
   LineChart,
   Line,
@@ -871,10 +871,15 @@ export default function NutritionPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // Prepare weight for storage - convert from user's input unit to storage format
+    // We store weights in the user's preferred unit (weightUnit) for consistency
+    const storageWeight = prepareWeightForStorage(weight, weightUnit, weightUnit);
+    
     const { error } = await supabase
       .from('weight_log')
       .update({
-        weight: weight,
+        weight: storageWeight.weight,
+        unit: storageWeight.unit,
         logged_at: date,
         notes: notes || null,
       })
