@@ -30,6 +30,7 @@ import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { StepTracking } from '@/components/nutrition/StepTracking';
 import { getLocalDateString, formatDate } from '@/lib/utils';
+import { getDisplayWeight } from '@/lib/weightUtils';
 import {
   LineChart,
   Line,
@@ -192,40 +193,8 @@ export default function NutritionPage() {
   const [trainingAge, setTrainingAge] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
   const [isEnhanced, setIsEnhanced] = useState<boolean>(false);
 
-  // Convert weight to preferred unit with validation
-  const convertWeight = (weight: number, fromUnit: string | null | undefined): number => {
-    // If unit is missing, try to infer from weight value
-    if (!fromUnit) {
-      if (weightUnit === 'lb' && weight > 300) {
-        // Likely stored in kg, convert
-        return weight * 2.20462;
-      } else if (weightUnit === 'kg' && weight > 150) {
-        // Likely stored in lb, convert
-        return weight / 2.20462;
-      }
-      // Assume already in preferred unit
-      return weight;
-    }
-    
-    // Validate: detect mislabeled units
-    // If unit says 'lb' but weight > 500, it's probably stored in kg (convert)
-    // If unit says 'kg' but weight is in human range (150-200), it's probably mislabeled as kg but actually in lbs (don't convert, just use as-is)
-    if (fromUnit === 'lb' && weight > 500) {
-      // Probably stored in kg, convert
-      return weight * 2.20462;
-    } else if (fromUnit === 'kg' && weight >= 150 && weight <= 200) {
-      // Common weights 150-200 are human weights in lbs, mislabeled as kg
-      // The weight is already in lbs, just mislabeled - don't convert, use as-is
-      return weight; // Already in lbs, just mislabeled
-    } else if (fromUnit === 'kg' && weight > 250) {
-      // Weight > 250 kg is probably in lbs, convert
-      return weight / 2.20462;
-    }
-    
-    // Normal conversion
-    if (fromUnit === weightUnit) return weight;
-    return fromUnit === 'kg' ? weight * 2.20462 : weight / 2.20462;
-  };
+  // Import unified weight utility
+  // All weight operations now use lib/weightUtils.ts
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -1034,47 +1003,14 @@ export default function NutritionPage() {
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
 
-  // Helper function to validate and convert weight (same logic as TDEE calculation)
-  // Returns weight in the user's preferred display unit (weightUnit)
-  // MUST be defined before use in sevenDayAverage and weightChartData
-  const validateAndConvertWeight = (weight: number, unit: string | null | undefined): number => {
-    const entryUnit = unit || 'lb';
-    let weightInLbs = weight;
-    
-    // Apply same unit validation as TDEE calculation
-    if (entryUnit === 'lb') {
-      if (weight > 400) {
-        // Weight > 400 lbs is probably in kg, convert
-        weightInLbs = weight * 2.20462;
-      } else if (weight <= 85 && weight >= 30) {
-        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
-        weightInLbs = weight * 2.20462;
-      } else {
-        weightInLbs = weight;
-      }
-    } else if (entryUnit === 'kg') {
-      if (weight >= 30 && weight <= 150) {
-        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
-        weightInLbs = weight; // Already in lbs, just mislabeled
-      } else {
-        weightInLbs = weight * 2.20462; // Normal kg to lbs conversion
-      }
-    }
-    
-    // Convert to display unit (weightUnit is the user's preference: 'lb' or 'kg')
-    // weightInLbs is now in lbs, convert to display unit
-    if (weightUnit === 'kg') {
-      return weightInLbs / 2.20462;
-    }
-    return weightInLbs; // Already in lbs, return as-is
-  };
+  // Use unified weight utility - all weight operations now use lib/weightUtils.ts
 
   // Calculate 7-day weight average (with unit validation and conversion)
   const last7Days = weightEntries.slice(0, 7);
   const sevenDayAverage =
     last7Days.length > 0
       ? last7Days.reduce((sum, e) => {
-          const validatedWeight = validateAndConvertWeight(e.weight, (e as any).unit || 'lb');
+          const validatedWeight = getDisplayWeight(e.weight, (e as any).unit as 'lb' | 'kg' | null, weightUnit);
           return sum + validatedWeight;
         }, 0) / last7Days.length
       : null;
@@ -1087,8 +1023,7 @@ export default function NutritionPage() {
     .map((entry) => {
       // Use logged_at directly as date string to avoid timezone issues
       const dateStr = entry.logged_at;
-      const entryUnit = (entry as any).unit || 'lb';
-      const validatedWeight = validateAndConvertWeight(entry.weight, entryUnit);
+      const validatedWeight = getDisplayWeight(entry.weight, (entry as any).unit as 'lb' | 'kg' | null, weightUnit);
 
       return {
         date: dateStr,
@@ -1554,7 +1489,7 @@ export default function NutritionPage() {
                 <div>
                   <div className="text-sm text-surface-400">Current Weight</div>
                   <div className="text-2xl font-bold text-surface-100">
-                    {weightEntries[0] ? validateAndConvertWeight(weightEntries[0].weight, (weightEntries[0] as any)?.unit || 'lb').toFixed(1) : '0.0'} {weightUnit}
+                    {weightEntries[0] ? getDisplayWeight(weightEntries[0].weight, (weightEntries[0] as any)?.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1) : '0.0'} {weightUnit}
                   </div>
                   <div className="text-xs text-surface-500">
                     {new Date(weightEntries[0]?.logged_at).toLocaleDateString()}

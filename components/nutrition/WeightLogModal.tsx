@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { convertWeight } from '@/lib/utils';
+import { getDisplayWeight, validateUserInput } from '@/lib/weightUtils';
 import type { WeightLogEntry } from '@/types/nutrition';
 
 interface WeightLogModalProps {
@@ -34,9 +34,12 @@ export function WeightLogModal({
       const today = new Date().toISOString().split('T')[0];
 
       if (existingEntry) {
-        // Convert stored weight to display unit
-        const storedUnit = (existingEntry.unit || 'lb') as 'kg' | 'lb';
-        const displayWeight = convertWeight(existingEntry.weight, storedUnit, preferredUnit);
+        // Use unified weight utility to get display weight (with validation)
+        const displayWeight = getDisplayWeight(
+          existingEntry.weight,
+          existingEntry.unit as 'lb' | 'kg' | null,
+          preferredUnit
+        );
         setWeight(displayWeight.toFixed(1));
       } else {
         setWeight('');
@@ -53,8 +56,11 @@ export function WeightLogModal({
     setError('');
 
     const weightNum = parseFloat(weight);
-    if (!weightNum || weightNum <= 0 || weightNum > 1000) {
-      setError('Please enter a valid weight');
+    
+    // Use unified validation
+    const validation = validateUserInput(weightNum, preferredUnit);
+    if (!validation.isValid) {
+      setError(validation.error || 'Please enter a valid weight');
       return;
     }
 

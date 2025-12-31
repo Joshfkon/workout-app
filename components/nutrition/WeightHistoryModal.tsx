@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { SwipeableRow } from '@/components/ui/SwipeableRow';
-import { convertWeight } from '@/lib/utils';
+import { getDisplayWeight, calculateWeightChange } from '@/lib/weightUtils';
 import type { WeightLogEntry } from '@/types/nutrition';
 
 interface WeightHistoryModalProps {
@@ -35,18 +35,16 @@ export function WeightHistoryModal({
     }
   };
 
-  // Simple conversion from stored unit to display unit
-  const getDisplayWeight = (weight: number, storedUnit: string | null | undefined): number => {
-    const fromUnit = (storedUnit || 'lb') as 'kg' | 'lb';
-    return convertWeight(weight, fromUnit, preferredUnit);
-  };
-
   // Calculate change from previous entry (in preferred unit)
   const getChange = (index: number) => {
     if (index >= entries.length - 1) return null;
-    const current = getDisplayWeight(entries[index].weight, entries[index].unit);
-    const previous = getDisplayWeight(entries[index + 1].weight, entries[index + 1].unit);
-    return current - previous;
+    return calculateWeightChange(
+      entries[index].weight,
+      entries[index].unit as 'lb' | 'kg' | null,
+      entries[index + 1].weight,
+      entries[index + 1].unit as 'lb' | 'kg' | null,
+      preferredUnit
+    );
   };
 
   return (
@@ -63,7 +61,11 @@ export function WeightHistoryModal({
         ) : (
           entries.map((entry, index) => {
             const change = getChange(index);
-            const displayWeight = getDisplayWeight(entry.weight, entry.unit);
+            const displayWeight = getDisplayWeight(
+              entry.weight,
+              entry.unit as 'lb' | 'kg' | null,
+              preferredUnit
+            );
 
             return (
               <SwipeableRow
