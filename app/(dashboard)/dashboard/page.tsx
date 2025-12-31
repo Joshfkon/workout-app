@@ -18,6 +18,7 @@ import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
+import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 
@@ -1277,17 +1278,11 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <p className="text-2xl font-bold text-surface-100">
-                            {(() => {
-                              const storedUnit = (todaysWeight.unit || weightUnit) as 'kg' | 'lb';
-                              // Simple conversion from stored unit to display unit
-                              let displayWeight = todaysWeight.weight;
-                              if (storedUnit !== weightUnit) {
-                                displayWeight = storedUnit === 'kg'
-                                  ? todaysWeight.weight * 2.20462
-                                  : todaysWeight.weight / 2.20462;
-                              }
-                              return displayWeight.toFixed(1);
-                            })()} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
+                            {getDisplayWeight(
+                              todaysWeight.weight,
+                              todaysWeight.unit as 'lb' | 'kg' | null,
+                              weightUnit
+                            ).toFixed(1)} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
                           </p>
                           <p className="text-xs text-surface-500">Logged today</p>
                         </div>

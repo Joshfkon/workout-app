@@ -8,6 +8,7 @@
  */
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
+import { validateWeightEntry } from '@/lib/weightUtils';
 import type {
   WearableSource,
   WearableConnection,
@@ -485,6 +486,7 @@ export async function getEnhancedDailyDataPoints(
     .gte('date', cutoffStr);
 
   // Create a map of dates to weight (convert to lbs for TDEE calculations)
+  // Use unified weight utility for validation
   // Add validation to detect and fix unit errors
   const weightByDate = new Map<string, number>();
   weightData?.forEach((w) => {

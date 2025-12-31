@@ -8,6 +8,7 @@ import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { convertWeight } from '@/lib/utils';
+import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { usePWA } from '@/hooks/usePWA';
@@ -177,21 +178,31 @@ export default function SettingsPage() {
 
           let weightToDisplay: number | null = null;
           if (latestWeightLog) {
-            // Convert to kg if needed
-            const weightKg = latestWeightLog.unit === 'kg' 
-              ? Number(latestWeightLog.weight) 
-              : Number(latestWeightLog.weight) / 2.20462; // Convert lbs to kg
+            // Use unified weight utility to validate and convert
+            const validated = validateWeightEntry(
+              Number(latestWeightLog.weight),
+              latestWeightLog.unit as 'lb' | 'kg' | null
+            );
+            // Convert validated weight to kg for storage
+            const weightKg = validated.unit === 'kg' 
+              ? validated.weight 
+              : validated.weight / 2.20462;
             weightToDisplay = weightKg;
             setStoredWeightKg(weightKg);
+            
+            // Get display weight in user's preferred unit
+            const displayWeight = getDisplayWeight(
+              validated.weight,
+              validated.unit,
+              userUnits === 'lb' ? 'lb' : 'kg'
+            );
+            setWeightDisplay(displayWeight.toFixed(1));
           } else if (data.weight_kg) {
             weightToDisplay = data.weight_kg;
             setStoredWeightKg(data.weight_kg);
-          }
-
-          if (weightToDisplay) {
             const displayWeight = userUnits === 'lb'
-              ? kgToLbs(weightToDisplay).toFixed(1)
-              : weightToDisplay.toFixed(1);
+              ? kgToLbs(data.weight_kg).toFixed(1)
+              : data.weight_kg.toFixed(1);
             setWeightDisplay(displayWeight);
           }
           

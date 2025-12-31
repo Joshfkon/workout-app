@@ -11,7 +11,8 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { formatDate, convertWeight } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
+import { getDisplayWeight } from '@/lib/weightUtils';
 import type { RechartsTooltipProps } from '@/types/database-queries';
 
 type Timeframe = '7d' | '30d' | '90d';
@@ -78,9 +79,12 @@ export const WeightGraph = memo(function WeightGraph({ weightHistory, preferredU
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return filtered.map((entry) => {
-      // Simple conversion: from stored unit to display unit
-      const storedUnit = (entry.unit || 'lb') as 'kg' | 'lb';
-      const displayWeight = convertWeight(entry.weight, storedUnit, preferredUnit);
+      // Use unified weight utility for consistent validation and conversion
+      const displayWeight = getDisplayWeight(
+        entry.weight,
+        entry.unit as 'lb' | 'kg' | null,
+        preferredUnit
+      );
 
       return {
         date: entry.date,
