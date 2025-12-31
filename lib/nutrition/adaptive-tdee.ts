@@ -408,11 +408,10 @@ function getSmoothedWeight(
 }
 
 /**
- * Create regression pairs using smoothed weight changes.
- */
-/**
  * Detect low-calorie outliers using statistical methods.
  * Excludes days that are significantly below the user's typical calorie intake.
+ * Uses both standard deviation (2.5 SD below mean) and percentile (bottom 10%)
+ * to catch unusually low days relative to the user's pattern.
  */
 function detectLowCalorieOutliers(
   data: DailyDataPoint[]
@@ -424,7 +423,7 @@ function detectLowCalorieOutliers(
     return outlierDates;
   }
   
-  // Get all calorie values
+  // Get all calorie values from complete days only
   const calories = data
     .filter(d => d.calories > 0 && d.isComplete)
     .map(d => d.calories);
@@ -439,12 +438,15 @@ function detectLowCalorieOutliers(
   
   // Use 2.5 standard deviations below mean as threshold
   // This catches days that are unusually low (bottom ~1% if normally distributed)
-  const threshold = mean - (2.5 * sd);
+  const sdThreshold = mean - (2.5 * sd);
   
   // Also use percentile-based approach: exclude bottom 10% if it's significantly below mean
   const sortedCalories = [...calories].sort((a, b) => a - b);
   const percentile10 = sortedCalories[Math.floor(sortedCalories.length * 0.1)];
-  const finalThreshold = Math.min(threshold, percentile10);
+  
+  // Use the more conservative (higher) threshold to avoid over-excluding
+  // This ensures we only exclude truly unusual days
+  const finalThreshold = Math.max(sdThreshold, percentile10);
   
   // Mark dates that are outliers
   data.forEach(d => {
@@ -454,11 +456,15 @@ function detectLowCalorieOutliers(
   });
   
   if (outlierDates.size > 0) {
-    console.log(`[TDEE] Detected ${outlierDates.size} low-calorie outlier days (threshold: ${finalThreshold.toFixed(0)} cal, mean: ${mean.toFixed(0)} cal)`);
+    console.log(`[TDEE] Detected ${outlierDates.size} low-calorie outlier days (threshold: ${finalThreshold.toFixed(0)} cal, mean: ${mean.toFixed(0)} cal, SD: ${sd.toFixed(0)} cal)`);
   }
   
   return outlierDates;
 }
+
+/**
+ * Create regression pairs using smoothed weight changes.
+ */
 
 function createSmoothedPairs(
   data: DailyDataPoint[],
