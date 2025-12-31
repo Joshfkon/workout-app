@@ -3783,14 +3783,20 @@ export default function WorkoutPage() {
                   )}
                 </div>
                 
-                {/* Status badges */}
-                <div className="flex items-center gap-2 flex-1">
+                {/* Status badges and exercise name */}
+                <div className="flex items-center gap-2 flex-1 min-w-0">
                   {isCurrent && (
                     <Badge variant="info" size="sm">Current</Badge>
                   )}
                   {isComplete && !isCurrent && (
                     <Badge variant="success" size="sm">Done</Badge>
                   )}
+                  {/* Exercise name - always visible even when collapsed */}
+                  <span className={`text-sm font-medium truncate ${
+                    isCurrent ? 'text-surface-100' : 'text-surface-300'
+                  }`}>
+                    {block.exercise.name}
+                  </span>
                   {/* Injury risk warning */}
                   {(() => {
                     const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
