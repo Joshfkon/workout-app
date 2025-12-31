@@ -291,39 +291,7 @@ export function BodyMeasurements({
       const supabase = createUntypedClient();
       const today = new Date().toISOString().split('T')[0];
 
-      // Get today's measurements
-      const { data: todayData, error: todayError } = await supabase
-        .from('body_measurements')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('logged_at', today)
-        .maybeSingle();
-      
-      if (todayError && todayError.code !== 'PGRST116') {
-        console.error('Error fetching today\'s measurements:', todayError);
-      }
-
-      if (todayData) {
-        setMeasurements({
-          neck: todayData.neck,
-          shoulders: todayData.shoulders,
-          chest: todayData.chest,
-          upper_back: todayData.upper_back,
-          lower_back: todayData.lower_back,
-          left_bicep: todayData.left_bicep,
-          right_bicep: todayData.right_bicep,
-          left_forearm: todayData.left_forearm,
-          right_forearm: todayData.right_forearm,
-          waist: todayData.waist,
-          hips: todayData.hips,
-          left_thigh: todayData.left_thigh,
-          right_thigh: todayData.right_thigh,
-          left_calf: todayData.left_calf,
-          right_calf: todayData.right_calf,
-        });
-      }
-
-      // Get last 5 measurement entries
+      // Get last 5 measurement entries (fetch history first to use as fallback)
       const { data: historyData } = await supabase
         .from('body_measurements')
         .select('*')
@@ -331,33 +299,63 @@ export function BodyMeasurements({
         .order('logged_at', { ascending: false })
         .limit(5);
 
+      // Get today's measurements
+      const { data: todayData, error: todayError } = await supabase
+        .from('body_measurements')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('logged_at', today)
+        .maybeSingle();
+
+      if (todayError && todayError.code !== 'PGRST116') {
+        console.error('Error fetching today\'s measurements:', todayError);
+      }
+
+      // Helper to extract measurements from a database entry
+      const extractMeasurements = (entry: Record<string, unknown>): Measurements => ({
+        neck: entry.neck as number | undefined,
+        shoulders: entry.shoulders as number | undefined,
+        chest: entry.chest as number | undefined,
+        upper_back: entry.upper_back as number | undefined,
+        lower_back: entry.lower_back as number | undefined,
+        left_bicep: entry.left_bicep as number | undefined,
+        right_bicep: entry.right_bicep as number | undefined,
+        left_forearm: entry.left_forearm as number | undefined,
+        right_forearm: entry.right_forearm as number | undefined,
+        waist: entry.waist as number | undefined,
+        hips: entry.hips as number | undefined,
+        left_thigh: entry.left_thigh as number | undefined,
+        right_thigh: entry.right_thigh as number | undefined,
+        left_calf: entry.left_calf as number | undefined,
+        right_calf: entry.right_calf as number | undefined,
+      });
+
+      if (todayData) {
+        // Use today's measurements if available
+        setMeasurements(extractMeasurements(todayData));
+      } else if (historyData && historyData.length > 0) {
+        // Fall back to most recent measurement if no entry for today
+        setMeasurements(extractMeasurements(historyData[0]));
+      }
+
       if (historyData && historyData.length > 0) {
         const formattedHistory = historyData.map((entry: Record<string, unknown>) => ({
           logged_at: entry.logged_at as string,
-          measurements: {
-            neck: entry.neck as number | undefined,
-            shoulders: entry.shoulders as number | undefined,
-            chest: entry.chest as number | undefined,
-            upper_back: entry.upper_back as number | undefined,
-            lower_back: entry.lower_back as number | undefined,
-            left_bicep: entry.left_bicep as number | undefined,
-            right_bicep: entry.right_bicep as number | undefined,
-            left_forearm: entry.left_forearm as number | undefined,
-            right_forearm: entry.right_forearm as number | undefined,
-            waist: entry.waist as number | undefined,
-            hips: entry.hips as number | undefined,
-            left_thigh: entry.left_thigh as number | undefined,
-            right_thigh: entry.right_thigh as number | undefined,
-            left_calf: entry.left_calf as number | undefined,
-            right_calf: entry.right_calf as number | undefined,
-          } as Measurements,
+          measurements: extractMeasurements(entry),
         }));
         setHistory(formattedHistory);
-        
-        // Set last measurement for comparison (skip today if it exists)
-        const previousEntry = formattedHistory.find((h: MeasurementHistory) => h.logged_at !== today);
-        if (previousEntry) {
-          setLastMeasurement(previousEntry);
+
+        // Set last measurement for comparison
+        // If showing today's data, compare to the previous entry
+        // If showing historical data (no today entry), compare to the entry after the most recent
+        if (todayData) {
+          const previousEntry = formattedHistory.find((h: MeasurementHistory) => h.logged_at !== today);
+          if (previousEntry) {
+            setLastMeasurement(previousEntry);
+          }
+        } else if (formattedHistory.length > 1) {
+          // Compare most recent to the one before it
+          setLastMeasurement(formattedHistory[1]);
         }
       }
     };
