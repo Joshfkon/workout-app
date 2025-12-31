@@ -3879,16 +3879,19 @@ export default function WorkoutPage() {
                           : 'border-surface-700'
                     }`}>
                       <div className="flex items-center gap-2">
-                        <h3 className={`text-base font-semibold ${
-                          isCurrent ? 'text-surface-100' : 'text-surface-200'
-                        }`}>
+                        <button
+                          onClick={() => setSelectedExerciseForDetails(block.exercise)}
+                          className={`text-base font-semibold text-left hover:text-primary-400 transition-colors ${
+                            isCurrent ? 'text-surface-100' : 'text-surface-200'
+                          }`}
+                        >
                           {block.exercise.name}
                           {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
                             <span className="text-surface-500 font-normal text-sm ml-1">
                               ({block.exercise.equipmentRequired[0]})
                             </span>
                           )}
-                        </h3>
+                        </button>
                         {/* Tier badge */}
                         {block.exercise.hypertrophyScore?.tier && (
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
@@ -4130,7 +4133,12 @@ export default function WorkoutPage() {
                 >
                   {isComplete ? (
                     <div className="flex flex-col gap-1">
-                      <p className="text-sm font-medium text-surface-100">{block.exercise.name}</p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
+                        className="text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
+                      >
+                        {block.exercise.name}
+                      </button>
                       <div className="flex items-center justify-between">
                         <div className="flex gap-3 flex-wrap">
                           {blockSets.map((set, setIdx) => (
@@ -4146,7 +4154,12 @@ export default function WorkoutPage() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <p className="text-sm font-medium text-surface-100">{block.exercise.name}</p>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedExerciseForDetails(block.exercise); }}
+                        className="text-sm font-medium text-surface-100 text-left hover:text-primary-400 transition-colors"
+                      >
+                        {block.exercise.name}
+                      </button>
                       <div className="flex items-center justify-between text-surface-500">
                         <span className="text-sm">
                           {block.targetSets} sets × {block.targetRepRange[0]}-{block.targetRepRange[1]} reps
