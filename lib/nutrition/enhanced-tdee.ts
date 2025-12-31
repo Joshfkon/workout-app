@@ -353,6 +353,18 @@ function detectLowCalorieOutliers(
 
 /**
  * Create regression pairs using smoothed weight changes.
+ * 
+ * IMPORTANT: Pairs Day N's calories with Day N+1's weight change.
+ * This is correct because:
+ * - Day N's calories are consumed throughout Day N
+ * - Day N+1's morning weight reflects Day N's intake
+ * - Weight change = weight[N+1] - weight[N] reflects Day N's calorie impact
+ * 
+ * Example:
+ * - Monday calories: 2000 cal, steps: 8000, workout: 300 cal
+ * - Monday weight: 175.0 lbs
+ * - Tuesday weight: 175.2 lbs
+ * - Pair: {calories: 2000, netSteps: 8000, workoutCalories: 300, actualChange: 0.2 lbs}
  */
 function createSmoothedPairs(
   data: EnhancedDailyDataPoint[],
@@ -377,12 +389,13 @@ function createSmoothedPairs(
       const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
       const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
       
+      // Pair Day N's calories/activity with weight change from Day N to Day N+1
       pairs.push({
         weight: data[i].weight, // Use actual weight for TDEE calculation
-        calories: data[i].calories,
-        netSteps: data[i].netSteps,
-        workoutCalories: data[i].workoutCalories,
-        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Smoothed change
+        calories: data[i].calories, // Day N's calories
+        netSteps: data[i].netSteps, // Day N's steps
+        workoutCalories: data[i].workoutCalories, // Day N's workout calories
+        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Weight change: Day N+1 - Day N
         date: data[i].date,
       });
     }

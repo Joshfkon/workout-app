@@ -480,8 +480,19 @@ function detectLowCalorieOutliers(
 
 /**
  * Create regression pairs using smoothed weight changes.
+ * 
+ * IMPORTANT: Pairs Day N's calories with Day N+1's weight change.
+ * This is correct because:
+ * - Day N's calories are consumed throughout Day N
+ * - Day N+1's morning weight reflects Day N's intake
+ * - Weight change = weight[N+1] - weight[N] reflects Day N's calorie impact
+ * 
+ * Example:
+ * - Monday calories: 2000 cal
+ * - Monday weight: 175.0 lbs
+ * - Tuesday weight: 175.2 lbs
+ * - Pair: {calories: 2000, actualChange: 0.2 lbs}
  */
-
 function createSmoothedPairs(
   data: DailyDataPoint[],
   smoothingWindow: number
@@ -501,10 +512,11 @@ function createSmoothedPairs(
       const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
       const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
       
+      // Pair Day N's calories with weight change from Day N to Day N+1
       pairs.push({
         weight: data[i].weight, // Use actual weight for TDEE calculation
-        calories: data[i].calories,
-        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Smoothed change
+        calories: data[i].calories, // Day N's calories
+        actualChange: smoothedWeightTomorrow - smoothedWeightToday, // Weight change: Day N+1 - Day N
         date: data[i].date,
       });
     }
@@ -826,6 +838,8 @@ export function getRegressionAnalysis(
   // Detect low-calorie outliers using statistical methods
   const lowCalorieOutliers = detectLowCalorieOutliers(filtered);
   
+  // Pair Day N's calories with weight change from Day N to Day N+1
+  // This is correct because Day N+1's morning weight reflects Day N's intake
   for (let i = 0; i < filtered.length - 1; i++) {
     if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
       // Exclude days with unusually low calories (statistical outliers)
@@ -834,7 +848,8 @@ export function getRegressionAnalysis(
         continue; // Skip this pair
       }
       
-      // Use actual weight changes (not smoothed) for visualization
+      // Pair Day N's calories with weight change from Day N to Day N+1
+      // Weight change = weight[N+1] - weight[N] reflects Day N's calorie impact
       const actualChange = filtered[i + 1].weight - filtered[i].weight;
       
       // Sanity check: exclude physically impossible weight changes
@@ -848,8 +863,8 @@ export function getRegressionAnalysis(
       pairs.push({
         date: filtered[i].date,
         weight: filtered[i].weight,
-        calories: filtered[i].calories,
-        actualChange, // Raw actual change - shows all fluctuations
+        calories: filtered[i].calories, // Day N's calories
+        actualChange, // Weight change: Day N+1 - Day N (reflects Day N's intake)
       });
     }
   }
