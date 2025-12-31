@@ -309,17 +309,23 @@ function detectLowCalorieOutliers(
   const mean = average(calories);
   const sd = calculateStandardDeviation(calories);
   
-  // Use 2.0 standard deviations below mean as threshold (more aggressive than 2.5)
-  // This catches days that are unusually low (bottom ~2.5% if normally distributed)
-  const sdThreshold = mean - (2.0 * sd);
+  // Use 1.8 standard deviations below mean as threshold
+  // This catches days that are unusually low (bottom ~3.5% if normally distributed)
+  const sdThreshold = mean - (1.8 * sd);
   
-  // Also use percentile-based approach: exclude bottom 15% (more aggressive than 10%)
+  // Also use percentile-based approach: exclude bottom 20% (more aggressive)
   const sortedCalories = [...calories].sort((a, b) => a - b);
-  const percentile15 = sortedCalories[Math.floor(sortedCalories.length * 0.15)];
+  const percentile20 = sortedCalories[Math.floor(sortedCalories.length * 0.2)];
   
-  // Use the lower threshold (more aggressive) to catch incomplete logging days
-  // Exclude if below EITHER threshold (catches more outliers)
-  const finalThreshold = Math.min(sdThreshold, percentile15);
+  // Use the higher of the two thresholds, but ensure we catch days significantly below mean
+  // This balances being aggressive while not over-excluding
+  // If a day is below the 20th percentile AND more than 1.5 SD below mean, exclude it
+  const conservativeThreshold = Math.max(sdThreshold, percentile20);
+  const aggressiveThreshold = mean - (1.5 * sd);
+  
+  // Exclude if below the conservative threshold OR if it's both below 20th percentile AND below 1.5 SD
+  // This catches incomplete logging days more effectively
+  const finalThreshold = Math.min(conservativeThreshold, aggressiveThreshold);
   
   // Mark dates that are outliers
   data.forEach(d => {
