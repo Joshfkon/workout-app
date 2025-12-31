@@ -415,9 +415,15 @@ function createSmoothedPairs(
   smoothingWindow: number
 ): RegressionPair[] {
   const pairs: RegressionPair[] = [];
+  const MIN_CALORIES_FOR_REGRESSION = 800; // Exclude days with very low calorie intake
 
   for (let i = 0; i < data.length - 1; i++) {
     if (data[i].weight > 0 && data[i + 1].weight > 0 && data[i].calories > 0) {
+      // Exclude days with very low calories (likely incomplete logging)
+      if (data[i].calories < MIN_CALORIES_FOR_REGRESSION) {
+        continue; // Skip this pair
+      }
+      
       const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
       const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
       
