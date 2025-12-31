@@ -743,8 +743,16 @@ export function getRegressionAnalysis(
     actualChange: number;
   }> = [];
 
+  const MIN_CALORIES_FOR_REGRESSION = 800; // Exclude days with very low calorie intake (likely incomplete logging)
+  
   for (let i = 0; i < filtered.length - 1; i++) {
     if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
+      // Exclude days with very low calories (likely incomplete logging)
+      if (filtered[i].calories < MIN_CALORIES_FOR_REGRESSION) {
+        console.warn(`[TDEE Regression] Excluding low-calorie day: ${filtered[i].date} with ${filtered[i].calories.toFixed(0)} cal (minimum: ${MIN_CALORIES_FOR_REGRESSION} cal)`);
+        continue; // Skip this pair
+      }
+      
       // Use actual weight changes (not smoothed) for visualization
       const actualChange = filtered[i + 1].weight - filtered[i].weight;
       
