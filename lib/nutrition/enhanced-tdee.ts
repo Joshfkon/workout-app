@@ -305,37 +305,47 @@ function detectLowCalorieOutliers(
     return outlierDates;
   }
   
-  // Calculate mean and standard deviation
-  const mean = average(calories);
-  const sd = calculateStandardDeviation(calories);
+  // First pass: Remove extreme outliers (< 500 cal) to get a robust mean/SD
+  // These are clearly incomplete logging days and shouldn't influence the threshold
+  const extremeOutlierThreshold = 500;
+  const trimmedCalories = calories.filter(c => c >= extremeOutlierThreshold);
   
-  // Use 1.8 standard deviations below mean as threshold
-  // This catches days that are unusually low (bottom ~3.5% if normally distributed)
-  const sdThreshold = mean - (1.8 * sd);
+  // If we have at least 3 non-extreme days, use trimmed data for mean/SD
+  // Otherwise, use all data (but this is a warning sign)
+  const useTrimmed = trimmedCalories.length >= 3;
+  const baseCalories = useTrimmed ? trimmedCalories : calories;
   
-  // Also use percentile-based approach: exclude bottom 20% (more aggressive)
-  const sortedCalories = [...calories].sort((a, b) => a - b);
+  // Calculate mean and standard deviation on trimmed data
+  const mean = average(baseCalories);
+  const sd = calculateStandardDeviation(baseCalories);
+  
+  // Use 1.5 standard deviations below mean as threshold
+  // This catches days that are unusually low (bottom ~7% if normally distributed)
+  const sdThreshold = mean - (1.5 * sd);
+  
+  // Also use percentile-based approach: exclude bottom 20%
+  const sortedCalories = [...baseCalories].sort((a, b) => a - b);
   const percentile20 = sortedCalories[Math.floor(sortedCalories.length * 0.2)];
   
-  // Use the higher of the two thresholds, but ensure we catch days significantly below mean
-  // This balances being aggressive while not over-excluding
-  // If a day is below the 20th percentile AND more than 1.5 SD below mean, exclude it
-  const conservativeThreshold = Math.max(sdThreshold, percentile20);
-  const aggressiveThreshold = mean - (1.5 * sd);
-  
-  // Exclude if below the conservative threshold OR if it's both below 20th percentile AND below 1.5 SD
-  // This catches incomplete logging days more effectively
-  const finalThreshold = Math.min(conservativeThreshold, aggressiveThreshold);
+  // Use the lower of the two thresholds to catch more outliers
+  // This ensures we catch days like 880 that are below the 20th percentile
+  const finalThreshold = Math.min(sdThreshold, percentile20);
   
   // Mark dates that are outliers
+  // Include both extreme outliers (< 500) and moderate outliers (< threshold)
   data.forEach(d => {
-    if (d.calories > 0 && d.calories < finalThreshold) {
-      outlierDates.add(d.date);
+    if (d.calories > 0 && d.isComplete) {
+      if (d.calories < extremeOutlierThreshold || d.calories < finalThreshold) {
+        outlierDates.add(d.date);
+      }
     }
   });
   
   if (outlierDates.size > 0) {
-    console.log(`[TDEE Enhanced] Detected ${outlierDates.size} low-calorie outlier days (threshold: ${finalThreshold.toFixed(0)} cal, mean: ${mean.toFixed(0)} cal, SD: ${sd.toFixed(0)} cal)`);
+    const extremeCount = data.filter(d => d.calories > 0 && d.isComplete && d.calories < extremeOutlierThreshold).length;
+    const moderateCount = outlierDates.size - extremeCount;
+    console.log(`[TDEE Enhanced] Detected ${outlierDates.size} low-calorie outlier days (${extremeCount} extreme < ${extremeOutlierThreshold} cal, ${moderateCount} moderate < ${finalThreshold.toFixed(0)} cal)`);
+    console.log(`[TDEE Enhanced] Threshold calculation: mean=${mean.toFixed(0)} cal, SD=${sd.toFixed(0)} cal, threshold=${finalThreshold.toFixed(0)} cal`);
   }
   
   return outlierDates;
