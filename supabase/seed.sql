@@ -32,6 +32,12 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   'Set cables at chest height for mid-chest focus',
   'horizontal_push', ARRAY['cable machine']),
 
+('Dumbbell Fly', 'chest', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+  ARRAY['Maintain slight elbow bend', 'Lower until chest stretch', 'Squeeze at top', 'Control the descent'],
+  ARRAY['Going too heavy', 'Straightening arms completely', 'Turning into a press'],
+  'Lie flat on bench, start with dumbbells above chest',
+  'horizontal_push', ARRAY['dumbbells', 'bench']),
+
 ('Machine Chest Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', ARRAY[8, 12], 2, 5.0,
   ARRAY['Keep chest up', 'Drive through chest not shoulders', 'Full range of motion'],
   ARRAY['Letting shoulders roll forward', 'Using momentum'],
@@ -122,6 +128,24 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   'Bent over 45-90 degrees or use pec deck reverse',
   'shoulder_isolation', ARRAY['dumbbells']),
 
+('Front Raise', 'shoulders', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+  ARRAY['Raise to eye level', 'Slight bend in elbows', 'Control the descent', 'Avoid swinging'],
+  ARRAY['Using momentum', 'Raising too high', 'Going too heavy'],
+  'Can use dumbbells, barbell, or cable',
+  'shoulder_isolation', ARRAY['dumbbells']),
+
+('Dumbbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', ARRAY[12, 15], 2, 2.0,
+  ARRAY['Shrug straight up', 'Hold at top briefly', 'Full stretch at bottom', 'Keep arms straight'],
+  ARRAY['Rolling shoulders', 'Using momentum', 'Shrugging forward'],
+  'Let arms hang at sides, palms facing body',
+  'shoulder_isolation', ARRAY['dumbbells']),
+
+('Barbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', ARRAY[10, 15], 2, 5.0,
+  ARRAY['Shrug straight up toward ears', 'Squeeze at top', 'Control the descent', 'Keep arms straight'],
+  ARRAY['Rolling shoulders', 'Using momentum', 'Bending elbows'],
+  'Grip slightly wider than shoulders, can use straps for heavy weight',
+  'shoulder_isolation', ARRAY['barbell']),
+
 -- ============================================
 -- BICEP EXERCISES
 -- ============================================
@@ -161,6 +185,18 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   'Adjust pad height so armpits rest on top',
   'elbow_flexion', ARRAY['preacher bench', 'barbell']),
 
+('EZ Bar Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[8, 12], 2, 2.5,
+  ARRAY['Keep elbows pinned to sides', 'Full range of motion', 'Squeeze at top', 'Control the negative'],
+  ARRAY['Using momentum', 'Swinging body', 'Moving elbows forward'],
+  'Angled grip reduces wrist strain compared to straight bar',
+  'elbow_flexion', ARRAY['ez curl bar']),
+
+('Concentration Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+  ARRAY['Brace elbow against inner thigh', 'Full extension at bottom', 'Squeeze at peak', 'Slow controlled movement'],
+  ARRAY['Using body momentum', 'Moving elbow off thigh', 'Rushing the movement'],
+  'Sit on bench, lean forward, brace elbow on inner thigh',
+  'elbow_flexion', ARRAY['dumbbell']),
+
 -- ============================================
 -- TRICEP EXERCISES
 -- ============================================
@@ -180,6 +216,18 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
   ARRAY['Keep elbows close to head', 'Full stretch at bottom', 'Squeeze at top'],
   ARRAY['Flaring elbows', 'Using momentum', 'Not getting full stretch'],
   'Can use dumbbell, cable, or rope attachment',
+  'elbow_extension', ARRAY['dumbbell']),
+
+('Triceps Extension (Dumbbell)', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+  ARRAY['Keep upper arm stationary', 'Full extension at bottom', 'Squeeze triceps at top', 'Control the weight throughout'],
+  ARRAY['Swinging the upper arm', 'Using momentum', 'Flaring elbow outward', 'Not achieving full range of motion'],
+  'Can be done one arm at a time or both arms with single dumbbell overhead',
+  'elbow_extension', ARRAY['dumbbell']),
+
+('Dumbbell Kickback', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+  ARRAY['Keep upper arm parallel to floor', 'Full extension behind you', 'Squeeze at top', 'Slow controlled movement'],
+  ARRAY['Dropping the elbow', 'Using momentum', 'Not fully extending', 'Going too heavy'],
+  'Hinge forward at hips, support with opposite hand on bench',
   'elbow_extension', ARRAY['dumbbell']),
 
 ('Close Grip Bench Press', 'triceps', ARRAY['chest', 'shoulders'], 'compound', ARRAY[8, 12], 2, 2.5,

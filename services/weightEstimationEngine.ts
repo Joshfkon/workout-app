@@ -169,6 +169,9 @@ function findExerciseMatch(exerciseName: string): string | null {
     'tricep push': 'Tricep Pushdown',
     'extension': 'Overhead Tricep Extension',
     'tricep extension': 'Overhead Tricep Extension',
+    'triceps extension': 'Overhead Tricep Extension',
+    'dumbbell tricep': 'Overhead Tricep Extension',
+    'dumbbell triceps': 'Overhead Tricep Extension',
     'lateral raise': 'Lateral Raise',
     'side raise': 'Lateral Raise',
     'face pull': 'Face Pull',
@@ -319,9 +322,20 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     ratioVariance: 0.15,
     relatedExercises: [
       { exercise: 'Overhead Tricep Extension', ratio: 0.70 },
+      { exercise: 'Triceps Extension (Dumbbell)', ratio: 0.50 },
       { exercise: 'Skull Crusher', ratio: 0.60 },
       { exercise: 'Cable Tricep Pushdown', ratio: 1.0 },
       { exercise: 'Cable Overhead Tricep Extension', ratio: 0.70 },
+      { exercise: 'Dumbbell Kickback', ratio: 0.35 },
+    ]
+  },
+  'Overhead Tricep Extension': {
+    parent: 'Close-Grip Bench Press',
+    ratioToParent: 0.28,
+    ratioVariance: 0.10,
+    relatedExercises: [
+      { exercise: 'Triceps Extension (Dumbbell)', ratio: 0.75 },
+      { exercise: 'Tricep Pushdown', ratio: 1.4 },
     ]
   },
   'Lateral Raise': {
@@ -719,10 +733,14 @@ export class WeightEstimationEngine {
       'Cable Curl': 0.25,
       'Preacher Curl': 0.20,
       'Incline Dumbbell Curl': 0.08,
+      'EZ Bar Curl': 0.25,
+      'Concentration Curl': 0.10,
       'Tricep Pushdown': 0.30,
       'Cable Tricep Pushdown': 0.30,
       'Overhead Tricep Extension': 0.20,
       'Cable Overhead Tricep Extension': 0.20,
+      'Triceps Extension (Dumbbell)': 0.15,
+      'Dumbbell Kickback': 0.10,
       'Skull Crusher': 0.35,
       'Dips': 0.30,
       'Lateral Raise': 0.06,
