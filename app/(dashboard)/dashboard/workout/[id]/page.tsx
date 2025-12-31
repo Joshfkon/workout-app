@@ -2717,8 +2717,9 @@ export default function WorkoutPage() {
         block => block.exercise.primaryMuscle === exercise.primary_muscle
       );
       
-      // Only generate warmup for first compound exercise of each muscle group
-      const shouldWarmup = isCompound && !muscleAlreadyWarmedUp;
+      // Generate warmup for first exercise of each muscle group (compound or isolation)
+      // If starting with an isolation, you still need warmups for that muscle group
+      const shouldWarmup = !muscleAlreadyWarmedUp;
       const workingWeight = suggestedWeight > 0 ? suggestedWeight : 60;
       const warmupSets = shouldWarmup ? generateWarmupProtocol({
         workingWeight,
@@ -4075,15 +4076,20 @@ export default function WorkoutPage() {
                         return blockWithWarmups.warmupProtocol;
                       }
                       
-                      // Generate warmups dynamically for compound exercises
-                      if (block.exercise.mechanic === 'compound') {
+                      // Generate warmups dynamically for first exercise of each muscle group
+                      // (includes isolation exercises if they're the first for that muscle)
+                      const isFirstForMuscle = !blocks.some(
+                        (b, i) => i < index && b.exercise.primaryMuscle === muscleGroup
+                      );
+
+                      if (isFirstForMuscle) {
                         return generateWarmupProtocol({
                           workingWeight: effectiveWorkingWeight,
                           exercise: block.exercise,
                           isFirstExercise: index === 0,
                         });
                       }
-                      
+
                       return undefined;
                     })()}
                     workingWeight={effectiveWorkingWeight}

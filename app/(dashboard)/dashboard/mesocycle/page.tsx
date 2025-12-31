@@ -274,13 +274,13 @@ export default function MesocyclePage() {
           for (const exercise of selected) {
             const isCompound = exercise.mechanic === 'compound';
             
-            // Generate warmup for first exercise of each muscle group (if compound)
+            // Generate warmup for first exercise of each muscle group (compound or isolation)
             let warmupSets: any[] = [];
-            if (isFirstExerciseForMuscle && isCompound) {
-              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2 
-                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]] 
+            if (isFirstExerciseForMuscle) {
+              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
+                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
                 : [8, 12]) as [number, number];
-              
+
               warmupSets = generateWarmupProtocol({
                 workingWeight: 60, // Default working weight, will be adjusted in workout
                 exercise: {
@@ -296,7 +296,7 @@ export default function MesocyclePage() {
                   commonMistakes: [],
                   equipmentRequired: [],
                   setupNote: '',
-                  movementPattern: 'compound',
+                  movementPattern: isCompound ? 'compound' : 'isolation',
                 },
                 isFirstExercise: order === 1, // First exercise overall gets general warmup
               });
