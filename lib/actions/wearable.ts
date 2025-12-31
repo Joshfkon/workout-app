@@ -492,47 +492,26 @@ export async function getEnhancedDailyDataPoints(
   weightData?.forEach((w) => {
     if (!w.weight || w.weight <= 0) return; // Skip invalid weights
     
-    const weightUnit = w.unit || 'lb';
-    let weightInLbs = w.weight;
+    // Use unified weight utility to validate and correct unit errors
+    const validated = validateWeightEntry(w.weight, w.unit as 'lb' | 'kg' | null);
     
-    // Validation: detect mislabeled units
-    // Reasonable adult human weight range: 80-600 lbs (36-272 kg)
-    // Anything outside this range is suspicious and likely a unit error
-    
-    if (weightUnit === 'lb') {
-      if (w.weight > 400) {
-        // Weight > 400 lbs is probably in kg, convert (lowered from 500 to catch more errors)
-        weightInLbs = w.weight * 2.20462;
-        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too high). Converting to ${weightInLbs.toFixed(1)} lbs.`);
-      } else if (w.weight <= 85 && w.weight >= 30) {
-        // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
-        // Convert from kg to lbs (includes 80.0, 80.1, 85.0, etc.)
-        weightInLbs = w.weight * 2.20462;
-        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'lb' but likely in kg (too low for adult). Converting to ${weightInLbs.toFixed(1)} lbs.`);
-      } else {
-        // Normal lbs, use as-is
-        weightInLbs = w.weight;
-      }
-    } else if (weightUnit === 'kg') {
-      if (w.weight >= 30 && w.weight <= 150) {
-        // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
-        // The weight is already in lbs, just mislabeled - don't convert, use as-is
-        weightInLbs = w.weight;
-        console.warn(`[TDEE] Detected unit error: weight ${w.weight} labeled as 'kg' but likely in lbs. Using as-is (${weightInLbs.toFixed(1)} lbs).`);
-      } else {
-        // Normal kg to lbs conversion
-        weightInLbs = w.weight * 2.20462;
-      }
+    // Convert validated weight to lbs for TDEE calculations
+    let weightInLbs: number;
+    if (validated.unit === 'kg') {
+      weightInLbs = validated.weight * 2.20462;
     } else {
-      // Unknown unit, assume lbs
-      weightInLbs = w.weight;
-      console.warn(`[TDEE] Unknown weight unit '${weightUnit}', assuming lbs`);
+      weightInLbs = validated.weight;
+    }
+    
+    // Log if weight was corrected
+    if (validated.wasCorrected) {
+      console.warn(`[TDEE] Corrected weight unit error: ${validated.originalWeight} ${validated.originalUnit} → ${validated.weight} ${validated.unit} (${weightInLbs.toFixed(1)} lbs)`);
     }
     
     // Final sanity check: weight should be in reasonable human range (30-600 lbs)
     // Using wider range to avoid false positives, outlier detection will catch extreme values
     if (weightInLbs < 30 || weightInLbs > 600) {
-      console.warn(`[TDEE] Skipping invalid weight: ${weightInLbs.toFixed(1)} lbs (original: ${w.weight} ${weightUnit}) - outside reasonable human range`);
+      console.warn(`[TDEE] Skipping invalid weight: ${weightInLbs.toFixed(1)} lbs (original: ${w.weight} ${w.unit}) - outside reasonable human range`);
       return; // Skip this weight entry
     }
     
