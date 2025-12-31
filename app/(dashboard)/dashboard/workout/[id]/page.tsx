@@ -1100,13 +1100,16 @@ export default function WorkoutPage() {
 
           if (shouldSkipCheckIn) {
             // Skip check-in, go directly to workout
+            const startedAt = new Date().toISOString();
             await supabase
               .from('workout_sessions')
               .update({
                 state: 'in_progress',
-                started_at: new Date().toISOString(),
+                started_at: startedAt,
               })
               .eq('id', sessionId);
+            // Update session state with the started time
+            setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
             setPhase('workout');
           } else {
             setPhase('checkin');
@@ -1527,7 +1530,11 @@ export default function WorkoutPage() {
         .from('workout_sessions')
         .update(updateData)
         .eq('id', sessionId);
-      
+
+      // Update session state with the started time
+      const startedAt = updateData.started_at as string;
+      setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
+
       setPhase('workout');
     } catch (err) {
       console.error('Failed to update session:', err);
