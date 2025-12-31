@@ -410,17 +410,69 @@ function getSmoothedWeight(
 /**
  * Create regression pairs using smoothed weight changes.
  */
+/**
+ * Detect low-calorie outliers using statistical methods.
+ * Excludes days that are significantly below the user's typical calorie intake.
+ */
+function detectLowCalorieOutliers(
+  data: DailyDataPoint[]
+): Set<string> {
+  const outlierDates = new Set<string>();
+  
+  if (data.length < 3) {
+    // Need at least 3 days to calculate meaningful statistics
+    return outlierDates;
+  }
+  
+  // Get all calorie values
+  const calories = data
+    .filter(d => d.calories > 0 && d.isComplete)
+    .map(d => d.calories);
+  
+  if (calories.length < 3) {
+    return outlierDates;
+  }
+  
+  // Calculate mean and standard deviation
+  const mean = average(calories);
+  const sd = calculateStandardDeviation(calories);
+  
+  // Use 2.5 standard deviations below mean as threshold
+  // This catches days that are unusually low (bottom ~1% if normally distributed)
+  const threshold = mean - (2.5 * sd);
+  
+  // Also use percentile-based approach: exclude bottom 10% if it's significantly below mean
+  const sortedCalories = [...calories].sort((a, b) => a - b);
+  const percentile10 = sortedCalories[Math.floor(sortedCalories.length * 0.1)];
+  const finalThreshold = Math.min(threshold, percentile10);
+  
+  // Mark dates that are outliers
+  data.forEach(d => {
+    if (d.calories > 0 && d.calories < finalThreshold) {
+      outlierDates.add(d.date);
+    }
+  });
+  
+  if (outlierDates.size > 0) {
+    console.log(`[TDEE] Detected ${outlierDates.size} low-calorie outlier days (threshold: ${finalThreshold.toFixed(0)} cal, mean: ${mean.toFixed(0)} cal)`);
+  }
+  
+  return outlierDates;
+}
+
 function createSmoothedPairs(
   data: DailyDataPoint[],
   smoothingWindow: number
 ): RegressionPair[] {
   const pairs: RegressionPair[] = [];
-  const MIN_CALORIES_FOR_REGRESSION = 800; // Exclude days with very low calorie intake
+  
+  // Detect low-calorie outliers using statistical methods
+  const lowCalorieOutliers = detectLowCalorieOutliers(data);
 
   for (let i = 0; i < data.length - 1; i++) {
     if (data[i].weight > 0 && data[i + 1].weight > 0 && data[i].calories > 0) {
-      // Exclude days with very low calories (likely incomplete logging)
-      if (data[i].calories < MIN_CALORIES_FOR_REGRESSION) {
+      // Exclude days with unusually low calories (statistical outliers)
+      if (lowCalorieOutliers.has(data[i].date)) {
         continue; // Skip this pair
       }
       
@@ -749,13 +801,14 @@ export function getRegressionAnalysis(
     actualChange: number;
   }> = [];
 
-  const MIN_CALORIES_FOR_REGRESSION = 800; // Exclude days with very low calorie intake (likely incomplete logging)
+  // Detect low-calorie outliers using statistical methods
+  const lowCalorieOutliers = detectLowCalorieOutliers(filtered);
   
   for (let i = 0; i < filtered.length - 1; i++) {
     if (filtered[i].weight > 0 && filtered[i + 1].weight > 0 && filtered[i].calories > 0) {
-      // Exclude days with very low calories (likely incomplete logging)
-      if (filtered[i].calories < MIN_CALORIES_FOR_REGRESSION) {
-        console.warn(`[TDEE Regression] Excluding low-calorie day: ${filtered[i].date} with ${filtered[i].calories.toFixed(0)} cal (minimum: ${MIN_CALORIES_FOR_REGRESSION} cal)`);
+      // Exclude days with unusually low calories (statistical outliers)
+      if (lowCalorieOutliers.has(filtered[i].date)) {
+        console.warn(`[TDEE Regression] Excluding low-calorie outlier day: ${filtered[i].date} with ${filtered[i].calories.toFixed(0)} cal`);
         continue; // Skip this pair
       }
       
