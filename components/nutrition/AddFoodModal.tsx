@@ -42,6 +42,7 @@ interface AddFoodModalProps {
     source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
     food_id?: string;
     nutritionix_id?: string;
+    barcode?: string;
   }) => Promise<void>;
   defaultMealType: MealType;
   recentFoods?: FoodSearchResult[];
@@ -637,6 +638,7 @@ export function AddFoodModal({
         fat: scannedProductNutrition.fat,
         meal_type: mealType,
         source: 'nutritionix', // Using this as generic barcode source
+        barcode: scannedProduct.barcode,
       });
 
       resetAndClose();
