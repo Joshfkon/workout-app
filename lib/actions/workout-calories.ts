@@ -43,18 +43,29 @@ export async function calculateAndSaveWorkoutCalories(
       return { success: false, error: 'Workout session not completed' };
     }
 
+    // First get exercise block IDs for this workout
+    const { data: exerciseBlocks, error: blocksError } = await supabase
+      .from('exercise_blocks')
+      .select('id, exercise_id, exercise:exercises(id, name, primary_muscle, pattern)')
+      .eq('workout_session_id', workoutSessionId);
+
+    if (blocksError) {
+      console.error('Error fetching exercise blocks:', blocksError);
+    }
+
+    const blockIds = (exerciseBlocks || []).map(b => b.id);
+
     // Fetch all set logs for this workout
     const { data: setLogs, error: setsError } = await supabase
       .from('set_logs')
       .select('*')
-      .eq('exercise_block_id', 'exercise_blocks!inner(workout_session_id)', workoutSessionId)
+      .in('exercise_block_id', blockIds.length > 0 ? blockIds : ['']) // Empty array causes error
       .order('logged_at', { ascending: true });
 
-    if (setsError) {
+    if (setsError && blockIds.length > 0) {
       console.error('Error fetching set logs:', setsError);
       // Continue with duration-based calculation
     }
-
 
     // Get user profile for body fat percentage
     const { data: userProfile } = await supabase
