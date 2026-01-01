@@ -2967,6 +2967,8 @@ export default function WorkoutPage() {
   const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
     try {
       const supabase = createUntypedClient();
+      
+      // Update workout session
       await supabase
         .from('workout_sessions')
         .update({
@@ -2978,6 +2980,13 @@ export default function WorkoutPage() {
           completion_percent: 100,
         })
         .eq('id', sessionId);
+
+      // Calculate and save workout calories (using set-based HyperTracker method)
+      if (session?.plannedDate) {
+        const { calculateAndSaveWorkoutCalories } = await import('@/lib/actions/workout-calories');
+        await calculateAndSaveWorkoutCalories(sessionId, session.plannedDate);
+        // Don't block on calorie calculation - it's okay if it fails
+      }
 
       // Clear store state and navigate to history
       endWorkoutSession();
