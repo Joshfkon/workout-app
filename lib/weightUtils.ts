@@ -99,8 +99,10 @@ export function validateWeightEntry(
 
   // Validate weights labeled as 'kg'
   if (correctedUnit === 'kg') {
-    if (weight >= 30 && weight <= 150) {
-      // Common weights 30-150 kg are actually human weights in lbs, mislabeled as kg
+    if (weight >= 30 && weight <= 200) {
+      // Common weights 30-200 kg are likely human weights in lbs, mislabeled as kg
+      // Most people weigh 100-400 lbs (45-181 kg), so values in this range
+      // labeled as 'kg' are very suspicious - likely lb values with wrong unit
       correctedWeight = weight; // Already in lbs, just mislabeled
       correctedUnit = 'lb'; // Correct the unit
       wasCorrected = true;
