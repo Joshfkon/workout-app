@@ -2,8 +2,8 @@
  * Workout Calorie Estimation Engine
  *
  * Estimates calories burned during resistance training with conservative
- * calculations. Wearable estimates for lifting are notoriously inaccurate
- * (often 2-3x too high), so we use research-based formulas.
+ * calculations. Uses set-based approach (HyperTracker) when full set data
+ * is available, falls back to duration-based method otherwise.
  */
 
 import type {
@@ -13,6 +13,13 @@ import type {
   WORKOUT_CALORIES_PER_MINUTE,
   EPOC_MULTIPLIERS,
 } from '@/types/wearable';
+import {
+  calculateWorkoutCalories,
+  createWorkoutSummary,
+  type UserProfile,
+} from './hyper-tracker-calories';
+import type { SetLog } from '@/types/schema';
+import type { ExerciseEntry } from '@/types/schema';
 
 // === CONSTANTS ===
 
@@ -56,16 +63,57 @@ const REFERENCE_WEIGHT_KG = 80;
 
 /**
  * Estimate calories burned during resistance training.
- * Uses conservative estimates based on workout characteristics.
+ * Uses set-based approach (HyperTracker) when full set data is available,
+ * falls back to duration-based method otherwise.
  *
  * @param workout - App workout activity data
  * @param userWeightKg - User's weight in kg
+ * @param userBodyFatPercent - User's body fat percentage (optional, defaults to 15%)
+ * @param setLogs - Optional array of set logs for set-based calculation
+ * @param exercises - Optional map of exercise ID to ExerciseEntry for set-based calculation
  * @returns Expenditure estimate with breakdown
  */
 export function estimateWorkoutExpenditure(
   workout: AppWorkoutActivity,
-  userWeightKg: number
+  userWeightKg: number,
+  userBodyFatPercent: number = 15,
+  setLogs?: SetLog[],
+  exercises?: Map<string, ExerciseEntry>
 ): WorkoutExpenditureEstimate {
+  // Try set-based calculation if we have full set data
+  if (setLogs && exercises && setLogs.length > 0 && exercises.size > 0) {
+    try {
+      const userProfile: UserProfile = {
+        weightKg: userWeightKg,
+        bodyFatPercent: userBodyFatPercent,
+        sex: 'male', // Default, could be passed as parameter if available
+      };
+      
+      const workoutSummary = createWorkoutSummary(
+        setLogs,
+        exercises,
+        workout.durationMinutes
+      );
+      
+      // Only use set-based if we have actual sets after filtering
+      if (workoutSummary.sets.length > 0) {
+        const result = calculateWorkoutCalories(workoutSummary, userProfile);
+        
+        return {
+          baseCalories: result.setCalories + result.restCalories,
+          epocEstimate: result.epocCalories,
+          totalEstimate: result.totalCalories,
+          confidence: 'high',
+          method: 'set_based',
+        };
+      }
+    } catch (error) {
+      console.warn('Set-based calorie calculation failed, falling back to duration method:', error);
+      // Fall through to duration-based method
+    }
+  }
+  
+  // Fallback to duration-based calculation
   const durationMinutes = workout.durationMinutes;
 
   // Estimate intensity from workout data
