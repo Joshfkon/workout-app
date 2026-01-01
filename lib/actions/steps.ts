@@ -28,12 +28,18 @@ export async function saveManualSteps(
   }
 
   // Get existing activity data for this date
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('daily_activity_data')
     .select('*')
     .eq('user_id', user.id)
     .eq('date', date)
     .single();
+
+  // Handle table not existing error gracefully
+  if (existingError?.code === '42P01' || existingError?.message?.includes('schema cache')) {
+    console.error('daily_activity_data table not found - migration may need to be run');
+    return { success: false, error: 'Step tracking is not yet available. Please try again later.' };
+  }
 
   // Prepare activity input
   const activityInput: DailyActivityInput = {
@@ -64,12 +70,18 @@ export async function getStepsForDate(date: string): Promise<number | null> {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('daily_activity_data')
     .select('steps_total')
     .eq('user_id', user.id)
     .eq('date', date)
     .single();
+
+  // Handle table not existing error gracefully
+  if (error?.code === '42P01' || error?.message?.includes('schema cache')) {
+    console.error('daily_activity_data table not found - migration may need to be run');
+    return null;
+  }
 
   return data?.steps_total || null;
 }

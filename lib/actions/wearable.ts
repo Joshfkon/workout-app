@@ -312,6 +312,10 @@ export async function saveDailyActivityData(
 
   if (error || !data) {
     console.error('Failed to save daily activity data:', error);
+    // Handle table not existing error gracefully
+    if (error?.code === '42P01' || error?.message?.includes('schema cache')) {
+      return { success: false, error: 'Step tracking is not yet available. Please try again later.' };
+    }
     return { success: false, error: error?.message || 'Failed to save activity data' };
   }
 
