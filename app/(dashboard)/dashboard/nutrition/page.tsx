@@ -774,8 +774,10 @@ export default function NutritionPage() {
       .select('weight_unit')
       .eq('user_id', user.id)
       .single();
-    
-    const isLbs = prefs?.weight_unit === 'lb';
+
+    // Default to 'lb' if no preference is set (most common unit)
+    const userUnit = (prefs?.weight_unit as 'lb' | 'kg' | null) || 'lb';
+    const isLbs = userUnit === 'lb';
     const weightKg = isLbs ? weight * 0.453592 : weight;
 
     // First try to update existing entry for today
@@ -1628,6 +1630,7 @@ export default function NutritionPage() {
         isOpen={showWeightLog}
         onClose={() => setShowWeightLog(false)}
         onSave={handleSaveWeight}
+        preferredUnit={weightUnit}
       />
 
       <WeightLogModal
