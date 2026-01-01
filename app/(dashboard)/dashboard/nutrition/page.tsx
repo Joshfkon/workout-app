@@ -617,6 +617,7 @@ export default function NutritionPage() {
     source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
     food_id?: string;
     nutritionix_id?: string;
+    barcode?: string;
   }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -645,6 +646,36 @@ export default function NutritionPage() {
     if (error) {
       console.error('Error adding food:', error);
       throw error;
+    }
+
+    // Save scanned barcode products to custom_foods for future search
+    if (food.barcode) {
+      // Check if this barcode already exists in custom_foods
+      const { data: existingFood } = await supabase
+        .from('custom_foods')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('barcode', food.barcode)
+        .maybeSingle();
+
+      if (!existingFood) {
+        // Calculate per-serving nutrition (divide by servings if > 1)
+        const perServingCalories = Math.round(food.calories / food.servings);
+        const perServingProtein = Math.round((food.protein / food.servings) * 10) / 10;
+        const perServingCarbs = Math.round((food.carbs / food.servings) * 10) / 10;
+        const perServingFat = Math.round((food.fat / food.servings) * 10) / 10;
+
+        await supabase.from('custom_foods').insert({
+          user_id: user.id,
+          food_name: food.food_name,
+          serving_size: food.serving_size,
+          calories: perServingCalories,
+          protein: perServingProtein,
+          carbs: perServingCarbs,
+          fat: perServingFat,
+          barcode: food.barcode,
+        });
+      }
     }
 
     await loadData();
