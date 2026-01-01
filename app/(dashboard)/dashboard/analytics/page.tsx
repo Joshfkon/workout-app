@@ -1588,7 +1588,7 @@ export default function AnalyticsPage() {
                                 }
                                 setExpandedMuscles(newExpanded);
                               }}
-                              className="w-full text-left"
+                              className="w-full text-left cursor-pointer"
                             >
                               <div className="flex items-center justify-between mb-1">
                                 <div className="flex items-center gap-2">
@@ -1611,10 +1611,10 @@ export default function AnalyticsPage() {
                                   <span className="text-sm text-surface-400">{muscle.sets} sets</span>
                                 </div>
                               </div>
-                              <div className="h-2 bg-surface-800 rounded-full overflow-hidden relative">
+                              <div className="h-2 bg-surface-800 rounded-full overflow-hidden relative pointer-events-none">
                                 {/* Optimal target marker */}
-                                <div 
-                                  className="absolute top-0 bottom-0 w-0.5 bg-success-500/50 z-10"
+                                <div
+                                  className="absolute top-0 bottom-0 w-0.5 bg-success-500/50"
                                   style={{ left: `${Math.min((optimalSets / maxSets) * 100, 100)}%` }}
                                 />
                                 <div
