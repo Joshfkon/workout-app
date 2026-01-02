@@ -323,6 +323,16 @@ export const ExerciseCard = memo(function ExerciseCard({
     rpe: string;
   }[]>([]);
 
+  // Reset pending inputs when exercise is swapped (exerciseId changes)
+  const prevExerciseIdRef = useRef(block.exerciseId);
+  useEffect(() => {
+    if (prevExerciseIdRef.current !== block.exerciseId) {
+      // Exercise was swapped - reset pending inputs to force re-initialization
+      setPendingInputs([]);
+      prevExerciseIdRef.current = block.exerciseId;
+    }
+  }, [block.exerciseId]);
+
   const completedSets = sets.filter((s) => !s.isWarmup);
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
@@ -1439,7 +1449,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             
             return (
               <CompactSetRow
-                key={`pending-${setNumber}`}
+                key={`pending-${block.exerciseId}-${setNumber}`}
                 setNumber={setNumber}
                 userBodyweightKg={userBodyweightKg}
                 weightMode={weightMode}
@@ -1476,7 +1486,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             const setNumber = completedSets.length + index + 1;
             return (
               <div
-                key={`inactive-${setNumber}`}
+                key={`inactive-${block.exerciseId}-${setNumber}`}
                 className="flex items-center gap-2 px-3 py-2 h-14 bg-surface-800/20 opacity-40"
               >
                 <div className="w-8 text-xs text-surface-500">{setNumber}</div>
@@ -1919,7 +1929,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {/* Pending sets */}
               {isActive && pendingInputs.map((input, index) => {
                 const setNumber = completedSets.length + index + 1;
-                const pendingId = `pending-set-${setNumber}`;
+                const pendingId = `pending-set-${block.exerciseId}-${setNumber}`;
 
                 return (
                   <tr
@@ -2032,7 +2042,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
                 const inactiveSetNumber = completedSets.length + i + 1;
                 return (
-                  <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
+                  <tr key={`inactive-set-${block.exerciseId}-${inactiveSetNumber}`} className="bg-surface-800/20">
                     <td className="px-1.5 py-2.5 text-surface-500">
                       {inactiveSetNumber}
                     </td>

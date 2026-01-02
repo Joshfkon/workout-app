@@ -2451,25 +2451,23 @@ export default function WorkoutPage() {
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
     try {
       const supabase = createUntypedClient();
-      
+
       // Fetch full exercise data from database (for hypertrophy scores, equipment, etc.)
       const { data: fullExerciseData, error: fetchError } = await supabase
         .from('exercises')
         .select('*')
         .eq('id', newExercise.id)
         .single();
-      
+
+      let completeExercise: Exercise;
+
       if (fetchError || !fullExerciseData) {
         console.error('Failed to fetch exercise data:', fetchError);
         // Fall back to the passed exercise data
-        setBlocks(prevBlocks => prevBlocks.map(block => 
-          block.id === blockId 
-            ? { ...block, exerciseId: newExercise.id, exercise: newExercise }
-            : block
-        ));
+        completeExercise = newExercise;
       } else {
         // Create complete exercise object with all fields
-        const completeExercise: Exercise = {
+        completeExercise = {
           id: fullExerciseData.id,
           name: fullExerciseData.name,
           primaryMuscle: fullExerciseData.primary_muscle,
@@ -2490,13 +2488,127 @@ export default function WorkoutPage() {
             progressionEase: fullExerciseData.progression_ease || 3,
           } : undefined,
         };
-        
-        // Update local state with complete exercise data
-        setBlocks(prevBlocks => prevBlocks.map(block => 
-          block.id === blockId 
-            ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise }
-            : block
-        ));
+      }
+
+      // Update local state with complete exercise data
+      // Also reset targetWeightKg to 0 so it uses the new exercise's recommendations
+      setBlocks(prevBlocks => prevBlocks.map(block =>
+        block.id === blockId
+          ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise, targetWeightKg: 0 }
+          : block
+      ));
+
+      // Fetch exercise history for the new exercise if we don't have it
+      if (session?.userId && !exerciseHistories[newExercise.id!]) {
+        const { data: historyBlocks } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            id,
+            exercise_id,
+            workout_sessions!inner (
+              id,
+              completed_at,
+              state,
+              user_id
+            ),
+            set_logs (
+              weight_kg,
+              reps,
+              rpe,
+              is_warmup,
+              logged_at
+            )
+          `)
+          .eq('exercise_id', newExercise.id)
+          .eq('workout_sessions.user_id', session.userId)
+          .eq('workout_sessions.state', 'completed')
+          .order('workout_sessions(completed_at)', { ascending: false })
+          .limit(10);
+
+        if (historyBlocks && historyBlocks.length > 0) {
+          let bestE1RM = 0;
+          let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+          let totalSessions = 0;
+          const seenSessions = new Set<string>();
+
+          // Get last workout data
+          const lastBlock = historyBlocks[0];
+          const lastSession = lastBlock.workout_sessions as any;
+          const lastSets = ((lastBlock.set_logs as any[]) || [])
+            .filter((s: any) => !s.is_warmup)
+            .map((s: any) => ({
+              weightKg: s.weight_kg,
+              reps: s.reps,
+              rpe: s.rpe,
+            }));
+
+          // Calculate best E1RM and PR
+          historyBlocks.forEach((block: any) => {
+            const blockSession = block.workout_sessions;
+            if (blockSession && !seenSessions.has(blockSession.id)) {
+              seenSessions.add(blockSession.id);
+              totalSessions++;
+            }
+
+            const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+            sets.forEach((set: any) => {
+              const e1rm = calculateE1RM(set.weight_kg, set.reps);
+              if (e1rm > bestE1RM) {
+                bestE1RM = e1rm;
+                personalRecord = {
+                  weightKg: set.weight_kg,
+                  reps: set.reps,
+                  e1rm,
+                  date: blockSession?.completed_at || set.logged_at,
+                };
+              }
+            });
+          });
+
+          const newHistory: ExerciseHistoryData = {
+            lastWorkoutDate: lastSession?.completed_at || '',
+            lastWorkoutSets: lastSets,
+            estimatedE1RM: bestE1RM,
+            personalRecord,
+            totalSessions,
+          };
+
+          // Update exercise histories state
+          setExerciseHistories(prev => ({
+            ...prev,
+            [newExercise.id!]: newHistory,
+          }));
+
+          // Regenerate coach message with updated blocks and histories
+          setBlocks(currentBlocks => {
+            const updatedBlocks = currentBlocks.map(block =>
+              block.id === blockId
+                ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise, targetWeightKg: 0 }
+                : block
+            );
+
+            // Build user context for coach message
+            const userContext: UserContext = {
+              goal: userGoal || undefined,
+            };
+
+            // Regenerate coach message with new exercise history
+            const updatedHistories = {
+              ...exerciseHistories,
+              [newExercise.id!]: newHistory,
+            };
+
+            setCoachMessage(generateCoachMessage(
+              updatedBlocks,
+              userProfile || undefined,
+              userContext,
+              preferences.units,
+              updatedHistories
+            ));
+
+            return updatedBlocks;
+          });
+        }
       }
 
       // Update in database
@@ -2504,7 +2616,7 @@ export default function WorkoutPage() {
         .from('exercise_blocks')
         .update({ exercise_id: newExercise.id })
         .eq('id', blockId);
-      
+
       if (updateError) {
         console.error('Failed to swap exercise:', updateError);
         setError(`Failed to swap exercise: ${updateError.message}`);
