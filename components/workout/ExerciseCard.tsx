@@ -16,6 +16,7 @@ import { BodyweightDisplay } from './BodyweightDisplay';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { CompactSetRow } from './CompactSetRow';
 import { SegmentedControl } from './SegmentedControl';
+import { useWorkoutStore } from '@/stores/workoutStore';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -232,7 +233,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [editRpeValue, setEditRpeValue] = useState('');
   const [editFormValue, setEditFormValue] = useState<'clean' | 'some_breakdown' | 'ugly' | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
+  // Warmup completion is persisted in workoutStore to survive exercise navigation
+  const completedWarmups = useWorkoutStore((state) => state.getCompletedWarmupsForBlock(block.id));
+  const toggleWarmupComplete = useWorkoutStore((state) => state.toggleWarmupComplete);
+  const setAllWarmupsComplete = useWorkoutStore((state) => state.setAllWarmupsComplete);
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
   const [warmupWeightInput, setWarmupWeightInput] = useState('');
@@ -265,17 +269,6 @@ export const ExerciseCard = memo(function ExerciseCard({
       setShowSwapModal(true);
     }
   }, [showSwapOnMount]);
-  
-  // Reset warmup completion state when this exercise becomes active
-  // This ensures warmups are fresh when switching exercises out of order
-  const prevIsActiveRef = useRef(isActive);
-  useEffect(() => {
-    // Only reset if we just became active (wasn't active before, now is)
-    if (isActive && !prevIsActiveRef.current) {
-      setCompletedWarmups(new Set());
-    }
-    prevIsActiveRef.current = isActive;
-  }, [isActive]);
   
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
@@ -1295,15 +1288,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         <button
                           onClick={() => {
                             const wasCompleted = completedWarmups.has(warmup.setNumber);
-                            setCompletedWarmups(prev => {
-                              const next = new Set(prev);
-                              if (next.has(warmup.setNumber)) {
-                                next.delete(warmup.setNumber);
-                              } else {
-                                next.add(warmup.setNumber);
-                              }
-                              return next;
-                            });
+                            toggleWarmupComplete(block.id, warmup.setNumber);
                             if (!wasCompleted && onWarmupComplete) {
                               const restTime = warmup.restSeconds || 45;
                               onWarmupComplete(restTime);
@@ -1333,7 +1318,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr className="bg-surface-800/30">
                     <td colSpan={6} className="px-3 py-1.5 text-center">
                       <button
-                        onClick={() => setCompletedWarmups(new Set(warmupSets.map(w => w.setNumber)))}
+                        onClick={() => setAllWarmupsComplete(block.id, warmupSets.map(w => w.setNumber))}
                         className="text-xs text-surface-500 hover:text-surface-400 transition-colors"
                       >
                         Skip warmup (already warm)
