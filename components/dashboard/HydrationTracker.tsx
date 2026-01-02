@@ -34,27 +34,27 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
   async function loadTodayData() {
     const today = getLocalDateString();
 
-    // Get today's total
-    const { data: hydrationData } = await supabase
-      .from('hydration_log')
-      .select('amount_ml')
-      .eq('user_id', userId)
-      .eq('logged_at', today);
+    // Fetch hydration data and targets in parallel for faster loading
+    const [hydrationResult, targetsResult] = await Promise.all([
+      supabase
+        .from('hydration_log')
+        .select('amount_ml')
+        .eq('user_id', userId)
+        .eq('logged_at', today),
+      supabase
+        .from('nutrition_targets')
+        .select('water_ml')
+        .eq('user_id', userId)
+        .single()
+    ]);
 
-    if (hydrationData) {
-      const total = hydrationData.reduce((sum: number, entry: { amount_ml?: number }) => sum + (entry.amount_ml || 0), 0);
+    if (hydrationResult.data) {
+      const total = hydrationResult.data.reduce((sum: number, entry: { amount_ml?: number }) => sum + (entry.amount_ml || 0), 0);
       setTodayTotal(total);
     }
 
-    // Get target from nutrition_targets
-    const { data: targetsData } = await supabase
-      .from('nutrition_targets')
-      .select('water_ml')
-      .eq('user_id', userId)
-      .single();
-
-    if (targetsData?.water_ml) {
-      setTarget(targetsData.water_ml);
+    if (targetsResult.data?.water_ml) {
+      setTarget(targetsResult.data.water_ml);
     }
   }
 
