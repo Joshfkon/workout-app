@@ -469,10 +469,10 @@ export function QuickFoodLogger({
                       min="1"
                       value={frequentWeightAmount}
                       onChange={(e) => setFrequentWeightAmount(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
+                      className="min-w-0 flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-sm text-surface-100 text-center"
                     />
                     {/* Tappable unit toggle */}
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <button
                         onClick={() => {
                           if (frequentWeightUnit === 'oz') {
@@ -482,7 +482,7 @@ export function QuickFoodLogger({
                           }
                           setFrequentWeightUnit('g');
                         }}
-                        className={`text-sm px-2 py-1 rounded transition-colors ${
+                        className={`text-xs px-2 py-1.5 rounded transition-colors ${
                           frequentWeightUnit === 'g'
                             ? 'bg-primary-500 text-white'
                             : 'text-surface-400 hover:bg-surface-700'
@@ -499,7 +499,7 @@ export function QuickFoodLogger({
                           }
                           setFrequentWeightUnit('oz');
                         }}
-                        className={`text-sm px-2 py-1 rounded transition-colors ${
+                        className={`text-xs px-2 py-1.5 rounded transition-colors ${
                           frequentWeightUnit === 'oz'
                             ? 'bg-primary-500 text-white'
                             : 'text-surface-400 hover:bg-surface-700'
@@ -512,16 +512,16 @@ export function QuickFoodLogger({
                           setFrequentInputMode('servings');
                           // Convert weight back to servings
                           if (frequentFoodWeightPerServing) {
-                            const weightInGrams = frequentWeightUnit === 'oz' 
-                              ? (parseFloat(frequentWeightAmount) || 0) * 28.3495 
+                            const weightInGrams = frequentWeightUnit === 'oz'
+                              ? (parseFloat(frequentWeightAmount) || 0) * 28.3495
                               : (parseFloat(frequentWeightAmount) || 0);
                             setFrequentServings((weightInGrams / frequentFoodWeightPerServing).toFixed(2));
                           }
                         }}
-                        className="text-xs text-primary-400 hover:bg-primary-500/20 px-2 py-1 rounded ml-1"
+                        className="text-xs text-primary-400 hover:bg-primary-500/20 px-2 py-1.5 rounded"
                         title="Switch to servings"
                       >
-                        ↔ srv
+                        srv
                       </button>
                     </div>
                   </div>
