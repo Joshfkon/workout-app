@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { Button, Input, Select } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
@@ -48,7 +48,9 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const [modality, setModality] = useState<CardioModality>('incline_walk');
   const [notes, setNotes] = useState('');
 
-  const supabase = createUntypedClient();
+  // Create supabase client once and reuse - avoid recreating on every render
+  const supabaseRef = useRef(createUntypedClient());
+  const supabase = supabaseRef.current;
 
   const loadTodayData = useCallback(async () => {
     const today = getLocalDateString();

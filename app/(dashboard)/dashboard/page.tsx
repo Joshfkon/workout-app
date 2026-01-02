@@ -447,11 +447,12 @@ export default function DashboardPage() {
             .order('created_at', { ascending: false })
             .limit(200),
           
-          // System foods
+          // System foods - limit to 500 to avoid fetching entire table
           supabase.from('system_foods')
             .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
             .eq('is_active', true)
-            .order('name'),
+            .order('name')
+            .limit(500),
 
           // Count completed workouts (for first week hints)
           supabase.from('workout_sessions')
