@@ -53,6 +53,7 @@ import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
+import { getUnavailableEquipment, filterExercisesByEquipment } from '@/services/equipmentFilter';
 
 type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
 
@@ -66,6 +67,7 @@ interface AvailableExercise {
   primary_muscle: string;
   secondary_muscles?: string[];
   mechanic: 'compound' | 'isolation';
+  equipment?: string;  // Equipment required for this exercise
 }
 
 interface CalibratedLift {
@@ -1145,14 +1147,31 @@ export default function WorkoutPage() {
   }, [currentBlockIndex, setStoreBlockIndex]);
 
   // Fetch available exercises on mount for swap functionality
+  // Filter out exercises that require equipment the user doesn't have
   useEffect(() => {
     async function loadAvailableExercises() {
       const supabase = createUntypedClient();
+
+      // Get the current user to fetch their equipment preferences
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Fetch all exercises
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic')
+        .select('id, name, primary_muscle, mechanic, equipment')
         .order('name');
+
       if (data) {
+        // If user is logged in, filter exercises based on their available equipment
+        if (user) {
+          const unavailableEquipmentIds = await getUnavailableEquipment(user.id);
+          if (unavailableEquipmentIds.length > 0) {
+            const filteredExercises = filterExercisesByEquipment(data, unavailableEquipmentIds);
+            setAvailableExercises(filteredExercises);
+            return;
+          }
+        }
+        // If no user or no equipment restrictions, use all exercises
         setAvailableExercises(data);
       }
     }
