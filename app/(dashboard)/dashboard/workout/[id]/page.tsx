@@ -1162,17 +1162,18 @@ export default function WorkoutPage() {
         .order('name');
 
       if (data) {
+        const exercises = data as AvailableExercise[];
         // If user is logged in, filter exercises based on their available equipment
         if (user) {
           const unavailableEquipmentIds = await getUnavailableEquipment(user.id);
           if (unavailableEquipmentIds.length > 0) {
-            const filteredExercises = filterExercisesByEquipment(data, unavailableEquipmentIds);
+            const filteredExercises = filterExercisesByEquipment(exercises, unavailableEquipmentIds);
             setAvailableExercises(filteredExercises);
             return;
           }
         }
         // If no user or no equipment restrictions, use all exercises
-        setAvailableExercises(data);
+        setAvailableExercises(exercises);
       }
     }
     loadAvailableExercises();
