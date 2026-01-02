@@ -1267,6 +1267,9 @@ export function estimateStartingWeight(
     'Romanian Deadlift': { novice: 0.5, intermediate: 0.75, advanced: 1.0 },
     'Barbell Row': { novice: 0.4, intermediate: 0.6, advanced: 0.8 },
     'Overhead Press': { novice: 0.3, intermediate: 0.45, advanced: 0.6 },
+    'Dumbbell Shoulder Press': { novice: 0.12, intermediate: 0.18, advanced: 0.24 },
+    'Dumbbell Overhead Press': { novice: 0.12, intermediate: 0.18, advanced: 0.24 },
+    'Seated Dumbbell Shoulder Press': { novice: 0.12, intermediate: 0.18, advanced: 0.24 },
     'Lat Pulldown': { novice: 0.5, intermediate: 0.7, advanced: 0.9 },
     'Lateral Raise': { novice: 0.05, intermediate: 0.08, advanced: 0.12 },
     'Cable Fly': { novice: 0.1, intermediate: 0.15, advanced: 0.2 },
@@ -1276,7 +1279,22 @@ export function estimateStartingWeight(
     'Cable Tricep Pushdown': { novice: 0.15, intermediate: 0.25, advanced: 0.35 },
   };
 
-  const multiplier = strengthMultipliers[exerciseName]?.[experience] || 0.3;
+  // Try direct match first
+  let multiplier = strengthMultipliers[exerciseName]?.[experience];
+
+  // If no direct match, check for dumbbell overhead/shoulder press patterns
+  if (!multiplier) {
+    const lowerName = exerciseName.toLowerCase();
+    const isDumbbell = lowerName.includes('dumbbell');
+    const isOverheadOrShoulder = lowerName.includes('overhead') || lowerName.includes('shoulder');
+
+    if (isDumbbell && isOverheadOrShoulder) {
+      multiplier = strengthMultipliers['Dumbbell Shoulder Press']?.[experience];
+    }
+  }
+
+  // Fall back to default
+  multiplier = multiplier || 0.3;
   const estimatedWeight = leanMassKg * multiplier;
 
   const increment = exerciseName.toLowerCase().includes('dumbbell') ? 2 : 2.5;

@@ -138,6 +138,23 @@ function findExerciseMatch(exerciseName: string): string | null {
     if (key.toLowerCase() === lowerName) return key;
   }
   
+  // Check for dumbbell variants first before falling back to barbell
+  const lowerNameForEquipment = exerciseName.toLowerCase();
+  const hasDumbbell = lowerNameForEquipment.includes('dumbbell') || lowerNameForEquipment.includes('db ');
+
+  // Dumbbell-specific patterns take priority
+  if (hasDumbbell) {
+    if (lowerNameForEquipment.includes('overhead') || lowerNameForEquipment.includes('shoulder') || lowerNameForEquipment.includes('military')) {
+      return 'Dumbbell Shoulder Press';
+    }
+    if (lowerNameForEquipment.includes('bench') || lowerNameForEquipment.includes('chest press')) {
+      return 'Dumbbell Bench Press';
+    }
+    if (lowerNameForEquipment.includes('incline')) {
+      return 'Incline Dumbbell Press';
+    }
+  }
+
   // Fuzzy match - check if exercise name contains key parts
   const matchPatterns: Record<string, string> = {
     'bench press': 'Barbell Bench Press',
@@ -301,6 +318,14 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     ratioVariance: 0.1,
     relatedExercises: [
       { exercise: 'Dumbbell Shoulder Press', ratio: 0.80 },
+    ]
+  },
+  'Dumbbell Shoulder Press': {
+    parent: 'Overhead Press',
+    ratioToParent: 0.40, // Per-hand dumbbell weight is ~40% of barbell OHP total
+    ratioVariance: 0.1,
+    relatedExercises: [
+      { exercise: 'Arnold Press', ratio: 0.85 },
     ]
   },
   // Isolation exercises
