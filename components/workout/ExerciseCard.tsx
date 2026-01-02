@@ -1059,7 +1059,8 @@ export const ExerciseCard = memo(function ExerciseCard({
             {/* Delete exercise button */}
             {onExerciseDelete && isActive && (
               <button
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (confirm(`Remove "${exercise.name}" from this workout?`)) {
                     onExerciseDelete();
                   }
