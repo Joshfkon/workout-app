@@ -402,7 +402,6 @@ function WorkoutPageContent() {
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
-    console.log('[WorkoutPage] Component mounted');
     setIsMounted(true);
   }, []);
 
@@ -604,7 +603,8 @@ function WorkoutPageContent() {
     if (phase === 'workout') {
       resumeSession();
     }
-  }, [phase, resumeSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]); // Removed resumeSession from deps - Zustand selectors create new refs each render
 
   // Handle navigation away from active workout - pause session so it can be resumed
   useEffect(() => {
@@ -642,7 +642,8 @@ function WorkoutPageContent() {
         pauseSession();
       }
     };
-  }, [phase, pauseSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]); // Removed pauseSession from deps - Zustand selectors create new refs each render
 
   // Load workout data
   useEffect(() => {
@@ -1137,19 +1138,12 @@ function WorkoutPageContent() {
       }
     }
 
-    console.log('[WorkoutPage] loadWorkout effect triggered, sessionId:', sessionId);
     loadWorkout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // preferences.units is used but we don't want to reload on unit change
 
   // Sync workout state to store for resume functionality
   useEffect(() => {
-    console.log('[WorkoutPage] Sync to store effect triggered', { 
-      hasSession: !!session, 
-      blocksCount: blocks.length, 
-      phase,
-      startWorkoutSessionRef: startWorkoutSession.toString().substring(0, 50)
-    });
     if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
       // Extract exercises from blocks
       const exercisesList = blocks
@@ -1159,7 +1153,6 @@ function WorkoutPageContent() {
       // Extract base blocks (without exercise property) for the store
       const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
 
-      console.log('[WorkoutPage] Calling startWorkoutSession');
       startWorkoutSession(session, baseBlocks, exercisesList);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1168,7 +1161,8 @@ function WorkoutPageContent() {
   // Sync current block index to store
   useEffect(() => {
     setStoreBlockIndex(currentBlockIndex);
-  }, [currentBlockIndex, setStoreBlockIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBlockIndex]); // Removed setStoreBlockIndex from deps - Zustand selectors create new refs each render
 
   // Fetch available exercises on mount for swap functionality
   // Filter out exercises that require equipment the user doesn't have
