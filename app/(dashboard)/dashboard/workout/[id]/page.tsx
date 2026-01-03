@@ -543,6 +543,8 @@ function WorkoutPageContent() {
   const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(null);
   const [calibrationEngine, setCalibrationEngine] = useState(() => new RPECalibrationEngine());
   const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
+  // Track if we've already synced the session to the store (prevents infinite loop)
+  const hasInitializedStoreRef = useRef(false);
   const [amrapSuggestion, setAmrapSuggestion] = useState<{
     exerciseName: string;
     blockId: string;
@@ -562,14 +564,17 @@ function WorkoutPageContent() {
   const currentExercise = currentBlock?.exercise;
   const currentBlockSets = completedSets.filter(s => s.exerciseBlockId === currentBlock?.id);
 
+  // Extract primitive value for stable useMemo dependency
+  const currentBlockRestSeconds = currentBlock?.targetRestSeconds;
+
   // Memoize rest timer options to prevent hook reinitialization
   const restTimerOptions = useMemo(() => ({
-    defaultSeconds: restTimerDuration ?? currentBlock?.targetRestSeconds ?? 180,
+    defaultSeconds: restTimerDuration ?? currentBlockRestSeconds ?? 180,
     autoStart: false,
     onComplete: () => {
       // Timer completed - could optionally auto-dismiss
     },
-  }), [restTimerDuration, currentBlock?.targetRestSeconds]);
+  }), [restTimerDuration, currentBlockRestSeconds]);
 
   // Rest timer hook
   const restTimer = useRestTimer(restTimerOptions);
@@ -647,6 +652,9 @@ function WorkoutPageContent() {
 
   // Load workout data
   useEffect(() => {
+    // Reset store initialization flag when loading a new session
+    hasInitializedStoreRef.current = false;
+
     async function loadWorkout() {
       try {
         const supabase = createUntypedClient();
@@ -1142,8 +1150,11 @@ function WorkoutPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // preferences.units is used but we don't want to reload on unit change
 
-  // Sync workout state to store for resume functionality
+  // Sync workout state to store for resume functionality (only once per session)
   useEffect(() => {
+    // Only initialize once to prevent infinite loops - blocks array changes reference frequently
+    if (hasInitializedStoreRef.current) return;
+
     if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
       // Extract exercises from blocks
       const exercisesList = blocks
@@ -1154,9 +1165,10 @@ function WorkoutPageContent() {
       const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
 
       startWorkoutSession(session, baseBlocks, exercisesList);
+      hasInitializedStoreRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, blocks, phase]); // Removed startWorkoutSession from deps - Zustand selectors are stable
+  }, [session, blocks.length, phase]); // Use blocks.length instead of blocks to avoid ref changes
 
   // Sync current block index to store
   useEffect(() => {
@@ -1314,38 +1326,44 @@ function WorkoutPageContent() {
     initCalibration();
   }, [sessionId]);
 
-  // Check for AMRAP suggestions when current block or set number changes
+  // Check for AMRAP suggestions when current block or set count changes
+  // Use primitive deps to avoid infinite loops from object reference changes
+  const currentBlockId = currentBlock?.id;
+  const currentBlockTargetSets = currentBlock?.targetSets;
+  const currentExerciseName = currentExercise?.name;
+
   useEffect(() => {
-    if (!currentBlock || !currentExercise) {
+    if (!currentBlockId || !currentExerciseName || !currentBlockTargetSets) {
       setAmrapSuggestion(null);
       return;
     }
 
-    const safetyTier = getFailureSafetyTier(currentExercise.name);
+    const safetyTier = getFailureSafetyTier(currentExerciseName);
     const isSafeExercise = safetyTier === 'push_freely';
-    
+
     // Count completed sets for this block
     const completedSetsForBlock = completedSets.filter(
-      s => s.exerciseBlockId === currentBlock.id && s.setType === 'normal'
+      s => s.exerciseBlockId === currentBlockId && s.setType === 'normal'
     ).length;
-    
+
     // Suggest AMRAP if:
     // 1. We're about to do the last set (completed sets + 1 = target sets)
     // 2. Exercise is safe to push to failure
     // 3. We haven't already completed all sets
-    const isAboutToDoLastSet = completedSetsForBlock + 1 === currentBlock.targetSets;
-    const hasNotCompletedAllSets = completedSetsForBlock < currentBlock.targetSets;
+    const isAboutToDoLastSet = completedSetsForBlock + 1 === currentBlockTargetSets;
+    const hasNotCompletedAllSets = completedSetsForBlock < currentBlockTargetSets;
 
     if (isAboutToDoLastSet && isSafeExercise && hasNotCompletedAllSets) {
       setAmrapSuggestion({
-        exerciseName: currentExercise.name,
-        blockId: currentBlock.id,
+        exerciseName: currentExerciseName,
+        blockId: currentBlockId,
         setNumber: completedSetsForBlock + 1,
       });
     } else {
       setAmrapSuggestion(null);
     }
-  }, [currentBlock, currentExercise, completedSets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBlockId, currentExerciseName, currentBlockTargetSets, completedSets.length]);
 
   // Fetch frequently used exercises for sorting
   useEffect(() => {
