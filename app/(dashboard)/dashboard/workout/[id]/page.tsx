@@ -598,6 +598,9 @@ function WorkoutPageContent() {
     hasWorkoutProgressRef.current = phase === 'workout' && completedSets.length > 0;
   }, [phase, completedSets.length]);
 
+  // Track whether we've synced to the store for this session (prevents infinite loop)
+  const hasStoreSyncedRef = useRef<string | null>(null);
+
   // Resume session when entering workout phase (in case it was paused)
   useEffect(() => {
     if (phase === 'workout') {
@@ -1143,7 +1146,13 @@ function WorkoutPageContent() {
   }, [sessionId]); // preferences.units is used but we don't want to reload on unit change
 
   // Sync workout state to store for resume functionality
+  // Uses hasStoreSyncedRef to prevent infinite loops - only sync once per session
   useEffect(() => {
+    // Skip if already synced for this session
+    if (hasStoreSyncedRef.current === sessionId) {
+      return;
+    }
+
     if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
       // Extract exercises from blocks
       const exercisesList = blocks
@@ -1154,9 +1163,12 @@ function WorkoutPageContent() {
       const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
 
       startWorkoutSession(session, baseBlocks, exercisesList);
+
+      // Mark as synced for this session
+      hasStoreSyncedRef.current = sessionId;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, blocks, phase]); // Removed startWorkoutSession from deps - Zustand selectors are stable
+  }, [session, blocks, phase, sessionId]); // Removed startWorkoutSession from deps - Zustand selectors are stable
 
   // Sync current block index to store
   useEffect(() => {
