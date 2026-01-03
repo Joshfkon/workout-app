@@ -1137,6 +1137,7 @@ function WorkoutPageContent() {
       }
     }
 
+    console.log('[WorkoutPage] loadWorkout effect triggered, sessionId:', sessionId);
     loadWorkout();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // preferences.units is used but we don't want to reload on unit change
