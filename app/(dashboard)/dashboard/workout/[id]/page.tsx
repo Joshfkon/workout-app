@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
@@ -391,7 +391,7 @@ function generateCoachMessage(
   };
 }
 
-export default function WorkoutPage() {
+function WorkoutPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
