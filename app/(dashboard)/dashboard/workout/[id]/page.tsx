@@ -385,10 +385,8 @@ function generateCoachMessage(
   tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
 
   // Use deterministic selection to avoid hydration mismatches
-  // Use first greeting or index based on sessionId hash for consistency
-  const greetingIndex = greetings.length > 1 
-    ? (sessionId ? sessionId.charCodeAt(0) % greetings.length : 0)
-    : 0;
+  // Use first greeting to ensure consistency between server and client
+  const greetingIndex = 0;
   
   return {
     greeting: greetings[greetingIndex],
