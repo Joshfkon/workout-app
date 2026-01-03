@@ -180,7 +180,9 @@ function generateCoachMessage(
   else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
 
   // Generate greeting based on time of day and goal
-  const hour = new Date().getHours();
+  // Use a deterministic approach to avoid hydration mismatches
+  // We'll use the first greeting option instead of random selection
+  const hour = typeof window !== 'undefined' ? new Date().getHours() : 12; // Default to noon for SSR
   let timeGreeting = 'Hey';
   if (hour < 12) timeGreeting = 'Good morning';
   else if (hour < 17) timeGreeting = 'Good afternoon';
@@ -382,8 +384,14 @@ function generateCoachMessage(
   }
   tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
 
+  // Use deterministic selection to avoid hydration mismatches
+  // Use first greeting or index based on sessionId hash for consistency
+  const greetingIndex = greetings.length > 1 
+    ? (sessionId ? sessionId.charCodeAt(0) % greetings.length : 0)
+    : 0;
+  
   return {
-    greeting: greetings[Math.floor(Math.random() * greetings.length)],
+    greeting: greetings[greetingIndex],
     overview: overviews[0],  // Use the personalized overview
     personalizedInsight,
     exerciseNotes,
