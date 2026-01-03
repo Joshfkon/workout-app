@@ -1143,6 +1143,12 @@ function WorkoutPageContent() {
 
   // Sync workout state to store for resume functionality
   useEffect(() => {
+    console.log('[WorkoutPage] Sync to store effect triggered', { 
+      hasSession: !!session, 
+      blocksCount: blocks.length, 
+      phase,
+      startWorkoutSessionRef: startWorkoutSession.toString().substring(0, 50)
+    });
     if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
       // Extract exercises from blocks
       const exercisesList = blocks
@@ -1152,9 +1158,11 @@ function WorkoutPageContent() {
       // Extract base blocks (without exercise property) for the store
       const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
 
+      console.log('[WorkoutPage] Calling startWorkoutSession');
       startWorkoutSession(session, baseBlocks, exercisesList);
     }
-  }, [session, blocks, phase, startWorkoutSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, blocks, phase]); // Removed startWorkoutSession from deps - Zustand selectors are stable
 
   // Sync current block index to store
   useEffect(() => {
