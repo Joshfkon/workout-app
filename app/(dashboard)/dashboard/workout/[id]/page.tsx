@@ -5163,3 +5163,16 @@ function WorkoutPageContent() {
     </div>
   );
 }
+
+export default function WorkoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <LoadingAnimation type="random" size="lg" />
+        <p className="mt-4 text-surface-400">Loading workout...</p>
+      </div>
+    }>
+      <WorkoutPageContent />
+    </Suspense>
+  );
+}
