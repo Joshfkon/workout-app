@@ -1124,7 +1124,7 @@ function WorkoutPageContent() {
     }
 
     loadWorkout();
-  }, [sessionId]);
+  }, [sessionId, preferences.units]);
 
   // Sync workout state to store for resume functionality
   useEffect(() => {

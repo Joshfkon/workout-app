@@ -20,6 +20,7 @@ export function StepTracking({ date, userWeightKg }: StepTrackingProps) {
 
   useEffect(() => {
     loadSteps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
   async function loadSteps() {
