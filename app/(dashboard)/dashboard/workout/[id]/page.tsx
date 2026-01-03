@@ -402,6 +402,7 @@ function WorkoutPageContent() {
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
+    console.log('[WorkoutPage] Component mounted');
     setIsMounted(true);
   }, []);
 
