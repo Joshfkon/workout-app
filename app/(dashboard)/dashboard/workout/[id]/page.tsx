@@ -1147,28 +1147,35 @@ function WorkoutPageContent() {
 
   // Sync workout state to store for resume functionality
   // Uses hasStoreSyncedRef to prevent infinite loops - only sync once per session
+  // IMPORTANT: Use stable identifiers (session?.id, blocks.length) instead of object refs
+  // to prevent infinite re-renders from dependency changes
+  const sessionReady = session?.id && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary';
+
   useEffect(() => {
     // Skip if already synced for this session
     if (hasStoreSyncedRef.current === sessionId) {
       return;
     }
 
-    if (session && blocks.length > 0 && phase !== 'loading' && phase !== 'error' && phase !== 'summary') {
-      // Extract exercises from blocks
-      const exercisesList = blocks
-        .map(block => block.exercise)
-        .filter((ex): ex is Exercise => ex !== undefined);
-
-      // Extract base blocks (without exercise property) for the store
-      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
-
-      startWorkoutSession(session, baseBlocks, exercisesList);
-
-      // Mark as synced for this session
-      hasStoreSyncedRef.current = sessionId;
+    // Only sync when session is fully ready
+    if (!sessionReady || !session) {
+      return;
     }
+
+    // Extract exercises from blocks
+    const exercisesList = blocks
+      .map(block => block.exercise)
+      .filter((ex): ex is Exercise => ex !== undefined);
+
+    // Extract base blocks (without exercise property) for the store
+    const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
+
+    startWorkoutSession(session, baseBlocks, exercisesList);
+
+    // Mark as synced for this session
+    hasStoreSyncedRef.current = sessionId;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, blocks, phase, sessionId]); // Removed startWorkoutSession from deps - Zustand selectors are stable
+  }, [sessionReady, sessionId]); // Use stable boolean instead of object refs to prevent infinite loops
 
   // Sync current block index to store
   useEffect(() => {
