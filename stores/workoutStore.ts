@@ -8,6 +8,10 @@ import type {
   Exercise,
 } from '@/types/schema';
 
+// Stable empty set to return when a block has no completed warmups
+// This prevents infinite re-renders from Zustand selector returning new Set() each time
+const EMPTY_SET: Set<number> = new Set();
+
 interface WorkoutState {
   // Current session
   activeSession: WorkoutSession | null;
@@ -223,7 +227,7 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       getCompletedWarmupsForBlock: (blockId) => {
         const { completedWarmups } = get();
-        return completedWarmups.get(blockId) || new Set();
+        return completedWarmups.get(blockId) || EMPTY_SET;
       },
 
       getSessionStats: () => {
