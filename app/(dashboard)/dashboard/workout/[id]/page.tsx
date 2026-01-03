@@ -1131,7 +1131,8 @@ function WorkoutPageContent() {
     }
 
     loadWorkout();
-  }, [sessionId, preferences.units]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]); // preferences.units is used but we don't want to reload on unit change
 
   // Sync workout state to store for resume functionality
   useEffect(() => {
