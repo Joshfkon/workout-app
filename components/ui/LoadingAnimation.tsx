@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 
 type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots' | 'pullup' | 'squat' | 'pushup' | 'jumprope' | 'deadlift' | 'random';
 
@@ -43,13 +43,18 @@ export function LoadingAnimation({
   showTip = false 
 }: LoadingAnimationProps) {
   const [tip, setTip] = useState('');
-  
-  // Pick a random animation type on mount (stable for component lifetime)
-  const actualType = useMemo(() => {
+  const [actualType, setActualType] = useState<AnimationType>(() =>
+    type === 'random' ? FITNESS_ANIMATIONS[0] : type
+  );
+
+  useEffect(() => {
     if (type === 'random') {
-      return FITNESS_ANIMATIONS[Math.floor(Math.random() * FITNESS_ANIMATIONS.length)];
+      setActualType(
+        FITNESS_ANIMATIONS[Math.floor(Math.random() * FITNESS_ANIMATIONS.length)]
+      );
+    } else {
+      setActualType(type);
     }
-    return type;
   }, [type]);
   
   useEffect(() => {
@@ -557,4 +562,3 @@ export function FullPageLoading({ text = 'Loading...', type = 'random' as Animat
 }
 
 export default LoadingAnimation;
-
