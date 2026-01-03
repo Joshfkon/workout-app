@@ -1105,13 +1105,15 @@ export default function WorkoutPage() {
 
       if (!user) throw new Error('Not logged in');
 
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
+      const { data: userData } = await supabase
+        .from('users')
         .select('goal')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
 
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const userGoal: Goal = userData?.goal 
+        ? (userData.goal === 'maintenance' ? 'maintain' : userData.goal) as Goal
+        : 'maintain';
 
       const today = new Date().toISOString().split('T')[0];
       const { data: existingWorkout } = await supabase

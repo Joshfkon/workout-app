@@ -253,17 +253,18 @@ function NewWorkoutContent() {
       // Get user's goal and equipment
       let userGoal: Goal = 'maintain';
       try {
-        const { data: userProfile, error: profileError } = await supabase
-        .from('user_profiles')
+        const { data: userData, error: userError } = await supabase
+        .from('users')
         .select('goal')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
-        if (!profileError && userProfile?.goal) {
-          userGoal = userProfile.goal as Goal;
+        if (!userError && userData?.goal) {
+          // Map 'maintenance' to 'maintain' for compatibility
+          userGoal = (userData.goal === 'maintenance' ? 'maintain' : userData.goal) as Goal;
         }
       } catch (err) {
-        console.warn('user_profiles table not found or error:', err);
+        console.warn('Error fetching user goal:', err);
         // Continue with default goal
       }
       
@@ -1275,14 +1276,16 @@ function NewWorkoutContent() {
       
       if (!user) throw new Error('You must be logged in');
 
-      // Fetch user's goal from profile
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
+      // Fetch user's goal from users table
+      const { data: userData } = await supabase
+        .from('users')
         .select('goal')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const userGoal: Goal = userData?.goal 
+        ? (userData.goal === 'maintenance' ? 'maintain' : userData.goal) as Goal
+        : 'maintain';
 
       // Create workout session
       const { data: session, error: sessionError } = await supabase

@@ -201,14 +201,16 @@ export default function MesocyclePage() {
       
       if (!user) throw new Error('Not logged in');
 
-      // Fetch user's goal from profile
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
+      // Fetch user's goal from users table
+      const { data: userData } = await supabase
+        .from('users')
         .select('goal')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
       
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const userGoal: Goal = userData?.goal 
+        ? (userData.goal === 'maintenance' ? 'maintain' : userData.goal) as Goal
+        : 'maintain';
 
       // Check if there's already a workout for today
       const today = new Date().toISOString().split('T')[0];
