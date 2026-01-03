@@ -392,6 +392,13 @@ function generateCoachMessage(
 }
 
 function WorkoutPageContent() {
+  // Ensure we're on the client to prevent hydration mismatches
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -3130,7 +3137,8 @@ function WorkoutPageContent() {
     }
   };
 
-  if (phase === 'loading') {
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!isMounted || phase === 'loading') {
     // Skip showing loading screen if coming from quick workout page (already saw one)
     if (fromCreate) {
       return null;
