@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Button } from '@/components/ui';
 import { BodyweightInput } from './BodyweightInput';
 import type {
@@ -68,7 +68,7 @@ export function BodyweightSetEditRow({
   const [rpe, setRpe] = useState(String(set.rpe));
 
   // Update effective load when bodyweight data changes
-  const handleBodyweightDataChange = (newData: BodyweightData) => {
+  const handleBodyweightDataChange = useCallback((newData: BodyweightData) => {
     const { calculateEffectiveLoad } = require('@/types/schema');
     const effectiveLoad = calculateEffectiveLoad(
       newData.userBodyweightKg,
@@ -80,7 +80,7 @@ export function BodyweightSetEditRow({
       ...newData,
       effectiveLoadKg: effectiveLoad,
     });
-  };
+  }, []);
 
   const handleSave = () => {
     const repsNum = parseInt(reps);
@@ -185,4 +185,3 @@ export function BodyweightSetEditRow({
     </tr>
   );
 }
-
