@@ -162,8 +162,8 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
                   <label className="block text-sm font-medium text-surface-200 mb-2">
                     Share Type
                   </label>
-                  <div className="flex gap-2">
-                    {(['single_workout', 'template'] as ShareType[]).map((type) => (
+                  <div className="flex gap-2 flex-wrap">
+                    {(['single_workout', 'template', 'crash_the_economy'] as ShareType[]).map((type) => (
                       <button
                         key={type}
                         type="button"
@@ -174,7 +174,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
                             : 'bg-surface-900 border-surface-700 text-surface-200 hover:border-surface-600'
                         }`}
                       >
-                        {type === 'single_workout' ? 'Single Workout' : 'Template'}
+                        {type === 'single_workout' ? 'Single Workout' : type === 'template' ? 'Template' : 'Crash The Economy'}
                       </button>
                     ))}
                   </div>
