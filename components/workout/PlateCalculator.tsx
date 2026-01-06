@@ -59,12 +59,17 @@ export const PlateCalculator = memo(function PlateCalculator({
     ? (unit === 'lb' ? startingWeightNum / 2.20462 : startingWeightNum)
     : undefined;
 
+  // If starting weight is set, it's a machine (no barbell)
+  const isMachine = startingWeightKg !== undefined;
+
   const calculation = useMemo(() => {
     const weight = parseFloat(targetWeight) || 0;
-    const result = calculatePlates(weight, barbellWeight, unit, undefined, startingWeightKg);
+    // For machines, use 0 as barbell weight since starting weight is the base
+    const effectiveBarbellWeight = isMachine ? 0 : barbellWeight;
+    const result = calculatePlates(weight, effectiveBarbellWeight, unit, undefined, startingWeightKg);
     onCalculate?.(result);
     return result;
-  }, [targetWeight, barbellWeight, unit, startingWeightKg, onCalculate]);
+  }, [targetWeight, barbellWeight, unit, startingWeightKg, isMachine, onCalculate]);
 
   const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -75,9 +80,9 @@ export const PlateCalculator = memo(function PlateCalculator({
   };
 
   const handleQuickAdjust = (amount: number) => {
-    const current = parseFloat(targetWeight) || barbellWeight;
+    const current = parseFloat(targetWeight) || 0;
     const minWeight = startingWeightKg 
-      ? (unit === 'lb' ? formatWeightValue(startingWeightKg, 'lb') : startingWeightKg) + barbellWeight
+      ? (unit === 'lb' ? formatWeightValue(startingWeightKg, 'lb') : startingWeightKg)
       : barbellWeight;
     const newWeight = Math.max(minWeight, current + amount);
     setTargetWeight(String(newWeight));
@@ -166,26 +171,28 @@ export const PlateCalculator = memo(function PlateCalculator({
         </div>
       </div>
 
-      {/* Barbell Type Selector */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">Barbell Type</label>
-        <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(BARBELL_WEIGHTS[unit]) as BarbellType[]).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setBarbellType(type)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                barbellType === type
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-surface-700 text-gray-300 hover:bg-surface-600'
-              }`}
-            >
-              {BARBELL_WEIGHTS[unit][type].label}
-            </button>
-          ))}
+      {/* Barbell Type Selector - only show if not a machine */}
+      {!isMachine && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-300">Barbell Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(BARBELL_WEIGHTS[unit]) as BarbellType[]).map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setBarbellType(type)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  barbellType === type
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-surface-700 text-gray-300 hover:bg-surface-600'
+                }`}
+              >
+                {BARBELL_WEIGHTS[unit][type].label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Visual Barbell Display */}
       <div className="space-y-2">

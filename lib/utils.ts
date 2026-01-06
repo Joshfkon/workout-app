@@ -296,26 +296,23 @@ export function calculatePlates(
 ): PlateCalculationResult {
   const plates = availablePlates || [...STANDARD_PLATES[unit]];
   
-  // If starting weight is provided, subtract it from target to get the weight to add
-  const effectiveTargetWeight = startingWeight ? targetWeight - startingWeight : targetWeight;
-  const effectiveBarbellWeight = startingWeight ? Math.max(0, barbellWeight - startingWeight) : barbellWeight;
+  // If starting weight is provided, it's a machine (no barbell)
+  if (startingWeight !== undefined) {
+    // Target weight must be at least the starting weight
+    if (targetWeight < startingWeight) {
+      return {
+        isValid: false,
+        barbellWeight: 0, // No barbell for machines
+        platesPerSide: [],
+        weightPerSide: 0,
+        actualTotal: startingWeight,
+        error: `Target weight must be at least ${startingWeight}${unit} (starting weight)`,
+      };
+    }
 
-  // Target weight must be at least the barbell weight (or barbell + starting weight)
-  const minWeight = startingWeight ? startingWeight + effectiveBarbellWeight : barbellWeight;
-  if (targetWeight < minWeight) {
-    return {
-      isValid: false,
-      barbellWeight,
-      platesPerSide: [],
-      weightPerSide: 0,
-      actualTotal: minWeight,
-      error: `Target weight must be at least ${minWeight}${unit}${startingWeight ? ` (${startingWeight}${unit} starting + ${effectiveBarbellWeight}${unit} barbell)` : ` (barbell weight)`}`,
-    };
-  }
-
-  // Calculate weight needed per side (accounting for starting weight)
-  const totalPlateWeight = effectiveTargetWeight - effectiveBarbellWeight;
-  let remainingPerSide = totalPlateWeight / 2;
+    // Calculate weight needed per side (target - starting weight, divided by 2)
+    const totalPlateWeight = targetWeight - startingWeight;
+    let remainingPerSide = totalPlateWeight / 2;
 
   // Check if the weight is divisible (plates go on both sides)
   if (totalPlateWeight % 2 !== 0 && unit === 'kg') {
