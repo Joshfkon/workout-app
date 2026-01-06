@@ -10,7 +10,7 @@ export async function saveMachineStartingWeight(
   startingWeightKg: number | null
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const supabase = createUntypedServerClient();
+    const supabase = await createUntypedServerClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -61,7 +61,7 @@ export async function loadMachineStartingWeight(
   exerciseId: string
 ): Promise<{ startingWeightKg: number | null; error?: string }> {
   try {
-    const supabase = createUntypedServerClient();
+    const supabase = await createUntypedServerClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
