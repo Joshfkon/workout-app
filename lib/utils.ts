@@ -339,7 +339,8 @@ export function calculatePlates(
 
   // Check if we achieved the target (allowing small rounding errors)
   const weightPerSide = platesPerSide.reduce((sum, p) => sum + p, 0);
-  const actualTotal = barbellWeight + (weightPerSide * 2);
+  // Actual total includes starting weight if provided
+  const actualTotal = (startingWeight ?? 0) + barbellWeight + (weightPerSide * 2);
 
   if (Math.abs(remainingPerSide) > 0.01) {
     return {
