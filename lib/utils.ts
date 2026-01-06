@@ -314,6 +314,68 @@ export function calculatePlates(
     const totalPlateWeight = targetWeight - startingWeight;
     let remainingPerSide = totalPlateWeight / 2;
 
+    // Check if the weight is divisible (plates go on both sides)
+    if (totalPlateWeight % 2 !== 0 && unit === 'kg') {
+      // For kg, we need the plate weight to be divisible by smallest increment
+      const smallestPlate = Math.min(...plates);
+      if ((totalPlateWeight / 2) % smallestPlate !== 0) {
+        // Round to nearest achievable weight
+        remainingPerSide = Math.round(remainingPerSide / smallestPlate) * smallestPlate;
+      }
+    }
+
+    const platesPerSide: number[] = [];
+
+    // Greedy algorithm: use largest plates first
+    for (const plate of plates.sort((a, b) => b - a)) {
+      while (remainingPerSide >= plate) {
+        platesPerSide.push(plate);
+        remainingPerSide -= plate;
+      }
+    }
+
+    // Check if we achieved the target (allowing small rounding errors)
+    const weightPerSide = platesPerSide.reduce((sum, p) => sum + p, 0);
+    // Actual total for machines: starting weight + plates
+    const actualTotal = startingWeight + (weightPerSide * 2);
+
+    if (Math.abs(remainingPerSide) > 0.01) {
+      return {
+        isValid: false,
+        barbellWeight: 0,
+        platesPerSide,
+        weightPerSide,
+        actualTotal,
+        error: `Cannot exactly achieve ${targetWeight}${unit}. Closest: ${actualTotal}${unit}`,
+      };
+    }
+
+    return {
+      isValid: true,
+      barbellWeight: 0, // No barbell for machines
+      platesPerSide,
+      weightPerSide,
+      actualTotal,
+    };
+  }
+
+  // Barbell calculation (no starting weight)
+  // Target weight must be at least the barbell weight
+  if (targetWeight < barbellWeight) {
+    return {
+      isValid: false,
+      barbellWeight,
+      platesPerSide: [],
+      weightPerSide: 0,
+      actualTotal: barbellWeight,
+      error: `Target weight must be at least ${barbellWeight}${unit} (barbell weight)`,
+    };
+  }
+
+  // Calculate weight needed per side
+  const totalPlateWeight = targetWeight - barbellWeight;
+  let remainingPerSide = totalPlateWeight / 2;
+
   // Check if the weight is divisible (plates go on both sides)
   if (totalPlateWeight % 2 !== 0 && unit === 'kg') {
     // For kg, we need the plate weight to be divisible by smallest increment
@@ -336,8 +398,7 @@ export function calculatePlates(
 
   // Check if we achieved the target (allowing small rounding errors)
   const weightPerSide = platesPerSide.reduce((sum, p) => sum + p, 0);
-  // Actual total includes starting weight if provided
-  const actualTotal = (startingWeight ?? 0) + barbellWeight + (weightPerSide * 2);
+  const actualTotal = barbellWeight + (weightPerSide * 2);
 
   if (Math.abs(remainingPerSide) > 0.01) {
     return {
