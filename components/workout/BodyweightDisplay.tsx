@@ -160,7 +160,8 @@ export const BodyweightDisplayInline = memo(function BodyweightDisplayInline({
   className?: string;
 }) {
   const { userBodyweightKg, modification, addedWeightKg, assistanceWeightKg, effectiveLoadKg } = data;
-  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  // Use convertWeightForDisplay to preserve exact values (not rounded to plate increments)
+  const displayWeight = (kg: number) => convertWeightForDisplay(kg, unit);
 
   let content: React.ReactNode;
 
