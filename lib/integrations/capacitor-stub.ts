@@ -5,11 +5,44 @@
  * with safe fallbacks for web-only environments.
  */
 
-import { Capacitor as CapacitorCore } from '@capacitor/core';
-import { Browser } from '@capacitor/browser';
-import { App, type URLOpenListenerEvent } from '@capacitor/app';
-import { StatusBar, Style } from '@capacitor/status-bar';
-import { SplashScreen } from '@capacitor/splash-screen';
+// Optional Capacitor imports - use try-catch to allow web-only builds
+let CapacitorCore: any;
+let Browser: any;
+let App: any;
+let StatusBar: any;
+let SplashScreen: any;
+
+try {
+  CapacitorCore = require('@capacitor/core').Capacitor;
+  Browser = require('@capacitor/browser').Browser;
+  App = require('@capacitor/app').App;
+  StatusBar = require('@capacitor/status-bar').StatusBar;
+  SplashScreen = require('@capacitor/splash-screen').SplashScreen;
+} catch (e) {
+  // Capacitor packages not installed - provide fallbacks
+  CapacitorCore = {
+    isNativePlatform: () => false,
+    getPlatform: () => 'web',
+  };
+  Browser = {
+    open: async () => {},
+    close: async () => {},
+  };
+  App = {
+    addListener: () => ({ remove: () => {} }),
+    getInfo: async () => null,
+    exitApp: async () => {},
+    minimizeApp: async () => {},
+  };
+  StatusBar = {
+    setStyle: async () => {},
+    setBackgroundColor: async () => {},
+  };
+  SplashScreen = {
+    show: async () => {},
+    hide: async () => {},
+  };
+}
 
 // Re-export Capacitor for platform detection
 export const Capacitor = CapacitorCore;
@@ -65,7 +98,7 @@ export function initializeCapacitorListeners(): void {
   }
 
   // Handle deep links (OAuth callbacks, etc.)
-  App.addListener('appUrlOpen', (event: URLOpenListenerEvent) => {
+  App.addListener('appUrlOpen', (event: { url: string }) => {
     const url = new URL(event.url);
 
     // Handle authentication callbacks
@@ -88,7 +121,7 @@ export function initializeCapacitorListeners(): void {
   });
 
   // Handle app state changes
-  App.addListener('appStateChange', ({ isActive }) => {
+  App.addListener('appStateChange', ({ isActive }: { isActive: boolean }) => {
     if (isActive) {
       // App came to foreground
       console.log('[Capacitor] App resumed');
@@ -99,7 +132,7 @@ export function initializeCapacitorListeners(): void {
   });
 
   // Handle back button (Android)
-  App.addListener('backButton', ({ canGoBack }) => {
+  App.addListener('backButton', ({ canGoBack }: { canGoBack: boolean }) => {
     if (canGoBack) {
       window.history.back();
     } else {
@@ -119,6 +152,7 @@ export async function configureStatusBar(): Promise<void> {
 
   try {
     // Set dark style to match app theme
+    const Style = require('@capacitor/status-bar').Style;
     await StatusBar.setStyle({ style: Style.Dark });
 
     // Set background color on Android
