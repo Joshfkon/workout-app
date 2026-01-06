@@ -26,20 +26,35 @@ export const Modal = memo(function Modal({
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Close on escape key
+  // Close on escape key and prevent body scroll
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
 
+    // Prevent body scroll and touch scrolling
+    const preventScroll = (e: TouchEvent) => {
+      // Only prevent if scrolling on the overlay, not the modal content
+      if (e.target === overlayRef.current || overlayRef.current?.contains(e.target as Node)) {
+        e.preventDefault();
+      }
+    };
+
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
+      // Prevent body scroll
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
       document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+      // Prevent touch scrolling on overlay
+      document.addEventListener('touchmove', preventScroll, { passive: false });
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('touchmove', preventScroll);
       document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
     };
   }, [isOpen, onClose]);
 
@@ -49,6 +64,16 @@ export const Modal = memo(function Modal({
       onClose();
     }
   }, [onClose]);
+
+  // Prevent scroll events from propagating to body
+  const handleContentClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+  }, []);
+
+  // Prevent touch events from propagating to body
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
+  }, []);
 
   const sizes = {
     sm: 'max-w-sm',
@@ -68,6 +93,8 @@ export const Modal = memo(function Modal({
     >
       <div
         ref={contentRef}
+        onClick={handleContentClick}
+        onTouchStart={handleTouchStart}
         className={cn(
           'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]',
           sizes[size]
@@ -118,7 +145,13 @@ export const Modal = memo(function Modal({
         )}
 
         {/* Content */}
-        <div className="p-4 overflow-y-auto">{children}</div>
+        <div 
+          className="p-4 overflow-y-auto"
+          onTouchStart={handleTouchStart}
+          onClick={handleContentClick}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
