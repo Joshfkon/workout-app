@@ -1657,7 +1657,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        {displayWeight(set.weightKg, true)}
+                        {set.bodyweightData 
+                          ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
+                          : displayWeight(set.weightKg, true)}
                       </td>
                       <td
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}

@@ -3,7 +3,7 @@
 import { memo } from 'react';
 import type { BodyweightData, WeightUnit } from '@/types/schema';
 import { calculatePercentBodyweight } from '@/types/schema';
-import { formatWeightValue } from '@/lib/utils';
+import { formatWeightValue, convertWeightForDisplay } from '@/lib/utils';
 
 interface BodyweightDisplayProps {
   /** Bodyweight data from the set */
@@ -31,7 +31,8 @@ export const BodyweightDisplay = memo(function BodyweightDisplay({
 }: BodyweightDisplayProps) {
   const { userBodyweightKg, modification, addedWeightKg, assistanceWeightKg, effectiveLoadKg } = data;
 
-  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
+  // Use convertWeightForDisplay to preserve exact values (not rounded to plate increments)
+  const displayWeight = (kg: number) => convertWeightForDisplay(kg, unit);
   const bw = displayWeight(userBodyweightKg);
   const effective = displayWeight(effectiveLoadKg);
   const percentBw = calculatePercentBodyweight(effectiveLoadKg, userBodyweightKg);
