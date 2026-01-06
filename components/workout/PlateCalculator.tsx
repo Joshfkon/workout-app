@@ -197,7 +197,13 @@ export const PlateCalculator = memo(function PlateCalculator({
       {/* Visual Barbell Display */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-300">Plates per Side</label>
-        <BarbellVisualization calculation={calculation} unit={unit} />
+        <BarbellVisualization 
+          calculation={calculation} 
+          unit={unit}
+          isMachine={isMachine}
+          startingWeightNum={startingWeightNum}
+          barbellWeight={barbellWeight}
+        />
       </div>
 
       {/* Plate Breakdown */}
@@ -221,11 +227,17 @@ export const PlateCalculator = memo(function PlateCalculator({
 function BarbellVisualization({
   calculation,
   unit,
+  isMachine,
+  startingWeightNum,
+  barbellWeight,
 }: {
   calculation: PlateCalculationResult;
   unit: WeightUnit;
+  isMachine: boolean;
+  startingWeightNum: number | undefined;
+  barbellWeight: number;
 }) {
-  const { platesPerSide, barbellWeight } = calculation;
+  const { platesPerSide } = calculation;
 
   // Get unique plates for legend
   const uniquePlates = Array.from(new Set(platesPerSide)).sort((a, b) => b - a);
