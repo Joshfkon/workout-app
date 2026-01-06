@@ -353,7 +353,11 @@ function BarbellVisualization({
           {calculation.actualTotal} {unit}
         </p>
         <p className="text-xs text-gray-400">
-          Bar: {barbellWeight}{unit} + Plates: {calculation.weightPerSide}{unit} × 2
+          {isMachine ? (
+            <>Starting: {startingWeightNum}{unit} + Plates: {calculation.weightPerSide}{unit} × 2</>
+          ) : (
+            <>Bar: {barbellWeight}{unit} + Plates: {calculation.weightPerSide}{unit} × 2</>
+          )}
         </p>
       </div>
 
