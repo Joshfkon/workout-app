@@ -103,9 +103,9 @@ export const Modal = memo(function Modal({
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
       >
-        {/* Header */}
+        {/* Header - sticky so close button is always visible */}
         {(title || showCloseButton) && (
-          <div className="flex items-start justify-between p-4 border-b border-surface-800">
+          <div className="flex items-start justify-between p-4 border-b border-surface-800 flex-shrink-0 bg-surface-900 sticky top-0 z-10">
             <div>
               {title && (
                 <h2
@@ -122,7 +122,7 @@ export const Modal = memo(function Modal({
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="p-1 text-surface-400 hover:text-surface-200 transition-colors rounded-lg hover:bg-surface-800"
+                className="p-1 text-surface-400 hover:text-surface-200 transition-colors rounded-lg hover:bg-surface-800 flex-shrink-0"
                 aria-label="Close modal"
               >
                 <svg
@@ -144,9 +144,9 @@ export const Modal = memo(function Modal({
           </div>
         )}
 
-        {/* Content */}
+        {/* Content - scrollable area */}
         <div 
-          className="p-4 overflow-y-auto"
+          className="p-4 overflow-y-auto flex-1 min-h-0"
           onTouchStart={handleTouchStart}
           onClick={handleContentClick}
         >
