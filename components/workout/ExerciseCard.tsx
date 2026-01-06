@@ -707,18 +707,19 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Get RPE-adjusted reps for next set
   const getRpeAdjustedReps = (lastRpe: number, targetRpe: number, lastReps: number, targetRepRange: [number, number]): number => {
     const rpeDiff = targetRpe - lastRpe;
-    
+
     // If set was easy (low RPE), suggest more reps
     if (rpeDiff > 0.3) {
       // Easy set - increase reps by 1-2 depending on how easy
       const repIncrease = Math.min(2, Math.floor(rpeDiff));
-      return Math.min(targetRepRange[1], lastReps + repIncrease);
+      // Don't suggest fewer reps than what user achieved - they may be operating above target range
+      return Math.max(lastReps, Math.min(targetRepRange[1], lastReps + repIncrease));
     } else if (rpeDiff < -0.3) {
       // Hard set - decrease reps slightly
       const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
       return Math.max(targetRepRange[0], lastReps - repDecrease);
     }
-    
+
     // On target - keep same reps
     return lastReps;
   };
