@@ -236,6 +236,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
   const [warmupWeightInput, setWarmupWeightInput] = useState('');
+  const [isWarmupExpanded, setIsWarmupExpanded] = useState(true);
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
@@ -273,9 +274,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Only reset if we just became active (wasn't active before, now is)
     if (isActive && !prevIsActiveRef.current) {
       setCompletedWarmups(new Set());
+      setIsWarmupExpanded(true); // Reset to expanded when exercise becomes active
     }
     prevIsActiveRef.current = isActive;
   }, [isActive]);
+
+  // Auto-collapse warmup sets when all are completed
+  useEffect(() => {
+    if (warmupSets.length > 0 && completedWarmups.size === warmupSets.length) {
+      setIsWarmupExpanded(false);
+    }
+  }, [completedWarmups.size, warmupSets.length]);
   
   const [swapMuscleFilter, setSwapMuscleFilter] = useState('');
   const [editWeight, setEditWeight] = useState('');
@@ -1205,19 +1214,55 @@ export const ExerciseCard = memo(function ExerciseCard({
       {/* Warmup sets - keep in separate table for now (legacy) */}
       {isActive && warmupSets.length > 0 && workingWeight > 0 && (
         <div className="border-b border-surface-800">
-          <div className="overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-surface-800/50">
-                <tr>
-                  <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
-                  <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
-                  <th className="px-1 py-2 w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-surface-800">
+          {/* Collapsible header */}
+          <button
+            onClick={() => setIsWarmupExpanded(!isWarmupExpanded)}
+            className="w-full flex items-center justify-between p-3 hover:bg-surface-800/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+                  completedWarmups.size === warmupSets.length
+                    ? 'bg-success-500/20 text-success-400'
+                    : 'bg-amber-500/20 text-amber-400'
+                }`}
+              >
+                {completedWarmups.size === warmupSets.length ? '✓' : completedWarmups.size}
+              </div>
+              <span className="text-sm font-medium text-surface-200">
+                Warmup Protocol
+              </span>
+              <span className="text-xs text-surface-500">
+                ({completedWarmups.size}/{warmupSets.length})
+              </span>
+            </div>
+            <svg
+              className={`w-4 h-4 text-surface-400 transition-transform ${
+                isWarmupExpanded ? 'rotate-180' : ''
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Warmup table - only show when expanded */}
+          {isWarmupExpanded && (
+            <div className="overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-surface-800/50">
+                  <tr>
+                    <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
+                    <th className="px-1 py-2 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-800">
                 {warmupSets.map((warmup) => {
                   const calculatedWeightKg = workingWeight * (warmup.percentOfWorking / 100);
                   const hasCustomWeight = customWarmupWeights.has(warmup.setNumber);
@@ -1341,9 +1386,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </td>
                   </tr>
                 )}
-              </tbody>
-            </table>
-          </div>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
