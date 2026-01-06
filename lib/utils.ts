@@ -124,9 +124,24 @@ export function formatWeight(weightKg: number, unit: 'kg' | 'lb', decimals: numb
 }
 
 /**
+ * Convert weight from kg to display unit without rounding (preserves exact values)
+ * Use this for displaying saved/completed set weights to preserve user input
+ */
+export function convertWeightForDisplay(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): number {
+  if (unit === 'lb') {
+    const lbs = convertWeight(weightKg, 'kg', 'lb');
+    return parseFloat(lbs.toFixed(decimals));
+  }
+  return parseFloat(weightKg.toFixed(decimals));
+}
+
+/**
  * Format weight value only (no unit suffix), rounded to plate increments
  * - lb: 2.5lb increments (or 1lb for weights < 45lb)
  * - kg: 2.5kg increments (or 1kg for weights < 20kg)
+ * 
+ * NOTE: Use convertWeightForDisplay() for displaying saved/completed set weights
+ * to preserve exact user input. Use this function only for suggestions/calculations.
  */
 export function formatWeightValue(weightKg: number, unit: 'kg' | 'lb', decimals: number = 1): number {
   if (unit === 'lb') {

@@ -10,7 +10,7 @@ import type {
   BodyweightData,
   BodyweightModification,
 } from '@/types/schema';
-import { formatWeightValue, inputWeightToKg } from '@/lib/utils';
+import { formatWeightValue, convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 import { calculateEffectiveLoad } from '@/types/schema';
 
 interface CompactSetRowProps {
@@ -95,10 +95,11 @@ export const CompactSetRow = memo(function CompactSetRow({
   );
 
   // If completed, show completed state (clickable to edit)
+  // Use convertWeightForDisplay to preserve exact user input, not rounded to plate increments
   if (isCompleted && completedSet) {
     const completedDisplayWeight = isBodyweight && completedSet.bodyweightData
-      ? formatWeightValue(completedSet.bodyweightData.effectiveLoadKg, unit)
-      : formatWeightValue(completedSet.weightKg, unit);
+      ? convertWeightForDisplay(completedSet.bodyweightData.effectiveLoadKg, unit)
+      : convertWeightForDisplay(completedSet.weightKg, unit);
 
     // Determine modification display for bodyweight exercises
     const bwModification = completedSet.bodyweightData?.modification;

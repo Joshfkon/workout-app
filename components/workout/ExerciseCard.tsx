@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from '
 import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
-import { convertWeight, formatWeight, formatWeightValue, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
+import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
@@ -361,8 +361,11 @@ export const ExerciseCard = memo(function ExerciseCard({
     ? block.targetWeightKg 
     : (recommendedWeight && recommendedWeight > 0 ? recommendedWeight : 0);
 
-  // Format weight for display - wrapped in useCallback for stable reference
-  const displayWeight = useCallback((kg: number) => formatWeightValue(kg, unit), [unit]);
+  // Format weight for display - use exact conversion for completed sets, rounded for suggestions
+  // For completed sets, preserve exact user input; for suggestions, round to plate increments
+  const displayWeight = useCallback((kg: number, preserveExact: boolean = false) => {
+    return preserveExact ? convertWeightForDisplay(kg, unit) : formatWeightValue(kg, unit);
+  }, [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
 
   // Track the last known completed sets count to detect changes
@@ -870,7 +873,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   const startEditing = (set: SetLog) => {
     setEditingSetId(set.id);
-    setEditWeight(String(displayWeight(set.weightKg)));
+    setEditWeight(String(displayWeight(set.weightKg, true))); // Preserve exact value when editing
     setEditReps(String(set.reps));
     setEditRpe(String(set.rpe));
   };
@@ -1181,7 +1184,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           key={idx}
                           className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                         >
-                          {displayWeight(set.weightKg)} × {set.reps}
+                          {displayWeight(set.weightKg, true)} × {set.reps}
                           {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                         </span>
                       ))}
@@ -1654,7 +1657,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        {displayWeight(set.weightKg)}
+                        {displayWeight(set.weightKg, true)}
                       </td>
                       <td
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
