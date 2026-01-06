@@ -4783,6 +4783,7 @@ export default function WorkoutPage() {
           setPlateCalculatorWeight(undefined);
         }}
         initialWeightKg={plateCalculatorWeight ?? currentBlock?.targetWeightKg}
+        exerciseId={currentExercise?.id}
       />
 
       {/* Page-level Swap Modal for injury-related swaps */}

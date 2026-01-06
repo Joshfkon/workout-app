@@ -20,6 +20,10 @@ interface PlateCalculatorProps {
   onCalculate?: (result: PlateCalculationResult) => void;
   /** Compact mode for inline display */
   compact?: boolean;
+  /** Starting weight in kg (e.g., machine base weight) */
+  startingWeightKg?: number;
+  /** Callback when starting weight changes */
+  onStartingWeightChange?: (weightKg: number | undefined) => void;
 }
 
 /**
@@ -31,6 +35,8 @@ export const PlateCalculator = memo(function PlateCalculator({
   unit = 'kg',
   onCalculate,
   compact = false,
+  startingWeightKg: initialStartingWeightKg,
+  onStartingWeightChange,
 }: PlateCalculatorProps) {
   const initialDisplayWeight = unit === 'lb'
     ? formatWeightValue(initialWeightKg, 'lb')
@@ -38,16 +44,27 @@ export const PlateCalculator = memo(function PlateCalculator({
 
   const [targetWeight, setTargetWeight] = useState<string>(String(initialDisplayWeight));
   const [barbellType, setBarbellType] = useState<BarbellType>('olympic');
+  const [startingWeight, setStartingWeight] = useState<string>(
+    initialStartingWeightKg !== undefined 
+      ? String(unit === 'lb' ? formatWeightValue(initialStartingWeightKg, 'lb') : initialStartingWeightKg)
+      : ''
+  );
 
   const barbellWeights = BARBELL_WEIGHTS[unit];
   const barbellWeight = barbellWeights[barbellType].weight;
 
+  // Convert starting weight to display unit
+  const startingWeightNum = startingWeight ? parseFloat(startingWeight) : undefined;
+  const startingWeightKg = startingWeightNum 
+    ? (unit === 'lb' ? startingWeightNum / 2.20462 : startingWeightNum)
+    : undefined;
+
   const calculation = useMemo(() => {
     const weight = parseFloat(targetWeight) || 0;
-    const result = calculatePlates(weight, barbellWeight, unit);
+    const result = calculatePlates(weight, barbellWeight, unit, undefined, startingWeightKg);
     onCalculate?.(result);
     return result;
-  }, [targetWeight, barbellWeight, unit, onCalculate]);
+  }, [targetWeight, barbellWeight, unit, startingWeightKg, onCalculate]);
 
   const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -59,8 +76,27 @@ export const PlateCalculator = memo(function PlateCalculator({
 
   const handleQuickAdjust = (amount: number) => {
     const current = parseFloat(targetWeight) || barbellWeight;
-    const newWeight = Math.max(barbellWeight, current + amount);
+    const minWeight = startingWeightKg 
+      ? (unit === 'lb' ? formatWeightValue(startingWeightKg, 'lb') : startingWeightKg) + barbellWeight
+      : barbellWeight;
+    const newWeight = Math.max(minWeight, current + amount);
     setTargetWeight(String(newWeight));
+  };
+
+  const handleStartingWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Allow empty string or valid numbers
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setStartingWeight(value);
+      // Convert to kg and notify parent
+      if (value === '') {
+        onStartingWeightChange?.(undefined);
+      } else {
+        const num = parseFloat(value);
+        const kg = unit === 'lb' ? num / 2.20462 : num;
+        onStartingWeightChange?.(kg);
+      }
+    }
   };
 
   if (compact) {
@@ -74,6 +110,28 @@ export const PlateCalculator = memo(function PlateCalculator({
 
   return (
     <div className="space-y-4">
+      {/* Starting Weight Input (Optional) */}
+      {onStartingWeightChange && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-gray-300">
+            Starting Weight <span className="text-xs text-gray-500">(optional, e.g., machine base)</span>
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              inputMode="decimal"
+              value={startingWeight}
+              onChange={handleStartingWeightChange}
+              className="w-full px-4 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white text-center focus:outline-none focus:border-primary-500"
+              placeholder={`Enter starting weight in ${unit}`}
+            />
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
+              {unit}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Weight Input */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-300">Target Weight</label>
