@@ -107,7 +107,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
 
   const handleProceedToFeedback = () => {
     const repsNum = parseInt(reps);
-    if (isNaN(repsNum) || repsNum < 1) {
+    if (isNaN(repsNum) || repsNum < 1 || repsNum > 100) {
       return;
     }
     setPhase('feedback');
@@ -115,7 +115,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
 
   const handleFeedbackSave = (feedback: SetFeedback) => {
     const repsNum = parseInt(reps);
-    if (isNaN(repsNum)) {
+    if (isNaN(repsNum) || repsNum < 1 || repsNum > 100) {
       return;
     }
 
@@ -145,6 +145,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
   };
 
   const repsNum = parseInt(reps) || 0;
+  const repsExceedsMax = repsNum > 100;
 
   // Show feedback card phase
   if (phase === 'feedback') {
@@ -201,7 +202,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
         </div>
         <Button
           onClick={handleProceedToFeedback}
-          disabled={disabled || !reps || parseInt(reps) < 1}
+          disabled={disabled || !reps || parseInt(reps) < 1 || parseInt(reps) > 100}
           size="sm"
           className="shrink-0"
         >
@@ -210,6 +211,13 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
           </svg>
         </Button>
       </div>
+
+      {/* Validation warning */}
+      {repsExceedsMax && (
+        <p className="text-xs text-red-400">
+          Maximum 100 reps allowed
+        </p>
+      )}
 
       {/* Note toggle and input - more compact */}
       {!showNote ? (
