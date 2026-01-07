@@ -556,3 +556,82 @@ export function getPlateColor(weight: number, unit: 'kg' | 'lb'): string {
   return '#9E9E9E'; // Gray - smaller plates
 }
 
+// ============ STREAK CALCULATION ============
+
+export interface StreakResult {
+  /** Current consecutive day streak (ending today or yesterday) */
+  currentStreak: number;
+  /** Longest consecutive day streak ever */
+  longestStreak: number;
+}
+
+/**
+ * Calculate workout streaks from an array of workout completion dates.
+ * A streak is consecutive days with at least one workout.
+ *
+ * @param dates - Array of workout completion dates (Date objects or ISO strings)
+ * @returns Object with currentStreak and longestStreak
+ */
+export function calculateStreaks(dates: (Date | string)[]): StreakResult {
+  if (dates.length === 0) {
+    return { currentStreak: 0, longestStreak: 0 };
+  }
+
+  // Convert all dates to YYYY-MM-DD strings in local timezone and get unique dates
+  const dateStrings = new Set<string>();
+  for (const date of dates) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    dateStrings.add(getLocalDateString(d));
+  }
+
+  // Sort unique dates in ascending order
+  const sortedDates = Array.from(dateStrings).sort();
+
+  // Calculate longest streak
+  let longestStreak = 1;
+  let currentRunLength = 1;
+
+  for (let i = 1; i < sortedDates.length; i++) {
+    const prevDate = new Date(sortedDates[i - 1] + 'T00:00:00');
+    const currDate = new Date(sortedDates[i] + 'T00:00:00');
+
+    // Check if dates are consecutive (difference of 1 day)
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentRunLength++;
+      longestStreak = Math.max(longestStreak, currentRunLength);
+    } else {
+      currentRunLength = 1;
+    }
+  }
+
+  // Calculate current streak (must end today or yesterday)
+  const today = getLocalDateString();
+  const yesterday = getLocalDateString(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+  // Check if there's a workout today or yesterday to start counting
+  const lastWorkoutDate = sortedDates[sortedDates.length - 1];
+  if (lastWorkoutDate !== today && lastWorkoutDate !== yesterday) {
+    // No recent workout, current streak is 0
+    return { currentStreak: 0, longestStreak };
+  }
+
+  // Count backwards from the most recent workout date
+  let currentStreak = 1;
+  for (let i = sortedDates.length - 2; i >= 0; i--) {
+    const currDate = new Date(sortedDates[i + 1] + 'T00:00:00');
+    const prevDate = new Date(sortedDates[i] + 'T00:00:00');
+
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+
+  return { currentStreak, longestStreak };
+}
+
