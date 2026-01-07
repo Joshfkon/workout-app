@@ -188,14 +188,18 @@ export async function updateStepCalibration(
     return { success: false, error: updateError.message };
   }
 
-  // Log history
-  await supabase.from('step_calibration_history').insert({
+  // Log history (non-critical, don't fail the operation if this fails)
+  const { error: historyError } = await supabase.from('step_calibration_history').insert({
     user_id: user.id,
     wearable_connection_id: connection.id,
     old_factor: connection.step_calibration_factor,
     new_factor: newFactor,
     reason,
   });
+
+  if (historyError) {
+    console.error('[updateStepCalibration] Failed to log calibration history:', historyError);
+  }
 
   return { success: true };
 }

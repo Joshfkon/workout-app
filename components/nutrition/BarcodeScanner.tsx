@@ -88,8 +88,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           barcode: barcode,
         };
       }
-    } catch {
-      // No custom food found
+    } catch (error) {
+      // Log unexpected errors - "not found" is handled by returning null from query
+      console.debug('[BarcodeScanner] Custom food lookup error:', error);
     }
     return null;
   };
@@ -333,8 +334,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       scannerRef.current = null;
       try {
         await scanner.stop();
-      } catch {
-        // Ignore
+      } catch (error) {
+        // Scanner stop can fail if already stopped or during cleanup - log for debugging
+        console.debug('[BarcodeScanner] Scanner stop error (usually safe to ignore):', error);
       }
     }
     if (isMountedRef.current) {

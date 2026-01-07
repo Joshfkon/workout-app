@@ -55,8 +55,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
           return;
         }
       }
-    } catch {
+    } catch (error) {
       // Cache read failed, proceed with fetch
+      console.debug('[ActivityCard] Cache read failed:', error);
     }
 
     try {
@@ -76,8 +77,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
           date: today,
         };
         sessionStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(cacheData));
-      } catch {
+      } catch (error) {
         // Cache write failed, non-critical
+        console.debug('[ActivityCard] Cache write failed:', error);
       }
     } catch (error) {
       console.error('Failed to load activity data:', error);
