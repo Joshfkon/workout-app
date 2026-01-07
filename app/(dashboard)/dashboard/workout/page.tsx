@@ -18,7 +18,7 @@ const ExercisesTab = dynamic(() => import('../exercises/page'), {
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, getLocalDateString } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
@@ -1113,7 +1113,7 @@ export default function WorkoutPage() {
 
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: existingWorkout } = await supabase
         .from('workout_sessions')
         .select('id')

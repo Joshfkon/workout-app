@@ -33,7 +33,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, getLocalDateString } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -1358,7 +1358,7 @@ export default function WorkoutPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
 
         // Fetch today's food log entries (logged_at is a DATE column, not timestamp)
         const { data: foodEntries } = await supabase
@@ -1494,7 +1494,7 @@ export default function WorkoutPage() {
         if (checkInData.bodyweightKg) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             await supabase
               .from('weight_log')
               .upsert(

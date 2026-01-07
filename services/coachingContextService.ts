@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import { getLocalDateString } from '@/lib/utils';
 import type { CoachingContext, RecentLift, PhaseType } from '@/types/coaching';
 import type {
   UserRow,
@@ -115,7 +116,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .from('bodyweight_entries')
     .select('weight_kg, date')
     .eq('user_id', authUser.id)
-    .gte('date', twoWeeksAgo.toISOString().split('T')[0])
+    .gte('date', getLocalDateString(twoWeeksAgo))
     .order('date', { ascending: true });
 
   const weights = recentWeights as Pick<BodyweightEntryRow, 'weight_kg' | 'date'>[] | null;
@@ -193,7 +194,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     `)
     .eq('user_id', authUser.id)
     .eq('state', 'completed')
-    .gte('planned_date', thirtyDaysAgo.toISOString().split('T')[0])
+    .gte('planned_date', getLocalDateString(thirtyDaysAgo))
     .order('planned_date', { ascending: false })
     .limit(20);
 

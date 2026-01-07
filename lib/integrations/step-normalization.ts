@@ -13,6 +13,7 @@ import type {
   BurnRateHistoryPoint,
   BASELINE_STEP_MULTIPLIERS,
 } from '@/types/wearable';
+import { getLocalDateString } from '@/lib/utils';
 
 // === CONSTANTS ===
 
@@ -280,7 +281,7 @@ export function createCalibrationHistoryEntry(
   currentFactor: number
 ): CalibrationHistoryEntry {
   return {
-    date: new Date().toISOString().split('T')[0],
+    date: getLocalDateString(),
     oldFactor: currentFactor,
     newFactor: result.newCalibrationFactor,
     reason: result.reason,

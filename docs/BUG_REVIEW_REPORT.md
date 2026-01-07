@@ -36,31 +36,36 @@ The following Priority 1 bugs have been fixed in branch `claude/fix-bug-review-r
 | `hooks/useAdaptiveVolume.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()` |
 | `lib/actions/exercise-completion.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()` |
 
-### Remaining Date Fixes Needed
+### Additional Date Fixes Applied (January 7, 2026)
 
-The following files still contain `.toISOString().split('T')[0]` and should be updated:
-- `lib/integrations/fitbit.ts`
-- `lib/integrations/google-fit.ts`
-- `lib/integrations/activity-sync.ts`
-- `lib/integrations/step-normalization.ts`
-- `services/coachingContextService.ts`
-- `lib/training/coachingService.ts`
-- `lib/training/programEngine.ts`
-- `lib/nutrition/enhanced-tdee.ts`
-- `lib/nutrition/adaptive-tdee.ts`
-- `lib/actions/wearable.ts`
-- `lib/actions/tdee.ts`
-- `components/nutrition/WeightLogModal.tsx`
-- `components/dashboard/BodyMeasurements.tsx`
-- `components/dashboard/ActivityCard.tsx`
-- `components/wearables/EnhancedTDEEDashboard.tsx`
-- `components/settings/ImportExportSettings.tsx`
-- `app/(dashboard)/dashboard/workout/page.tsx`
-- `app/(dashboard)/dashboard/workout/[id]/page.tsx`
-- `app/(dashboard)/dashboard/mesocycle/page.tsx`
-- `app/(dashboard)/dashboard/mesocycle/new/page.tsx`
-- `app/(dashboard)/dashboard/analytics/page.tsx`
-- `app/(dashboard)/dashboard/body-composition/add/page.tsx`
+All remaining `.toISOString().split('T')[0]` occurrences have been fixed in branch `claude/fix-review-bugs-ylSAy`:
+
+| File | Fix Applied |
+|------|-------------|
+| `lib/integrations/fitbit.ts` | Updated `formatDate()` to use `getLocalDateString()` |
+| `lib/integrations/google-fit.ts` | Replaced all `.toISOString().split('T')[0]` with `getLocalDateString()` |
+| `lib/integrations/activity-sync.ts` | Updated `formatDate()` to use `getLocalDateString()` |
+| `lib/integrations/step-normalization.ts` | Replaced with `getLocalDateString()` |
+| `services/coachingContextService.ts` | Replaced all `.toISOString().split('T')[0]` with `getLocalDateString()` |
+| `lib/training/coachingService.ts` | Replaced with `getLocalDateString()` |
+| `lib/training/programEngine.ts` | Replaced with `getLocalDateString()` |
+| `lib/nutrition/enhanced-tdee.ts` | Replaced with `getLocalDateString()` |
+| `lib/nutrition/adaptive-tdee.ts` | Replaced all occurrences with `getLocalDateString()` |
+| `lib/actions/wearable.ts` | Replaced with `getLocalDateString()` |
+| `lib/actions/tdee.ts` | Replaced with `getLocalDateString()` |
+| `components/nutrition/WeightLogModal.tsx` | Replaced with `getLocalDateString()` |
+| `components/dashboard/BodyMeasurements.tsx` | Replaced all occurrences with `getLocalDateString()` |
+| `components/dashboard/ActivityCard.tsx` | Replaced with `getLocalDateString()` |
+| `components/wearables/EnhancedTDEEDashboard.tsx` | Replaced with `getLocalDateString()` |
+| `components/settings/ImportExportSettings.tsx` | Replaced with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/workout/page.tsx` | Replaced with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/workout/[id]/page.tsx` | Replaced all occurrences with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/mesocycle/page.tsx` | Replaced with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/mesocycle/new/page.tsx` | Replaced with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/analytics/page.tsx` | Replaced all occurrences with `getLocalDateString()` |
+| `app/(dashboard)/dashboard/body-composition/add/page.tsx` | Replaced with `getLocalDateString()` |
+
+**Status:** All Priority 1 date handling bugs have been fixed
 
 ---
 

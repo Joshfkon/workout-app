@@ -11,6 +11,7 @@ import {
   getActiveWearableConnections,
   getDailyActivityData,
 } from '@/lib/actions/wearable';
+import { getLocalDateString } from '@/lib/utils';
 import type { WearableConnection, DailyActivityData } from '@/types/wearable';
 
 interface ActivityCardProps {
@@ -37,7 +38,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   const [showManualInput, setShowManualInput] = useState(false);
 
   const loadData = useCallback(async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     // Check sessionStorage cache first
     try {

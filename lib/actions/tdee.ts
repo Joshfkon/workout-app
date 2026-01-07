@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getLocalDateString } from '@/lib/utils';
 import {
   calculateAdaptiveTDEE,
   getFormulaTDEE,
@@ -105,7 +106,7 @@ export async function getAdaptiveTDEE(
       .from('weight_log')
       .select('logged_at, weight, unit')
       .eq('user_id', user.id)
-      .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
+      .gte('logged_at', getLocalDateString(thirtyFiveDaysAgo))
       .order('logged_at', { ascending: false })
       .limit(1) as {
         data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;

@@ -9,6 +9,7 @@
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { validateWeightEntry } from '@/lib/weightUtils';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   WearableSource,
   WearableConnection,
@@ -465,7 +466,7 @@ export async function getEnhancedDailyDataPoints(
 
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - windowDays);
-  const cutoffStr = cutoffDate.toISOString().split('T')[0];
+  const cutoffStr = getLocalDateString(cutoffDate);
 
   // Get weight log data (with unit for conversion)
   const { data: weightData } = await supabase

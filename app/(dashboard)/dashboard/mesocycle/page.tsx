@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import type { Split, MuscleGroup } from '@/types/schema';
 
@@ -211,7 +212,7 @@ export default function MesocyclePage() {
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
 
       // Check if there's already a workout for today
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: existingWorkout } = await supabase
         .from('workout_sessions')
         .select('id')

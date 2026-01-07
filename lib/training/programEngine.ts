@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   UserProfile,
   BodyComposition,
@@ -942,7 +943,7 @@ export class ProgramEngine {
         volume_per_muscle: volumePerMuscle,
         recovery_multiplier: recoveryFactors.volumeMultiplier,
         is_active: true,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: getLocalDateString(),
       })
       .select('id')
       .single();

@@ -10,6 +10,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { getLocalDateString } from '@/lib/utils';
 import type { EnhancedTDEEEstimate, DailyActivityData, DailyTDEEResult } from '@/types/wearable';
 import { getDailyActivityData } from '@/lib/actions/wearable';
 
@@ -33,7 +34,7 @@ export function EnhancedTDEEDashboard({
 
   async function loadTodayActivity() {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const data = await getDailyActivityData(today);
       setTodayActivity(data);
     } catch (error) {

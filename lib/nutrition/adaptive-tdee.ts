@@ -14,6 +14,7 @@
  */
 
 import { calculateBMR, calculateTDEE, type UserStats, type ActivityConfig } from './macroCalculator';
+import { getLocalDateString } from '@/lib/utils';
 
 // === TYPES ===
 
@@ -250,7 +251,7 @@ export function predictFutureWeight(
   const adjustedMargin = Math.max(minMargin, errorMargin);
 
   return {
-    targetDate: addDays(new Date(), daysAhead).toISOString().split('T')[0],
+    targetDate: getLocalDateString(addDays(new Date(), daysAhead)),
     predictedWeight: Math.round(predictedWeight * 10) / 10,
     confidenceRange: [
       Math.round((predictedWeight - adjustedMargin) * 10) / 10,
@@ -671,7 +672,7 @@ function filterDataPoints(
 ): DailyDataPoint[] {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - windowDays);
-  const cutoffStr = cutoffDate.toISOString().split('T')[0];
+  const cutoffStr = getLocalDateString(cutoffDate);
 
   return dataPoints
     .filter((dp) => {

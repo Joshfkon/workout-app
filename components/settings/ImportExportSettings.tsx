@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import {
   parseStrongCSV,
   parseLoseItCSV,
@@ -564,7 +565,7 @@ export function ImportExportSettings() {
 
         if (logs) {
           const entries = logs.map((l: any) => ({
-            date: l.logged_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            date: l.logged_at?.split('T')[0] || getLocalDateString(),
             name: l.food_name,
             calories: l.calories,
             protein: l.protein,
