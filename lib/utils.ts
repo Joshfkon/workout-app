@@ -79,8 +79,12 @@ export function formatDistanceToNow(date: string | Date): string {
  * Format time duration in seconds to mm:ss format
  */
 export function formatDuration(seconds: number): string {
+  // Handle negative, NaN, or invalid values
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '0:00';
+  }
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
@@ -88,6 +92,10 @@ export function formatDuration(seconds: number): string {
  * Convert weight between kg and lb
  */
 export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'): number {
+  // Handle invalid input values
+  if (!Number.isFinite(weight) || weight < 0) {
+    return 0;
+  }
   if (from === to) return weight;
   if (from === 'kg' && to === 'lb') return weight * 2.20462;
   return weight / 2.20462;
@@ -166,6 +174,13 @@ export function inputWeightToKg(weight: number, fromUnit: 'kg' | 'lb'): number {
  * Round to nearest increment (for weights)
  */
 export function roundToIncrement(value: number, increment: number): number {
+  // Guard against zero or invalid increment to prevent NaN
+  if (!Number.isFinite(increment) || increment <= 0) {
+    return value;
+  }
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
   return Math.round(value / increment) * increment;
 }
 

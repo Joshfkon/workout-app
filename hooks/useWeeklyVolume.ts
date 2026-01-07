@@ -7,6 +7,7 @@ import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from
 import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import { getLocalDateString } from '@/lib/utils';
 
 interface UseWeeklyVolumeOptions {
   weekStart?: string; // YYYY-MM-DD, defaults to current week
@@ -25,8 +26,9 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
     const now = new Date();
     const day = now.getDay();
     const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(now.setDate(diff));
-    return monday.toISOString().split('T')[0];
+    // Create a new Date instead of mutating 'now'
+    const monday = new Date(now.getFullYear(), now.getMonth(), diff);
+    return getLocalDateString(monday);
   }, [options.weekStart]);
 
   const fetchVolume = useCallback(async () => {

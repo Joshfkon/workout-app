@@ -17,6 +17,7 @@ import {
   type AIResponse,
 } from '@/lib/exercises/exercise-ai-completion';
 import { getExerciseById, getExercises } from '@/services/exerciseService';
+import { getLocalDateString } from '@/lib/utils';
 
 // ============================================
 // USAGE TRACKING
@@ -30,10 +31,10 @@ interface UsageRecord {
 async function getAIUsage(userId: string): Promise<UsageRecord> {
   const supabase = await createClient();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const monthStart = new Date();
   monthStart.setDate(1);
-  const monthStartStr = monthStart.toISOString().split('T')[0];
+  const monthStartStr = getLocalDateString(monthStart);
 
   // Check for existing usage record
   const { data } = await (supabase

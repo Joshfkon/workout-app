@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
+import { getLocalDateString } from '@/lib/utils';
 import type { UserLifts } from '@/services/measurementImbalanceEngine';
 
 interface BestLiftRecord {
@@ -229,7 +230,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         weight_kg: weightKg,
         reps,
         estimated_1rm_kg: e1rm,
-        achieved_at: new Date().toISOString().split('T')[0],
+        achieved_at: getLocalDateString(),
         source: 'manual',
       }, {
         onConflict: 'user_id,exercise_name',

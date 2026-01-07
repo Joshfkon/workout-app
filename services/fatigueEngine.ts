@@ -288,6 +288,9 @@ export function adjustTargetsForReadiness(
 ): ProgressionTargets {
   const { baseTargets, readinessScore, minWeightIncrement } = input;
 
+  // Guard against invalid minWeightIncrement (prevent division by zero)
+  const safeIncrement = minWeightIncrement > 0 ? minWeightIncrement : 2.5;
+
   // High readiness (80+): No adjustment needed
   if (readinessScore >= 80) {
     return baseTargets;
@@ -305,10 +308,10 @@ export function adjustTargetsForReadiness(
 
   // Low readiness (40-59): Significant adjustments
   if (readinessScore >= 40) {
-    const weightReduction = Math.round(baseTargets.weightKg * 0.1 / minWeightIncrement) * minWeightIncrement;
+    const weightReduction = Math.round(baseTargets.weightKg * 0.1 / safeIncrement) * safeIncrement;
     return {
       ...baseTargets,
-      weightKg: baseTargets.weightKg - weightReduction,
+      weightKg: Math.max(0, baseTargets.weightKg - weightReduction),
       targetRir: baseTargets.targetRir + 2,
       sets: Math.max(2, baseTargets.sets - 1),
       restSeconds: baseTargets.restSeconds + 60,
@@ -317,10 +320,10 @@ export function adjustTargetsForReadiness(
   }
 
   // Very low readiness (<40): Consider skipping or light session
-  const weightReduction = Math.round(baseTargets.weightKg * 0.2 / minWeightIncrement) * minWeightIncrement;
+  const weightReduction = Math.round(baseTargets.weightKg * 0.2 / safeIncrement) * safeIncrement;
   return {
     ...baseTargets,
-    weightKg: baseTargets.weightKg - weightReduction,
+    weightKg: Math.max(0, baseTargets.weightKg - weightReduction),
     targetRir: 4,
     sets: 2,
     restSeconds: baseTargets.restSeconds + 90,
@@ -344,6 +347,16 @@ export function forecastWeeklyFatigue(
   projectedFatigue: number;
   recommendation: string;
 } {
+  // Guard against zero or negative sessions
+  if (plannedSessions <= 0) {
+    // No sessions = pure recovery
+    const recoveredFatigue = Math.max(0, currentFatigue - (7 * FATIGUE_RECOVERY_RATE));
+    return {
+      projectedFatigue: Math.round(recoveredFatigue),
+      recommendation: 'No sessions planned - good time for recovery',
+    };
+  }
+
   // Simulate week with evenly spaced sessions
   const daysPerSession = Math.floor(7 / plannedSessions);
   let fatigue = currentFatigue;

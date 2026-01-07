@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
+import { getLocalDateString } from '@/lib/utils';
 import {
   type UserVolumeProfile,
   type MuscleVolumeData,
@@ -96,11 +97,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const weekStart = new Date(now);
       weekStart.setDate(weekStart.getDate() - 6); // 7 days ago (including today = 6 days back)
       weekStart.setHours(0, 0, 0, 0);
-      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const weekStartStr = getLocalDateString(weekStart);
 
       const prevWeekStart = new Date(weekStart);
       prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-      const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
+      const prevWeekStartStr = getLocalDateString(prevWeekStart);
       
       const weekEnd = new Date(now);
       weekEnd.setHours(23, 59, 59, 999);
