@@ -8,6 +8,62 @@ This document contains a comprehensive analysis of potential bugs and edge cases
 
 ---
 
+## Fixes Applied (January 7, 2026)
+
+The following Priority 1 bugs have been fixed in branch `claude/fix-bug-review-report-FEiGt`:
+
+### Core Services - Division by Zero Guards
+
+| File | Fix Applied |
+|------|-------------|
+| `services/progressionEngine.ts` | Added guards for `getPeriodizationPhase()` (line 152), `getPhaseAdjustedRIR()` (line 422), `calculateSuggestedWeight()` (lines 1232-1236), null checks for `weeklyModifiers.rpeTarget`, minimum sets guard, and `calculateLoadProgression()` zero weight fix |
+| `services/volumeTracker.ts` | Added guards for `percentOfMrv` calculation (line 113) and `averagePercentMrv` in `getVolumeSummary()` (line 395) |
+| `services/fatigueEngine.ts` | Added guards for `forecastWeeklyFatigue()` when `plannedSessions` is 0 (line 348) and `adjustTargetsForReadiness()` division by `minWeightIncrement` (lines 308, 320) |
+
+### Utility Functions - Input Validation
+
+| File | Fix Applied |
+|------|-------------|
+| `lib/utils.ts` | Added validation to `roundToIncrement()` to handle zero/invalid increment, `convertWeight()` to handle negative/NaN/Infinity values, `formatDuration()` to handle negative values |
+| `lib/weightUtils.ts` | Fixed backwards constant naming (`LBS_TO_KG` and `KG_TO_LBS` were swapped) and updated all usages |
+
+### Date Handling - Timezone Fixes
+
+| File | Fix Applied |
+|------|-------------|
+| `hooks/useBestLifts.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()` |
+| `hooks/useWeeklyVolume.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()`, fixed Date mutation bug |
+| `hooks/useAdaptiveVolume.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()` |
+| `lib/actions/exercise-completion.ts` | Replaced `toISOString().split('T')[0]` with `getLocalDateString()` |
+
+### Remaining Date Fixes Needed
+
+The following files still contain `.toISOString().split('T')[0]` and should be updated:
+- `lib/integrations/fitbit.ts`
+- `lib/integrations/google-fit.ts`
+- `lib/integrations/activity-sync.ts`
+- `lib/integrations/step-normalization.ts`
+- `services/coachingContextService.ts`
+- `lib/training/coachingService.ts`
+- `lib/training/programEngine.ts`
+- `lib/nutrition/enhanced-tdee.ts`
+- `lib/nutrition/adaptive-tdee.ts`
+- `lib/actions/wearable.ts`
+- `lib/actions/tdee.ts`
+- `components/nutrition/WeightLogModal.tsx`
+- `components/dashboard/BodyMeasurements.tsx`
+- `components/dashboard/ActivityCard.tsx`
+- `components/wearables/EnhancedTDEEDashboard.tsx`
+- `components/settings/ImportExportSettings.tsx`
+- `app/(dashboard)/dashboard/workout/page.tsx`
+- `app/(dashboard)/dashboard/workout/[id]/page.tsx`
+- `app/(dashboard)/dashboard/mesocycle/page.tsx`
+- `app/(dashboard)/dashboard/mesocycle/new/page.tsx`
+- `app/(dashboard)/dashboard/analytics/page.tsx`
+- `app/(dashboard)/dashboard/body-composition/add/page.tsx`
+
+---
+
 ## Executive Summary
 
 | Category | Critical | High | Medium | Low |

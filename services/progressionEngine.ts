@@ -149,6 +149,10 @@ export function getPeriodizationPhase(
   totalWeeks: number,
   model: 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block' = 'linear'
 ): PeriodizationPhase {
+  // Guard against division by zero
+  if (totalWeeks <= 0) {
+    return 'hypertrophy'; // Default to hypertrophy phase
+  }
   const progress = weekInMeso / totalWeeks;
   
   // Deload is always the last week
@@ -345,8 +349,12 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   // Apply weekly modifiers if provided
   if (weeklyModifiers) {
     targets.weightKg = Math.round(targets.weightKg * weeklyModifiers.intensityModifier * 10) / 10;
-    targets.sets = Math.round(targets.sets * weeklyModifiers.volumeModifier);
-    targets.targetRir = Math.max(0, Math.min(4, 10 - weeklyModifiers.rpeTarget.max));
+    // Ensure sets never goes below 1
+    targets.sets = Math.max(1, Math.round(targets.sets * weeklyModifiers.volumeModifier));
+    // Safely access rpeTarget with null check
+    if (weeklyModifiers.rpeTarget?.max != null) {
+      targets.targetRir = Math.max(0, Math.min(4, 10 - weeklyModifiers.rpeTarget.max));
+    }
   }
   
   // Adjust for accumulated fatigue
@@ -419,6 +427,10 @@ function getPhaseAdjustedRIR(
   weekInMeso: number,
   totalWeeks: number
 ): number {
+  // Guard against division by zero
+  if (totalWeeks <= 0) {
+    return baseRir;
+  }
   const progress = weekInMeso / totalWeeks;
   
   switch (phase) {
@@ -561,19 +573,21 @@ function calculateLoadProgression(
   weekInMeso: number
 ): ProgressionTargets {
   const incrementFactor = WEIGHT_INCREMENT_FACTOR[experience];
-  const baseIncrement = exercise.minWeightIncrementKg;
-  
+  const baseIncrement = exercise.minWeightIncrementKg || 2.5; // Default to 2.5kg if not set
+
   // Calculate weight increase
   let weightIncrease = baseIncrement * incrementFactor;
-  
-  // Cap at max weekly increase
+
+  // Cap at max weekly increase, but ensure at least the minimum increment for very light weights
   const maxIncrease = lastPerformance.weightKg * MAX_WEEKLY_WEIGHT_INCREASE;
-  weightIncrease = Math.min(weightIncrease, maxIncrease);
-  
-  // Round to exercise increment
+  // Ensure weight increase is at least the minimum increment when max is very small
+  weightIncrease = Math.max(baseIncrement * 0.5, Math.min(weightIncrease, maxIncrease));
+
+  // Round to exercise increment (guard against zero increment)
+  const increment = exercise.minWeightIncrementKg || 2.5;
   const newWeight = roundToIncrement(
     lastPerformance.weightKg + weightIncrease,
-    exercise.minWeightIncrementKg
+    increment
   );
 
   return {
@@ -1216,6 +1230,16 @@ export function calculateSuggestedWeight(
   input: FormAwareProgressionInput
 ): WeightSuggestion {
   const { lastSession, targetRepRange, targetRIR, exerciseMinIncrement } = input;
+
+  // Guard against empty arrays
+  if (lastSession.form.length === 0 || lastSession.repsInTank.length === 0 || lastSession.reps.length === 0) {
+    return {
+      weight: lastSession.weight,
+      reason: 'insufficient_data',
+      message: 'Not enough data to calculate suggestion - maintain current weight',
+      confidence: 'low',
+    };
+  }
 
   // Import form score calculation
   const formScoreHelper = (form: FormRating): number => {

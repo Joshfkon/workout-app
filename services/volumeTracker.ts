@@ -110,7 +110,10 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, 
   // Calculate status for each muscle group
   volumeMap.forEach((data, muscle) => {
     data.status = assessVolumeStatus(data.totalSets, data.landmarks);
-    data.percentOfMrv = Math.round((data.totalSets / data.landmarks.mrv) * 100);
+    // Guard against division by zero (mrv should never be 0, but protect anyway)
+    data.percentOfMrv = data.landmarks.mrv > 0
+      ? Math.round((data.totalSets / data.landmarks.mrv) * 100)
+      : 0;
   });
 
   return volumeMap;
@@ -392,7 +395,10 @@ export function getVolumeSummary(volumeData: Map<string, MuscleVolumeData>): {
     musclesBelowMev,
     musclesOptimal,
     musclesOverMrv,
-    averagePercentMrv: Math.round(totalPercentMrv / volumeData.size),
+    // Guard against division by zero if volumeData is empty
+    averagePercentMrv: volumeData.size > 0
+      ? Math.round(totalPercentMrv / volumeData.size)
+      : 0,
   };
 }
 
