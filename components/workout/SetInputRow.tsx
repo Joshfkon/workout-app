@@ -55,7 +55,7 @@ export const SetInputRow = memo(function SetInputRow({
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
 
-    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1) {
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1 || repsNum > 100) {
       return;
     }
 
@@ -66,7 +66,7 @@ export const SetInputRow = memo(function SetInputRow({
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
 
-    if (isNaN(weightNum) || isNaN(repsNum)) {
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1 || repsNum > 100) {
       return;
     }
 
@@ -96,6 +96,7 @@ export const SetInputRow = memo(function SetInputRow({
 
   const weightKg = inputWeightToKg(parseFloat(weight) || 0, unit);
   const repsNum = parseInt(reps) || 0;
+  const repsExceedsMax = repsNum > 100;
 
   // Show feedback card phase
   if (phase === 'feedback') {
@@ -171,7 +172,7 @@ export const SetInputRow = memo(function SetInputRow({
         </div>
         <Button
           onClick={handleProceedToFeedback}
-          disabled={disabled || !weight || !reps || parseInt(reps) < 1}
+          disabled={disabled || !weight || !reps || parseInt(reps) < 1 || parseInt(reps) > 100}
           size="md"
           className="shrink-0"
           aria-label={`Log set ${setNumber}`}
@@ -181,6 +182,13 @@ export const SetInputRow = memo(function SetInputRow({
           </svg>
         </Button>
       </div>
+
+      {/* Validation warning */}
+      {repsExceedsMax && (
+        <p className="text-xs text-red-400">
+          Maximum 100 reps allowed
+        </p>
+      )}
 
       {/* Note toggle and input */}
       {!showNote ? (
