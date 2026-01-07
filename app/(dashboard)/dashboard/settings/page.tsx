@@ -321,19 +321,20 @@ export default function SettingsPage() {
 
   const handleRedeemPromo = async () => {
     if (!promoCode.trim()) return;
-    
+
     setPromoLoading(true);
     setPromoResult(null);
-    
+
     try {
       const result = await redeemPromoCode(promoCode);
       setPromoResult(result);
-      
+
       if (result.success) {
         setPromoCode('');
-        // Refresh the page after a short delay to show updated subscription
+        // Clear subscription cache and refresh to show updated subscription
         setTimeout(() => {
-          router.refresh();
+          sessionStorage.removeItem('subscription_data');
+          window.location.reload();
         }, 2000);
       }
     } catch {
