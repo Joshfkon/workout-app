@@ -339,7 +339,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     rpe: string;
   }[]>([]);
 
-  const completedSets = sets.filter((s) => !s.isWarmup);
+  const completedSets = sets.filter((s) => !s.isWarmup && s.setType !== 'warmup');
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
 

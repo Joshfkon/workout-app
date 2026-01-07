@@ -789,13 +789,13 @@ export default function WorkoutPage() {
             
             // Set current set number based on existing sets for the first incomplete block
             const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
-              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup);
+              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup && s.setType !== 'warmup');
               return blockSets.length < block.targetSets;
             });
             
             if (firstIncompleteBlock) {
               const blockIdx = transformedBlocks.findIndex((b: ExerciseBlockWithExercise) => b.id === firstIncompleteBlock.id);
-              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup);
+              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup && s.setType !== 'warmup');
               setCurrentBlockIndex(blockIdx);
               setCurrentSetNumber(existingBlockSets.length + 1);
             }
@@ -1956,7 +1956,7 @@ export default function WorkoutPage() {
       // Renumber sets in the same block (immutably)
       let blockSetNumber = 1;
       return filteredSets.map(set => {
-        if (set.exerciseBlockId === blockId && !set.isWarmup) {
+        if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
           return { ...set, setNumber: blockSetNumber++ };
         }
         return set;
@@ -3404,7 +3404,7 @@ export default function WorkoutPage() {
   }
 
   // Helper to get sets for a specific block
-  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId);
+  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
 
   // Check if a block is complete
   const isBlockComplete = (block: ExerciseBlockWithExercise) => {
@@ -3416,7 +3416,7 @@ export default function WorkoutPage() {
   // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
   const pendingExtraSets = addingExtraSet ? 1 : 0;
   const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
-  const totalCompletedSets = completedSets.filter(s => !s.isWarmup).length;
+  const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
   return (
