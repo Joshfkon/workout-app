@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
 import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
 import type { ExerciseBlockFull, SetLogRow, MinimalUser } from '@/types/database-queries';
@@ -114,8 +115,8 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         if (authUser) {
           setUser({ id: authUser.id });
         }
-      } catch (err) {
-        console.error('[useMuscleRecovery] Error getting user from auth:', err);
+      } catch (err: unknown) {
+        console.error('[useMuscleRecovery] Error getting user from auth:', getErrorMessage(err));
       }
     }
     loadUser();
@@ -203,9 +204,10 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
       }
 
       setLastTrainedMap(muscleLastTrained);
-    } catch (err) {
-      console.error('[useMuscleRecovery] Error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load recovery data');
+    } catch (err: unknown) {
+      const message = getErrorMessage(err);
+      console.error('[useMuscleRecovery] Error:', message);
+      setError(message);
     } finally {
       setIsLoading(false);
     }
