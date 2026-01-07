@@ -66,10 +66,11 @@ export const PlateCalculator = memo(function PlateCalculator({
     const weight = parseFloat(targetWeight) || 0;
     // For machines, use 0 as barbell weight since starting weight is the base
     const effectiveBarbellWeight = isMachine ? 0 : barbellWeight;
-    const result = calculatePlates(weight, effectiveBarbellWeight, unit, undefined, startingWeightKg);
+    // Pass starting weight in display units (not kg) since calculatePlates expects all weights in same unit
+    const result = calculatePlates(weight, effectiveBarbellWeight, unit, undefined, startingWeightNum);
     onCalculate?.(result);
     return result;
-  }, [targetWeight, barbellWeight, unit, startingWeightKg, isMachine, onCalculate]);
+  }, [targetWeight, barbellWeight, unit, startingWeightNum, isMachine, onCalculate]);
 
   const handleWeightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
