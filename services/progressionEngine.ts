@@ -1235,7 +1235,7 @@ export function calculateSuggestedWeight(
   if (lastSession.form.length === 0 || lastSession.repsInTank.length === 0 || lastSession.reps.length === 0) {
     return {
       weight: lastSession.weight,
-      reason: 'insufficient_data',
+      reason: 'on_target',
       message: 'Not enough data to calculate suggestion - maintain current weight',
       confidence: 'low',
     };
