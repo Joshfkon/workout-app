@@ -513,8 +513,20 @@ function analyzePerformance(
   const hitTopOfRange = performance.reps >= maxReps;
   const completedAllSets = performance.allSetsCompleted;
   const averageRpeAppropriate = performance.averageRpe >= 7 && performance.averageRpe <= 9;
+  const rpeTooLow = performance.averageRpe < 7; // Weight is too light
 
-  // Ready for load progression: hit top of rep range with good RPE
+  // PRIORITY 1: RPE too low (weight too light) + at/above top of rep range = needs MORE weight
+  // This is the clearest signal for load progression - the weight is definitely too light
+  if (hitTopOfRange && completedAllSets && rpeTooLow) {
+    return {
+      readyForLoadProgression: true,
+      readyForRepProgression: false,
+      readyForSetProgression: false,
+      reason: 'Weight too light - RPE indicates significant capacity for heavier load',
+    };
+  }
+
+  // PRIORITY 2: Standard load progression - hit top of rep range with appropriate RPE (7-9)
   if (hitTopOfRange && completedAllSets && averageRpeAppropriate) {
     return {
       readyForLoadProgression: true,
@@ -524,7 +536,17 @@ function analyzePerformance(
     };
   }
 
-  // Ready for rep progression: in rep range but not at top
+  // PRIORITY 3: RPE too low but not at top of range - add reps first, then weight
+  if (performance.reps >= minReps && performance.reps < maxReps && completedAllSets && rpeTooLow) {
+    return {
+      readyForLoadProgression: false,
+      readyForRepProgression: true,
+      readyForSetProgression: false,
+      reason: 'Weight may be light - add reps to reach top of range, then increase weight',
+    };
+  }
+
+  // PRIORITY 4: Rep progression - in rep range but not at top, normal RPE
   if (performance.reps >= minReps && performance.reps < maxReps && completedAllSets) {
     return {
       readyForLoadProgression: false,
@@ -534,8 +556,8 @@ function analyzePerformance(
     };
   }
 
-  // Ready for set progression: maintaining well, can add volume
-  if (completedAllSets && performance.averageRpe < 8) {
+  // PRIORITY 5: Set progression - only when at appropriate RPE, not when weight is too light
+  if (completedAllSets && averageRpeAppropriate) {
     return {
       readyForLoadProgression: false,
       readyForRepProgression: false,

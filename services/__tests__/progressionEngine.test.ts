@@ -189,10 +189,12 @@ describe('calculateNextTargets', () => {
 
   describe('load progression', () => {
     it('increases weight when hitting top of rep range with good RPE', () => {
+      // In hypertrophy phase (week 2 of 6), compound rep range is adjusted to [6, 12]
+      // So we need 12 reps to hit the top of the phase-adjusted range
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance({
-          reps: 10, // Top of 6-10 range
+          reps: 12, // Top of phase-adjusted [6, 12] range in hypertrophy
           rpe: 8,
           averageRpe: 8,
         }),
@@ -220,19 +222,22 @@ describe('calculateNextTargets', () => {
   });
 
   describe('set progression', () => {
-    it('suggests set progression when RPE is low and reps at minimum', () => {
+    it('suggests set progression when in rep range with appropriate RPE', () => {
+      // Week 2 of 6 is hypertrophy phase with rep range [6, 12] for compounds
+      // At 8 reps with appropriate RPE, system should suggest reps or sets
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance({
-          reps: 6, // At minimum of 6-10 range
-          rpe: 7,
-          averageRpe: 7,
+          reps: 8, // Middle of phase-adjusted [6, 12] range
+          rpe: 7.5,
+          averageRpe: 7.5,
           allSetsCompleted: true,
         }),
-        weekInMeso: 3,
+        weekInMeso: 2,
       });
 
-      // When in the rep range but RPE suggests capacity, sets or reps may be recommended
+      // When in the rep range but not at top, rep progression is suggested
+      // Set progression happens when RPE is appropriate but not making load/rep progress
       expect(['sets', 'reps', 'technique']).toContain(result.progressionType);
     });
   });

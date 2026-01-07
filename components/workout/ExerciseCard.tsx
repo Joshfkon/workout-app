@@ -750,9 +750,14 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     const rpeDiff = targetRpe - lastRpe;
 
-    // If set was easy (low RPE), suggest more reps
-    if (rpeDiff > 0.3) {
-      // Easy set - increase reps by 1-2 depending on how easy
+    // If RPE is significantly low (weight too light) AND at/near top of range,
+    // weight will be increased, so suggest mid-range reps for the heavier weight
+    if (rpeDiff > 1 && lastReps >= targetRepRange[1]) {
+      return Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
+    }
+
+    // If set was slightly easy (low RPE) but not at top of range, add reps
+    if (rpeDiff > 0.3 && lastReps < targetRepRange[1]) {
       const repIncrease = Math.min(2, Math.floor(rpeDiff));
       return Math.min(targetRepRange[1], lastReps + repIncrease);
     } else if (rpeDiff < -0.3) {
@@ -761,7 +766,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       return Math.max(targetRepRange[0], lastReps - repDecrease);
     }
 
-    // On target - keep same reps
+    // On target or slightly easy at top of range - keep same reps
     return lastReps;
   };
 
@@ -797,13 +802,9 @@ export const ExerciseCard = memo(function ExerciseCard({
             
             if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
               // Weight changed significantly, recalculate reps
+              // Don't clamp - show actual estimate so user can see if weight is outside target range
               const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
-              // Clamp to target rep range
-              const clampedReps = Math.max(
-                block.targetRepRange[0],
-                Math.min(block.targetRepRange[1], newReps)
-              );
-              updated[index].reps = String(clampedReps);
+              updated[index].reps = String(newReps);
             }
           }
         }
@@ -2059,15 +2060,33 @@ export const ExerciseCard = memo(function ExerciseCard({
                       />
                     </td>
                     <td className="px-1 py-1.5">
-                      <input
-                        type="number"
-                        value={input.reps}
-                        onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        min="0"
-                        max="100"
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
+                      {(() => {
+                        const repsValue = parseInt(input.reps) || 0;
+                        const isOutsideRange = repsValue > 0 && (
+                          repsValue < block.targetRepRange[0] || repsValue > block.targetRepRange[1]
+                        );
+                        return (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={input.reps}
+                              onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                              min="0"
+                              max="100"
+                              title={isOutsideRange ? `Estimated reps outside target range (${block.targetRepRange[0]}-${block.targetRepRange[1]})` : undefined}
+                              className={`w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                                isOutsideRange
+                                  ? 'border-danger-500 text-danger-400'
+                                  : 'border-surface-700 text-surface-100'
+                              }`}
+                            />
+                            {isOutsideRange && (
+                              <span className="absolute -top-1 -right-1 w-2 h-2 bg-danger-500 rounded-full" title="Outside target rep range" />
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-1 py-1.5 text-center">
                       {(() => {
