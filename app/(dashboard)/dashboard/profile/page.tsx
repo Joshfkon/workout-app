@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/social/profile';
 import { MySharedWorkouts } from '@/components/social/sharing/MySharedWorkouts';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, calculateStreaks } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
 import type { UserProfile, ProfileStats } from '@/types/social';
 
@@ -54,7 +54,7 @@ export default function MyProfilePage() {
         .from('workout_sessions')
         .select('id, completed_at')
         .eq('user_id', authUser.id)
-        .eq('state', 'completed');
+        .eq('state', 'completed') as { data: Array<{ id: string; completed_at: string | null }> | null };
 
       const { data: setLogs } = await supabase
         .from('set_logs')
@@ -67,12 +67,18 @@ export default function MyProfilePage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
+      // Calculate workout streaks from completed workout dates
+      const workoutDates = workoutStats
+        ?.filter((w) => w.completed_at)
+        .map((w) => w.completed_at as string) ?? [];
+      const { currentStreak, longestStreak } = calculateStreaks(workoutDates);
+
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: 0, // TODO: Calculate
-        longest_streak: 0, // TODO: Calculate
+        current_streak: currentStreak,
+        longest_streak: longestStreak,
         favorite_exercise: null,
         strongest_lift: null,
       });
