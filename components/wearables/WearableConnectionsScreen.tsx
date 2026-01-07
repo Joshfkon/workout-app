@@ -22,7 +22,8 @@ import {
 async function getHealthKitModule() {
   try {
     return await import('@/lib/integrations/healthkit');
-  } catch {
+  } catch (error) {
+    console.debug('[WearableConnections] HealthKit module not available:', error);
     return null;
   }
 }
@@ -30,7 +31,8 @@ async function getHealthKitModule() {
 async function getGoogleFitModule() {
   try {
     return await import('@/lib/integrations/google-fit');
-  } catch {
+  } catch (error) {
+    console.debug('[WearableConnections] Google Fit module not available:', error);
     return null;
   }
 }
@@ -38,7 +40,8 @@ async function getGoogleFitModule() {
 async function getFitbitModule() {
   try {
     return await import('@/lib/integrations/fitbit');
-  } catch {
+  } catch (error) {
+    console.debug('[WearableConnections] Fitbit module not available:', error);
     return null;
   }
 }
