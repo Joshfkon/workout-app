@@ -370,6 +370,9 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
+
+  // Track whether AMRAP prefill has already occurred to avoid overwriting user edits
+  const amrapPrefillDoneRef = useRef(false);
   
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
@@ -556,14 +559,26 @@ export const ExerciseCard = memo(function ExerciseCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSets.length, pendingSetsCount, isAmrapSuggested]);
   
-  // Update RPE to 9.5 and predicted reps when AMRAP suggestion appears for the last pending set
+  // Update RPE to 9.5 and predicted reps when AMRAP suggestion first appears
+  // Only prefill once to avoid overwriting user edits
   useEffect(() => {
+    // Reset prefill flag when AMRAP mode is turned off
+    if (!isAmrapSuggested) {
+      amrapPrefillDoneRef.current = false;
+      return;
+    }
+
+    // Only prefill once when AMRAP first appears
+    if (amrapPrefillDoneRef.current) {
+      return;
+    }
+
     if (isAmrapSuggested && pendingInputs.length > 0) {
       const lastIndex = pendingInputs.length - 1;
       const lastInput = pendingInputs[lastIndex];
       const lastCompleted = completedSets[completedSets.length - 1];
 
-      // Check if we need to update RPE or reps
+      // Check if we need to update RPE
       const currentRpe = parseFloat(lastInput?.rpe || '0');
       const needsRpeUpdate = lastInput && currentRpe !== 9.5;
 
@@ -574,8 +589,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         predictedReps = Math.round(lastCompleted.reps + repsInReserve);
       }
 
-      const currentReps = parseInt(lastInput?.reps || '0', 10);
-      const needsRepsUpdate = predictedReps !== null && currentReps < predictedReps;
+      // Only prefill reps if we have a prediction (don't check current value - this is initial prefill)
+      const needsRepsUpdate = predictedReps !== null;
 
       if (needsRpeUpdate || needsRepsUpdate) {
         setPendingInputs(prev => {
@@ -587,6 +602,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           return updated;
         });
       }
+
+      // Mark prefill as done so we don't overwrite user edits
+      amrapPrefillDoneRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAmrapSuggested, pendingInputs.length, completedSets]);
