@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import type { LeaderboardType, LeaderboardEntryWithProfile } from '@/types/social';
 
 interface UseLeaderboardOptions {
@@ -131,8 +132,8 @@ export function useLeaderboard({
           setUserRank(null);
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

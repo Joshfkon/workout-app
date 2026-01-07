@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import { useUserStore, useExerciseStore } from '@/stores';
 import {
   calculateNextTargets,
@@ -76,8 +77,8 @@ export function useProgressionTargets({
 
       const calculatedTargets = calculateNextTargets(input);
       setTargets(calculatedTargets);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to calculate targets');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

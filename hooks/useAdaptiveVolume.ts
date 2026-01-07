@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
 import {
   type UserVolumeProfile,
@@ -257,8 +258,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         }));
         setPreviousWeekData(mapped);
       }
-    } catch (err) {
-      console.error('Failed to fetch volume data:', err);
+    } catch (err: unknown) {
+      console.error('Failed to fetch volume data:', getErrorMessage(err));
     }
   }, [user?.id]);
 
@@ -345,8 +346,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       // Fetch latest mesocycle analysis
       await fetchLatestAnalysis();
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load volume profile');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -367,8 +368,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           training_age: profile.trainingAge,
           updated_at: new Date().toISOString(),
         });
-    } catch (err) {
-      console.error('Failed to save volume profile:', err);
+    } catch (err: unknown) {
+      console.error('Failed to save volume profile:', getErrorMessage(err));
     }
   };
 
