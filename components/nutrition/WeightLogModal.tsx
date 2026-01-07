@@ -5,6 +5,7 @@ import { Modal, ModalFooter } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { getDisplayWeight, validateUserInput } from '@/lib/weightUtils';
+import { getLocalDateString } from '@/lib/utils';
 import type { WeightLogEntry } from '@/types/nutrition';
 
 interface WeightLogModalProps {
@@ -31,7 +32,7 @@ export function WeightLogModal({
   // Sync state with existingEntry when modal opens or entry changes
   useEffect(() => {
     if (isOpen) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       if (existingEntry) {
         // Use unified weight utility to get display weight (with validation)

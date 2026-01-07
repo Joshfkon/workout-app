@@ -27,7 +27,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement, formatWeight, formatDuration } from '@/lib/utils';
+import { kgToLbs, roundToIncrement, formatWeight, formatDuration, getLocalDateString } from '@/lib/utils';
 // Recharts components still used inline - these will be gradually migrated
 import {
   LineChart,
@@ -555,7 +555,7 @@ export default function AnalyticsPage() {
             .from('weigh_ins')
             .select('logged_at, weight_kg')
             .eq('user_id', userId)
-            .gte('logged_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .gte('logged_at', getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)))
             .order('logged_at', { ascending: true }),
           // Latest body measurements
           supabase
@@ -722,7 +722,7 @@ export default function AnalyticsPage() {
           startDate = new Date(0); // All time
       }
 
-      const startDateStr = startDate.toISOString().split('T')[0];
+      const startDateStr = getLocalDateString(startDate);
 
       try {
         // Fetch hydration data

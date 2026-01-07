@@ -10,7 +10,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, getLocalDateString } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
 import {
   generateMesocycleRecommendation,
@@ -337,7 +337,7 @@ export default function NewMesocyclePage() {
           state: 'active',
           fatigue_score: 0,
           is_active: true,
-          start_date: new Date().toISOString().split('T')[0],
+          start_date: getLocalDateString(),
           // New fields for training science integration
           periodization_model: fullProgram?.periodization?.model || 'linear',
           program_data: fullProgram,

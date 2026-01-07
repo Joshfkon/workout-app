@@ -14,6 +14,7 @@ import type {
   WearablePermission,
   HealthUpdate,
 } from '@/types/wearable';
+import { getLocalDateString } from '@/lib/utils';
 
 // === TYPES ===
 
@@ -186,7 +187,7 @@ class GoogleFitService {
       return response.buckets.map((bucket) => {
         const steps = this.sumBucketValues(bucket);
         return {
-          date: new Date(bucket.startTimeMillis).toISOString().split('T')[0],
+          date: getLocalDateString(new Date(bucket.startTimeMillis)),
           steps,
           source: 'google_fit' as const,
           confidence: 'measured' as const,
@@ -251,7 +252,7 @@ class GoogleFitService {
       return response.buckets.map((bucket) => {
         const calories = this.sumBucketValues(bucket);
         return {
-          date: new Date(bucket.startTimeMillis).toISOString().split('T')[0],
+          date: getLocalDateString(new Date(bucket.startTimeMillis)),
           activeCalories: Math.round(calories),
           source: 'google_fit' as const,
         };
@@ -388,7 +389,7 @@ class GoogleFitService {
     data: unknown;
   }): HealthUpdate | null {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       if (event.dataType === DATA_TYPES.steps) {
         const steps =
