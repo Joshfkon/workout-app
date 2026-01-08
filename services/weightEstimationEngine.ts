@@ -494,11 +494,11 @@ export class WeightEstimationEngine {
    */
   getLowerSessionCounts(): Record<string, number> {
     const result: Record<string, number> = {};
-    for (const [exercise, count] of this.lowerSessionCounts) {
+    this.lowerSessionCounts.forEach((count, exercise) => {
       if (count > 0) {
         result[exercise] = count;
       }
-    }
+    });
     return result;
   }
   
