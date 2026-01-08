@@ -660,7 +660,9 @@ export default function DashboardPage() {
           const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
             .map(([muscle, data]) => {
               const target = volumeTargets[muscle] || 10;
-              const status: 'low' | 'optimal' | 'high' = data.sets < target * 0.7 ? 'low' : data.sets > target * 1.3 ? 'high' : 'optimal';
+              const mev = MEV_TARGETS[muscle] || 4;
+              // Use MEV as the threshold for 'low' status to be consistent with AtrophyRiskAlert
+              const status: 'low' | 'optimal' | 'high' = data.sets < mev ? 'low' : data.sets > target * 1.3 ? 'high' : 'optimal';
               const exercises = Array.from(data.exercises.values()).sort((a, b) => b.sets - a.sets);
               return { muscle, sets: data.sets, target, status, exercises };
             })
