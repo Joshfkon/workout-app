@@ -19,86 +19,56 @@ All critical correctness and estimation quality issues have been addressed:
 - [x] Variance fields used in range calculations
 - [x] Relationship graph validation added
 
+## Completed in January 2026 Iteration
+
+- [x] **Standalone Canonicalization Module** - Created `services/exerciseCanonical.ts` with centralized exercise name matching
+- [x] **Shared Strength Calculations** - Created `services/shared/strengthCalculations.ts` with single source of truth for E1RM and working weight calculations
+- [x] **Additional Volatile Exercises** - Added volatile flag to Machine Chest Press, Hack Squat, Cable Fly, and Seated Cable Row
+
 ## Remaining Items (Lower Priority)
 
-### 1. Create Standalone Canonicalization Module
+### 1. ~~Create Standalone Canonicalization Module~~ ✅ COMPLETED
 
-**Current State:** Canonicalization functions (`normalizeExerciseName`, `findExerciseMatch`) are inline in `weightEstimationEngine.ts`.
+**Status:** Completed in January 2026
 
-**Proposed Change:** Create a dedicated module at `services/exerciseCanonical.ts`:
-
-```typescript
-// services/exerciseCanonical.ts
-
-export interface CanonicalExercise {
-  key: string;           // Lowercase, normalized key for lookups
-  displayName: string;   // User-friendly name
-  aliases: string[];     // Alternative names that map to this
-}
-
-const CANONICAL_EXERCISES: CanonicalExercise[] = [
-  {
-    key: 'barbell_bench_press',
-    displayName: 'Barbell Bench Press',
-    aliases: ['bench press', 'flat bench', 'bb bench', 'barbell bench']
-  },
-  // ... etc
-];
-
-export function canonicalizeExercise(name: string): CanonicalExercise | null;
-export function getCanonicalKey(name: string): string;
-export function getDisplayName(name: string): string;
-```
-
-**Benefits:**
-- Centralized exercise name matching logic
-- Easier to add new aliases
-- Can be reused across the codebase (e.g., in exercise search, history matching)
-
-**Effort:** Medium - requires updating imports in weightEstimationEngine.ts and testing
+Created `services/exerciseCanonical.ts` with:
+- `CanonicalExercise` interface with key, displayName, and aliases
+- `normalizeExerciseName()` - normalizes exercise names for matching
+- `findExerciseMatch()` - finds canonical exercise name from input
+- `getCanonicalKey()` - gets snake_case key for database lookups
+- `getDisplayName()` - gets user-friendly display name
+- `canonicalizeExercise()` - returns full canonical object
+- `isSameExercise()` - compares two exercise names
 
 ---
 
-### 2. Extract Shared Strength Calculations
+### 2. ~~Extract Shared Strength Calculations~~ ✅ COMPLETED
 
-**Current State:** `estimate1RM()` is duplicated in:
-- `services/weightEstimationEngine.ts`
-- `services/progressionEngine.ts` (per comment in code)
+**Status:** Completed in January 2026
 
-**Proposed Change:** Create shared module at `services/shared/strengthCalculations.ts`:
+Created `services/shared/strengthCalculations.ts` with:
+- `rpeToRIR()` - converts RPE to RIR with bounds and rep-range awareness
+- `rirToRPE()` - converts RIR back to RPE
+- `estimate1RM()` - multi-formula E1RM calculation (Brzycki, Epley, Lombardi average)
+- `estimateE1RMSimple()` - simple Epley-only E1RM calculation
+- `calculateWorkingWeight()` - Brzycki-derived working weight with bounds
+- `calculateWorkingWeightSimple()` - Epley inverse working weight
+- `getPercentageOf1RM()` - get percentage for rep/RIR target
+- `estimateRepsAtPercentage()` - inverse calculation
 
-```typescript
-// services/shared/strengthCalculations.ts
-
-export function estimate1RM(weight: number, reps: number, rpe?: number): number;
-export function calculateWorkingWeight(estimated1RM: number, targetReps: number, targetRIR: number): number;
-export function rpeToRIR(rpe: number | undefined, reps: number): number;
-```
-
-**Benefits:**
-- Single source of truth for strength math
-- Easier to update formulas consistently
-- Reduces code duplication
-
-**Effort:** Low - extract functions and update imports
+Both `weightEstimationEngine.ts` and `progressionEngine.ts` now import from this shared module.
 
 ---
 
-### 3. Add More Volatile Exercise Relationships
+### 3. ~~Add More Volatile Exercise Relationships~~ ✅ COMPLETED
 
-**Current State:** The following exercises are marked as volatile:
-- Leg Press
-- Lat Pulldown
-- Leg Extension
-- Lying Leg Curl
+**Status:** Completed in January 2026
 
-**Consider Adding:**
-- Machine Chest Press (machine varies)
-- Hack Squat (machine varies)
-- Cable Fly (cable stack varies)
-- Any "Machine" prefixed exercises
-
-**Effort:** Low - just add `volatile: true` to relevant relationships
+Added `volatile: true` to:
+- Machine Chest Press (machine lever arms, angles, and resistance curves vary)
+- Hack Squat (machine angle, sled weight, and foot placement options vary)
+- Cable Fly (cable stack weight increments and pulley ratios vary)
+- Seated Cable Row (cable stack varies between machines)
 
 ---
 
@@ -134,5 +104,7 @@ After implementing any of the above, verify:
 | File | Purpose |
 |------|---------|
 | `services/weightEstimationEngine.ts` | Main weight estimation logic |
-| `services/progressionEngine.ts` | Contains duplicate `estimate1RM` |
+| `services/progressionEngine.ts` | Workout progression calculations (now uses shared module) |
+| `services/exerciseCanonical.ts` | **NEW** - Centralized exercise name matching and canonicalization |
+| `services/shared/strengthCalculations.ts` | **NEW** - Single source of truth for E1RM and working weight calculations |
 | `services/__tests__/weightEstimationEngine.test.ts` | Test file (needs updates for new interface) |
