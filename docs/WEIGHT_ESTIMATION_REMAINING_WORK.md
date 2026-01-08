@@ -1,6 +1,9 @@
-# Weight Estimation Engine - Remaining Work
+# Weight Estimation Engine - Refactor Complete ✅
 
-This document tracks remaining items from the weight estimation refactor that were deferred for a future iteration.
+This document tracks items from the weight estimation refactor. **All tasks are now complete.**
+
+> **Summary:** The weight estimation engine has been fully refactored with improved accuracy,
+> centralized code, and persistence support for hysteresis counters.
 
 ## Completed in This Refactor
 
@@ -19,98 +22,90 @@ All critical correctness and estimation quality issues have been addressed:
 - [x] Variance fields used in range calculations
 - [x] Relationship graph validation added
 
+## Completed in January 2026 Iteration
+
+- [x] **Standalone Canonicalization Module** - Created `services/exerciseCanonical.ts` with centralized exercise name matching
+- [x] **Shared Strength Calculations** - Created `services/shared/strengthCalculations.ts` with single source of truth for E1RM and working weight calculations
+- [x] **Additional Volatile Exercises** - Added volatile flag to Machine Chest Press, Hack Squat, Cable Fly, and Seated Cable Row
+- [x] **Persist Lower Session Counts** - Added persistence support for hysteresis counters via `UserStrengthProfile.lowerSessionCounts` and `getLowerSessionCounts()` method
+
 ## Remaining Items (Lower Priority)
 
-### 1. Create Standalone Canonicalization Module
+### 1. ~~Create Standalone Canonicalization Module~~ ✅ COMPLETED
 
-**Current State:** Canonicalization functions (`normalizeExerciseName`, `findExerciseMatch`) are inline in `weightEstimationEngine.ts`.
+**Status:** Completed in January 2026
 
-**Proposed Change:** Create a dedicated module at `services/exerciseCanonical.ts`:
+Created `services/exerciseCanonical.ts` with:
+- `CanonicalExercise` interface with key, displayName, and aliases
+- `normalizeExerciseName()` - normalizes exercise names for matching
+- `findExerciseMatch()` - finds canonical exercise name from input
+- `getCanonicalKey()` - gets snake_case key for database lookups
+- `getDisplayName()` - gets user-friendly display name
+- `canonicalizeExercise()` - returns full canonical object
+- `isSameExercise()` - compares two exercise names
 
+---
+
+### 2. ~~Extract Shared Strength Calculations~~ ✅ COMPLETED
+
+**Status:** Completed in January 2026
+
+Created `services/shared/strengthCalculations.ts` with:
+- `rpeToRIR()` - converts RPE to RIR with bounds and rep-range awareness
+- `rirToRPE()` - converts RIR back to RPE
+- `estimate1RM()` - multi-formula E1RM calculation (Brzycki, Epley, Lombardi average)
+- `estimateE1RMSimple()` - simple Epley-only E1RM calculation
+- `calculateWorkingWeight()` - Brzycki-derived working weight with bounds
+- `calculateWorkingWeightSimple()` - Epley inverse working weight
+- `getPercentageOf1RM()` - get percentage for rep/RIR target
+- `estimateRepsAtPercentage()` - inverse calculation
+
+Both `weightEstimationEngine.ts` and `progressionEngine.ts` now import from this shared module.
+
+---
+
+### 3. ~~Add More Volatile Exercise Relationships~~ ✅ COMPLETED
+
+**Status:** Completed in January 2026
+
+Added `volatile: true` to:
+- Machine Chest Press (machine lever arms, angles, and resistance curves vary)
+- Hack Squat (machine angle, sled weight, and foot placement options vary)
+- Cable Fly (cable stack weight increments and pulley ratios vary)
+- Seated Cable Row (cable stack varies between machines)
+
+---
+
+### 4. ~~Persist Lower Session Counts~~ ✅ COMPLETED
+
+**Status:** Completed in January 2026
+
+Added persistence support for hysteresis counters:
+
+1. **Extended `UserStrengthProfile` interface** with optional `lowerSessionCounts?: Record<string, number>` field
+2. **Updated constructor** to initialize from profile if `lowerSessionCounts` is provided
+3. **Added `getLowerSessionCounts()` method** to export current counts for persistence (returns plain object suitable for JSON serialization)
+4. **Updated `createStrengthProfile()` helper** to accept optional `lowerSessionCounts` parameter
+
+**Usage for persistence:**
 ```typescript
-// services/exerciseCanonical.ts
+// After updating from workout
+engine.updateFromWorkout(exerciseName, sets);
 
-export interface CanonicalExercise {
-  key: string;           // Lowercase, normalized key for lookups
-  displayName: string;   // User-friendly name
-  aliases: string[];     // Alternative names that map to this
-}
+// Get counts for persistence (e.g., save to user profile in database)
+const countsToSave = engine.getLowerSessionCounts();
+// Save countsToSave to database/localStorage
 
-const CANONICAL_EXERCISES: CanonicalExercise[] = [
-  {
-    key: 'barbell_bench_press',
-    displayName: 'Barbell Bench Press',
-    aliases: ['bench press', 'flat bench', 'bb bench', 'barbell bench']
-  },
-  // ... etc
-];
-
-export function canonicalizeExercise(name: string): CanonicalExercise | null;
-export function getCanonicalKey(name: string): string;
-export function getDisplayName(name: string): string;
+// Later, when recreating the engine
+const savedCounts = /* load from database/localStorage */;
+const profile = createStrengthProfile(
+  heightCm, weightKg, bodyFatPercent, experience, trainingAge,
+  exerciseHistory, regionalData, savedCounts
+);
+const engine = new WeightEstimationEngine(profile, 'kg');
 ```
 
-**Benefits:**
-- Centralized exercise name matching logic
-- Easier to add new aliases
-- Can be reused across the codebase (e.g., in exercise search, history matching)
-
-**Effort:** Medium - requires updating imports in weightEstimationEngine.ts and testing
-
----
-
-### 2. Extract Shared Strength Calculations
-
-**Current State:** `estimate1RM()` is duplicated in:
-- `services/weightEstimationEngine.ts`
-- `services/progressionEngine.ts` (per comment in code)
-
-**Proposed Change:** Create shared module at `services/shared/strengthCalculations.ts`:
-
-```typescript
-// services/shared/strengthCalculations.ts
-
-export function estimate1RM(weight: number, reps: number, rpe?: number): number;
-export function calculateWorkingWeight(estimated1RM: number, targetReps: number, targetRIR: number): number;
-export function rpeToRIR(rpe: number | undefined, reps: number): number;
-```
-
-**Benefits:**
-- Single source of truth for strength math
-- Easier to update formulas consistently
-- Reduces code duplication
-
-**Effort:** Low - extract functions and update imports
-
----
-
-### 3. Add More Volatile Exercise Relationships
-
-**Current State:** The following exercises are marked as volatile:
-- Leg Press
-- Lat Pulldown
-- Leg Extension
-- Lying Leg Curl
-
-**Consider Adding:**
-- Machine Chest Press (machine varies)
-- Hack Squat (machine varies)
-- Cable Fly (cable stack varies)
-- Any "Machine" prefixed exercises
-
-**Effort:** Low - just add `volatile: true` to relevant relationships
-
----
-
-### 4. Persist Lower Session Counts
-
-**Current State:** `lowerSessionCounts` Map is in-memory only, reset when engine is recreated.
-
-**Issue:** If the user closes the app between workouts, the hysteresis counter resets.
-
-**Proposed Change:** Store counts in the user's profile or local storage.
-
-**Effort:** Medium - requires coordination with data persistence layer
+**Integration Note:** The actual persistence mechanism (database column, localStorage key, etc.) should be implemented where the engine is instantiated, typically in a hook or service that manages user workout data
 
 ---
 
@@ -134,5 +129,7 @@ After implementing any of the above, verify:
 | File | Purpose |
 |------|---------|
 | `services/weightEstimationEngine.ts` | Main weight estimation logic |
-| `services/progressionEngine.ts` | Contains duplicate `estimate1RM` |
+| `services/progressionEngine.ts` | Workout progression calculations (now uses shared module) |
+| `services/exerciseCanonical.ts` | **NEW** - Centralized exercise name matching and canonicalization |
+| `services/shared/strengthCalculations.ts` | **NEW** - Single source of truth for E1RM and working weight calculations |
 | `services/__tests__/weightEstimationEngine.test.ts` | Test file (needs updates for new interface) |

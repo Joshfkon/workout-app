@@ -19,6 +19,10 @@ import type {
   Equipment,
 } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
+import {
+  estimateE1RMSimple,
+  calculateWorkingWeightSimple,
+} from './shared/strengthCalculations';
 
 // ============================================
 // TYPE ADAPTERS
@@ -365,6 +369,7 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
 
 /**
  * Calculate working weight from estimated 1RM
+ * Uses shared strength calculations with local rounding
  */
 function calculateWorkingWeightFromE1RM(
   e1rm: number,
@@ -372,12 +377,9 @@ function calculateWorkingWeightFromE1RM(
   targetRir: number
 ): number {
   const avgReps = Math.round((repRange[0] + repRange[1]) / 2);
-  const effectiveReps = avgReps + targetRir;
-  // Exact inverse of Epley formula: E1RM = weight * (1 + reps/30)
-  // Therefore: weight = E1RM / (1 + reps/30) = E1RM * 30 / (30 + reps)
-  const percentage = 30 / (30 + effectiveReps);
-  const safetyMargin = 0.95;
-  return roundToIncrement(e1rm * percentage * safetyMargin, 2.5);
+  // Use shared calculation for consistency across the codebase
+  const workingWeight = calculateWorkingWeightSimple(e1rm, avgReps, targetRir);
+  return roundToIncrement(workingWeight, 2.5);
 }
 
 /**
@@ -968,17 +970,10 @@ function getRestSecondsForMechanic(mechanic: 'compound' | 'isolation'): number {
 
 /**
  * Calculate estimated 1 rep max using Epley formula
+ * Uses shared strength calculations for consistency across the codebase
  */
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Adjust reps for RIR
-  const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
+  return estimateE1RMSimple(weight, reps, rpe);
 }
 
 /**

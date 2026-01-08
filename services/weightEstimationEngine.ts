@@ -9,6 +9,12 @@
 
 import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
 import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './regionalAnalysis';
+import { normalizeExerciseName, findExerciseMatch } from './exerciseCanonical';
+import {
+  rpeToRIR,
+  calculateWorkingWeight,
+  estimate1RM,
+} from './shared/strengthCalculations';
 
 // ============================================================
 // TYPES FOR WEIGHT ESTIMATION
@@ -76,6 +82,13 @@ export interface UserStrengthProfile {
   knownMaxes: EstimatedMax[];
   regionalData?: DexaRegionalData;
   regionalAnalysis?: RegionalAnalysis;
+  /**
+   * Persisted lower session counts for hysteresis.
+   * Maps exercise name (lowercase) to consecutive lower session count.
+   * Used to require 3 consecutive significantly lower sessions before
+   * downgrading an estimated max.
+   */
+  lowerSessionCounts?: Record<string, number>;
 }
 
 // ============================================================
@@ -114,89 +127,8 @@ interface ExerciseRelationship {
   volatile?: boolean;
 }
 
-// Normalize exercise names for fuzzy matching
-function normalizeExerciseName(name: string): string {
-  return name.toLowerCase()
-    .replace(/bent[ -]?over/gi, '')
-    .replace(/seated/gi, '')
-    .replace(/standing/gi, '')
-    .replace(/lying/gi, '')
-    .replace(/machine/gi, '')
-    .replace(/cable/gi, '')
-    .replace(/ez[ -]?bar/gi, 'barbell')
-    .replace(/smith[ -]?machine/gi, 'barbell')
-    .replace(/dumbbell/gi, 'db')
-    .replace(/barbell/gi, 'bb')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Find matching exercise in relationships
-function findExerciseMatch(exerciseName: string): string | null {
-  const normalized = normalizeExerciseName(exerciseName);
-  const lowerName = exerciseName.toLowerCase();
-  
-  // Direct match first
-  for (const key of Object.keys(EXERCISE_RELATIONSHIPS)) {
-    if (key.toLowerCase() === lowerName) return key;
-  }
-  
-  // Fuzzy match - check if exercise name contains key parts
-  const matchPatterns: Record<string, string> = {
-    'bench press': 'Barbell Bench Press',
-    'incline press': 'Incline Barbell Press',
-    'incline bench': 'Incline Barbell Press',
-    'overhead press': 'Overhead Press',
-    'shoulder press': 'Overhead Press',
-    'military press': 'Overhead Press',
-    'squat': 'Barbell Back Squat',
-    'back squat': 'Barbell Back Squat',
-    'front squat': 'Front Squat',
-    'leg press': 'Leg Press',
-    'deadlift': 'Deadlift',
-    'rdl': 'Romanian Deadlift',
-    'romanian': 'Romanian Deadlift',
-    'row': 'Barbell Row',
-    'bent over row': 'Barbell Row',
-    'db row': 'Dumbbell Row',
-    'dumbbell row': 'Dumbbell Row',
-    'pulldown': 'Lat Pulldown',
-    'lat pull': 'Lat Pulldown',
-    'pull-up': 'Pull-Up',
-    'pullup': 'Pull-Up',
-    'chin-up': 'Pull-Up',
-    'curl': 'Barbell Curl',
-    'bicep curl': 'Barbell Curl',
-    'hammer curl': 'Hammer Curl',
-    'pushdown': 'Tricep Pushdown',
-    'tricep push': 'Tricep Pushdown',
-    'extension': 'Overhead Tricep Extension',
-    'tricep extension': 'Overhead Tricep Extension',
-    'triceps extension': 'Overhead Tricep Extension',
-    'dumbbell tricep': 'Overhead Tricep Extension',
-    'dumbbell triceps': 'Overhead Tricep Extension',
-    'lateral raise': 'Lateral Raise',
-    'side raise': 'Lateral Raise',
-    'face pull': 'Face Pull',
-    'leg curl': 'Lying Leg Curl',
-    'hamstring curl': 'Lying Leg Curl',
-    'leg extension': 'Leg Extension',
-    'calf raise': 'Standing Calf Raise',
-    'hip thrust': 'Hip Thrust',
-    'glute bridge': 'Hip Thrust',
-    'fly': 'Cable Fly',
-    'chest fly': 'Cable Fly',
-    'pec fly': 'Cable Fly',
-  };
-  
-  for (const [pattern, exercise] of Object.entries(matchPatterns)) {
-    if (lowerName.includes(pattern)) {
-      return exercise;
-    }
-  }
-  
-  return null;
-}
+// NOTE: normalizeExerciseName and findExerciseMatch are now imported from exerciseCanonical.ts
+// This provides centralized exercise name matching that can be reused across the codebase
 
 const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
   // Chest exercises relative to Barbell Bench Press
@@ -384,6 +316,49 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
       { exercise: 'Calf Machine', ratio: 1.0 },
     ]
   },
+  // Additional volatile exercises (machines vary significantly between gyms)
+  'Machine Chest Press': {
+    parent: 'Barbell Bench Press',
+    ratioToParent: 0.90,
+    ratioVariance: 0.2,
+    volatile: true,  // Machine lever arms, angles, and resistance curves vary
+    relatedExercises: []
+  },
+  'Hack Squat': {
+    parent: 'Barbell Back Squat',
+    ratioToParent: 1.2,
+    ratioVariance: 0.25,
+    volatile: true,  // Machine angle, sled weight, and foot placement options vary
+    relatedExercises: [
+      { exercise: 'Leg Press', ratio: 1.5 },
+    ]
+  },
+  'Cable Fly': {
+    parent: 'Barbell Bench Press',
+    ratioToParent: 0.30,
+    ratioVariance: 0.15,
+    volatile: true,  // Cable stack weight increments and pulley ratios vary
+    relatedExercises: [
+      { exercise: 'Dumbbell Fly', ratio: 0.90 },
+    ]
+  },
+  'Dumbbell Fly': {
+    parent: 'Barbell Bench Press',
+    ratioToParent: 0.25,
+    ratioVariance: 0.1,
+    relatedExercises: [
+      { exercise: 'Cable Fly', ratio: 1.2 },
+    ]
+  },
+  'Seated Cable Row': {
+    parent: 'Barbell Row',
+    ratioToParent: 0.75,
+    ratioVariance: 0.15,
+    volatile: true,  // Cable stack varies between machines
+    relatedExercises: [
+      { exercise: 'Lat Pulldown', ratio: 1.0 },
+    ]
+  },
 };
 
 /**
@@ -483,88 +458,13 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // ============================================================
 // 1RM ESTIMATION FROM REPS
 // ============================================================
+// NOTE: rpeToRIR, estimate1RM, and calculateWorkingWeight are now imported
+// from services/shared/strengthCalculations.ts
+// This provides a single source of truth for strength calculations across the codebase
 
-/**
- * Convert RPE to RIR (Reps In Reserve) with bounds and rep-range awareness
- */
-function rpeToRIR(rpe: number | undefined, reps: number): number {
-  if (!rpe) return 0;  // Assume RPE 10 if not specified
-
-  // Clamp RPE to reasonable range (6-10)
-  const clampedRPE = Math.min(Math.max(rpe, 6), 10);
-
-  // Base RIR calculation
-  let rir = 10 - clampedRPE;
-
-  // At higher rep ranges, RIR estimates become less reliable
-  // Compress the RIR for high-rep sets
-  if (reps > 10) {
-    rir = rir * 0.75;  // RIR less meaningful at high reps
-  }
-
-  // Cap effective RIR at 4 (RPE 6 minimum useful)
-  return Math.min(rir, 4);
-}
-
-/**
- * Estimate 1RM from weight, reps, and optional RPE
- * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy
- *
- * NOTE: This function is duplicated in lib/training/programEngine.ts
- * Both implementations should be kept in sync. Consider consolidating in the future.
- */
-export function estimate1RM(weight: number, reps: number, rpe?: number): number {
-  if (reps === 1) return weight;
-
-  // High rep sets (>12): use conservative linear estimate
-  if (reps > 12) {
-    // For very high reps, the formulas become unreliable
-    // Use a conservative linear estimate
-    return Math.round(weight * (1 + reps / 40) * 10) / 10;
-  }
-
-  const rir = rpeToRIR(rpe, reps);
-  const effectiveReps = reps + rir;
-
-  // Clamp effective reps to prevent formula breakdown
-  const clampedEffectiveReps = Math.min(effectiveReps, 15);
-
-  // Multiple formulas for accuracy
-  const brzycki = weight * (36 / (37 - clampedEffectiveReps));
-  const epley = weight * (1 + clampedEffectiveReps / 30);
-  const lombardi = weight * Math.pow(clampedEffectiveReps, 0.10);
-
-  const average = (brzycki + epley + lombardi) / 3;
-  return Math.round(average * 10) / 10;
-}
-
-/**
- * Calculate working weight based on estimated 1RM, target reps, and target RIR.
- * Uses Brzycki-derived percentage with bounds for high-rep scenarios.
- */
-function calculateWorkingWeight(
-  estimated1RM: number,
-  targetReps: number,
-  targetRIR: number
-): number {
-  const effectiveReps = targetReps + targetRIR;
-
-  // Clamp effective reps to reasonable range for formula accuracy
-  const clampedReps = Math.min(effectiveReps, 15);
-
-  let percentage: number;
-  if (clampedReps <= 12) {
-    // Standard Brzycki-derived percentage
-    percentage = (37 - clampedReps) / 36;
-  } else {
-    // Linear extrapolation for higher reps (more conservative)
-    // At 12 reps: 69.4%, at 15 reps: ~62%
-    percentage = 0.694 - (clampedReps - 12) * 0.025;
-  }
-
-  const safetyMargin = 0.95;
-  return Math.round(estimated1RM * percentage * safetyMargin * 10) / 10;
-}
+// Re-export estimate1RM for backwards compatibility with existing imports
+// This allows: import { estimate1RM } from '@/services/weightEstimationEngine'
+export { estimate1RM };
 
 // ============================================================
 // MAIN WEIGHT ESTIMATION ENGINE
@@ -585,6 +485,29 @@ export class WeightEstimationEngine {
     for (const max of profile.knownMaxes) {
       this.estimatedMaxes.set(max.exercise.toLowerCase(), max);
     }
+
+    // Initialize lower session counts from persisted data if available
+    if (profile.lowerSessionCounts) {
+      for (const [exercise, count] of Object.entries(profile.lowerSessionCounts)) {
+        this.lowerSessionCounts.set(exercise.toLowerCase(), count);
+      }
+    }
+  }
+
+  /**
+   * Get the current lower session counts for persistence.
+   * Returns a plain object suitable for JSON serialization.
+   * This should be saved to the user's profile/preferences to maintain
+   * hysteresis across app sessions.
+   */
+  getLowerSessionCounts(): Record<string, number> {
+    const result: Record<string, number> = {};
+    this.lowerSessionCounts.forEach((count, exercise) => {
+      if (count > 0) {
+        result[exercise] = count;
+      }
+    });
+    return result;
   }
   
   getWorkingWeight(
@@ -1452,20 +1375,21 @@ export function createStrengthProfile(
   experience: Experience,
   trainingAge: number,
   exerciseHistory: ExerciseHistoryEntry[] = [],
-  regionalData?: DexaRegionalData
+  regionalData?: DexaRegionalData,
+  lowerSessionCounts?: Record<string, number>
 ): UserStrengthProfile {
   const bodyComp = calculateBodyComposition(weightKg, bodyFatPercentage, heightCm);
-  
+
   const knownMaxes: EstimatedMax[] = [];
   const exerciseNames = Array.from(new Set(exerciseHistory.map(h => h.exerciseName)));
-  
+
   for (const name of exerciseNames) {
     const history = exerciseHistory.filter(h => h.exerciseName === name);
     if (history.length > 0) {
       const recentHistory = history
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 10);
-      
+
       const estimates: number[] = [];
       for (const session of recentHistory) {
         for (const set of session.sets) {
@@ -1474,11 +1398,11 @@ export function createStrengthProfile(
           }
         }
       }
-      
+
       if (estimates.length > 0) {
         estimates.sort((a, b) => b - a);
         const best = estimates[Math.floor(estimates.length * 0.1)] || estimates[0];
-        
+
         knownMaxes.push({
           exercise: name,
           estimated1RM: Math.round(best * 10) / 10,
@@ -1489,12 +1413,12 @@ export function createStrengthProfile(
       }
     }
   }
-  
+
   // Calculate regional analysis if regional data provided
-  const regionalAnalysis = regionalData 
+  const regionalAnalysis = regionalData
     ? analyzeRegionalComposition(regionalData, bodyComp.leanMassKg)
     : undefined;
-  
+
   return {
     bodyComposition: bodyComp,
     experience,
@@ -1502,7 +1426,8 @@ export function createStrengthProfile(
     exerciseHistory,
     knownMaxes,
     regionalData,
-    regionalAnalysis
+    regionalAnalysis,
+    lowerSessionCounts
   };
 }
 
