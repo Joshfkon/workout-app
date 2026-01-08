@@ -1600,7 +1600,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             <thead className="bg-surface-800/50">
               <tr>
                 <th className="w-8 px-1 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="w-14 px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="w-[72px] px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
                 <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
                 <th className="w-12 px-1 py-2 text-center text-surface-400 font-medium">Form</th>
