@@ -617,7 +617,9 @@ export class WeightEstimationEngine {
         const smoothedWeight = rawWeight > previousRecommendation
           ? previousRecommendation + maxChange
           : previousRecommendation - maxChange;
-        recommendation.recommendedWeight = this.roundToNearestPlate(this.unit, smoothedWeight);
+        // smoothedWeight is in display unit; convert back to kg for roundToNearestPlate
+        const smoothedWeightKg = this.unit === 'lb' ? smoothedWeight / 2.20462 : smoothedWeight;
+        recommendation.recommendedWeight = this.roundToNearestPlate(this.unit, smoothedWeightKg);
         recommendation.rationale += ` (Smoothed from ${rawWeight.toFixed(1)} to limit week-to-week change)`;
       }
     }
@@ -1041,7 +1043,11 @@ export class WeightEstimationEngine {
     const conservativeWeight = workingWeight * 0.85;
 
     const startWeight = this.roundToNearestPlate(this.unit, conservativeWeight * (1 - lowVariance));
-    const increment = this.getAppropriateIncrement(exerciseName);
+    const incrementKg = this.getAppropriateIncrement(exerciseName);
+    // Convert increment to display unit for instructions
+    const incrementDisplay = this.unit === 'lb'
+      ? Math.round(incrementKg * 2.20462 * 2) / 2  // Round to nearest 0.5 lb
+      : incrementKg;
     const unitLabel = this.unit;
 
     return {
@@ -1059,10 +1065,10 @@ export class WeightEstimationEngine {
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {
         startingWeight: startWeight,
-        incrementKg: increment,
+        incrementKg: incrementKg,
         targetRPE: 10 - targetRIR,
         maxAttempts: 4,
-        instructions: `Start at ${startWeight}${unitLabel}. Increase by ${increment}${unitLabel} each set until RPE ${10 - targetRIR}.`
+        instructions: `Start at ${startWeight}${unitLabel}. Increase by ${incrementDisplay}${unitLabel} each set until RPE ${10 - targetRIR}.`
       }
     };
   }
@@ -1085,7 +1091,11 @@ export class WeightEstimationEngine {
     const conservativeWeight = workingWeight * 0.80;
 
     const startWeight = this.roundToNearestPlate(this.unit, conservativeWeight * 0.6);
-    const increment = this.getAppropriateIncrement(exerciseName);
+    const incrementKg = this.getAppropriateIncrement(exerciseName);
+    // Convert increment to display unit for instructions
+    const incrementDisplay = this.unit === 'lb'
+      ? Math.round(incrementKg * 2.20462 * 2) / 2  // Round to nearest 0.5 lb
+      : incrementKg;
     const unitLabel = this.unit;
 
     return {
@@ -1103,10 +1113,10 @@ export class WeightEstimationEngine {
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {
         startingWeight: startWeight,
-        incrementKg: increment,
+        incrementKg: incrementKg,
         targetRPE: 10 - targetRIR,
         maxAttempts: 5,
-        instructions: `Start at ${startWeight}${unitLabel}. This is based on population averages - your actual weight may differ significantly. Increase by ${increment}${unitLabel} each set until RPE ${10 - targetRIR}.`
+        instructions: `Start at ${startWeight}${unitLabel}. This is based on population averages - your actual weight may differ significantly. Increase by ${incrementDisplay}${unitLabel} each set until RPE ${10 - targetRIR}.`
       }
     };
   }
@@ -1118,7 +1128,11 @@ export class WeightEstimationEngine {
   ): WorkingWeightRecommendation {
     const bwEstimate = this.estimateFromBodyweight(exerciseName);
     const startWeightKg = bwEstimate.estimated1RM * 0.5;
-    const increment = this.getAppropriateIncrement(exerciseName);
+    const incrementKg = this.getAppropriateIncrement(exerciseName);
+    // Convert increment to display unit for instructions
+    const incrementDisplay = this.unit === 'lb'
+      ? Math.round(incrementKg * 2.20462 * 2) / 2  // Round to nearest 0.5 lb
+      : incrementKg;
     const startWeight = this.roundToNearestPlate(this.unit, startWeightKg);
     const unitLabel = this.unit;
 
@@ -1133,10 +1147,10 @@ export class WeightEstimationEngine {
       rationale: 'No history available. Use the ramping protocol below to find your working weight.',
       findingWeightProtocol: {
         startingWeight: startWeight,
-        incrementKg: increment,
+        incrementKg: incrementKg,
         targetRPE: 10 - targetRIR,
         maxAttempts: 5,
-        instructions: `Start with ${startWeight}${unitLabel} for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${increment}${unitLabel} and try again. Stop when you hit RPE ${10 - targetRIR}.`
+        instructions: `Start with ${startWeight}${unitLabel} for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${incrementDisplay}${unitLabel} and try again. Stop when you hit RPE ${10 - targetRIR}.`
       }
     };
   }
