@@ -625,7 +625,9 @@ export function buildDUPSession(
   totalMesocycleWeeks: number,
   quickWorkoutMode: boolean = false,
   unavailableEquipmentIds: string[] = [],
-  sessionMinutes: number = 60
+  sessionMinutes: number = 60,
+  varietyPrefs?: ExerciseVarietyPreferences | null,
+  recentlyUsedByMuscle?: Map<string, Set<string>>
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -682,14 +684,27 @@ export function buildDUPSession(
     setsThisSession = Math.round(setsThisSession * volumeModifiers[dupDayType]);
     setsThisSession = Math.max(1, setsThisSession);
 
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
+    // Select exercises with variety preferences
+    const recentlyUsedIds = recentlyUsedByMuscle?.get(muscle.toLowerCase());
+    const selectedExercises = selectExercisesWithFatigue(
+      muscle,
+      setsThisSession,
+      profile,
+      fatigueManager,
+      exercisePosition,
+      true,
+      quickWorkoutMode,
+      unavailableEquipmentIds,
+      varietyPrefs,
+      recentlyUsedIds
+    );
 
     for (const selection of selectedExercises) {
       // Check if we've hit limits
       if (exercisesAdded >= exerciseBudget.total || estimatedTimeUsed >= sessionMinutes - 5) {
         break;
       }
-      
+
       const isCompound = selection.exercise.pattern !== 'isolation';
       
       // Estimate time for this exercise
@@ -987,7 +1002,9 @@ export function generateFullMesocycleWithFatigue(
   profile: ExtendedUserProfile,
   sessionMinutes: number = 60,
   laggingAreas?: string[],
-  unavailableEquipmentIds: string[] = []
+  unavailableEquipmentIds: string[] = [],
+  varietyPrefs?: ExerciseVarietyPreferences | null,
+  recentlyUsedByMuscle?: Map<string, Set<string>>
 ): FullProgramRecommendation {
   const warnings: string[] = [];
   const programNotes: string[] = [];
@@ -1106,7 +1123,9 @@ export function generateFullMesocycleWithFatigue(
           periodization.mesocycleWeeks,
           quickWorkoutMode,
           unavailableEquipmentIds,
-          sessionMinutes
+          sessionMinutes,
+          varietyPrefs,
+          recentlyUsedByMuscle
         );
         dupIndex++;
       } else {
@@ -1123,7 +1142,9 @@ export function generateFullMesocycleWithFatigue(
           weekProgression,
           quickWorkoutMode,
           unavailableEquipmentIds,
-          sessionMinutes
+          sessionMinutes,
+          varietyPrefs,
+          recentlyUsedByMuscle
         );
       }
 

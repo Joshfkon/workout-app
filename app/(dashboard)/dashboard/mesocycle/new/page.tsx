@@ -23,6 +23,9 @@ import {
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { getUnavailableEquipment } from '@/services/equipmentFilter';
+import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
+import type { ExerciseVarietyLevel, ExerciseVarietyPreferences } from '@/types/user-exercise-preferences';
+import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -64,6 +67,11 @@ export default function NewMesocyclePage() {
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
+
+  // Exercise variety preferences
+  const [varietyLevel, setVarietyLevel] = useState<ExerciseVarietyLevel>('medium');
+  const [varietyPrefs, setVarietyPrefs] = useState<ExerciseVarietyPreferences | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Calculate estimated exercises based on time (proper estimation with rest periods)
   const getExerciseEstimate = (minutes: number) => {
@@ -215,6 +223,14 @@ export default function NewMesocyclePage() {
         const unavailable = await getUnavailableEquipment(user.id);
         setUnavailableEquipmentIds(unavailable);
 
+        // Load exercise variety preferences
+        setCurrentUserId(user.id);
+        const prefs = await getVarietyPreferences(user.id);
+        if (prefs) {
+          setVarietyPrefs(prefs);
+          setVarietyLevel(prefs.varietyLevel);
+        }
+
         // Check if this is the user's first mesocycle
         const { count } = await supabase
           .from('mesocycles')
@@ -276,14 +292,21 @@ export default function NewMesocyclePage() {
         laggingAreas = regionalAnalysis.laggingAreas;
       }
       
-      // Generate full program with extended profile and lagging areas
+      // Generate full program with extended profile, lagging areas, and variety preferences
       // Uses the full-featured generator with fatigue tracking, SFR, and mesocycle weeks
-      const program = generateFullMesocycleWithFatigue(daysPerWeek, extendedProfile, sessionDurationMinutes, laggingAreas, unavailableEquipmentIds);
+      const program = generateFullMesocycleWithFatigue(
+        daysPerWeek,
+        extendedProfile,
+        sessionDurationMinutes,
+        laggingAreas,
+        unavailableEquipmentIds,
+        varietyPrefs
+      );
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds]);
+  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, varietyPrefs]);
 
   // Generate default name
   useEffect(() => {
@@ -702,6 +725,54 @@ export default function NewMesocyclePage() {
                   {' '}per session
                 </span>
               </div>
+            </div>
+
+            {/* Exercise Variety Preference */}
+            <div className="p-4 bg-surface-800/50 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span className="text-sm font-medium text-surface-200">Exercise Variety</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {(['low', 'medium', 'high'] as ExerciseVarietyLevel[]).map((level) => (
+                  <button
+                    key={level}
+                    onClick={async () => {
+                      setVarietyLevel(level);
+                      // Create updated prefs object
+                      const newPrefs: ExerciseVarietyPreferences = {
+                        id: varietyPrefs?.id || '',
+                        userId: currentUserId || '',
+                        varietyLevel: level,
+                        rotationFrequency: VARIETY_LEVEL_DEFAULTS[level].rotationFrequency,
+                        minPoolSize: VARIETY_LEVEL_DEFAULTS[level].minPoolSize,
+                        prioritizeTopTier: varietyPrefs?.prioritizeTopTier ?? true,
+                        createdAt: varietyPrefs?.createdAt || new Date(),
+                        updatedAt: new Date(),
+                      };
+                      setVarietyPrefs(newPrefs);
+                      // Save to database
+                      if (currentUserId) {
+                        await saveVarietyPreferences(currentUserId, { varietyLevel: level });
+                      }
+                    }}
+                    className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+                      varietyLevel === level
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-200'
+                    }`}
+                  >
+                    {level === 'low' ? 'Consistent' : level === 'medium' ? 'Balanced' : 'High Variety'}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-surface-500">
+                {VARIETY_LEVEL_DEFAULTS[varietyLevel].description}
+              </p>
             </div>
 
             {/* AI Recommendation */}
