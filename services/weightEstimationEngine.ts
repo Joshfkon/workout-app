@@ -342,6 +342,14 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
       { exercise: 'Dumbbell Fly', ratio: 0.90 },
     ]
   },
+  'Dumbbell Fly': {
+    parent: 'Barbell Bench Press',
+    ratioToParent: 0.25,
+    ratioVariance: 0.1,
+    relatedExercises: [
+      { exercise: 'Cable Fly', ratio: 1.2 },
+    ]
+  },
   'Seated Cable Row': {
     parent: 'Barbell Row',
     ratioToParent: 0.75,
