@@ -8,6 +8,9 @@ import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
 import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
+import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
+import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
+import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
@@ -231,6 +234,10 @@ function NewWorkoutContent() {
   const [customExerciseError, setCustomExerciseError] = useState<string | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Exercise variety state
+  const [varietyLevel, setVarietyLevel] = useState<ExerciseVarietyLevel>('medium');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
@@ -967,6 +974,22 @@ function NewWorkoutContent() {
     loadGymLocations();
   }, []);
 
+  // Load variety preferences on mount
+  useEffect(() => {
+    const loadVarietyPrefs = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setCurrentUserId(user.id);
+      const prefs = await getVarietyPreferences(user.id);
+      if (prefs) {
+        setVarietyLevel(prefs.varietyLevel);
+      }
+    };
+    loadVarietyPrefs();
+  }, []);
+
   // Fetch frequently used exercises on mount
   useEffect(() => {
     const fetchFrequentExercises = async () => {
@@ -1687,7 +1710,42 @@ function NewWorkoutContent() {
               </div>
             </div>
           )}
-          
+
+          {/* Exercise Variety Quick Selector */}
+          <div className="p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-sm text-surface-300">Exercise Variety</span>
+              </div>
+              <div className="flex gap-1">
+                {(['low', 'medium', 'high'] as ExerciseVarietyLevel[]).map((level) => (
+                  <button
+                    key={level}
+                    onClick={async () => {
+                      setVarietyLevel(level);
+                      if (currentUserId) {
+                        await saveVarietyPreferences(currentUserId, { varietyLevel: level });
+                      }
+                    }}
+                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                      varietyLevel === level
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-200'
+                    }`}
+                  >
+                    {level === 'low' ? 'Consistent' : level === 'medium' ? 'Balanced' : 'High'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-2">
+              {VARIETY_LEVEL_DEFAULTS[varietyLevel].description}
+            </p>
+          </div>
+
           {/* Search bar */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
