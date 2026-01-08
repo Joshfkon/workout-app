@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimerControlPanel } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
@@ -405,6 +405,12 @@ export default function WorkoutPage() {
   const updateSetInStore = useWorkoutStore((state) => state.updateSet);
   const deleteSetFromStore = useWorkoutStore((state) => state.deleteSet);
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
+
+  // Toast notifications for errors
+  const { toasts, dismissToast, showError, showSuccess } = useToasts();
+
+  // Delete confirmation modal state for header row delete button
+  const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
 
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [isFirstWorkout, setIsFirstWorkout] = useState(false);
@@ -2519,31 +2525,38 @@ export default function WorkoutPage() {
 
   // Handle deleting an exercise from the workout
   const handleExerciseDelete = async (blockId: string) => {
+    // Find the exercise name for the toast message
+    const blockToDelete = blocks.find(b => b.id === blockId);
+    const exerciseName = blockToDelete?.exercise.name || 'Exercise';
+
     try {
       const supabase = createUntypedClient();
-      
+
       // First delete any set logs for this block
+      // Note: This is redundant since we have ON DELETE CASCADE, but kept for safety
       const { error: setsError } = await supabase
         .from('set_logs')
         .delete()
         .eq('exercise_block_id', blockId);
-      
+
       if (setsError) {
         console.error('Failed to delete set logs:', setsError);
+        // Don't fail the operation - cascade delete will handle it
       }
-      
+
       // Then delete the exercise block
       const { error: blockError } = await supabase
         .from('exercise_blocks')
         .delete()
         .eq('id', blockId);
-      
+
       if (blockError) {
         console.error('Failed to delete exercise block:', blockError);
+        showError(`Failed to remove ${exerciseName}: ${blockError.message}`);
         setError(`Failed to delete exercise: ${blockError.message}`);
         return;
       }
-      
+
       // Update local state - remove the block and update set logs
       setBlocks(prevBlocks => {
         const newBlocks = prevBlocks.filter(b => b.id !== blockId);
@@ -2553,13 +2566,16 @@ export default function WorkoutPage() {
         }
         return newBlocks;
       });
-      
+
       setCompletedSets(prevSets => prevSets.filter(s => s.exerciseBlockId !== blockId));
       setError(null);
-      
+      showSuccess(`${exerciseName} removed from workout`);
+
     } catch (err) {
       console.error('Failed to delete exercise:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete exercise');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete exercise';
+      showError(`Failed to remove ${exerciseName}: ${errorMessage}`);
+      setError(errorMessage);
     }
   };
 
@@ -3838,9 +3854,7 @@ export default function WorkoutPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`Remove "${block.exercise.name}" from this workout?`)) {
-                      handleExerciseDelete(block.id);
-                    }
+                    setDeleteConfirmBlock({ id: block.id, name: block.exercise.name });
                   }}
                   className="p-2 text-surface-500 hover:text-error-400 transition-colors"
                   title="Remove exercise"
@@ -5029,6 +5043,26 @@ export default function WorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Toast Container for notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Delete Exercise Confirmation Modal (for header row delete button) */}
+      <ConfirmModal
+        isOpen={deleteConfirmBlock !== null}
+        onClose={() => setDeleteConfirmBlock(null)}
+        onConfirm={() => {
+          if (deleteConfirmBlock) {
+            handleExerciseDelete(deleteConfirmBlock.id);
+            setDeleteConfirmBlock(null);
+          }
+        }}
+        title="Remove Exercise"
+        message={deleteConfirmBlock ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.` : ''}
+        confirmText="Remove"
+        cancelText="Keep"
+        variant="danger"
+      />
     </div>
   );
 }
