@@ -1296,8 +1296,8 @@ export const ExerciseCard = memo(function ExerciseCard({
 
           {/* Warmup table - only show when expanded */}
           {isWarmupExpanded && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[360px]">
+            <div className="overflow-hidden">
+              <table className="w-full text-sm">
                 <thead className="bg-surface-800/50">
                   <tr>
                     <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
@@ -1595,8 +1595,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       ) : (
         // Table design for non-bodyweight exercises
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[400px]">
+        <div className="overflow-hidden">
+          <table className="w-full text-sm">
             <thead className="bg-surface-800/50">
               <tr>
                 <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
