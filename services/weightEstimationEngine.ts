@@ -45,6 +45,7 @@ export interface WorkingWeightRecommendation {
   targetReps: { min: number; max: number };
   targetRIR: number;
   recommendedWeight: number;
+  weightUnit: 'kg' | 'lb';  // The unit of the returned weight values
   weightRange: { low: number; high: number };
   confidence: 'high' | 'medium' | 'low' | 'find_working_weight';
   rationale: string;
@@ -109,6 +110,8 @@ interface ExerciseRelationship {
   ratioToParent: number;
   ratioVariance: number;
   relatedExercises: { exercise: string; ratio: number }[];
+  /** True for exercises with high inherent variance (machines, BW-dependent exercises) */
+  volatile?: boolean;
 }
 
 // Normalize exercise names for fuzzy matching
@@ -261,6 +264,7 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     parent: 'Pull-Up',
     ratioToParent: 0.85,
     ratioVariance: 0.1,
+    volatile: true,  // BW-dependent parent, cable stack varies between machines
     relatedExercises: [
       { exercise: 'Seated Cable Row', ratio: 1.0 },
     ]
@@ -282,6 +286,7 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     parent: 'Barbell Back Squat',
     ratioToParent: 1.8,
     ratioVariance: 0.3,
+    volatile: true,  // Machine angle, sled weight, ROM vary wildly
     relatedExercises: [
       { exercise: 'Hack Squat', ratio: 0.70 },
     ]
@@ -352,12 +357,14 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     parent: 'Barbell Back Squat',
     ratioToParent: 0.35,
     ratioVariance: 0.1,
+    volatile: true,  // Machine varies significantly
     relatedExercises: []
   },
   'Lying Leg Curl': {
     parent: 'Romanian Deadlift',
     ratioToParent: 0.40,
     ratioVariance: 0.1,
+    volatile: true,  // Machine varies significantly
     relatedExercises: [
       { exercise: 'Seated Leg Curl', ratio: 0.95 },
     ]
@@ -378,6 +385,54 @@ const EXERCISE_RELATIONSHIPS: Record<string, ExerciseRelationship> = {
     ]
   },
 };
+
+/**
+ * Validate relationship graph consistency at module load.
+ * Only runs in development mode.
+ */
+function validateRelationshipGraph(): void {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  const warnings: string[] = [];
+
+  for (const [exercise, rel] of Object.entries(EXERCISE_RELATIONSHIPS)) {
+    // Check parent exists (unless self-referential)
+    if (rel.parent !== exercise && !EXERCISE_RELATIONSHIPS[rel.parent]) {
+      warnings.push(`${exercise}: parent "${rel.parent}" not in relationships`);
+    }
+
+    // Check related exercises exist and ratios are consistent
+    for (const related of rel.relatedExercises) {
+      const relatedRel = EXERCISE_RELATIONSHIPS[related.exercise];
+      if (relatedRel) {
+        // Check for reciprocal relationship with consistent ratio
+        const reciprocal = relatedRel.relatedExercises.find(r => r.exercise === exercise);
+        if (reciprocal) {
+          const expectedReciprocal = 1 / related.ratio;
+          if (Math.abs(reciprocal.ratio - expectedReciprocal) > 0.15) {
+            warnings.push(
+              `Inconsistent ratio: ${exercise}→${related.exercise} = ${related.ratio.toFixed(2)}, ` +
+              `but ${related.exercise}→${exercise} = ${reciprocal.ratio.toFixed(2)} (expected ~${expectedReciprocal.toFixed(2)})`
+            );
+          }
+        }
+      }
+    }
+
+    // Check variance is reasonable (0 to 0.5)
+    if (rel.ratioVariance < 0 || rel.ratioVariance > 0.5) {
+      warnings.push(`${exercise}: ratioVariance ${rel.ratioVariance} outside reasonable range (0-0.5)`);
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn('Exercise relationship graph warnings:');
+    warnings.forEach(w => console.warn(`  - ${w}`));
+  }
+}
+
+// Run validation at module load in development
+validateRelationshipGraph();
 
 // ============================================================
 // STRENGTH STANDARDS BY FFMI AND EXPERIENCE
@@ -430,36 +485,83 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // ============================================================
 
 /**
+ * Convert RPE to RIR (Reps In Reserve) with bounds and rep-range awareness
+ */
+function rpeToRIR(rpe: number | undefined, reps: number): number {
+  if (!rpe) return 0;  // Assume RPE 10 if not specified
+
+  // Clamp RPE to reasonable range (6-10)
+  const clampedRPE = Math.min(Math.max(rpe, 6), 10);
+
+  // Base RIR calculation
+  let rir = 10 - clampedRPE;
+
+  // At higher rep ranges, RIR estimates become less reliable
+  // Compress the RIR for high-rep sets
+  if (reps > 10) {
+    rir = rir * 0.75;  // RIR less meaningful at high reps
+  }
+
+  // Cap effective RIR at 4 (RPE 6 minimum useful)
+  return Math.min(rir, 4);
+}
+
+/**
  * Estimate 1RM from weight, reps, and optional RPE
  * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy
- * 
+ *
  * NOTE: This function is duplicated in lib/training/programEngine.ts
  * Both implementations should be kept in sync. Consider consolidating in the future.
  */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   if (reps === 1) return weight;
+
+  // High rep sets (>12): use conservative linear estimate
   if (reps > 12) {
-    return weight * (1 + reps / 40);
+    // For very high reps, the formulas become unreliable
+    // Use a conservative linear estimate
+    return Math.round(weight * (1 + reps / 40) * 10) / 10;
   }
-  
-  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  
+
+  const rir = rpeToRIR(rpe, reps);
+  const effectiveReps = reps + rir;
+
+  // Clamp effective reps to prevent formula breakdown
+  const clampedEffectiveReps = Math.min(effectiveReps, 15);
+
   // Multiple formulas for accuracy
-  const brzycki = weight * (36 / (37 - effectiveReps));
-  const epley = weight * (1 + effectiveReps / 30);
-  const lombardi = weight * Math.pow(effectiveReps, 0.10);
-  
+  const brzycki = weight * (36 / (37 - clampedEffectiveReps));
+  const epley = weight * (1 + clampedEffectiveReps / 30);
+  const lombardi = weight * Math.pow(clampedEffectiveReps, 0.10);
+
   const average = (brzycki + epley + lombardi) / 3;
   return Math.round(average * 10) / 10;
 }
 
+/**
+ * Calculate working weight based on estimated 1RM, target reps, and target RIR.
+ * Uses Brzycki-derived percentage with bounds for high-rep scenarios.
+ */
 function calculateWorkingWeight(
   estimated1RM: number,
   targetReps: number,
   targetRIR: number
 ): number {
   const effectiveReps = targetReps + targetRIR;
-  const percentage = (37 - effectiveReps) / 36;
+
+  // Clamp effective reps to reasonable range for formula accuracy
+  const clampedReps = Math.min(effectiveReps, 15);
+
+  let percentage: number;
+  if (clampedReps <= 12) {
+    // Standard Brzycki-derived percentage
+    percentage = (37 - clampedReps) / 36;
+  } else {
+    // Linear extrapolation for higher reps (more conservative)
+    // At 12 reps: 69.4%, at 15 reps: ~62%
+    percentage = 0.694 - (clampedReps - 12) * 0.025;
+  }
+
   const safetyMargin = 0.95;
   return Math.round(estimated1RM * percentage * safetyMargin * 10) / 10;
 }
@@ -472,12 +574,14 @@ export class WeightEstimationEngine {
   private profile: UserStrengthProfile;
   private estimatedMaxes: Map<string, EstimatedMax>;
   private unit: 'kg' | 'lb';
-  
+  /** Track consecutive lower sessions per exercise for hysteresis */
+  private lowerSessionCounts: Map<string, number> = new Map();
+
   constructor(profile: UserStrengthProfile, unit: 'kg' | 'lb' = 'kg') {
     this.profile = profile;
     this.unit = unit;
     this.estimatedMaxes = new Map();
-    
+
     for (const max of profile.knownMaxes) {
       this.estimatedMaxes.set(max.exercise.toLowerCase(), max);
     }
@@ -486,101 +590,176 @@ export class WeightEstimationEngine {
   getWorkingWeight(
     exerciseName: string,
     targetReps: { min: number; max: number },
-    targetRIR: number
+    targetRIR: number,
+    previousRecommendation?: number
   ): WorkingWeightRecommendation {
     const estimatedMax = this.getEstimated1RM(exerciseName);
-    
+
+    let recommendation: WorkingWeightRecommendation;
+
     if (estimatedMax.confidence === 'high' || estimatedMax.confidence === 'medium') {
-      return this.calculateFromKnownMax(exerciseName, estimatedMax, targetReps, targetRIR);
+      recommendation = this.calculateFromKnownMax(exerciseName, estimatedMax, targetReps, targetRIR);
+    } else if (estimatedMax.confidence === 'low') {
+      recommendation = this.calculateFromLowConfidenceMax(exerciseName, estimatedMax, targetReps, targetRIR);
+    } else if (estimatedMax.confidence === 'extrapolated') {
+      // Extrapolated estimates (from strength standards) get wider ranges
+      recommendation = this.calculateFromExtrapolatedMax(exerciseName, estimatedMax, targetReps, targetRIR);
+    } else {
+      return this.generateFindingWeightProtocol(exerciseName, targetReps, targetRIR);
     }
-    
-    if (estimatedMax.confidence === 'low') {
-      return this.calculateFromLowConfidenceMax(exerciseName, estimatedMax, targetReps, targetRIR);
+
+    // Apply week-to-week smoothing if we have a previous recommendation
+    if (previousRecommendation && previousRecommendation > 0 && recommendation.recommendedWeight > 0) {
+      const maxChange = previousRecommendation * 0.075;  // 7.5% max week-to-week change
+      const rawWeight = recommendation.recommendedWeight;
+
+      if (Math.abs(rawWeight - previousRecommendation) > maxChange) {
+        const smoothedWeight = rawWeight > previousRecommendation
+          ? previousRecommendation + maxChange
+          : previousRecommendation - maxChange;
+        recommendation.recommendedWeight = this.roundToNearestPlate(this.unit, smoothedWeight);
+        recommendation.rationale += ` (Smoothed from ${rawWeight.toFixed(1)} to limit week-to-week change)`;
+      }
     }
-    
-    return this.generateFindingWeightProtocol(exerciseName, targetReps, targetRIR);
+
+    return recommendation;
   }
   
   private getEstimated1RM(exerciseName: string): EstimatedMax {
-    const normalizedName = exerciseName.toLowerCase();
-    
-    if (this.estimatedMaxes.has(normalizedName)) {
-      const cached = this.estimatedMaxes.get(normalizedName)!;
-      if (cached.lastUpdated && 
+    // Canonicalize the exercise name for consistent lookups
+    const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
+    const cacheKey = canonicalName.toLowerCase();
+
+    // Check cache with canonical key
+    if (this.estimatedMaxes.has(cacheKey)) {
+      const cached = this.estimatedMaxes.get(cacheKey)!;
+      if (cached.lastUpdated &&
           (Date.now() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
         return cached;
       }
     }
-    
-    const directEstimate = this.estimateFromDirectHistory(exerciseName);
+
+    // Also check with original name for backwards compatibility
+    const originalKey = exerciseName.toLowerCase();
+    if (originalKey !== cacheKey && this.estimatedMaxes.has(originalKey)) {
+      const cached = this.estimatedMaxes.get(originalKey)!;
+      if (cached.lastUpdated &&
+          (Date.now() - cached.lastUpdated.getTime()) < 28 * 24 * 60 * 60 * 1000) {
+        return cached;
+      }
+    }
+
+    // Pass canonical name to all estimation methods
+    const directEstimate = this.estimateFromDirectHistory(canonicalName, exerciseName);
     if (directEstimate) {
-      this.estimatedMaxes.set(normalizedName, directEstimate);
+      this.estimatedMaxes.set(cacheKey, directEstimate);
       return directEstimate;
     }
-    
-    const relatedEstimate = this.estimateFromRelatedExercises(exerciseName);
+
+    const relatedEstimate = this.estimateFromRelatedExercises(canonicalName);
     if (relatedEstimate) {
-      this.estimatedMaxes.set(normalizedName, relatedEstimate);
+      this.estimatedMaxes.set(cacheKey, relatedEstimate);
       return relatedEstimate;
     }
-    
-    const standardEstimate = this.estimateFromStrengthStandards(exerciseName);
+
+    const standardEstimate = this.estimateFromStrengthStandards(canonicalName);
     if (standardEstimate) {
-      this.estimatedMaxes.set(normalizedName, standardEstimate);
+      this.estimatedMaxes.set(cacheKey, standardEstimate);
       return standardEstimate;
     }
-    
+
     return this.estimateFromBodyweight(exerciseName);
   }
   
-  private estimateFromDirectHistory(exerciseName: string): EstimatedMax | null {
-    const history = this.profile.exerciseHistory.filter(h => 
-      h.exerciseName.toLowerCase() === exerciseName.toLowerCase()
-    );
-    
+  private estimateFromDirectHistory(canonicalName: string, originalName?: string): EstimatedMax | null {
+    // Match history against canonical names for better matching
+    const canonicalTarget = canonicalName.toLowerCase();
+    const originalTarget = (originalName || canonicalName).toLowerCase();
+
+    const history = this.profile.exerciseHistory.filter(h => {
+      const historyCanonical = findExerciseMatch(h.exerciseName) || h.exerciseName;
+      const historyLower = historyCanonical.toLowerCase();
+      const directLower = h.exerciseName.toLowerCase();
+      // Match if canonical names match OR if direct names match
+      return historyLower === canonicalTarget ||
+             directLower === canonicalTarget ||
+             directLower === originalTarget;
+    });
+
     if (history.length === 0) return null;
-    
+
     history.sort((a, b) => b.date.getTime() - a.date.getTime());
-    
-    const recentHistory = history.filter(h => 
+
+    const recentHistory = history.filter(h =>
       (Date.now() - h.date.getTime()) < 28 * 24 * 60 * 60 * 1000
     );
-    
+
     if (recentHistory.length === 0) {
       const bestSet = this.findBestSet(history[0].sets);
       if (!bestSet) return null;
-      
+
       return {
-        exercise: exerciseName,
+        exercise: canonicalName,
         estimated1RM: estimate1RM(bestSet.weight, bestSet.reps, bestSet.rpe),
         confidence: 'low',
         source: 'direct_history',
         lastUpdated: history[0].date
       };
     }
-    
-    const estimates: number[] = [];
+
+    // Collect estimates with dates for recency-weighted selection
+    const estimatesWithDates: Array<{ value: number; date: Date }> = [];
     for (const session of recentHistory) {
       for (const set of session.sets) {
         if (set.completed && set.reps >= 1 && set.reps <= 12) {
-          estimates.push(estimate1RM(set.weight, set.reps, set.rpe));
+          estimatesWithDates.push({
+            value: estimate1RM(set.weight, set.reps, set.rpe),
+            date: session.date
+          });
         }
       }
     }
-    
-    if (estimates.length === 0) return null;
-    
-    estimates.sort((a, b) => b - a);
-    const percentile90Index = Math.floor(estimates.length * 0.1);
-    const estimated1RM = estimates[percentile90Index] || estimates[0];
-    
+
+    if (estimatesWithDates.length === 0) return null;
+
+    const estimated1RM = this.selectBestEstimate(estimatesWithDates);
+
     return {
-      exercise: exerciseName,
+      exercise: canonicalName,
       estimated1RM: Math.round(estimated1RM * 10) / 10,
       confidence: recentHistory.length >= 3 ? 'high' : 'medium',
       source: 'direct_history',
       lastUpdated: recentHistory[0].date
     };
+  }
+
+  /**
+   * Select best estimate using median of top-3 with recency weighting
+   * This replaces the fragile 90th percentile selection
+   */
+  private selectBestEstimate(estimates: Array<{ value: number; date: Date }>): number {
+    if (estimates.length === 0) return 0;
+    if (estimates.length === 1) return estimates[0].value;
+
+    // Sort by value descending
+    const sorted = [...estimates].sort((a, b) => b.value - a.value);
+
+    // Take top 3 (or fewer if not available)
+    const topN = sorted.slice(0, Math.min(3, sorted.length));
+
+    // Weight by recency (newer = higher weight)
+    const now = Date.now();
+    const weighted = topN.map(est => {
+      const ageMs = now - est.date.getTime();
+      const ageDays = ageMs / (24 * 60 * 60 * 1000);
+      const recencyWeight = Math.exp(-ageDays / 14);  // Half-life of ~14 days
+      return { value: est.value, weight: recencyWeight };
+    });
+
+    const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+    const weightedAvg = weighted.reduce((sum, w) => sum + w.value * w.weight, 0) / totalWeight;
+
+    return Math.round(weightedAvg * 10) / 10;
   }
   
   private findBestSet(sets: ExerciseHistoryEntry['sets']): ExerciseHistoryEntry['sets'][0] | null {
@@ -603,20 +782,24 @@ export class WeightEstimationEngine {
   private estimateFromRelatedExercises(exerciseName: string): EstimatedMax | null {
     const relationship = EXERCISE_RELATIONSHIPS[exerciseName];
     if (!relationship) return null;
-    
+
+    // For volatile exercises, force low confidence regardless of parent confidence
+    const isVolatile = relationship.volatile === true;
+
     if (relationship.parent !== exerciseName) {
       const parentMax = this.estimateFromDirectHistory(relationship.parent);
       if (parentMax && parentMax.confidence !== 'low') {
         return {
           exercise: exerciseName,
           estimated1RM: Math.round(parentMax.estimated1RM * relationship.ratioToParent * 10) / 10,
-          confidence: 'medium',
+          // Volatile exercises get 'low' confidence due to high variance
+          confidence: isVolatile ? 'low' : 'medium',
           source: 'related_exercise',
           lastUpdated: parentMax.lastUpdated
         };
       }
     }
-    
+
     for (const related of relationship.relatedExercises) {
       const relatedMax = this.estimateFromDirectHistory(related.exercise);
       if (relatedMax && relatedMax.confidence !== 'low') {
@@ -626,14 +809,14 @@ export class WeightEstimationEngine {
           return {
             exercise: exerciseName,
             estimated1RM: Math.round(relatedMax.estimated1RM * conversionRatio * 10) / 10,
-            confidence: 'low',
+            confidence: 'low',  // Related exercises always get low confidence
             source: 'related_exercise',
             lastUpdated: relatedMax.lastUpdated
           };
         }
       }
     }
-    
+
     return null;
   }
   
@@ -655,40 +838,40 @@ export class WeightEstimationEngine {
       return {
         exercise: exerciseName,
         estimated1RM: Math.round(this.profile.bodyComposition.totalWeightKg * ratio * 10) / 10,
-        confidence: 'low',
+        confidence: 'extrapolated',  // Use extrapolated for standards-based estimates
         source: 'strength_standards'
       };
     }
-    
+
     // Try fuzzy match
     const matchedExercise = findExerciseMatch(exerciseName);
-    
+
     // Check if matched exercise is in standards
     if (matchedExercise && standardMap[matchedExercise]) {
       const ratio = standards[standardMap[matchedExercise]];
       return {
         exercise: exerciseName,
         estimated1RM: Math.round(this.profile.bodyComposition.totalWeightKg * ratio * 10) / 10,
-        confidence: 'low',
+        confidence: 'extrapolated',  // Use extrapolated for standards-based estimates
         source: 'strength_standards'
       };
     }
-    
+
     // Check direct relationship
     let relationship = EXERCISE_RELATIONSHIPS[exerciseName];
-    
+
     // If no direct relationship, try fuzzy match
     if (!relationship && matchedExercise) {
       relationship = EXERCISE_RELATIONSHIPS[matchedExercise];
     }
-    
+
     if (relationship && standardMap[relationship.parent]) {
       const parentRatio = standards[standardMap[relationship.parent] as keyof StrengthStandards];
       const parent1RM = this.profile.bodyComposition.totalWeightKg * parentRatio;
       return {
         exercise: exerciseName,
         estimated1RM: Math.round(parent1RM * relationship.ratioToParent * 10) / 10,
-        confidence: 'low',
+        confidence: 'extrapolated',  // Use extrapolated for standards-based estimates
         source: 'strength_standards'
       };
     }
@@ -792,8 +975,24 @@ export class WeightEstimationEngine {
   ): WorkingWeightRecommendation {
     const avgReps = Math.round((targetReps.min + targetReps.max) / 2);
     let workingWeight = calculateWorkingWeight(estimatedMax.estimated1RM, avgReps, targetRIR);
-    const variance = estimatedMax.confidence === 'high' ? 0.05 : 0.10;
-    
+
+    // Calculate variance based on confidence and relationship volatility
+    let variance = estimatedMax.confidence === 'high' ? 0.05 : 0.10;
+
+    // If estimate came from related exercise, incorporate relationship variance
+    if (estimatedMax.source === 'related_exercise') {
+      const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
+      const relationship = EXERCISE_RELATIONSHIPS[canonicalName];
+      if (relationship) {
+        // Add relationship variance to base variance
+        variance = Math.max(variance, relationship.ratioVariance || 0.1);
+        // Widen further for volatile exercises (1.5x multiplier)
+        if (relationship.volatile) {
+          variance *= 1.5;
+        }
+      }
+    }
+
     // Apply regional mass adjustment if available
     let additionalNote = '';
     if (this.profile.regionalData) {
@@ -801,12 +1000,13 @@ export class WeightEstimationEngine {
       workingWeight = regionalAdj.weight;
       additionalNote = regionalAdj.note;
     }
-    
+
     return {
       exercise: exerciseName,
       targetReps,
       targetRIR,
       recommendedWeight: this.roundToNearestPlate(this.unit, workingWeight),
+      weightUnit: this.unit,
       weightRange: {
         low: this.roundToNearestPlate(this.unit, workingWeight * (1 - variance)),
         high: this.roundToNearestPlate(this.unit, workingWeight * (1 + variance))
@@ -816,7 +1016,7 @@ export class WeightEstimationEngine {
       warmupProtocol: this.generateWarmupSets(workingWeight, exerciseName)
     };
   }
-  
+
   private calculateFromLowConfidenceMax(
     exerciseName: string,
     estimatedMax: EstimatedMax,
@@ -825,71 +1025,140 @@ export class WeightEstimationEngine {
   ): WorkingWeightRecommendation {
     const avgReps = Math.round((targetReps.min + targetReps.max) / 2);
     const workingWeight = calculateWorkingWeight(estimatedMax.estimated1RM, avgReps, targetRIR);
+
+    // Calculate variance based on relationship volatility
+    let lowVariance = 0.15;  // Default 15% low range
+    const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
+    const relationship = EXERCISE_RELATIONSHIPS[canonicalName];
+    if (relationship) {
+      // Use relationship variance, widened by 1.5x for volatile exercises
+      lowVariance = Math.max(lowVariance, relationship.ratioVariance || 0.1);
+      if (relationship.volatile) {
+        lowVariance *= 1.5;
+      }
+    }
+
     const conservativeWeight = workingWeight * 0.85;
-    
+
+    const startWeight = this.roundToNearestPlate(this.unit, conservativeWeight * (1 - lowVariance));
+    const increment = this.getAppropriateIncrement(exerciseName);
+    const unitLabel = this.unit;
+
     return {
       exercise: exerciseName,
       targetReps,
       targetRIR,
       recommendedWeight: this.roundToNearestPlate(this.unit, conservativeWeight),
+      weightUnit: this.unit,
       weightRange: {
-        low: this.roundToNearestPlate(this.unit, conservativeWeight * 0.85),
+        low: this.roundToNearestPlate(this.unit, conservativeWeight * (1 - lowVariance)),
         high: this.roundToNearestPlate(this.unit, workingWeight)
       },
       confidence: 'low',
       rationale: `Estimated from ${estimatedMax.source.replace(/_/g, ' ')}. Start conservative and adjust based on feel.`,
       warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
       findingWeightProtocol: {
-        startingWeight: this.roundToNearestPlate(this.unit, conservativeWeight * 0.7),
-        incrementKg: this.getAppropriateIncrement(exerciseName),
+        startingWeight: startWeight,
+        incrementKg: increment,
         targetRPE: 10 - targetRIR,
         maxAttempts: 4,
-        instructions: `Start at ${this.roundToNearestPlate(this.unit, conservativeWeight * 0.7)}kg. Increase by ${this.getAppropriateIncrement(exerciseName)}kg each set until RPE ${10 - targetRIR}.`
+        instructions: `Start at ${startWeight}${unitLabel}. Increase by ${increment}${unitLabel} each set until RPE ${10 - targetRIR}.`
       }
     };
   }
-  
+
+  /**
+   * Calculate recommendation from extrapolated estimates (strength standards)
+   * Uses wider variance ranges since these are population-based estimates
+   */
+  private calculateFromExtrapolatedMax(
+    exerciseName: string,
+    estimatedMax: EstimatedMax,
+    targetReps: { min: number; max: number },
+    targetRIR: number
+  ): WorkingWeightRecommendation {
+    const avgReps = Math.round((targetReps.min + targetReps.max) / 2);
+    const workingWeight = calculateWorkingWeight(estimatedMax.estimated1RM, avgReps, targetRIR);
+    // Use 25% variance for extrapolated estimates (much wider than low confidence)
+    const variance = 0.25;
+    // Start more conservative since we're guessing based on population data
+    const conservativeWeight = workingWeight * 0.80;
+
+    const startWeight = this.roundToNearestPlate(this.unit, conservativeWeight * 0.6);
+    const increment = this.getAppropriateIncrement(exerciseName);
+    const unitLabel = this.unit;
+
+    return {
+      exercise: exerciseName,
+      targetReps,
+      targetRIR,
+      recommendedWeight: this.roundToNearestPlate(this.unit, conservativeWeight),
+      weightUnit: this.unit,
+      weightRange: {
+        low: this.roundToNearestPlate(this.unit, conservativeWeight * (1 - variance)),
+        high: this.roundToNearestPlate(this.unit, workingWeight * (1 + variance * 0.5))
+      },
+      confidence: 'low',  // Show as 'low' in UI since extrapolated isn't a valid UI confidence
+      rationale: `Extrapolated from strength standards for your experience level and body composition. Wide range - adjust based on feel.`,
+      warmupProtocol: this.generateWarmupSets(conservativeWeight, exerciseName),
+      findingWeightProtocol: {
+        startingWeight: startWeight,
+        incrementKg: increment,
+        targetRPE: 10 - targetRIR,
+        maxAttempts: 5,
+        instructions: `Start at ${startWeight}${unitLabel}. This is based on population averages - your actual weight may differ significantly. Increase by ${increment}${unitLabel} each set until RPE ${10 - targetRIR}.`
+      }
+    };
+  }
+
   private generateFindingWeightProtocol(
     exerciseName: string,
     targetReps: { min: number; max: number },
     targetRIR: number
   ): WorkingWeightRecommendation {
     const bwEstimate = this.estimateFromBodyweight(exerciseName);
-    const startWeight = bwEstimate.estimated1RM * 0.5;
+    const startWeightKg = bwEstimate.estimated1RM * 0.5;
     const increment = this.getAppropriateIncrement(exerciseName);
-    
+    const startWeight = this.roundToNearestPlate(this.unit, startWeightKg);
+    const unitLabel = this.unit;
+
     return {
       exercise: exerciseName,
       targetReps,
       targetRIR,
       recommendedWeight: 0,
+      weightUnit: this.unit,
       weightRange: { low: 0, high: 0 },
       confidence: 'find_working_weight',
       rationale: 'No history available. Use the ramping protocol below to find your working weight.',
       findingWeightProtocol: {
-        startingWeight: this.roundToNearestPlate(this.unit, startWeight),
+        startingWeight: startWeight,
         incrementKg: increment,
         targetRPE: 10 - targetRIR,
         maxAttempts: 5,
-        instructions: `Start with ${this.roundToNearestPlate(this.unit, startWeight)}kg for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${increment}kg and try again. Stop when you hit RPE ${10 - targetRIR}.`
+        instructions: `Start with ${startWeight}${unitLabel} for ${targetReps.max} reps. If RPE < ${10 - targetRIR - 1}, add ${increment}${unitLabel} and try again. Stop when you hit RPE ${10 - targetRIR}.`
       }
     };
   }
   
-  private roundToNearestPlate(unit: 'kg' | 'lb', weight: number): number {
-    // Import would create circular dependency, so inline the logic
+  /**
+   * Round weight to nearest plate increment and return in the target unit.
+   * Input weight is always in kg (internal storage unit).
+   * Output is in the requested unit (kg or lb).
+   */
+  private roundToNearestPlate(unit: 'kg' | 'lb', weightKg: number): number {
     if (unit === 'lb') {
-      // Convert to lb, round to 2.5lb increments, convert back
-      const lbs = weight * 2.20462;
+      // Convert to lb, round to 2.5lb increments, return in lb
+      const lbs = weightKg * 2.20462;
       const rounded = Math.round(lbs / 2.5) * 2.5;
-      return rounded / 2.20462;
+      return rounded;  // Return actual lb value, not converted back
     }
-    
-    // kg mode: 2.5kg increments
-    if (weight < 20) {
-      return Math.round(weight);
+
+    // kg mode: 2.5kg increments for heavier weights, 1kg for lighter
+    if (weightKg < 20) {
+      return Math.round(weightKg);
     }
-    return Math.round(weight / 2.5) * 2.5;
+    return Math.round(weightKg / 2.5) * 2.5;
   }
   
   private getAppropriateIncrement(exerciseName: string): number {
@@ -1010,35 +1279,65 @@ export class WeightEstimationEngine {
     return { weight: adjustedWeight, note };
   }
   
-  // Get asymmetry adjustment for unilateral exercises
+  /**
+   * Get asymmetry multiplier for unilateral exercises.
+   * Returns a multiplier (e.g., 0.95 for 5% reduction on weaker side).
+   * Usage: adjustedWeight = baseWeight * multiplier
+   *
+   * @deprecated Use getAsymmetryMultiplier instead (same function, clearer name)
+   */
   getAsymmetryAdjustment(
     exerciseName: string,
     side: 'left' | 'right'
   ): { adjustment: number; note: string } {
+    const result = this.getAsymmetryMultiplier(exerciseName, side);
+    // For backwards compatibility, return the delta (multiplier - 1) as 'adjustment'
+    return { adjustment: result.multiplier - 1, note: result.note };
+  }
+
+  /**
+   * Get asymmetry multiplier for unilateral exercises.
+   * Returns a multiplier to apply to the weight for the specified side.
+   * - multiplier = 1.0 means no adjustment
+   * - multiplier = 0.95 means reduce weight by 5% (weaker side)
+   * - multiplier = 1.0 for the stronger side (no reduction)
+   *
+   * Usage: adjustedWeight = baseWeight * multiplier
+   */
+  getAsymmetryMultiplier(
+    exerciseName: string,
+    side: 'left' | 'right'
+  ): { multiplier: number; note: string } {
     if (!this.profile.regionalAnalysis) {
-      return { adjustment: 0, note: '' };
+      return { multiplier: 1, note: '' };
     }
-    
+
     const isArmExercise = ['Curl', 'Tricep', 'Press', 'Raise', 'Fly'].some(k => exerciseName.includes(k));
     const isLegExercise = ['Lunge', 'Split', 'Step', 'Leg'].some(k => exerciseName.includes(k));
-    
+
     let asymmetry: number;
     if (isArmExercise) {
       asymmetry = this.profile.regionalAnalysis.asymmetries.arms;
     } else if (isLegExercise) {
       asymmetry = this.profile.regionalAnalysis.asymmetries.legs;
     } else {
-      return { adjustment: 0, note: '' };
+      return { multiplier: 1, note: '' };
     }
-    
+
     // Positive asymmetry = right is stronger
-    // If doing left side and right is stronger, reduce weight
-    const adjustmentPercent = side === 'left' 
-      ? (asymmetry > 0 ? -asymmetry / 200 : 0)
-      : (asymmetry < 0 ? asymmetry / 200 : 0);
-    
-    const adjustment = adjustmentPercent;
-    
+    // Calculate multiplier:
+    // - For the weaker side, reduce weight proportionally to asymmetry
+    // - For the stronger side, no reduction (multiplier = 1)
+    // - Cap reduction at 50% of the asymmetry to avoid over-correction
+    let multiplier = 1;
+    if (side === 'left' && asymmetry > 0) {
+      // Left is weaker, reduce weight
+      multiplier = 1 - (asymmetry / 100) * 0.5;
+    } else if (side === 'right' && asymmetry < 0) {
+      // Right is weaker (negative asymmetry means left is stronger)
+      multiplier = 1 - (Math.abs(asymmetry) / 100) * 0.5;
+    }
+
     let note = '';
     if (Math.abs(asymmetry) >= 5) {
       const strongerSide = asymmetry > 0 ? 'right' : 'left';
@@ -1047,8 +1346,8 @@ export class WeightEstimationEngine {
         note = `Your ${weakerSide} side is ${Math.abs(asymmetry).toFixed(0)}% weaker. Start with this side and match reps on your ${strongerSide}.`;
       }
     }
-    
-    return { adjustment, note };
+
+    return { multiplier, note };
   }
   
   private getExerciseRegion(exerciseName: string): 'Arms' | 'Legs' | 'Trunk' | null {
@@ -1062,39 +1361,68 @@ export class WeightEstimationEngine {
     return null;
   }
   
+  /**
+   * Update estimated max from workout data.
+   * Uses hysteresis: upward updates are immediate, but downward updates
+   * require 3 consecutive significantly lower sessions to prevent
+   * a single bad day from tanking the estimate.
+   */
   updateFromWorkout(exerciseName: string, sets: ExerciseHistoryEntry['sets']): void {
     const bestSet = this.findBestSet(sets);
     if (!bestSet) return;
-    
+
     const newEstimate = estimate1RM(bestSet.weight, bestSet.reps, bestSet.rpe);
-    const existing = this.estimatedMaxes.get(exerciseName.toLowerCase());
-    
-    // Only update if new estimate is significantly different (5% threshold)
-    // This prevents overwriting a better max with a lower one
+    const key = exerciseName.toLowerCase();
+    const existing = this.estimatedMaxes.get(key);
+
     if (!existing) {
       // No existing estimate - always add
-      this.estimatedMaxes.set(exerciseName.toLowerCase(), {
+      this.estimatedMaxes.set(key, {
         exercise: exerciseName,
         estimated1RM: Math.round(newEstimate * 10) / 10,
         confidence: 'high',
         source: 'direct_history',
         lastUpdated: new Date()
       });
-    } else {
-      // Only update if new estimate is significantly higher (>5%) or significantly lower (<95%)
-      // This ensures we track improvements and meaningful declines, but not minor fluctuations
-      const isSignificantlyHigher = newEstimate > existing.estimated1RM * 1.05;
-      const isSignificantlyLower = newEstimate < existing.estimated1RM * 0.95;
-      
-      if (isSignificantlyHigher || isSignificantlyLower) {
-        this.estimatedMaxes.set(exerciseName.toLowerCase(), {
+      this.lowerSessionCounts.set(key, 0);
+      return;
+    }
+
+    const isSignificantlyHigher = newEstimate > existing.estimated1RM * 1.05;
+    // Use wider threshold (92%) for detecting significantly lower
+    const isSignificantlyLower = newEstimate < existing.estimated1RM * 0.92;
+
+    if (isSignificantlyHigher) {
+      // Always update upward immediately - PRs are celebrated!
+      this.lowerSessionCounts.set(key, 0);
+      this.estimatedMaxes.set(key, {
+        exercise: exerciseName,
+        estimated1RM: Math.round(newEstimate * 10) / 10,
+        confidence: 'high',
+        source: 'direct_history',
+        lastUpdated: new Date()
+      });
+    } else if (isSignificantlyLower) {
+      // Require 3 consecutive significantly lower sessions before downgrading
+      // This prevents a single bad day from tanking the estimate
+      const count = (this.lowerSessionCounts.get(key) || 0) + 1;
+      this.lowerSessionCounts.set(key, count);
+
+      if (count >= 3) {
+        // Three consecutive lower sessions - actually update the estimate
+        this.estimatedMaxes.set(key, {
           exercise: exerciseName,
           estimated1RM: Math.round(newEstimate * 10) / 10,
           confidence: 'high',
           source: 'direct_history',
           lastUpdated: new Date()
         });
+        this.lowerSessionCounts.set(key, 0);
       }
+      // If count < 3, don't update - keep the higher estimate
+    } else {
+      // Within normal range - reset the lower session counter
+      this.lowerSessionCounts.set(key, 0);
     }
   }
 }
