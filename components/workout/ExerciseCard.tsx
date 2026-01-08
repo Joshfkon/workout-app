@@ -1596,16 +1596,16 @@ export const ExerciseCard = memo(function ExerciseCard({
       ) : (
         // Table design for non-bodyweight exercises
         <div className="overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-surface-800/50">
               <tr>
-                <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
+                <th className="w-8 px-1 py-2 text-left text-surface-400 font-medium">Set</th>
+                <th className="w-14 px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
+                <th className="w-12 px-1 py-2 text-center text-surface-400 font-medium">Form</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
-                <th className="px-1 py-2 w-10"></th>
+                <th className="w-10 px-1 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
