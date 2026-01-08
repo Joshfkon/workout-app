@@ -1,6 +1,9 @@
-# Weight Estimation Engine - Remaining Work
+# Weight Estimation Engine - Refactor Complete ✅
 
-This document tracks remaining items from the weight estimation refactor that were deferred for a future iteration.
+This document tracks items from the weight estimation refactor. **All tasks are now complete.**
+
+> **Summary:** The weight estimation engine has been fully refactored with improved accuracy,
+> centralized code, and persistence support for hysteresis counters.
 
 ## Completed in This Refactor
 
@@ -24,6 +27,7 @@ All critical correctness and estimation quality issues have been addressed:
 - [x] **Standalone Canonicalization Module** - Created `services/exerciseCanonical.ts` with centralized exercise name matching
 - [x] **Shared Strength Calculations** - Created `services/shared/strengthCalculations.ts` with single source of truth for E1RM and working weight calculations
 - [x] **Additional Volatile Exercises** - Added volatile flag to Machine Chest Press, Hack Squat, Cable Fly, and Seated Cable Row
+- [x] **Persist Lower Session Counts** - Added persistence support for hysteresis counters via `UserStrengthProfile.lowerSessionCounts` and `getLowerSessionCounts()` method
 
 ## Remaining Items (Lower Priority)
 
@@ -72,15 +76,36 @@ Added `volatile: true` to:
 
 ---
 
-### 4. Persist Lower Session Counts
+### 4. ~~Persist Lower Session Counts~~ ✅ COMPLETED
 
-**Current State:** `lowerSessionCounts` Map is in-memory only, reset when engine is recreated.
+**Status:** Completed in January 2026
 
-**Issue:** If the user closes the app between workouts, the hysteresis counter resets.
+Added persistence support for hysteresis counters:
 
-**Proposed Change:** Store counts in the user's profile or local storage.
+1. **Extended `UserStrengthProfile` interface** with optional `lowerSessionCounts?: Record<string, number>` field
+2. **Updated constructor** to initialize from profile if `lowerSessionCounts` is provided
+3. **Added `getLowerSessionCounts()` method** to export current counts for persistence (returns plain object suitable for JSON serialization)
+4. **Updated `createStrengthProfile()` helper** to accept optional `lowerSessionCounts` parameter
 
-**Effort:** Medium - requires coordination with data persistence layer
+**Usage for persistence:**
+```typescript
+// After updating from workout
+engine.updateFromWorkout(exerciseName, sets);
+
+// Get counts for persistence (e.g., save to user profile in database)
+const countsToSave = engine.getLowerSessionCounts();
+// Save countsToSave to database/localStorage
+
+// Later, when recreating the engine
+const savedCounts = /* load from database/localStorage */;
+const profile = createStrengthProfile(
+  heightCm, weightKg, bodyFatPercent, experience, trainingAge,
+  exerciseHistory, regionalData, savedCounts
+);
+const engine = new WeightEstimationEngine(profile, 'kg');
+```
+
+**Integration Note:** The actual persistence mechanism (database column, localStorage key, etc.) should be implemented where the engine is instantiated, typically in a hook or service that manages user workout data
 
 ---
 

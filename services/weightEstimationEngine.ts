@@ -82,6 +82,13 @@ export interface UserStrengthProfile {
   knownMaxes: EstimatedMax[];
   regionalData?: DexaRegionalData;
   regionalAnalysis?: RegionalAnalysis;
+  /**
+   * Persisted lower session counts for hysteresis.
+   * Maps exercise name (lowercase) to consecutive lower session count.
+   * Used to require 3 consecutive significantly lower sessions before
+   * downgrading an estimated max.
+   */
+  lowerSessionCounts?: Record<string, number>;
 }
 
 // ============================================================
@@ -470,6 +477,29 @@ export class WeightEstimationEngine {
     for (const max of profile.knownMaxes) {
       this.estimatedMaxes.set(max.exercise.toLowerCase(), max);
     }
+
+    // Initialize lower session counts from persisted data if available
+    if (profile.lowerSessionCounts) {
+      for (const [exercise, count] of Object.entries(profile.lowerSessionCounts)) {
+        this.lowerSessionCounts.set(exercise.toLowerCase(), count);
+      }
+    }
+  }
+
+  /**
+   * Get the current lower session counts for persistence.
+   * Returns a plain object suitable for JSON serialization.
+   * This should be saved to the user's profile/preferences to maintain
+   * hysteresis across app sessions.
+   */
+  getLowerSessionCounts(): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [exercise, count] of this.lowerSessionCounts) {
+      if (count > 0) {
+        result[exercise] = count;
+      }
+    }
+    return result;
   }
   
   getWorkingWeight(
@@ -1323,20 +1353,21 @@ export function createStrengthProfile(
   experience: Experience,
   trainingAge: number,
   exerciseHistory: ExerciseHistoryEntry[] = [],
-  regionalData?: DexaRegionalData
+  regionalData?: DexaRegionalData,
+  lowerSessionCounts?: Record<string, number>
 ): UserStrengthProfile {
   const bodyComp = calculateBodyComposition(weightKg, bodyFatPercentage, heightCm);
-  
+
   const knownMaxes: EstimatedMax[] = [];
   const exerciseNames = Array.from(new Set(exerciseHistory.map(h => h.exerciseName)));
-  
+
   for (const name of exerciseNames) {
     const history = exerciseHistory.filter(h => h.exerciseName === name);
     if (history.length > 0) {
       const recentHistory = history
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 10);
-      
+
       const estimates: number[] = [];
       for (const session of recentHistory) {
         for (const set of session.sets) {
@@ -1345,11 +1376,11 @@ export function createStrengthProfile(
           }
         }
       }
-      
+
       if (estimates.length > 0) {
         estimates.sort((a, b) => b - a);
         const best = estimates[Math.floor(estimates.length * 0.1)] || estimates[0];
-        
+
         knownMaxes.push({
           exercise: name,
           estimated1RM: Math.round(best * 10) / 10,
@@ -1360,12 +1391,12 @@ export function createStrengthProfile(
       }
     }
   }
-  
+
   // Calculate regional analysis if regional data provided
-  const regionalAnalysis = regionalData 
+  const regionalAnalysis = regionalData
     ? analyzeRegionalComposition(regionalData, bodyComp.leanMassKg)
     : undefined;
-  
+
   return {
     bodyComposition: bodyComp,
     experience,
@@ -1373,7 +1404,8 @@ export function createStrengthProfile(
     exerciseHistory,
     knownMaxes,
     regionalData,
-    regionalAnalysis
+    regionalAnalysis,
+    lowerSessionCounts
   };
 }
 
