@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
+import { Card, Badge, SetQualityBadge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
@@ -239,6 +239,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [isWarmupExpanded, setIsWarmupExpanded] = useState(true);
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
@@ -1114,11 +1115,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {/* Delete exercise button */}
             {onExerciseDelete && isActive && (
               <button
-                onClick={() => {
-                  if (confirm(`Remove "${exercise.name}" from this workout?`)) {
-                    onExerciseDelete();
-                  }
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
                 title="Remove exercise"
               >
@@ -2778,6 +2775,23 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          if (onExerciseDelete) {
+            onExerciseDelete();
+          }
+        }}
+        title="Remove Exercise"
+        message={`Remove "${exercise.name}" from this workout? This will delete any logged sets for this exercise.`}
+        confirmText="Remove"
+        cancelText="Keep"
+        variant="danger"
+      />
     </Card>
   );
 }, (prevProps, nextProps) => {
