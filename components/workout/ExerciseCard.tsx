@@ -1603,8 +1603,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium hidden sm:table-cell">Form</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium hidden sm:table-cell">Quality</th>
                 <th className="px-1 py-2 w-10"></th>
               </tr>
             </thead>
@@ -1650,10 +1650,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
                     </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-1 py-1.5 text-center hidden sm:table-cell">
                       <span className="text-surface-500 text-xs">—</span>
                     </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-1 py-1.5 text-center hidden sm:table-cell">
                       <div className="flex justify-center">
                         <SetQualityBadge quality={set.quality} />
                       </div>
@@ -1773,7 +1773,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         )}
                       </td>
                       <td
-                        className="px-1 py-2.5 text-center"
+                        className="px-1 py-2.5 text-center hidden sm:table-cell"
                       >
                         {editingFormId === set.id ? (
                           <select
@@ -1833,7 +1833,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           </span>
                         )}
                       </td>
-                      <td className="px-1 py-2.5 text-center">
+                      <td className="px-1 py-2.5 text-center hidden sm:table-cell">
                         <div className="flex justify-center">
                           <SetQualityBadge quality={set.quality} />
                         </div>
@@ -2115,10 +2115,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                         );
                       })()}
                     </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-1 py-1.5 text-center hidden sm:table-cell">
                       <span className="text-surface-600 text-xs">—</span>
                     </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-1 py-1.5 text-center hidden sm:table-cell">
                       <span className="text-surface-600 text-xs">???</span>
                     </td>
                     <td className="px-1 py-1.5 relative">
@@ -2165,8 +2165,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
                     <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
                     <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs hidden sm:table-cell">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs hidden sm:table-cell">???</td>
                     <td className="px-1 py-2.5"></td>
                   </tr>
                 );
