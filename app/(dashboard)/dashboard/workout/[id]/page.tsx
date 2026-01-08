@@ -3933,53 +3933,6 @@ export default function WorkoutPage() {
                     
                     {/* Card content area */}
                     <div className="px-4 py-3 space-y-3">
-                  {/* AMRAP Suggestion Banner */}
-                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
-                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
-                            <span className="text-primary-400 text-lg">🎯</span>
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
-                            AMRAP Set Suggestion
-                          </h3>
-                          <p className="text-xs text-surface-300 mb-3">
-                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>. 
-                            Push to failure (RPE 9.5+) to calibrate your RPE perception. 
-                            This helps us adjust your future RIR prescriptions.
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => {
-                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
-                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
-                                // The user will complete the set normally, but we'll track it as AMRAP
-                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
-                                setAmrapSuggestion(null);
-                              }}
-                              className="text-xs"
-                            >
-                              Got it - I&apos;ll push hard
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setAmrapSuggestion(null)}
-                              className="text-xs"
-                            >
-                              Dismiss
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  )}
-
                     {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
                     <ExerciseCard
                       hideHeader
@@ -4118,6 +4071,53 @@ export default function WorkoutPage() {
                       setShowPlateCalculator(true);
                     }}
                   />
+
+                  {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
+                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
+                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
+                            <span className="text-primary-400 text-lg">🎯</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                            AMRAP Set Suggestion
+                          </h3>
+                          <p className="text-xs text-surface-300 mb-3">
+                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>.
+                            Push to failure (RPE 9.5+) to calibrate your RPE perception.
+                            This helps us adjust your future RIR prescriptions.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
+                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
+                                // The user will complete the set normally, but we'll track it as AMRAP
+                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
+                                setAmrapSuggestion(null);
+                              }}
+                              className="text-xs"
+                            >
+                              Got it - I&apos;ll push hard
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setAmrapSuggestion(null)}
+                              className="text-xs"
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
 
                     {/* Exercise complete actions - only show for current exercise */}
                     {isCurrent && isComplete && addingExtraSet !== block.id && (
