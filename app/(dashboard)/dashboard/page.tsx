@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import Link from 'next/link';
@@ -14,13 +15,25 @@ import { ActivityCard } from '@/components/dashboard/ActivityCard';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { DashboardCard } from '@/components/dashboard/DashboardCard';
 import { CardioTracker } from '@/components/dashboard/CardioTracker';
-import { WeightGraph } from '@/components/analytics/WeightGraph';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
+
+// Lazy load heavy chart components for faster initial render
+const WeightGraph = dynamic(
+  () => import('@/components/analytics/WeightGraph').then(mod => ({ default: mod.WeightGraph })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[200px] bg-surface-800/50 rounded-lg animate-pulse flex items-center justify-center">
+        <span className="text-surface-500 text-sm">Loading chart...</span>
+      </div>
+    ),
+  }
+);
 
 // Card identifiers for reordering
 type DashboardCardId =
@@ -440,19 +453,19 @@ export default function DashboardPage() {
             .eq('workout_sessions.state', 'completed')
             .gte('workout_sessions.completed_at', weekStart.toISOString()),
           
-          // Frequent foods (reduced limit for speed)
+          // Frequent foods - smaller initial load, rest loaded on-demand in QuickFoodLogger
           supabase.from('food_log')
             .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
-            .limit(200),
-          
-          // System foods - limit to 500 to avoid fetching entire table
+            .limit(50),
+
+          // System foods - smaller initial load for faster dashboard render
           supabase.from('system_foods')
             .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
             .eq('is_active', true)
             .order('name')
-            .limit(500),
+            .limit(100),
 
           // Count completed workouts (for first week hints)
           supabase.from('workout_sessions')

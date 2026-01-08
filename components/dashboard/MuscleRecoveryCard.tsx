@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, memo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
 
@@ -80,7 +80,7 @@ interface MuscleRecoveryCardProps {
   compact?: boolean;
 }
 
-export function MuscleRecoveryCard({
+export const MuscleRecoveryCard = memo(function MuscleRecoveryCard({
   limit = 6,
   showOnlyRecovering = false,
   compact = false,
@@ -237,4 +237,4 @@ export function MuscleRecoveryCard({
       </CardContent>
     </Card>
   );
-}
+});

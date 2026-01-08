@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input } from '@/components/ui';
 import { saveManualSteps, getStepsForDate } from '@/lib/actions/steps';
 import { getLocalDateString } from '@/lib/utils';
@@ -11,7 +11,7 @@ interface StepTrackingProps {
   userWeightKg: number;
 }
 
-export function StepTracking({ date, userWeightKg }: StepTrackingProps) {
+export const StepTracking = memo(function StepTracking({ date, userWeightKg }: StepTrackingProps) {
   const [steps, setSteps] = useState<string>('');
   const [savedSteps, setSavedSteps] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -143,5 +143,5 @@ export function StepTracking({ date, userWeightKg }: StepTrackingProps) {
       </CardContent>
     </Card>
   );
-}
+});
 
