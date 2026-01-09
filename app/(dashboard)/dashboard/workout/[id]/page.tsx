@@ -185,10 +185,13 @@ function getExerciseInjuryRisk(
 }
 
 // Calculate E1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
+// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
+function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
+  if (reps === 1 && rpe === 10) return weight;
+  // Account for reps in reserve when RPE < 10
+  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
+  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
+  return weight * (36 / (37 - effectiveReps));
 }
 
 // Generate coach message based on workout structure and user context
