@@ -21,6 +21,7 @@ import type {
   WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
 import { MUSCLE_FIBER_PROFILE } from './repRangeEngine';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // ============================================================
 // FATIGUE COST CONSTANTS
@@ -124,16 +125,21 @@ export function calculateExerciseFatigue(
   }
   
   // === LOCAL FATIGUE ===
+  // Normalize muscle keys to standard format for consistent lookups
   const localCost = new Map<string, number>();
-  
+
   // Primary muscle gets full local fatigue
   const primaryLocalCost = sets * 8 * intensityFactor;
-  localCost.set(exercise.primaryMuscle, primaryLocalCost);
-  
+  const normalizedPrimary = toStandardMuscleForVolume(exercise.primaryMuscle) ?? exercise.primaryMuscle;
+  localCost.set(normalizedPrimary, primaryLocalCost);
+
   // Secondary muscles get partial fatigue
   for (const secondary of exercise.secondaryMuscles) {
     const secondaryCost = sets * 4 * intensityFactor;
-    localCost.set(secondary, secondaryCost);
+    const normalizedSecondary = toStandardMuscleForVolume(secondary) ?? secondary;
+    // Accumulate if same standard muscle hit multiple times
+    const existing = localCost.get(normalizedSecondary) ?? 0;
+    localCost.set(normalizedSecondary, existing + secondaryCost);
   }
   
   // === STIMULUS-TO-FATIGUE RATIO ===

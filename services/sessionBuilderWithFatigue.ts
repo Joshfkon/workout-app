@@ -48,6 +48,7 @@ import {
   WeeklyFatigueTracker,
   BASE_SFR,
 } from './fatigueBudgetEngine';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup } from './mesocycleBuilder';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
@@ -568,8 +569,9 @@ export function buildDetailedSessionWithFatigue(
         );
       }
 
-      // Track weekly fatigue
-      const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
+      // Track weekly fatigue (normalize muscle key to match localCost map keys)
+      const normalizedMuscle = toStandardMuscleForVolume(muscle) ?? muscle;
+      const localCost = exerciseFatigue.localCost.get(normalizedMuscle) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
       // Track time and exercise count (reuse isCompound and needsWarmup from above)
@@ -751,7 +753,9 @@ export function buildDUPSession(
         },
       });
 
-      const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
+      // Normalize muscle key to match localCost map keys
+      const normalizedMuscleKey = toStandardMuscleForVolume(muscle) ?? muscle;
+      const localCost = exerciseFatigue.localCost.get(normalizedMuscleKey) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
       // Track time and exercise count
