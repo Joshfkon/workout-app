@@ -13,6 +13,8 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
+import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // Loading placeholder for dashboard cards
 const CardSkeleton = () => (
@@ -104,14 +106,28 @@ const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 // MEV targets (minimum effective volume per muscle) - defined outside component for stable reference
-const MEV_TARGETS: Record<string, number> = {
-  chest: 8, back: 8, shoulders: 6, quads: 6, hamstrings: 4,
-  glutes: 4, biceps: 4, triceps: 4, calves: 6, abs: 8,
-  traps: 4, forearms: 4, adductors: 4,
+// Uses StandardMuscleGroup (20 muscles) for consistent volume tracking
+const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
+  chest_upper: 4, chest_lower: 4,
+  front_delts: 4, lateral_delts: 6, rear_delts: 4,
+  lats: 6, upper_back: 4, traps: 4,
+  biceps: 4, triceps: 4, forearms: 4,
+  quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4, calves: 6,
+  abs: 6, obliques: 4, erectors: 4,
 };
 
 // All muscle groups to check (including those with 0 sets)
-const ALL_MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'biceps', 'triceps', 'calves', 'abs', 'traps', 'forearms', 'adductors'];
+// Uses STANDARD_MUSCLE_GROUPS from schema for consistent typing
+const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
+
+// Helper to get MEV for any muscle format (legacy, standard, or detailed)
+function getMevForMuscle(muscle: string): number {
+  const standardMuscle = toStandardMuscleForVolume(muscle);
+  if (standardMuscle && standardMuscle in MEV_TARGETS) {
+    return MEV_TARGETS[standardMuscle];
+  }
+  return 4; // Default MEV
+}
 
 interface NutritionTotals {
   calories: number;
@@ -706,7 +722,7 @@ export default function DashboardPage() {
           const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
             .map(([muscle, data]) => {
               const target = volumeTargets[muscle] || 10;
-              const mev = MEV_TARGETS[muscle] || 4;
+              const mev = getMevForMuscle(muscle);
               // Use MEV as the threshold for 'low' status to be consistent with AtrophyRiskAlert
               const status: 'low' | 'optimal' | 'high' = data.sets < mev ? 'low' : data.sets > target * 1.3 ? 'high' : 'optimal';
               const exercises = Array.from(data.exercises.values()).sort((a, b) => b.sets - a.sets);

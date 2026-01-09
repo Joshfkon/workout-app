@@ -401,12 +401,15 @@ function parseAIResponse(
     : 'medium';
 
   return {
-    // User provided (but we now store the detailed primary muscle)
+    // User provided (keep original legacy format for backwards compatibility)
     name: input.name,
-    primaryMuscle: primaryMuscleDetailed, // Now uses DetailedMuscleGroup
+    primaryMuscle: input.primaryMuscle, // User's original legacy muscle input
     equipment: input.equipment,
     description: input.description,
     variationOf: input.variationOf,
+
+    // AI's detailed classification of the primary muscle
+    primaryMuscleDetailed,
 
     // AI completed (use user-provided values if available, otherwise use AI response)
     // All muscle arrays now use DetailedMuscleGroup
@@ -514,10 +517,11 @@ export function getDefaultsByEquipment(input: BasicExerciseInput): CompletedExer
 
   return {
     name: input.name,
-    primaryMuscle: primaryMuscleDetailed, // Now uses DetailedMuscleGroup
+    primaryMuscle: input.primaryMuscle, // Keep user's original legacy input
     equipment: input.equipment,
     description: input.description,
     variationOf: input.variationOf,
+    primaryMuscleDetailed, // AI's detailed classification
     secondaryMuscles: [],
     stabilizers: [],
     pattern,
@@ -553,9 +557,17 @@ export function inheritFromBaseExercise(
   input: BasicExerciseInput,
   baseExercise: Exercise
 ): Partial<CompletedExerciseData> {
+  // Convert string[] muscle arrays to DetailedMuscleGroup[] for type compatibility
+  const secondaryMuscles = baseExercise.secondaryMuscles
+    .map(m => toDetailedMuscle(m))
+    .filter((m): m is DetailedMuscleGroup => m !== null);
+  const stabilizers = (baseExercise.stabilizers || [])
+    .map(m => toDetailedMuscle(m))
+    .filter((m): m is DetailedMuscleGroup => m !== null);
+
   return {
-    secondaryMuscles: baseExercise.secondaryMuscles,
-    stabilizers: baseExercise.stabilizers || [],
+    secondaryMuscles,
+    stabilizers,
     pattern: baseExercise.pattern,
     mechanic: baseExercise.mechanic,
     difficulty: baseExercise.difficulty,

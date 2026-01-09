@@ -114,8 +114,12 @@ export interface CompletedExerciseData {
   variationOf?: string;
 
   // === AI Completed ===
-  secondaryMuscles: MuscleGroup[];
-  stabilizers: MuscleGroup[];
+  /** AI's detailed classification of the primary muscle */
+  primaryMuscleDetailed: DetailedMuscleGroup;
+  /** Secondary muscles targeted (detailed 33-muscle system) */
+  secondaryMuscles: DetailedMuscleGroup[];
+  /** Stabilizer muscles (detailed 33-muscle system) */
+  stabilizers: DetailedMuscleGroup[];
   pattern: MovementPattern | 'isolation' | 'carry';
   mechanic: 'compound' | 'isolation';
   difficulty: ExerciseDifficulty;

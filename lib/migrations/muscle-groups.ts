@@ -189,8 +189,8 @@ export function migrateExerciseMuscles(
 
   return {
     primaryMuscle,
-    secondaryMuscles: [...new Set(secondaryMuscles)], // Dedupe
-    stabilizers: [...new Set(stabilizers)],
+    secondaryMuscles: Array.from(new Set(secondaryMuscles)), // Dedupe
+    stabilizers: Array.from(new Set(stabilizers)),
     _wasMigrated: wasMigrated,
     _originalValues: wasMigrated ? {
       primaryMuscle: exercise.primaryMuscle,
