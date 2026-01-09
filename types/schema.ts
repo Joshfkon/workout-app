@@ -1038,14 +1038,14 @@ export interface SessionTemplate {
  */
 export interface ExerciseEntry {
   name: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: MuscleGroup[];
+  primaryMuscle: string; // Can be MuscleGroup or DetailedMuscleGroup
+  secondaryMuscles: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
   pattern: MovementPattern | 'isolation' | 'carry';
   equipment: Equipment;
   difficulty: ExerciseDifficulty;
   fatigueRating: FatigueRating;
   notes?: string;
-  
+
   // Progression-related fields (optional for backwards compatibility)
   /** Default rep range [min, max] - derived from pattern if not set */
   defaultRepRange?: [number, number];
@@ -1055,7 +1055,7 @@ export interface ExerciseEntry {
   minWeightIncrementKg?: number;
   /** Mechanic type for progression engine */
   mechanic?: Mechanic;
-  
+
   // Hypertrophy scoring (Nippard methodology)
   /** Hypertrophy effectiveness score for exercise selection prioritization */
   hypertrophyScore?: HypertrophyScore;
