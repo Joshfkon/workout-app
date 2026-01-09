@@ -149,31 +149,32 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     }
 
     // Secondary muscles: convert to standard, partial credit
-    // Use a Set to avoid double-counting when multiple detailed muscles map to same standard
-    const secondaryStandardCounts = new Map<StandardMuscleGroup, number>();
+    // Track credit per standard muscle, distributing 0.5 proportionally when
+    // a legacy muscle maps to multiple standard muscles
+    const secondaryStandardCredits = new Map<StandardMuscleGroup, number>();
 
     for (const secondary of exercise.secondaryMuscles) {
       const secondaryStandards = resolveToStandardMuscles(secondary);
+      // Distribute 0.5 credit proportionally among mapped standard muscles
+      const creditPerMuscle = secondaryStandards.length > 0
+        ? 0.5 / secondaryStandards.length
+        : 0;
+
       for (const secondaryStandard of secondaryStandards) {
         // Don't count secondary if it's the same standard group as primary
         if (secondaryStandard === primaryStandard) continue;
 
-        // Track that this standard muscle was hit
-        if (!secondaryStandardCounts.has(secondaryStandard)) {
-          secondaryStandardCounts.set(secondaryStandard, 0);
-        }
-        secondaryStandardCounts.set(
-          secondaryStandard,
-          secondaryStandardCounts.get(secondaryStandard)! + 1
-        );
+        // Accumulate credit for this standard muscle
+        const existing = secondaryStandardCredits.get(secondaryStandard) ?? 0;
+        secondaryStandardCredits.set(secondaryStandard, existing + creditPerMuscle);
       }
     }
 
-    // Apply indirect credit (0.5 per standard muscle group, once per standard group)
-    secondaryStandardCounts.forEach((count, standardMuscle) => {
+    // Apply indirect credit based on accumulated credits
+    secondaryStandardCredits.forEach((credit, standardMuscle) => {
       if (volumeMap.has(standardMuscle)) {
         const data = volumeMap.get(standardMuscle)!;
-        const indirectCredit = Math.round(setCount * 0.5);
+        const indirectCredit = Math.round(setCount * credit);
         data.indirectSets += indirectCredit;
         data.totalSets += indirectCredit;
       }
