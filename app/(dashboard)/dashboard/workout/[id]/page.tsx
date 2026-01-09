@@ -67,6 +67,8 @@ interface AvailableExercise {
   secondary_muscles?: string[];
   mechanic: 'compound' | 'isolation';
   equipment_required?: string[];
+  default_rep_range?: [number, number];
+  default_rir?: number;
   is_bodyweight?: boolean;
 }
 
@@ -184,10 +186,13 @@ function getExerciseInjuryRisk(
 }
 
 // Calculate E1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
+// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
+function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
+  if (reps === 1 && rpe === 10) return weight;
+  // Account for reps in reserve when RPE < 10
+  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
+  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
+  return weight * (36 / (37 - effectiveReps));
 }
 
 // Generate coach message based on workout structure and user context
@@ -1093,10 +1098,12 @@ export default function WorkoutPage() {
                   seenSessions.add(session.id);
                   totalSessions++;
                 }
-                
+
                 const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
                 sets.forEach((set: any) => {
-                  const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                  // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
+                  // which underestimates true strength for sets done with reps in reserve
+                  const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
                   if (e1rm > bestE1RM) {
                     bestE1RM = e1rm;
                     personalRecord = {
@@ -1214,7 +1221,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, equipment_required, is_bodyweight')
+        .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -2181,9 +2188,9 @@ export default function WorkoutPage() {
     if (exercisesToUse.length === 0) {
       const { data: allExercises } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, is_bodyweight')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
         .order('name');
-      
+
       if (allExercises) {
         exercisesToUse = allExercises;
         setAvailableExercises(allExercises);
@@ -2813,13 +2820,13 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, mechanic, equipment_required, is_bodyweight')
+      .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
       .order('name');
-    
+
     if (muscle) {
       query = query.eq('primary_muscle', muscle);
     }
-    
+
     const { data } = await query;
     if (data) {
       setAvailableExercises(data);
@@ -2843,16 +2850,20 @@ export default function WorkoutPage() {
   const handleAddExercise = async (exercise: AvailableExercise) => {
     setIsAddingExercise(true);
     setError(null);
-    
+
     try {
       const supabase = createUntypedClient();
       const isCompound = exercise.mechanic === 'compound';
-      
+
+      // Use exercise's configured defaults, with sensible fallbacks based on mechanic type
+      const exerciseRepRange = exercise.default_rep_range || (isCompound ? [6, 10] : [10, 15]) as [number, number];
+      const exerciseRir = exercise.default_rir ?? 2;
+
       // Get weight recommendation for the new exercise
       let suggestedWeight = 0;
       if (userProfile) {
-        const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
-        const targetRir = 2;
+        const repRange = { min: exerciseRepRange[0], max: exerciseRepRange[1] };
+        const targetRir = exerciseRir;
         let weightRec: WorkingWeightRecommendation;
 
         // Check if we have exercise history for this exercise (using exercise.id)
@@ -2911,8 +2922,8 @@ export default function WorkoutPage() {
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: [],
           mechanic: exercise.mechanic,
-          defaultRepRange: [8, 12],
-          defaultRir: 2,
+          defaultRepRange: exerciseRepRange,
+          defaultRir: exerciseRir,
           minWeightIncrementKg: 2.5,
           formCues: [],
           commonMistakes: [],
@@ -2942,8 +2953,8 @@ export default function WorkoutPage() {
           exercise_id: exercise.id,
           order: newOrder,
           target_sets: isCompound ? 4 : 3,
-          target_rep_range: isCompound ? [6, 10] : [10, 15],
-          target_rir: 2,
+          target_rep_range: exerciseRepRange,
+          target_rir: exerciseRir,
           target_weight_kg: suggestedWeight,
           target_rest_seconds: isCompound ? 180 : 90,
           suggestion_reason: suggestedWeight > 0 ? `Added mid-workout • Suggested ${formatWeight(suggestedWeight, preferences.units)}` : 'Added mid-workout',
@@ -3070,7 +3081,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data: newExercise, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, default_rep_range, default_rir')
         .eq('id', exerciseId)
         .single();
 
@@ -3085,6 +3096,8 @@ export default function WorkoutPage() {
         primary_muscle: newExercise.primary_muscle,
         secondary_muscles: newExercise.secondary_muscles || [],
         mechanic: newExercise.mechanic,
+        default_rep_range: newExercise.default_rep_range,
+        default_rir: newExercise.default_rir,
       }]);
 
       // Now add it to the workout
@@ -3094,6 +3107,8 @@ export default function WorkoutPage() {
         primary_muscle: newExercise.primary_muscle,
         secondary_muscles: newExercise.secondary_muscles || [],
         mechanic: newExercise.mechanic,
+        default_rep_range: newExercise.default_rep_range,
+        default_rir: newExercise.default_rir,
       });
 
       // Close the custom exercise modal
