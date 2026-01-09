@@ -66,7 +66,57 @@ interface AvailableExercise {
   primary_muscle: string;
   secondary_muscles?: string[];
   mechanic: 'compound' | 'isolation';
+  equipment_required?: string[];
 }
+
+interface GymLocation {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+// Equipment mapping for filtering exercises based on available equipment at a location
+const EQUIPMENT_MAPPING: Record<string, string[]> = {
+  // Machines
+  leg_press: ['leg press', 'machine'],
+  leg_extension: ['leg extension', 'machine'],
+  leg_curl: ['leg curl', 'machine'],
+  hack_squat: ['hack squat', 'machine'],
+  smith_machine: ['smith machine', 'smith'],
+  chest_press: ['chest press machine', 'machine'],
+  pec_deck: ['pec deck', 'fly machine', 'machine'],
+  shoulder_press_machine: ['shoulder press machine', 'machine'],
+  lat_pulldown: ['lat pulldown', 'cable'],
+  seated_row: ['seated row', 'cable row', 'machine'],
+  cable_machine: ['cable', 'pulley'],
+  assisted_dip: ['assisted'],
+  preacher_curl: ['preacher'],
+  calf_raise: ['calf raise machine', 'machine'],
+  hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
+  glute_kickback: ['glute kickback', 'cable'],
+  reverse_hyper: ['reverse hyper'],
+  // Free Weights
+  barbell: ['barbell', 'bar', 'olympic bar'],
+  dumbbells: ['dumbbell', 'db'],
+  kettlebells: ['kettlebell', 'kb'],
+  ez_bar: ['ez bar', 'curl bar', 'ez curl bar'],
+  weight_plates: ['plate', 'weight plate'],
+  // Benches
+  flat_bench: ['flat bench', 'bench'],
+  adjustable_bench: ['adjustable bench', 'incline bench', 'decline bench', 'bench'],
+  preacher_bench: ['preacher bench', 'preacher'],
+  // Racks
+  squat_rack: ['squat rack', 'power rack', 'rack'],
+  power_rack: ['power rack', 'squat rack', 'rack', 'cage'],
+  // Stations
+  pull_up_bar: ['pull up bar', 'pullup bar', 'chin up bar', 'bar'],
+  dip_station: ['dip station', 'dip bars', 'parallel bars'],
+  // Other
+  resistance_bands: ['resistance band', 'band'],
+  trx: ['trx', 'suspension trainer'],
+  ab_wheel: ['ab wheel', 'ab roller'],
+  foam_roller: ['foam roller', 'roller'],
+};
 
 interface CalibratedLift {
   lift_name: string;
@@ -454,7 +504,13 @@ export default function WorkoutPage() {
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
-  
+
+  // Location filter state
+  const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [locationEquipment, setLocationEquipment] = useState<string[]>([]);
+
   // Share workout modal state
   const [showShareModal, setShowShareModal] = useState(false);
   
@@ -1156,7 +1212,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic')
+        .select('id, name, primary_muscle, mechanic, equipment_required')
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -1164,6 +1220,99 @@ export default function WorkoutPage() {
     }
     loadAvailableExercises();
   }, []);
+
+  // Load gym locations for the location filter
+  useEffect(() => {
+    async function loadGymLocations() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        const { data: locations, error } = await supabase
+          .from('gym_locations')
+          .select('id, name, is_default')
+          .eq('user_id', user.id);
+
+        if (!error && locations && locations.length > 0) {
+          setGymLocations(locations);
+        }
+      } catch (err) {
+        console.warn('Error loading gym locations:', err);
+      }
+    }
+    loadGymLocations();
+  }, []);
+
+  // Load equipment when location filter changes
+  useEffect(() => {
+    async function loadLocationEquipment() {
+      if (!selectedLocationFilter) {
+        setLocationEquipment([]);
+        return;
+      }
+
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        // Load available equipment for the selected location
+        const { data: locationEq, error: equipmentError } = await supabase
+          .from('user_equipment')
+          .select('equipment_id, is_available')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationFilter)
+          .eq('is_available', true);
+
+        if (!equipmentError && locationEq && locationEq.length > 0) {
+          // Get equipment type names from equipment_types table
+          const equipmentIds = locationEq.map((eq: { equipment_id: string }) => eq.equipment_id);
+          const { data: equipmentTypes, error: typesError } = await supabase
+            .from('equipment_types')
+            .select('id, name')
+            .in('id', equipmentIds);
+
+          if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
+            // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
+            const equipmentNames = new Set<string>();
+            equipmentTypes.forEach((et: { id: string; name: string }) => {
+              const name = et.name.toLowerCase();
+              equipmentNames.add(name);
+
+              // Also add mapped variations
+              const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
+              if (mapping) {
+                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+              }
+            });
+
+            setLocationEquipment(Array.from(equipmentNames));
+          } else {
+            // Fallback: use equipment_id directly with mapping
+            const equipmentNames = new Set<string>();
+            equipmentIds.forEach((id: string) => {
+              const idLower = id.toLowerCase();
+              equipmentNames.add(idLower);
+
+              const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
+              if (mapping) {
+                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+              }
+            });
+
+            setLocationEquipment(Array.from(equipmentNames));
+          }
+        } else {
+          setLocationEquipment([]);
+        }
+      } catch (err) {
+        console.warn('Error loading location equipment:', err);
+        setLocationEquipment([]);
+      }
+    }
+    loadLocationEquipment();
+  }, [selectedLocationFilter]);
 
   // Load historical set logs for RPE calibration
   useEffect(() => {
@@ -3210,12 +3359,12 @@ export default function WorkoutPage() {
                   className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
                 />
 
-                {/* Body Part Dropdown and Sort Button */}
+                {/* Body Part and Location Dropdowns */}
                 <div className="flex gap-2">
                   {/* Body Part Dropdown */}
                   <div className="relative flex-1">
                     <button
-                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
+                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
                       className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
                     >
                       <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
@@ -3265,10 +3414,64 @@ export default function WorkoutPage() {
                     )}
                   </div>
 
+                  {/* Location Dropdown */}
+                  {gymLocations.length > 0 && (
+                    <div className="relative flex-1">
+                      <button
+                        onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
+                        className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                      >
+                        <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
+                          {selectedLocationFilter
+                            ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
+                            : 'Any Location'}
+                        </span>
+                        <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Location Dropdown Menu */}
+                      {showLocationDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                          <button
+                            onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                              !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>Any Location</span>
+                            {!selectedLocationFilter && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                          {gymLocations.map(location => (
+                            <button
+                              key={location.id}
+                              onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
+                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                                selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
+                              }`}
+                            >
+                              <span>{location.name}</span>
+                              {selectedLocationFilter === location.id && (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Sort Button */}
                   <div className="relative">
                     <button
-                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
+                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
                       className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
                       title="Sort exercises"
                     >
@@ -3329,19 +3532,52 @@ export default function WorkoutPage() {
               <div className="flex-1 overflow-y-auto">
                 {(() => {
                   let filteredExercises = availableExercises;
-                  
+
                   // Filter by muscle
                   if (selectedMuscleFilter) {
                     filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
                   }
-                  
+
                   // Filter by search
                   if (exerciseSearch) {
-                    filteredExercises = filteredExercises.filter(ex => 
+                    filteredExercises = filteredExercises.filter(ex =>
                       ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
                     );
                   }
-                  
+
+                  // Filter by location equipment
+                  if (selectedLocationFilter && locationEquipment.length > 0) {
+                    const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
+                    filteredExercises = filteredExercises.filter(ex => {
+                      // If exercise has no equipment requirement, check name for equipment hints
+                      if (!ex.equipment_required || ex.equipment_required.length === 0) {
+                        const exerciseNameLower = ex.name.toLowerCase();
+
+                        // Check if exercise name indicates specific equipment
+                        const requiresCable = exerciseNameLower.includes('cable');
+                        const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+                        const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
+                        const requiresMachine = exerciseNameLower.includes('machine');
+                        const requiresSmith = exerciseNameLower.includes('smith');
+
+                        if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
+                        if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
+                        if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
+                        if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
+                        if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
+
+                        return true;
+                      }
+
+                      // For exercises with equipment_required, check if ALL required equipment is available
+                      const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
+                      return requiredEquipment.every(reqEq => {
+                        if (normalizedAvailable.includes(reqEq)) return true;
+                        return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
+                      });
+                    });
+                  }
+
                   // Sort based on selected option
                   filteredExercises = [...filteredExercises].sort((a, b) => {
                     switch (exerciseSortOption) {
@@ -4342,12 +4578,12 @@ export default function WorkoutPage() {
                 onChange={(e) => setExerciseSearch(e.target.value)}
               />
 
-              {/* Body Part Dropdown and Sort Button */}
+              {/* Body Part and Location Dropdowns */}
               <div className="flex gap-2">
                 {/* Body Part Dropdown */}
                 <div className="relative flex-1">
                   <button
-                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
+                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
                     className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
                   >
                     <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
@@ -4397,10 +4633,64 @@ export default function WorkoutPage() {
                   )}
                 </div>
 
+                {/* Location Dropdown */}
+                {gymLocations.length > 0 && (
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                    >
+                      <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
+                        {selectedLocationFilter
+                          ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
+                          : 'Any Location'}
+                      </span>
+                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Location Dropdown Menu */}
+                    {showLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Any Location</span>
+                          {!selectedLocationFilter && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {gymLocations.map(location => (
+                          <button
+                            key={location.id}
+                            onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                              selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>{location.name}</span>
+                            {selectedLocationFilter === location.id && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Sort Button */}
                 <div className="relative">
                   <button
-                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
+                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
                     className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
                     title="Sort exercises"
                   >
@@ -4479,19 +4769,52 @@ export default function WorkoutPage() {
             <div className="flex-1 overflow-y-auto">
               {(() => {
                 let filteredExercises = availableExercises;
-                
+
                 // Filter by muscle
                 if (selectedMuscleFilter) {
                   filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
                 }
-                
+
                 // Filter by search
                 if (exerciseSearch) {
-                  filteredExercises = filteredExercises.filter(ex => 
+                  filteredExercises = filteredExercises.filter(ex =>
                     ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
                   );
                 }
-                
+
+                // Filter by location equipment
+                if (selectedLocationFilter && locationEquipment.length > 0) {
+                  const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
+                  filteredExercises = filteredExercises.filter(ex => {
+                    // If exercise has no equipment requirement, check name for equipment hints
+                    if (!ex.equipment_required || ex.equipment_required.length === 0) {
+                      const exerciseNameLower = ex.name.toLowerCase();
+
+                      // Check if exercise name indicates specific equipment
+                      const requiresCable = exerciseNameLower.includes('cable');
+                      const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+                      const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
+                      const requiresMachine = exerciseNameLower.includes('machine');
+                      const requiresSmith = exerciseNameLower.includes('smith');
+
+                      if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
+                      if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
+                      if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
+                      if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
+                      if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
+
+                      return true;
+                    }
+
+                    // For exercises with equipment_required, check if ALL required equipment is available
+                    const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
+                    return requiredEquipment.every(reqEq => {
+                      if (normalizedAvailable.includes(reqEq)) return true;
+                      return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
+                    });
+                  });
+                }
+
                 // Sort based on selected option
                 filteredExercises = [...filteredExercises].sort((a, b) => {
                   switch (exerciseSortOption) {
