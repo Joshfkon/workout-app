@@ -13,7 +13,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // Loading placeholder for dashboard cards
@@ -1478,7 +1478,7 @@ export default function DashboardPage() {
                                 <svg className="w-3 h-3 text-surface-500 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                 </svg>
-                                <span className="text-surface-300 capitalize">{mv.muscle}</span>
+                                <span className="text-surface-300">{STANDARD_MUSCLE_DISPLAY_NAMES[mv.muscle as StandardMuscleGroup] ?? mv.muscle}</span>
                               </div>
                               <span className={`font-medium ${
                                 mv.status === 'optimal' ? 'text-success-400' :

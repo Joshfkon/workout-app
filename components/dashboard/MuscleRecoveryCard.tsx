@@ -10,7 +10,7 @@ interface RecoveryBarProps {
 }
 
 function RecoveryBar({ status, compact = false }: RecoveryBarProps) {
-  const { muscle, recoveryPercent, isReady, statusText, hoursRemaining } = status;
+  const { displayName, recoveryPercent, isReady, statusText, hoursRemaining } = status;
 
   // Color based on recovery status
   const barColor = useMemo(() => {
@@ -28,13 +28,10 @@ function RecoveryBar({ status, compact = false }: RecoveryBarProps) {
     return 'text-danger-400';
   }, [isReady, recoveryPercent]);
 
-  // Capitalize first letter
-  const displayName = muscle.charAt(0).toUpperCase() + muscle.slice(1);
-
   if (compact) {
     return (
       <div className="flex items-center gap-2">
-        <div className="w-20 text-xs text-surface-300 truncate capitalize">{displayName}</div>
+        <div className="w-24 text-xs text-surface-300 truncate">{displayName}</div>
         <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
           <div
             className={`h-full ${barColor} transition-all duration-300`}
