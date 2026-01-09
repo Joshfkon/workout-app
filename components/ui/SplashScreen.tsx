@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 
 interface SplashScreenProps {
   onComplete: () => void;
+  onReady?: () => void; // Called when React splash is mounted and ready
   duration?: number; // milliseconds
 }
 
@@ -14,9 +15,17 @@ const APP_NAME = 'HYPERTROPHY';
  * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
  * Optimized for fast load times with reduced animation duration.
  */
-export function SplashScreen({ onComplete, duration = 1500 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isFading, setIsFading] = useState(false);
+
+  // Signal ready immediately on mount so static splash can be hidden
+  useEffect(() => {
+    // Use requestAnimationFrame to ensure the component has painted
+    requestAnimationFrame(() => {
+      onReady?.();
+    });
+  }, [onReady]);
 
   useEffect(() => {
     // Start fade out earlier for faster perceived load (at 1000ms)

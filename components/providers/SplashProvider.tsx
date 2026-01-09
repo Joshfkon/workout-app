@@ -1,13 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import dynamic from 'next/dynamic';
-
-// Lazy load the animated splash screen to reduce initial bundle
-const SplashScreen = dynamic(
-  () => import('@/components/ui/SplashScreen').then(mod => ({ default: mod.SplashScreen })),
-  { ssr: false }
-);
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useRef } from 'react';
+import { SplashScreen } from '@/components/ui/SplashScreen';
 
 interface SplashContextType {
   showSplash: boolean;
@@ -31,13 +25,18 @@ interface SplashProviderProps {
 
 /**
  * Hides the static HTML splash screen that shows before JS loads.
- * This ensures a seamless transition from static -> React splash.
+ * Uses a fade-out transition for seamless handoff to React splash.
  */
 function hideStaticSplash() {
   if (typeof document !== 'undefined') {
     const staticSplash = document.getElementById('static-splash');
     if (staticSplash) {
-      staticSplash.classList.add('hidden');
+      // Fade out then hide to prevent flash
+      staticSplash.style.opacity = '0';
+      staticSplash.style.transition = 'opacity 150ms ease-out';
+      setTimeout(() => {
+        staticSplash.classList.add('hidden');
+      }, 150);
     }
   }
 }
@@ -84,16 +83,21 @@ export function SplashProvider({ children }: SplashProviderProps) {
     return () => clearTimeout(timer);
   }, []);
 
-  // Check session storage and handle splash visibility
+  // Check session storage - but don't hide static splash yet
   useEffect(() => {
     const seen = sessionStorage.getItem('splash_seen');
     if (seen) {
       setShowSplash(false);
       setHasSeenSplash(true);
-      hideStaticSplash();
-    } else {
+      // Hide static splash immediately since we're not showing React splash
       hideStaticSplash();
     }
+    // If not seen, wait for React splash to signal ready before hiding static
+  }, []);
+
+  // Callback for when React splash is mounted and painted
+  const handleSplashReady = useCallback(() => {
+    hideStaticSplash();
   }, []);
 
   // Auto-hide splash when both conditions are met
@@ -122,6 +126,7 @@ export function SplashProvider({ children }: SplashProviderProps) {
       {shouldShowSplash && (
         <SplashScreen
           onComplete={hideSplash}
+          onReady={handleSplashReady}
           duration={1500}
         />
       )}
