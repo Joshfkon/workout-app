@@ -102,6 +102,7 @@ jest.mock('@/lib/utils', () => ({
   convertWeight: jest.fn((w, _, toUnit) => toUnit === 'lb' ? w * 2.205 : w),
   formatWeight: jest.fn((w, unit) => `${w}${unit}`),
   formatWeightValue: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205) : w),
+  convertWeightForDisplay: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205 * 10) / 10 : w),
   inputWeightToKg: jest.fn((w, unit) => unit === 'lb' ? w / 2.205 : w),
   roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
   formatDuration: jest.fn((s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`),
@@ -354,11 +355,9 @@ describe('ExerciseCard', () => {
     });
 
     it('displays set count badge', () => {
-      const { container } = render(<ExerciseCard {...defaultProps} />);
-      // Badge with "X/Y" format exists
-      const badge = container.querySelector('.rounded-full');
-      expect(badge).toBeInTheDocument();
-      expect(badge?.textContent).toContain('/');
+      render(<ExerciseCard {...defaultProps} />);
+      // Progress badge shows "X/Y" format - "0/3" for no completed sets and 3 target sets
+      expect(screen.getByText(/0\/3/)).toBeInTheDocument();
     });
 
     it('displays primary muscle', () => {
