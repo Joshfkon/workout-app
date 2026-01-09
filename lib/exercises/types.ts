@@ -1,5 +1,10 @@
 /**
  * Types for AI-Assisted Custom Exercise Completion
+ *
+ * Uses the two-tier muscle group system:
+ * - User input: Legacy MuscleGroup (13 muscles) for simplicity
+ * - AI output: DetailedMuscleGroup (33 muscles) for precision
+ * - Volume tracking: StandardMuscleGroup (20 muscles) for display
  */
 
 import type {
@@ -10,8 +15,11 @@ import type {
   FatigueRating,
   HypertrophyTier,
   HypertrophyRating,
+  StandardMuscleGroup,
+  DetailedMuscleGroup,
 } from '@/types/schema';
 
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { SpinalLoading, PositionStress } from '@/services/exerciseService';
 
 // ============================================
@@ -321,3 +329,29 @@ export const EQUIPMENT_OPTIONS: { value: Equipment; label: string }[] = [
   { value: 'bodyweight', label: 'Bodyweight' },
   { value: 'kettlebell', label: 'Kettlebell' },
 ];
+
+// ============================================
+// STANDARD MUSCLE GROUP OPTIONS (for volume UI)
+// ============================================
+
+/**
+ * Standard muscle group options for volume tracking UI
+ * Uses the new 20-muscle system for granular volume display
+ */
+export const STANDARD_MUSCLE_GROUP_OPTIONS: { value: StandardMuscleGroup; label: string }[] =
+  STANDARD_MUSCLE_GROUPS.map((muscle) => ({
+    value: muscle,
+    label: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],
+  }));
+
+/**
+ * Standard muscle groups organized by body region for UI display
+ */
+export const STANDARD_MUSCLE_GROUPS_BY_REGION: Record<string, StandardMuscleGroup[]> = {
+  'Chest': ['chest_upper', 'chest_lower'],
+  'Shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
+  'Back': ['lats', 'upper_back', 'traps'],
+  'Arms': ['biceps', 'triceps', 'forearms'],
+  'Legs': ['quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'calves'],
+  'Core & Spine': ['abs', 'obliques', 'erectors'],
+};
