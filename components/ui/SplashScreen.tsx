@@ -12,15 +12,15 @@ const APP_NAME = 'HYPERTROPHY';
 /**
  * Lightweight CSS-only splash screen for fast initial load.
  * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
- * Visually identical to the original Framer Motion version.
+ * Optimized for fast load times with reduced animation duration.
  */
-export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, duration = 1500 }: SplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isFading, setIsFading] = useState(false);
 
   useEffect(() => {
-    // Start fade out at 2000ms (matching original)
-    const fadeTimer = setTimeout(() => setIsFading(true), 2000);
+    // Start fade out earlier for faster perceived load (at 1000ms)
+    const fadeTimer = setTimeout(() => setIsFading(true), Math.max(800, duration - 500));
 
     // Complete and unmount
     const completeTimer = setTimeout(() => {
@@ -91,13 +91,13 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
           </svg>
         </div>
 
-        {/* App name with staggered letters */}
+        {/* App name with staggered letters - faster animation */}
         <div className="flex items-center gap-1">
           {APP_NAME.split('').map((letter, i) => (
             <span
               key={i}
               className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-letter"
-              style={{ animationDelay: `${0.3 + i * 0.05}s` }}
+              style={{ animationDelay: `${0.15 + i * 0.025}s` }}
             >
               {letter}
             </span>
@@ -123,10 +123,10 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
         <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
       </div>
 
-      {/* CSS Animations - matching original Framer Motion timing */}
+      {/* CSS Animations - optimized for faster load times */}
       <style jsx>{`
         .splash-bg {
-          animation: bgScale 0.5s ease-out forwards;
+          animation: bgScale 0.3s ease-out forwards;
         }
 
         .splash-line {
@@ -135,7 +135,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
           left: -100%;
           right: -100%;
           background: linear-gradient(to right, transparent, rgb(var(--primary-500) / 0.3), transparent);
-          animation: lineMove 1.5s ease-in-out forwards;
+          animation: lineMove 0.8s ease-in-out forwards;
           opacity: 0;
         }
 
@@ -145,57 +145,57 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
           border: 1px solid rgb(var(--primary-500) / 0.2);
           width: 100px;
           height: 100px;
-          animation: ringExpand 2s ease-out infinite;
+          animation: ringExpand 1.2s ease-out infinite;
         }
 
         .splash-ring-1 { animation-delay: 0s; }
-        .splash-ring-2 { animation-delay: 0.3s; }
-        .splash-ring-3 { animation-delay: 0.6s; }
+        .splash-ring-2 { animation-delay: 0.15s; }
+        .splash-ring-3 { animation-delay: 0.3s; }
 
         .splash-logo-enter {
-          animation: logoEnter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          animation: logoEnter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
         .splash-icon-enter {
-          animation: iconEnter 0.8s ease-out forwards;
+          animation: iconEnter 0.4s ease-out forwards;
         }
 
         .splash-glow {
-          animation: glowPulse 2s ease-in-out infinite;
+          animation: glowPulse 1.2s ease-in-out infinite;
         }
 
         .splash-path {
           stroke-dasharray: 100;
           stroke-dashoffset: 100;
-          animation: pathDraw 1.2s ease-in-out forwards;
+          animation: pathDraw 0.6s ease-in-out forwards;
         }
 
         .splash-letter {
           opacity: 0;
-          animation: letterEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          animation: letterEnter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
         .splash-tagline {
           opacity: 0;
-          animation: taglineEnter 0.5s ease-out 1s forwards;
+          animation: taglineEnter 0.3s ease-out 0.4s forwards;
         }
 
         .splash-bar-container {
           opacity: 0;
-          animation: barContainerEnter 0.3s ease-out 0.5s forwards;
+          animation: barContainerEnter 0.2s ease-out 0.25s forwards;
         }
 
         .splash-progress {
           transform: translateX(-100%);
-          animation: progressFill 1.8s ease-in-out 0.6s forwards;
+          animation: progressFill 0.9s ease-in-out 0.3s forwards;
         }
 
         .splash-corner-tl {
-          animation: cornerTL 0.8s ease-out 0.2s both;
+          animation: cornerTL 0.4s ease-out 0.1s both;
         }
 
         .splash-corner-br {
-          animation: cornerBR 0.8s ease-out 0.2s both;
+          animation: cornerBR 0.4s ease-out 0.1s both;
         }
 
         @keyframes bgScale {
@@ -212,7 +212,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
 
         @keyframes ringExpand {
           0% { width: 100px; height: 100px; opacity: 0.8; }
-          100% { width: 500px; height: 500px; opacity: 0; }
+          100% { width: 400px; height: 400px; opacity: 0; }
         }
 
         @keyframes logoEnter {
@@ -221,7 +221,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
         }
 
         @keyframes iconEnter {
-          from { transform: translateY(20px) rotateY(-90deg); opacity: 0; }
+          from { transform: translateY(15px) rotateY(-90deg); opacity: 0; }
           to { transform: translateY(0) rotateY(0deg); opacity: 1; }
         }
 
@@ -235,12 +235,12 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
         }
 
         @keyframes letterEnter {
-          from { transform: translateY(50px) rotateX(-90deg); opacity: 0; }
+          from { transform: translateY(30px) rotateX(-90deg); opacity: 0; }
           to { transform: translateY(0) rotateX(0deg); opacity: 1; }
         }
 
         @keyframes taglineEnter {
-          from { transform: translateY(20px); opacity: 0; }
+          from { transform: translateY(15px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
 
@@ -254,12 +254,12 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
         }
 
         @keyframes cornerTL {
-          from { transform: translate(-100px, -100px); }
+          from { transform: translate(-60px, -60px); }
           to { transform: translate(0, 0); }
         }
 
         @keyframes cornerBR {
-          from { transform: translate(100px, 100px); }
+          from { transform: translate(60px, 60px); }
           to { transform: translate(0, 0); }
         }
       `}</style>

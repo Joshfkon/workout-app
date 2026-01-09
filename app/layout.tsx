@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SplashProvider } from "@/components/providers/SplashProvider";
 import { NativeAppBehavior } from "@/components/providers/NativeAppBehavior";
@@ -13,19 +12,10 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",  // Show fallback font immediately, swap when loaded
-  preload: true,
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  display: "swap",  // Prevent invisible text during font load
-  preload: true,
-});
+// Use system font stack for instant text rendering (no font download blocking)
+// This significantly improves LCP (Largest Contentful Paint) and FCP (First Contentful Paint)
+const systemFontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+const monoFontStack = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace';
 
 export const metadata: Metadata = {
   title: {
@@ -79,9 +69,35 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" style={{ backgroundColor: '#09090b' }}>
       <head>
+        {/* Preconnect to critical origins for faster subsequent requests */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* DNS prefetch for Supabase - loaded dynamically */}
+        <link rel="dns-prefetch" href="https://*.supabase.co" />
+
+        {/* Load Google Fonts asynchronously - non-blocking with optional swap */}
+        <link
+          rel="preload"
+          as="style"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+          media="print"
+          onLoad={(e: React.SyntheticEvent<HTMLLinkElement>) => { (e.target as HTMLLinkElement).media = 'all'; }}
+        />
+
         {/* Inline critical CSS for instant splash screen - prevents white flash */}
         <style dangerouslySetInnerHTML={{ __html: `
-          html, body { background-color: #09090b; }
+          :root {
+            --font-inter: ${systemFontStack};
+            --font-mono: ${monoFontStack};
+          }
+          html, body {
+            background-color: #09090b;
+            font-family: var(--font-inter);
+          }
           #static-splash {
             position: fixed;
             inset: 0;
@@ -129,7 +145,7 @@ export default function RootLayout({
             height: 100%;
             background: linear-gradient(to right, #0ea5e9, #d946ef, #0ea5e9);
             border-radius: 9999px;
-            animation: progress 2s ease-in-out infinite;
+            animation: progress 1.2s ease-in-out infinite;
           }
           @keyframes fadeIn {
             from { opacity: 0; transform: scale(0.9); }
@@ -137,14 +153,15 @@ export default function RootLayout({
           }
           @keyframes progress {
             0% { width: 0%; }
-            50% { width: 70%; }
+            50% { width: 80%; }
             100% { width: 100%; }
           }
           #static-splash.hidden { display: none; }
         `}} />
       </head>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen font-sans overflow-x-hidden`}
+        className="antialiased min-h-screen font-sans overflow-x-hidden"
+        style={{ fontFamily: systemFontStack }}
       >
         {/* Static splash screen - shows immediately before JS loads */}
         <div id="static-splash">

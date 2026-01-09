@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  /* System font stacks for instant text rendering */
+  --font-inter: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
   --background: #09090b;
   --foreground: #fafafa;
   --card: #18181b;
