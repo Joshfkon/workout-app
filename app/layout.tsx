@@ -82,6 +82,7 @@ export default function RootLayout({
         />
 
         {/* Inline critical CSS for instant splash screen - prevents white flash */}
+        {/* Static splash is minimal - just shows logo until React splash takes over */}
         <style dangerouslySetInnerHTML={{ __html: `
           :root {
             --font-inter: ${systemFontStack};
@@ -104,7 +105,6 @@ export default function RootLayout({
             display: flex;
             flex-direction: column;
             align-items: center;
-            animation: fadeIn 0.3s ease-out;
           }
           #static-splash svg {
             width: 96px;
@@ -126,29 +126,6 @@ export default function RootLayout({
             letter-spacing: 0.1em;
             text-transform: uppercase;
           }
-          #static-splash .loading-bar {
-            margin-top: 32px;
-            width: 192px;
-            height: 4px;
-            background: #27272a;
-            border-radius: 9999px;
-            overflow: hidden;
-          }
-          #static-splash .loading-progress {
-            height: 100%;
-            background: linear-gradient(to right, #0ea5e9, #d946ef, #0ea5e9);
-            border-radius: 9999px;
-            animation: progress 1.2s ease-in-out infinite;
-          }
-          @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.9); }
-            to { opacity: 1; transform: scale(1); }
-          }
-          @keyframes progress {
-            0% { width: 0%; }
-            50% { width: 80%; }
-            100% { width: 100%; }
-          }
           #static-splash.hidden { display: none; }
         `}} />
       </head>
@@ -157,6 +134,7 @@ export default function RootLayout({
         style={{ fontFamily: systemFontStack }}
       >
         {/* Static splash screen - shows immediately before JS loads */}
+        {/* Minimal static content - React splash will add animations */}
         <div id="static-splash">
           <div className="logo-container">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
@@ -168,9 +146,6 @@ export default function RootLayout({
             </svg>
             <span className="app-name">HYPERTROPHY</span>
             <span className="tagline">Train Smarter</span>
-            <div className="loading-bar">
-              <div className="loading-progress" />
-            </div>
           </div>
         </div>
         <ServiceWorkerRegistration />
