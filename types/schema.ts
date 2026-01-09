@@ -1184,8 +1184,8 @@ export interface ExerciseFatigueProfile {
   /** Systemic/CNS fatigue cost (0-50 typically) */
   systemicCost: number;
   
-  /** Local fatigue per muscle hit */
-  localCost: Map<MuscleGroup, number>;
+  /** Local fatigue per muscle hit (string key for flexibility with muscle group types) */
+  localCost: Map<string, number>;
   
   /** Stimulus-to-Fatigue Ratio (higher = more efficient, 1.0+ is good) */
   stimulusPerFatigue: number;
