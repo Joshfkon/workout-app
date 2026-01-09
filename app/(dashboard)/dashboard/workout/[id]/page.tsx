@@ -67,6 +67,7 @@ interface AvailableExercise {
   secondary_muscles?: string[];
   mechanic: 'compound' | 'isolation';
   equipment_required?: string[];
+  is_bodyweight?: boolean;
 }
 
 interface GymLocation {
@@ -510,6 +511,7 @@ export default function WorkoutPage() {
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locationEquipment, setLocationEquipment] = useState<string[]>([]);
+  const [unavailableExerciseIds, setUnavailableExerciseIds] = useState<Set<string>>(new Set());
 
   // Share workout modal state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1212,7 +1214,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, equipment_required')
+        .select('id, name, primary_muscle, mechanic, equipment_required, is_bodyweight')
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -1244,11 +1246,12 @@ export default function WorkoutPage() {
     loadGymLocations();
   }, []);
 
-  // Load equipment when location filter changes
+  // Load equipment and exercise availability when location filter changes
   useEffect(() => {
     async function loadLocationEquipment() {
       if (!selectedLocationFilter) {
         setLocationEquipment([]);
+        setUnavailableExerciseIds(new Set());
         return;
       }
 
@@ -1257,6 +1260,20 @@ export default function WorkoutPage() {
       if (!user) return;
 
       try {
+        // Load user-specified unavailable exercises for this location
+        const { data: unavailableExercises } = await supabase
+          .from('exercise_location_availability')
+          .select('exercise_id')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationFilter)
+          .eq('is_available', false);
+
+        if (unavailableExercises) {
+          setUnavailableExerciseIds(new Set(unavailableExercises.map((e: { exercise_id: string }) => e.exercise_id)));
+        } else {
+          setUnavailableExerciseIds(new Set());
+        }
+
         // Load available equipment for the selected location
         const { data: locationEq, error: equipmentError } = await supabase
           .from('user_equipment')
@@ -2164,7 +2181,7 @@ export default function WorkoutPage() {
     if (exercisesToUse.length === 0) {
       const { data: allExercises } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, is_bodyweight')
         .order('name');
       
       if (allExercises) {
@@ -2796,7 +2813,7 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, mechanic')
+      .select('id, name, primary_muscle, mechanic, equipment_required, is_bodyweight')
       .order('name');
     
     if (muscle) {
@@ -3546,25 +3563,59 @@ export default function WorkoutPage() {
                   }
 
                   // Filter by location equipment
-                  if (selectedLocationFilter && locationEquipment.length > 0) {
+                  if (selectedLocationFilter) {
+                    // First, filter out exercises the user explicitly marked as unavailable
+                    if (unavailableExerciseIds.size > 0) {
+                      filteredExercises = filteredExercises.filter(ex => !unavailableExerciseIds.has(ex.id));
+                    }
+
                     const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
+
+                    // Machine brand prefixes and machine-specific terms that indicate machine exercises
+                    const machineBrands = ['mts', 'iso-lateral', 'iso lateral', 'hammer strength', 'nautilus', 'cybex', 'life fitness', 'technogym', 'matrix', 'precor', 'hoist', 'star trac', 'freemotion', 'prime', 'arsenal', 'atlantis', 'body-solid', 'icarian', 'strive', 'magnum', 'panatta'];
+                    const machineTerms = ['leg press', 'leg extension', 'leg curl', 'hack squat', 'pendulum', 'seated row', 'chest press', 'shoulder press machine', 'lat pulldown', 'pec deck', 'fly machine', 'hip abductor', 'hip adductor', 'glute drive', 'calf raise machine', 'reverse hyper', 'back extension machine', 'ab crunch machine', 'torso rotation', 'inner thigh', 'outer thigh', 'belt squat'];
+
                     filteredExercises = filteredExercises.filter(ex => {
+                      const exerciseNameLower = ex.name.toLowerCase();
+
+                      // If location has no equipment, only allow bodyweight exercises
+                      if (normalizedAvailable.length === 0) {
+                        return ex.is_bodyweight === true;
+                      }
+
+                      // Check if exercise requires a machine (by brand or term)
+                      const isMachineExercise =
+                        machineBrands.some(brand => exerciseNameLower.includes(brand)) ||
+                        machineTerms.some(term => exerciseNameLower.includes(term));
+
+                      // If it's a machine exercise, check if user has machine equipment available
+                      if (isMachineExercise) {
+                        const hasMachineEquipment = normalizedAvailable.some(a =>
+                          a.includes('machine') || a.includes('press') || a.includes('pulldown') ||
+                          a.includes('leg extension') || a.includes('leg curl') || a.includes('hack') ||
+                          a.includes('cable') || a.includes('lat pulldown') || a.includes('seated row')
+                        );
+                        if (!hasMachineEquipment) return false;
+                      }
+
                       // If exercise has no equipment requirement, check name for equipment hints
                       if (!ex.equipment_required || ex.equipment_required.length === 0) {
-                        const exerciseNameLower = ex.name.toLowerCase();
-
                         // Check if exercise name indicates specific equipment
                         const requiresCable = exerciseNameLower.includes('cable');
                         const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
                         const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
                         const requiresMachine = exerciseNameLower.includes('machine');
                         const requiresSmith = exerciseNameLower.includes('smith');
+                        const requiresKettlebell = exerciseNameLower.includes('kettlebell') || exerciseNameLower.includes('kb ');
+                        const requiresBand = exerciseNameLower.includes('band') || exerciseNameLower.includes('resistance band');
 
                         if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
                         if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
                         if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
                         if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
                         if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
+                        if (requiresKettlebell && !normalizedAvailable.some(a => a.includes('kettlebell') || a.includes('kb'))) return false;
+                        if (requiresBand && !normalizedAvailable.some(a => a.includes('band'))) return false;
 
                         return true;
                       }
