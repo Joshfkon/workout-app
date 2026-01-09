@@ -29,8 +29,8 @@ import type { SpinalLoading, PositionStress } from '@/services/exerciseService';
 export interface BasicExerciseInput {
   /** Exercise name (required) */
   name: string;
-  /** Primary muscle targeted (required) */
-  primaryMuscle: MuscleGroup;
+  /** Primary muscle targeted (required) - can be MuscleGroup or DetailedMuscleGroup */
+  primaryMuscle: string;
   /** Equipment used (required) */
   equipment: Equipment;
   /** Optional description to help AI understand the movement */
@@ -39,11 +39,11 @@ export interface BasicExerciseInput {
   variationOf?: string;
   /** Name of the base exercise if this is a variation */
   variationOfName?: string;
-  
+
   // === Optional Detailed Fields ===
-  
-  /** Secondary muscles worked */
-  secondaryMuscles?: MuscleGroup[];
+
+  /** Secondary muscles worked (can be MuscleGroup[] or DetailedMuscleGroup[]) */
+  secondaryMuscles?: string[];
   /** Movement pattern */
   pattern?: MovementPattern | 'isolation' | 'carry';
   /** Exercise mechanic type */
@@ -52,25 +52,25 @@ export interface BasicExerciseInput {
   difficulty?: ExerciseDifficulty;
   /** Fatigue rating (1-3) */
   fatigueRating?: FatigueRating;
-  
+
   /** Default rep range [min, max] */
   defaultRepRange?: [number, number];
   /** Default RIR target */
   defaultRir?: number;
   /** Minimum weight increment in kg */
   minWeightIncrementKg?: number;
-  
+
   /** Form cues for proper execution */
   formCues?: string[];
   /** Common mistakes to avoid */
   commonMistakes?: string[];
   /** Setup instructions or notes */
   setupNote?: string;
-  
+
   /** Spinal loading level */
   spinalLoading?: SpinalLoading;
-  /** Muscles used for stability */
-  stabilizers?: MuscleGroup[];
+  /** Muscles used for stability (can be MuscleGroup[] or DetailedMuscleGroup[]) */
+  stabilizers?: string[];
   /** Requires back arch */
   requiresBackArch?: boolean;
   /** Requires spinal flexion */
@@ -108,7 +108,7 @@ export interface HypertrophyScoreData {
 export interface CompletedExerciseData {
   // === User Provided ===
   name: string;
-  primaryMuscle: MuscleGroup;
+  primaryMuscle: string; // Can be MuscleGroup or DetailedMuscleGroup
   equipment: Equipment;
   description?: string;
   variationOf?: string;
