@@ -1,221 +1,269 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface SplashScreenProps {
   onComplete: () => void;
   duration?: number; // milliseconds
 }
 
+const APP_NAME = 'HYPERTROPHY';
+
+/**
+ * Lightweight CSS-only splash screen for fast initial load.
+ * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
+ * Visually identical to the original Framer Motion version.
+ */
 export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps) {
-  const [phase, setPhase] = useState<'logo' | 'expand' | 'fade'>('logo');
+  const [isVisible, setIsVisible] = useState(true);
+  const [isFading, setIsFading] = useState(false);
 
   useEffect(() => {
-    // Phase 1: Logo animation (0-1500ms)
-    const expandTimer = setTimeout(() => setPhase('expand'), 1500);
-    
-    // Phase 2: Expand and fade (1500-2500ms)
-    const fadeTimer = setTimeout(() => setPhase('fade'), 2000);
-    
-    // Complete
-    const completeTimer = setTimeout(() => onComplete(), duration);
+    // Start fade out at 2000ms (matching original)
+    const fadeTimer = setTimeout(() => setIsFading(true), 2000);
+
+    // Complete and unmount
+    const completeTimer = setTimeout(() => {
+      setIsVisible(false);
+      onComplete();
+    }, duration);
 
     return () => {
-      clearTimeout(expandTimer);
       clearTimeout(fadeTimer);
       clearTimeout(completeTimer);
     };
   }, [duration, onComplete]);
 
+  if (!isVisible) return null;
+
   return (
-    <AnimatePresence>
-      {phase !== 'fade' && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Animated background */}
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950"
-            initial={{ scale: 1 }}
-            animate={phase === 'expand' ? { scale: 1.2 } : { scale: 1 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          />
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
+        isFading ? 'opacity-0' : 'opacity-100'
+      }`}
+    >
+      {/* Animated background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950 splash-bg" />
 
-          {/* Dynamic lines animation */}
-          <div className="absolute inset-0 overflow-hidden">
-            {[...Array(8)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute h-[2px] bg-gradient-to-r from-transparent via-primary-500/30 to-transparent"
-                style={{
-                  top: `${15 + i * 12}%`,
-                  left: '-100%',
-                  right: '-100%',
-                  transform: `rotate(${-15 + i * 4}deg)`,
-                }}
-                initial={{ x: '-100%', opacity: 0 }}
-                animate={{ 
-                  x: ['100%', '-100%'],
-                  opacity: [0, 1, 1, 0],
-                }}
-                transition={{
-                  duration: 1.5,
-                  delay: i * 0.1,
-                  ease: 'easeInOut',
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Pulsing circles */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {[...Array(3)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full border border-primary-500/20"
-                initial={{ width: 100, height: 100, opacity: 0 }}
-                animate={{
-                  width: [100, 400 + i * 100],
-                  height: [100, 400 + i * 100],
-                  opacity: [0.8, 0],
-                }}
-                transition={{
-                  duration: 2,
-                  delay: i * 0.3,
-                  repeat: Infinity,
-                  ease: 'easeOut',
-                }}
-              />
-            ))}
-          </div>
-
-          {/* Main logo container */}
-          <motion.div
-            className="relative z-10 flex flex-col items-center"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ 
-              duration: 0.6, 
-              ease: [0.34, 1.56, 0.64, 1], // Spring-like bounce
+      {/* Dynamic lines animation */}
+      <div className="absolute inset-0 overflow-hidden">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div
+            key={i}
+            className="splash-line"
+            style={{
+              top: `${15 + i * 12}%`,
+              transform: `rotate(${-15 + i * 4}deg)`,
+              animationDelay: `${i * 0.1}s`,
             }}
+          />
+        ))}
+      </div>
+
+      {/* Pulsing circles */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="splash-ring splash-ring-1" />
+        <div className="splash-ring splash-ring-2" />
+        <div className="splash-ring splash-ring-3" />
+      </div>
+
+      {/* Main logo container */}
+      <div className="relative z-10 flex flex-col items-center splash-logo-enter">
+        {/* Icon */}
+        <div className="relative mb-4 splash-icon-enter">
+          {/* Glow effect */}
+          <div className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full splash-glow" />
+
+          {/* Dumbbell Icon */}
+          <svg
+            className="w-24 h-24 text-primary-500 relative z-10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
           >
-            {/* Icon */}
-            <motion.div
-              className="relative mb-4"
-              initial={{ y: 20, rotateY: -90 }}
-              animate={{ y: 0, rotateY: 0 }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
+            <path
+              d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="splash-path"
+            />
+          </svg>
+        </div>
+
+        {/* App name with staggered letters */}
+        <div className="flex items-center gap-1">
+          {APP_NAME.split('').map((letter, i) => (
+            <span
+              key={i}
+              className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-letter"
+              style={{ animationDelay: `${0.3 + i * 0.05}s` }}
             >
-              {/* Glow effect */}
-              <motion.div
-                className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-              />
-              
-              {/* Dumbbell Icon */}
-              <motion.svg
-                className="w-24 h-24 text-primary-500 relative z-10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 1.5, ease: 'easeInOut' }}
-              >
-                <motion.path
-                  d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 1.2, ease: 'easeInOut' }}
-                />
-              </motion.svg>
-            </motion.div>
+              {letter}
+            </span>
+          ))}
+        </div>
 
-            {/* App name with staggered letters */}
-            <div className="flex items-center gap-1">
-              {'HYPERTROPHY'.split('').map((letter, i) => (
-                <motion.span
-                  key={i}
-                  className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider"
-                  initial={{ y: 50, opacity: 0, rotateX: -90 }}
-                  animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                  transition={{
-                    duration: 0.4,
-                    delay: 0.3 + i * 0.05,
-                    ease: [0.34, 1.56, 0.64, 1],
-                  }}
-                >
-                  {letter}
-                </motion.span>
-              ))}
-            </div>
+        {/* Tagline */}
+        <p className="mt-3 text-sm text-primary-400 font-medium tracking-widest uppercase splash-tagline">
+          Train Smarter
+        </p>
 
-            {/* Tagline */}
-            <motion.p
-              className="mt-3 text-sm text-primary-400 font-medium tracking-widest uppercase"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1, duration: 0.5 }}
-            >
-              Train Smarter
-            </motion.p>
+        {/* Loading bar */}
+        <div className="mt-8 w-48 h-1 bg-surface-800 rounded-full overflow-hidden splash-bar-container">
+          <div className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full splash-progress" />
+        </div>
+      </div>
 
-            {/* Loading bar */}
-            <motion.div
-              className="mt-8 w-48 h-1 bg-surface-800 rounded-full overflow-hidden"
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              transition={{ delay: 0.5, duration: 0.3 }}
-            >
-              <motion.div
-                className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full"
-                initial={{ x: '-100%' }}
-                animate={{ x: '0%' }}
-                transition={{ 
-                  duration: 1.8,
-                  delay: 0.6,
-                  ease: 'easeInOut',
-                }}
-              />
-            </motion.div>
-          </motion.div>
+      {/* Corner accents */}
+      <div className="absolute top-0 left-0 w-32 h-32 splash-corner-tl">
+        <div className="w-full h-full border-l-2 border-t-2 border-primary-500/30" />
+      </div>
+      <div className="absolute bottom-0 right-0 w-32 h-32 splash-corner-br">
+        <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
+      </div>
 
-          {/* Corner accents */}
-          <motion.div
-            className="absolute top-0 left-0 w-32 h-32"
-            initial={{ x: -100, y: -100 }}
-            animate={{ x: 0, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="w-full h-full border-l-2 border-t-2 border-primary-500/30" />
-          </motion.div>
-          
-          <motion.div
-            className="absolute bottom-0 right-0 w-32 h-32"
-            initial={{ x: 100, y: 100 }}
-            animate={{ x: 0, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      {/* CSS Animations - matching original Framer Motion timing */}
+      <style jsx>{`
+        .splash-bg {
+          animation: bgScale 0.5s ease-out forwards;
+        }
+
+        .splash-line {
+          position: absolute;
+          height: 2px;
+          left: -100%;
+          right: -100%;
+          background: linear-gradient(to right, transparent, rgb(var(--primary-500) / 0.3), transparent);
+          animation: lineMove 1.5s ease-in-out forwards;
+          opacity: 0;
+        }
+
+        .splash-ring {
+          position: absolute;
+          border-radius: 50%;
+          border: 1px solid rgb(var(--primary-500) / 0.2);
+          width: 100px;
+          height: 100px;
+          animation: ringExpand 2s ease-out infinite;
+        }
+
+        .splash-ring-1 { animation-delay: 0s; }
+        .splash-ring-2 { animation-delay: 0.3s; }
+        .splash-ring-3 { animation-delay: 0.6s; }
+
+        .splash-logo-enter {
+          animation: logoEnter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .splash-icon-enter {
+          animation: iconEnter 0.8s ease-out forwards;
+        }
+
+        .splash-glow {
+          animation: glowPulse 2s ease-in-out infinite;
+        }
+
+        .splash-path {
+          stroke-dasharray: 100;
+          stroke-dashoffset: 100;
+          animation: pathDraw 1.2s ease-in-out forwards;
+        }
+
+        .splash-letter {
+          opacity: 0;
+          animation: letterEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .splash-tagline {
+          opacity: 0;
+          animation: taglineEnter 0.5s ease-out 1s forwards;
+        }
+
+        .splash-bar-container {
+          opacity: 0;
+          animation: barContainerEnter 0.3s ease-out 0.5s forwards;
+        }
+
+        .splash-progress {
+          transform: translateX(-100%);
+          animation: progressFill 1.8s ease-in-out 0.6s forwards;
+        }
+
+        .splash-corner-tl {
+          animation: cornerTL 0.8s ease-out 0.2s both;
+        }
+
+        .splash-corner-br {
+          animation: cornerBR 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes bgScale {
+          from { transform: scale(1); }
+          to { transform: scale(1); }
+        }
+
+        @keyframes lineMove {
+          0% { transform: translateX(-100%) rotate(inherit); opacity: 0; }
+          25% { opacity: 1; }
+          75% { opacity: 1; }
+          100% { transform: translateX(100%) rotate(inherit); opacity: 0; }
+        }
+
+        @keyframes ringExpand {
+          0% { width: 100px; height: 100px; opacity: 0.8; }
+          100% { width: 500px; height: 500px; opacity: 0; }
+        }
+
+        @keyframes logoEnter {
+          from { transform: scale(0.5); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes iconEnter {
+          from { transform: translateY(20px) rotateY(-90deg); opacity: 0; }
+          to { transform: translateY(0) rotateY(0deg); opacity: 1; }
+        }
+
+        @keyframes glowPulse {
+          0%, 100% { transform: scale(1); opacity: 0.5; }
+          50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        @keyframes pathDraw {
+          to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes letterEnter {
+          from { transform: translateY(50px) rotateX(-90deg); opacity: 0; }
+          to { transform: translateY(0) rotateX(0deg); opacity: 1; }
+        }
+
+        @keyframes taglineEnter {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes barContainerEnter {
+          from { transform: scaleX(0); opacity: 0; }
+          to { transform: scaleX(1); opacity: 1; }
+        }
+
+        @keyframes progressFill {
+          to { transform: translateX(0); }
+        }
+
+        @keyframes cornerTL {
+          from { transform: translate(-100px, -100px); }
+          to { transform: translate(0, 0); }
+        }
+
+        @keyframes cornerBR {
+          from { transform: translate(100px, 100px); }
+          to { transform: translate(0, 0); }
+        }
+      `}</style>
+    </div>
   );
 }
 
