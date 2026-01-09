@@ -77,10 +77,92 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" style={{ backgroundColor: '#09090b' }}>
+      <head>
+        {/* Inline critical CSS for instant splash screen - prevents white flash */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          html, body { background-color: #09090b; }
+          #static-splash {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
+          }
+          #static-splash .logo-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            animation: fadeIn 0.3s ease-out;
+          }
+          #static-splash svg {
+            width: 96px;
+            height: 96px;
+            color: #0ea5e9;
+            margin-bottom: 16px;
+          }
+          #static-splash .app-name {
+            font-size: 1.875rem;
+            font-weight: 900;
+            color: #fafafa;
+            letter-spacing: 0.1em;
+          }
+          #static-splash .tagline {
+            margin-top: 12px;
+            font-size: 0.875rem;
+            color: #38bdf8;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+          }
+          #static-splash .loading-bar {
+            margin-top: 32px;
+            width: 192px;
+            height: 4px;
+            background: #27272a;
+            border-radius: 9999px;
+            overflow: hidden;
+          }
+          #static-splash .loading-progress {
+            height: 100%;
+            background: linear-gradient(to right, #0ea5e9, #d946ef, #0ea5e9);
+            border-radius: 9999px;
+            animation: progress 2s ease-in-out infinite;
+          }
+          @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+          }
+          @keyframes progress {
+            0% { width: 0%; }
+            50% { width: 70%; }
+            100% { width: 100%; }
+          }
+          #static-splash.hidden { display: none; }
+        `}} />
+      </head>
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased min-h-screen font-sans overflow-x-hidden`}
       >
+        {/* Static splash screen - shows immediately before JS loads */}
+        <div id="static-splash">
+          <div className="logo-container">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <path
+                d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span className="app-name">HYPERTROPHY</span>
+            <span className="tagline">Train Smarter</span>
+            <div className="loading-bar">
+              <div className="loading-progress" />
+            </div>
+          </div>
+        </div>
         <ServiceWorkerRegistration />
         <NativeAppBehavior />
         <SplashProvider>
