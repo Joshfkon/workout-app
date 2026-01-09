@@ -511,6 +511,7 @@ export default function WorkoutPage() {
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [locationEquipment, setLocationEquipment] = useState<string[]>([]);
+  const [unavailableExerciseIds, setUnavailableExerciseIds] = useState<Set<string>>(new Set());
 
   // Share workout modal state
   const [showShareModal, setShowShareModal] = useState(false);
@@ -1245,11 +1246,12 @@ export default function WorkoutPage() {
     loadGymLocations();
   }, []);
 
-  // Load equipment when location filter changes
+  // Load equipment and exercise availability when location filter changes
   useEffect(() => {
     async function loadLocationEquipment() {
       if (!selectedLocationFilter) {
         setLocationEquipment([]);
+        setUnavailableExerciseIds(new Set());
         return;
       }
 
@@ -1258,6 +1260,20 @@ export default function WorkoutPage() {
       if (!user) return;
 
       try {
+        // Load user-specified unavailable exercises for this location
+        const { data: unavailableExercises } = await supabase
+          .from('exercise_location_availability')
+          .select('exercise_id')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationFilter)
+          .eq('is_available', false);
+
+        if (unavailableExercises) {
+          setUnavailableExerciseIds(new Set(unavailableExercises.map((e: { exercise_id: string }) => e.exercise_id)));
+        } else {
+          setUnavailableExerciseIds(new Set());
+        }
+
         // Load available equipment for the selected location
         const { data: locationEq, error: equipmentError } = await supabase
           .from('user_equipment')
@@ -3548,6 +3564,11 @@ export default function WorkoutPage() {
 
                   // Filter by location equipment
                   if (selectedLocationFilter) {
+                    // First, filter out exercises the user explicitly marked as unavailable
+                    if (unavailableExerciseIds.size > 0) {
+                      filteredExercises = filteredExercises.filter(ex => !unavailableExerciseIds.has(ex.id));
+                    }
+
                     const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
 
                     // Machine brand prefixes and machine-specific terms that indicate machine exercises
