@@ -75,17 +75,10 @@ export default function RootLayout({
         {/* DNS prefetch for Supabase - loaded dynamically */}
         <link rel="dns-prefetch" href="https://*.supabase.co" />
 
-        {/* Load Google Fonts asynchronously - non-blocking with optional swap */}
-        <link
-          rel="preload"
-          as="style"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
-        />
+        {/* Load Google Fonts with display=swap for non-blocking render */}
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
-          media="print"
-          onLoad={(e: React.SyntheticEvent<HTMLLinkElement>) => { (e.target as HTMLLinkElement).media = 'all'; }}
         />
 
         {/* Inline critical CSS for instant splash screen - prevents white flash */}
