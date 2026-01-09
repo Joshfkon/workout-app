@@ -81,8 +81,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
         />
 
-        {/* Inline critical CSS for instant splash screen - prevents white flash */}
-        {/* Static splash is minimal - just shows logo until React splash takes over */}
+        {/* Inline critical CSS - dark background prevents white flash */}
         <style dangerouslySetInnerHTML={{ __html: `
           :root {
             --font-inter: ${systemFontStack};
@@ -92,62 +91,12 @@ export default function RootLayout({
             background-color: #09090b;
             font-family: var(--font-inter);
           }
-          #static-splash {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
-          }
-          #static-splash .logo-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-          }
-          #static-splash svg {
-            width: 96px;
-            height: 96px;
-            color: #0ea5e9;
-            margin-bottom: 16px;
-          }
-          #static-splash .app-name {
-            font-size: 1.875rem;
-            font-weight: 900;
-            color: #fafafa;
-            letter-spacing: 0.1em;
-          }
-          #static-splash .tagline {
-            margin-top: 12px;
-            font-size: 0.875rem;
-            color: #38bdf8;
-            font-weight: 500;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-          }
-          #static-splash.hidden { display: none; }
         `}} />
       </head>
       <body
         className="antialiased min-h-screen font-sans overflow-x-hidden"
         style={{ fontFamily: systemFontStack }}
       >
-        {/* Static splash screen - shows immediately before JS loads */}
-        {/* Minimal static content - React splash will add animations */}
-        <div id="static-splash">
-          <div className="logo-container">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
-              <path
-                d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span className="app-name">HYPERTROPHY</span>
-            <span className="tagline">Train Smarter</span>
-          </div>
-        </div>
         <ServiceWorkerRegistration />
         <NativeAppBehavior />
         <SplashProvider>
