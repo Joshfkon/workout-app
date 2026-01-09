@@ -7,17 +7,20 @@ interface SplashScreenProps {
   duration?: number; // milliseconds
 }
 
+const APP_NAME = 'HYPERTROPHY';
+
 /**
  * Lightweight CSS-only splash screen for fast initial load.
  * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
+ * Visually identical to the original Framer Motion version.
  */
-export function SplashScreen({ onComplete, duration = 1800 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isFading, setIsFading] = useState(false);
 
   useEffect(() => {
-    // Start fade out slightly before duration completes
-    const fadeTimer = setTimeout(() => setIsFading(true), duration - 300);
+    // Start fade out at 2000ms (matching original)
+    const fadeTimer = setTimeout(() => setIsFading(true), 2000);
 
     // Complete and unmount
     const completeTimer = setTimeout(() => {
@@ -35,14 +38,29 @@ export function SplashScreen({ onComplete, duration = 1800 }: SplashScreenProps)
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-300 ${
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
         isFading ? 'opacity-0' : 'opacity-100'
       }`}
     >
-      {/* Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950" />
+      {/* Animated background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950 splash-bg" />
 
-      {/* Pulsing circles - CSS only */}
+      {/* Dynamic lines animation */}
+      <div className="absolute inset-0 overflow-hidden">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+          <div
+            key={i}
+            className="splash-line"
+            style={{
+              top: `${15 + i * 12}%`,
+              transform: `rotate(${-15 + i * 4}deg)`,
+              animationDelay: `${i * 0.1}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Pulsing circles */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="splash-ring splash-ring-1" />
         <div className="splash-ring splash-ring-2" />
@@ -51,14 +69,14 @@ export function SplashScreen({ onComplete, duration = 1800 }: SplashScreenProps)
 
       {/* Main logo container */}
       <div className="relative z-10 flex flex-col items-center splash-logo-enter">
-        {/* Icon with glow */}
-        <div className="relative mb-4">
+        {/* Icon */}
+        <div className="relative mb-4 splash-icon-enter">
           {/* Glow effect */}
           <div className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full splash-glow" />
 
           {/* Dumbbell Icon */}
           <svg
-            className="w-20 h-20 text-primary-500 relative z-10"
+            className="w-24 h-24 text-primary-500 relative z-10"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -73,88 +91,176 @@ export function SplashScreen({ onComplete, duration = 1800 }: SplashScreenProps)
           </svg>
         </div>
 
-        {/* App name */}
-        <h1 className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-text">
-          HYPERTRACK
-        </h1>
+        {/* App name with staggered letters */}
+        <div className="flex items-center gap-1">
+          {APP_NAME.split('').map((letter, i) => (
+            <span
+              key={i}
+              className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-letter"
+              style={{ animationDelay: `${0.3 + i * 0.05}s` }}
+            >
+              {letter}
+            </span>
+          ))}
+        </div>
 
         {/* Tagline */}
-        <p className="mt-2 text-sm text-primary-400 font-medium tracking-widest uppercase splash-tagline">
+        <p className="mt-3 text-sm text-primary-400 font-medium tracking-widest uppercase splash-tagline">
           Train Smarter
         </p>
 
         {/* Loading bar */}
-        <div className="mt-6 w-40 h-1 bg-surface-800 rounded-full overflow-hidden">
+        <div className="mt-8 w-48 h-1 bg-surface-800 rounded-full overflow-hidden splash-bar-container">
           <div className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full splash-progress" />
         </div>
       </div>
 
-      {/* CSS Animations */}
+      {/* Corner accents */}
+      <div className="absolute top-0 left-0 w-32 h-32 splash-corner-tl">
+        <div className="w-full h-full border-l-2 border-t-2 border-primary-500/30" />
+      </div>
+      <div className="absolute bottom-0 right-0 w-32 h-32 splash-corner-br">
+        <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
+      </div>
+
+      {/* CSS Animations - matching original Framer Motion timing */}
       <style jsx>{`
-        .splash-logo-enter {
-          animation: logoEnter 0.5s ease-out forwards;
+        .splash-bg {
+          animation: bgScale 0.5s ease-out forwards;
         }
 
-        .splash-text {
-          animation: textEnter 0.4s ease-out 0.2s both;
-        }
-
-        .splash-tagline {
-          animation: textEnter 0.4s ease-out 0.4s both;
-        }
-
-        .splash-glow {
-          animation: glowPulse 2s ease-in-out infinite;
-        }
-
-        .splash-progress {
-          animation: progressFill 1.5s ease-out 0.3s forwards;
-          transform: translateX(-100%);
+        .splash-line {
+          position: absolute;
+          height: 2px;
+          left: -100%;
+          right: -100%;
+          background: linear-gradient(to right, transparent, rgb(var(--primary-500) / 0.3), transparent);
+          animation: lineMove 1.5s ease-in-out forwards;
+          opacity: 0;
         }
 
         .splash-ring {
           position: absolute;
           border-radius: 50%;
           border: 1px solid rgb(var(--primary-500) / 0.2);
+          width: 100px;
+          height: 100px;
           animation: ringExpand 2s ease-out infinite;
         }
 
         .splash-ring-1 { animation-delay: 0s; }
-        .splash-ring-2 { animation-delay: 0.4s; }
-        .splash-ring-3 { animation-delay: 0.8s; }
+        .splash-ring-2 { animation-delay: 0.3s; }
+        .splash-ring-3 { animation-delay: 0.6s; }
+
+        .splash-logo-enter {
+          animation: logoEnter 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .splash-icon-enter {
+          animation: iconEnter 0.8s ease-out forwards;
+        }
+
+        .splash-glow {
+          animation: glowPulse 2s ease-in-out infinite;
+        }
 
         .splash-path {
           stroke-dasharray: 100;
           stroke-dashoffset: 100;
-          animation: pathDraw 1s ease-out 0.1s forwards;
+          animation: pathDraw 1.2s ease-in-out forwards;
+        }
+
+        .splash-letter {
+          opacity: 0;
+          animation: letterEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        .splash-tagline {
+          opacity: 0;
+          animation: taglineEnter 0.5s ease-out 1s forwards;
+        }
+
+        .splash-bar-container {
+          opacity: 0;
+          animation: barContainerEnter 0.3s ease-out 0.5s forwards;
+        }
+
+        .splash-progress {
+          transform: translateX(-100%);
+          animation: progressFill 1.8s ease-in-out 0.6s forwards;
+        }
+
+        .splash-corner-tl {
+          animation: cornerTL 0.8s ease-out 0.2s both;
+        }
+
+        .splash-corner-br {
+          animation: cornerBR 0.8s ease-out 0.2s both;
+        }
+
+        @keyframes bgScale {
+          from { transform: scale(1); }
+          to { transform: scale(1); }
+        }
+
+        @keyframes lineMove {
+          0% { transform: translateX(-100%) rotate(inherit); opacity: 0; }
+          25% { opacity: 1; }
+          75% { opacity: 1; }
+          100% { transform: translateX(100%) rotate(inherit); opacity: 0; }
+        }
+
+        @keyframes ringExpand {
+          0% { width: 100px; height: 100px; opacity: 0.8; }
+          100% { width: 500px; height: 500px; opacity: 0; }
         }
 
         @keyframes logoEnter {
-          from { transform: scale(0.8); opacity: 0; }
+          from { transform: scale(0.5); opacity: 0; }
           to { transform: scale(1); opacity: 1; }
         }
 
-        @keyframes textEnter {
-          from { transform: translateY(10px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+        @keyframes iconEnter {
+          from { transform: translateY(20px) rotateY(-90deg); opacity: 0; }
+          to { transform: translateY(0) rotateY(0deg); opacity: 1; }
         }
 
         @keyframes glowPulse {
           0%, 100% { transform: scale(1); opacity: 0.5; }
-          50% { transform: scale(1.1); opacity: 0.7; }
+          50% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        @keyframes pathDraw {
+          to { stroke-dashoffset: 0; }
+        }
+
+        @keyframes letterEnter {
+          from { transform: translateY(50px) rotateX(-90deg); opacity: 0; }
+          to { transform: translateY(0) rotateX(0deg); opacity: 1; }
+        }
+
+        @keyframes taglineEnter {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes barContainerEnter {
+          from { transform: scaleX(0); opacity: 0; }
+          to { transform: scaleX(1); opacity: 1; }
         }
 
         @keyframes progressFill {
           to { transform: translateX(0); }
         }
 
-        @keyframes ringExpand {
-          0% { width: 60px; height: 60px; opacity: 0.6; }
-          100% { width: 300px; height: 300px; opacity: 0; }
+        @keyframes cornerTL {
+          from { transform: translate(-100px, -100px); }
+          to { transform: translate(0, 0); }
         }
 
-        @keyframes pathDraw {
-          to { stroke-dashoffset: 0; }
+        @keyframes cornerBR {
+          from { transform: translate(100px, 100px); }
+          to { transform: translate(0, 0); }
         }
       `}</style>
     </div>
