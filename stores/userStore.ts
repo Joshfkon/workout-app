@@ -6,6 +6,7 @@ import type {
   VolumeLandmarks,
   Goal,
   Experience,
+  StandardMuscleGroup,
 } from '@/types/schema';
 import { DEFAULT_USER_PREFERENCES, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 
@@ -84,13 +85,17 @@ export const useUserStore = create<UserState>()(
 
       getVolumeLandmarks: (muscle) => {
         const { user } = get();
+        const defaultFallback = { mev: 6, mav: 12, mrv: 18 };
+        // Use type assertion for string key access
+        const defaultLandmarks = DEFAULT_VOLUME_LANDMARKS.intermediate as Record<string, VolumeLandmarks>;
         if (!user) {
-          return DEFAULT_VOLUME_LANDMARKS.intermediate[muscle] || { mev: 6, mav: 12, mrv: 18 };
+          return defaultLandmarks[muscle] || defaultFallback;
         }
+        const userExperienceLandmarks = DEFAULT_VOLUME_LANDMARKS[user.experience] as Record<string, VolumeLandmarks>;
         return (
-          user.volumeLandmarks[muscle] ||
-          DEFAULT_VOLUME_LANDMARKS[user.experience][muscle] ||
-          { mev: 6, mav: 12, mrv: 18 }
+          user.volumeLandmarks[muscle as StandardMuscleGroup] ||
+          userExperienceLandmarks[muscle] ||
+          defaultFallback
         );
       },
 

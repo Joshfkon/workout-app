@@ -21,6 +21,7 @@ import type {
   WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
 import { MUSCLE_FIBER_PROFILE } from './repRangeEngine';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // ============================================================
 // FATIGUE COST CONSTANTS
@@ -124,16 +125,21 @@ export function calculateExerciseFatigue(
   }
   
   // === LOCAL FATIGUE ===
-  const localCost = new Map<MuscleGroup, number>();
-  
+  // Normalize muscle keys to standard format for consistent lookups
+  const localCost = new Map<string, number>();
+
   // Primary muscle gets full local fatigue
   const primaryLocalCost = sets * 8 * intensityFactor;
-  localCost.set(exercise.primaryMuscle, primaryLocalCost);
-  
+  const normalizedPrimary = toStandardMuscleForVolume(exercise.primaryMuscle) ?? exercise.primaryMuscle;
+  localCost.set(normalizedPrimary, primaryLocalCost);
+
   // Secondary muscles get partial fatigue
   for (const secondary of exercise.secondaryMuscles) {
     const secondaryCost = sets * 4 * intensityFactor;
-    localCost.set(secondary, secondaryCost);
+    const normalizedSecondary = toStandardMuscleForVolume(secondary) ?? secondary;
+    // Accumulate if same standard muscle hit multiple times
+    const existing = localCost.get(normalizedSecondary) ?? 0;
+    localCost.set(normalizedSecondary, existing + secondaryCost);
   }
   
   // === STIMULUS-TO-FATIGUE RATIO ===
@@ -157,7 +163,8 @@ export function calculateExerciseFatigue(
   }
   
   // Fast-twitch dominant muscles recover slower from heavy work
-  const fiberType = MUSCLE_FIBER_PROFILE[exercise.primaryMuscle];
+  // Use type assertion since primaryMuscle may be any muscle group format
+  const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[exercise.primaryMuscle] ?? 'mixed';
   if (fiberType === 'fast' && reps <= 6) {
     recoveryDays += 0.5;
   }
@@ -228,7 +235,7 @@ export function createFatigueBudget(profile: ExtendedUserProfile): FatigueBudget
 
 interface SessionFatigueState {
   currentSystemic: number;
-  currentLocal: Map<MuscleGroup, number>;
+  currentLocal: Map<string, number>;
   exercisesPerformed: number;
   sfrRunningAverage: number;
 }
@@ -331,10 +338,10 @@ export class SessionFatigueManager {
    */
   getRemainingBudget(): {
     systemic: number;
-    localByMuscle: Map<MuscleGroup, number>;
+    localByMuscle: Map<string, number>;
     percentUsed: number;
   } {
-    const localRemaining = new Map<MuscleGroup, number>();
+    const localRemaining = new Map<string, number>();
     
     const currentLocalEntries = Array.from(this.state.currentLocal.entries());
     for (const [muscle, current] of currentLocalEntries) {
@@ -399,8 +406,8 @@ export class SessionFatigueManager {
 // ============================================================
 
 interface WeeklyFatigueState {
-  muscleRecoveryStatus: Map<MuscleGroup, MuscleRecoveryStatus>;
-  totalWeeklyVolume: Map<MuscleGroup, number>;
+  muscleRecoveryStatus: Map<string, MuscleRecoveryStatus>;
+  totalWeeklyVolume: Map<string, number>;
   cumulativeSystemicFatigue: number;
 }
 
@@ -420,7 +427,7 @@ export class WeeklyFatigueTracker {
     };
     
     // Initialize all muscles
-    const allMuscles: MuscleGroup[] = [
+    const allMuscles: string[] = [
       'chest', 'back', 'shoulders', 'biceps', 'triceps',
       'quads', 'hamstrings', 'glutes', 'calves', 'abs',
     ];
@@ -435,7 +442,7 @@ export class WeeklyFatigueTracker {
     }
   }
   
-  private calculateRecoveryRate(muscle: MuscleGroup): number {
+  private calculateRecoveryRate(muscle: string): number {
     // Base recovery: clear ~30 fatigue points per day
     let rate = 30;
     
@@ -447,7 +454,8 @@ export class WeeklyFatigueTracker {
     rate *= 0.7 + (this.profile.sleepQuality / 5) * 0.6;
     
     // Fiber type affects recovery
-    const fiberType = MUSCLE_FIBER_PROFILE[muscle];
+    // Use type assertion since muscle may be any muscle group format
+    const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[muscle] ?? 'mixed';
     if (fiberType === 'fast') {
       rate *= 0.9;  // Fast-twitch recovers slower
     } else if (fiberType === 'slow') {
@@ -460,7 +468,7 @@ export class WeeklyFatigueTracker {
   /**
    * Check if a muscle is ready to be trained
    */
-  canTrainMuscle(muscle: MuscleGroup, currentDay: number, plannedFatigue: number): {
+  canTrainMuscle(muscle: string, currentDay: number, plannedFatigue: number): {
     ready: boolean;
     currentFatigue: number;
     daysUntilReady: number;
@@ -502,7 +510,7 @@ export class WeeklyFatigueTracker {
   /**
    * Record that a muscle was trained
    */
-  recordTraining(muscle: MuscleGroup, day: number, fatigueAdded: number, sets: number): void {
+  recordTraining(muscle: string, day: number, fatigueAdded: number, sets: number): void {
     const status = this.state.muscleRecoveryStatus.get(muscle)!;
     
     // Update fatigue level (accounting for decay since last training)
@@ -521,8 +529,8 @@ export class WeeklyFatigueTracker {
   /**
    * Get weekly volume status for all muscles
    */
-  getWeeklyVolumeStatus(): Map<MuscleGroup, WeeklyMuscleVolumeStatus> {
-    const result = new Map<MuscleGroup, WeeklyMuscleVolumeStatus>();
+  getWeeklyVolumeStatus(): Map<string, WeeklyMuscleVolumeStatus> {
+    const result = new Map<string, WeeklyMuscleVolumeStatus>();
     
     const volumeEntries = Array.from(this.state.totalWeeklyVolume.entries());
     for (const [muscle, sets] of volumeEntries) {

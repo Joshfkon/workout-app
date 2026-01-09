@@ -40,8 +40,8 @@ export interface PositionStress {
 export interface Exercise {
   id: string;
   name: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: MuscleGroup[];
+  primaryMuscle: string; // Can be MuscleGroup (legacy) or DetailedMuscleGroup
+  secondaryMuscles: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
   pattern: MovementPattern | 'isolation' | 'carry';
   equipment: Equipment;
   difficulty: ExerciseDifficulty;
@@ -64,7 +64,7 @@ export interface Exercise {
   // === INJURY/SAFETY METADATA ===
 
   /** Muscles used for stability, not as primary movers */
-  stabilizers?: MuscleGroup[];
+  stabilizers?: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
 
   /** Compression/shear on spine */
   spinalLoading: SpinalLoading;

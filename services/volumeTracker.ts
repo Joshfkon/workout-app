@@ -1,8 +1,12 @@
 /**
  * Volume Tracker
- * 
+ *
  * Pure functions for calculating weekly volume, comparing to landmarks,
  * and generating volume recommendations.
+ *
+ * Uses the two-tier muscle group system:
+ * - Exercises store DetailedMuscleGroup (33 muscles) for precise targeting
+ * - Volume tracking uses StandardMuscleGroup (20 muscles) for user-facing metrics
  */
 
 import type {
@@ -12,16 +16,25 @@ import type {
   VolumeLandmarks,
   VolumeStatus,
   WeeklyMuscleVolume,
-  MuscleGroup,
+  StandardMuscleGroup,
+  DetailedMuscleGroup,
 } from '@/types/schema';
-import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import {
+  STANDARD_MUSCLE_GROUPS,
+  DETAILED_TO_STANDARD_MAP,
+  DEFAULT_VOLUME_LANDMARKS,
+  isDetailedMuscle,
+  isStandardMuscle,
+  isLegacyMuscle,
+  legacyToStandardMuscles,
+} from '@/types/schema';
 
 // ============================================
 // TYPES
 // ============================================
 
 export interface MuscleVolumeData {
-  muscleGroup: string;
+  muscleGroup: StandardMuscleGroup;
   totalSets: number;
   directSets: number;
   indirectSets: number;
@@ -31,7 +44,7 @@ export interface MuscleVolumeData {
 }
 
 export interface VolumeRecommendation {
-  muscleGroup: string;
+  muscleGroup: StandardMuscleGroup;
   status: VolumeStatus;
   currentSets: number;
   targetRange: [number, number];
@@ -53,21 +66,61 @@ export interface CalculateVolumeInput {
 }
 
 /**
+ * Convert any muscle string (detailed, standard, or legacy) to StandardMuscleGroup(s)
+ * Returns an array because legacy muscles may map to multiple standard muscles
+ */
+function resolveToStandardMuscles(muscle: string): StandardMuscleGroup[] {
+  const lowerMuscle = muscle.toLowerCase();
+
+  // Check if it's a detailed muscle
+  if (isDetailedMuscle(lowerMuscle)) {
+    return [DETAILED_TO_STANDARD_MAP[lowerMuscle as DetailedMuscleGroup]];
+  }
+
+  // Check if it's already a standard muscle
+  if (isStandardMuscle(lowerMuscle)) {
+    return [lowerMuscle as StandardMuscleGroup];
+  }
+
+  // Check if it's a legacy muscle
+  if (isLegacyMuscle(lowerMuscle)) {
+    return legacyToStandardMuscles(lowerMuscle);
+  }
+
+  // Unknown muscle - return empty array
+  return [];
+}
+
+/**
+ * Convert any muscle string to a single StandardMuscleGroup (primary only)
+ * For primary muscles, we only want one result
+ */
+function resolveToStandardMuscle(muscle: string): StandardMuscleGroup | null {
+  const results = resolveToStandardMuscles(muscle);
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
  * Calculate weekly volume per muscle group
  * Counts working sets (non-warmup) from completed exercise blocks
+ *
+ * Handles three muscle formats:
+ * - DetailedMuscleGroup (33 muscles) - new format from AI completion
+ * - StandardMuscleGroup (20 muscles) - volume tracking format
+ * - Legacy MuscleGroup (13 muscles) - old format for backwards compatibility
  */
-export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, MuscleVolumeData> {
+export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<StandardMuscleGroup, MuscleVolumeData> {
   const { exerciseBlocks, userLandmarks } = input;
-  
-  // Initialize volume map for all muscle groups
-  const volumeMap = new Map<string, MuscleVolumeData>();
-  
+
+  // Initialize volume map for all STANDARD muscle groups (20)
+  const volumeMap = new Map<StandardMuscleGroup, MuscleVolumeData>();
+
   // Default landmarks for muscle groups not explicitly defined
   const DEFAULT_FALLBACK_LANDMARKS: VolumeLandmarks = { mev: 4, mav: 10, mrv: 16 };
 
-  MUSCLE_GROUPS.forEach((muscle) => {
+  STANDARD_MUSCLE_GROUPS.forEach((muscle) => {
     const landmarks = userLandmarks[muscle]
-      ?? DEFAULT_VOLUME_LANDMARKS.intermediate[muscle as keyof typeof DEFAULT_VOLUME_LANDMARKS.intermediate]
+      ?? DEFAULT_VOLUME_LANDMARKS.intermediate[muscle]
       ?? DEFAULT_FALLBACK_LANDMARKS;
     volumeMap.set(muscle, {
       muscleGroup: muscle,
@@ -87,28 +140,49 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, 
 
     if (setCount === 0) continue;
 
-    // Primary muscle: full set credit
-    const primaryMuscle = exercise.primaryMuscle.toLowerCase();
-    if (volumeMap.has(primaryMuscle)) {
-      const data = volumeMap.get(primaryMuscle)!;
+    // Primary muscle: convert to standard and give full credit
+    const primaryStandard = resolveToStandardMuscle(exercise.primaryMuscle);
+    if (primaryStandard && volumeMap.has(primaryStandard)) {
+      const data = volumeMap.get(primaryStandard)!;
       data.directSets += setCount;
       data.totalSets += setCount;
     }
 
-    // Secondary muscles: partial set credit (typically 0.5)
+    // Secondary muscles: convert to standard, partial credit
+    // Track credit per standard muscle, distributing 0.5 proportionally when
+    // a legacy muscle maps to multiple standard muscles
+    const secondaryStandardCredits = new Map<StandardMuscleGroup, number>();
+
     for (const secondary of exercise.secondaryMuscles) {
-      const secondaryMuscle = secondary.toLowerCase();
-      if (volumeMap.has(secondaryMuscle)) {
-        const data = volumeMap.get(secondaryMuscle)!;
-        const indirectCredit = Math.round(setCount * 0.5);
+      const secondaryStandards = resolveToStandardMuscles(secondary);
+      // Distribute 0.5 credit proportionally among mapped standard muscles
+      const creditPerMuscle = secondaryStandards.length > 0
+        ? 0.5 / secondaryStandards.length
+        : 0;
+
+      for (const secondaryStandard of secondaryStandards) {
+        // Don't count secondary if it's the same standard group as primary
+        if (secondaryStandard === primaryStandard) continue;
+
+        // Accumulate credit for this standard muscle
+        const existing = secondaryStandardCredits.get(secondaryStandard) ?? 0;
+        secondaryStandardCredits.set(secondaryStandard, existing + creditPerMuscle);
+      }
+    }
+
+    // Apply indirect credit based on accumulated credits
+    secondaryStandardCredits.forEach((credit, standardMuscle) => {
+      if (volumeMap.has(standardMuscle)) {
+        const data = volumeMap.get(standardMuscle)!;
+        const indirectCredit = Math.round(setCount * credit);
         data.indirectSets += indirectCredit;
         data.totalSets += indirectCredit;
       }
-    }
+    });
   }
 
   // Calculate status for each muscle group
-  volumeMap.forEach((data, muscle) => {
+  volumeMap.forEach((data) => {
     data.status = assessVolumeStatus(data.totalSets, data.landmarks);
     // Guard against division by zero (mrv should never be 0, but protect anyway)
     data.percentOfMrv = data.landmarks.mrv > 0
@@ -127,7 +201,7 @@ export function calculateVolumeFromSets(
   exerciseMap: Map<string, Exercise>,
   blockMap: Map<string, ExerciseBlock>,
   userLandmarks: Record<string, VolumeLandmarks>
-): Map<string, MuscleVolumeData> {
+): Map<StandardMuscleGroup, MuscleVolumeData> {
   // Group sets by exercise block
   const blockSets = new Map<string, SetLog[]>();
   for (const set of sets) {
@@ -232,7 +306,7 @@ export function getVolumeStatusDescription(status: VolumeStatus): {
  * Generate volume recommendations for all muscle groups
  */
 export function generateVolumeRecommendations(
-  volumeData: Map<string, MuscleVolumeData>,
+  volumeData: Map<StandardMuscleGroup, MuscleVolumeData>,
   weekInMeso: number,
   isDeloadWeek: boolean
 ): VolumeRecommendation[] {
@@ -342,10 +416,10 @@ function generateMuscleRecommendation(
  * Calculate week-over-week volume change
  */
 export function calculateVolumeProgression(
-  currentWeek: Map<string, MuscleVolumeData>,
-  previousWeek: Map<string, MuscleVolumeData>
-): Map<string, { change: number; percentChange: number }> {
-  const changes = new Map<string, { change: number; percentChange: number }>();
+  currentWeek: Map<StandardMuscleGroup, MuscleVolumeData>,
+  previousWeek: Map<StandardMuscleGroup, MuscleVolumeData>
+): Map<StandardMuscleGroup, { change: number; percentChange: number }> {
+  const changes = new Map<StandardMuscleGroup, { change: number; percentChange: number }>();
 
   currentWeek.forEach((current, muscle) => {
     const previous = previousWeek.get(muscle);
@@ -364,18 +438,18 @@ export function calculateVolumeProgression(
 /**
  * Get summary statistics for volume distribution
  */
-export function getVolumeSummary(volumeData: Map<string, MuscleVolumeData>): {
+export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolumeData>): {
   totalSets: number;
-  musclesBelowMev: string[];
-  musclesOptimal: string[];
-  musclesOverMrv: string[];
+  musclesBelowMev: StandardMuscleGroup[];
+  musclesOptimal: StandardMuscleGroup[];
+  musclesOverMrv: StandardMuscleGroup[];
   averagePercentMrv: number;
 } {
   let totalSets = 0;
   let totalPercentMrv = 0;
-  const musclesBelowMev: string[] = [];
-  const musclesOptimal: string[] = [];
-  const musclesOverMrv: string[] = [];
+  const musclesBelowMev: StandardMuscleGroup[] = [];
+  const musclesOptimal: StandardMuscleGroup[] = [];
+  const musclesOverMrv: StandardMuscleGroup[] = [];
 
   volumeData.forEach((data, muscle) => {
     totalSets += data.totalSets;
@@ -408,7 +482,7 @@ export function getVolumeSummary(volumeData: Map<string, MuscleVolumeData>): {
 export function toWeeklyMuscleVolume(
   userId: string,
   weekStart: string,
-  volumeData: Map<string, MuscleVolumeData>
+  volumeData: Map<StandardMuscleGroup, MuscleVolumeData>
 ): WeeklyMuscleVolume[] {
   const records: WeeklyMuscleVolume[] = [];
 

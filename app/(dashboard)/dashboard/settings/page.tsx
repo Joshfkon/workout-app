@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal } from '@/components/ui';
-import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
-import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
+import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { convertWeight } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
@@ -1457,12 +1457,12 @@ function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }
             </div>
           </div>
 
-          {MUSCLE_GROUPS.map((muscle) => {
+          {STANDARD_MUSCLE_GROUPS.map((muscle) => {
             const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
             const landmarks = volumeLandmarks[muscle] || defaultLandmark;
             return (
               <div key={muscle} className="flex items-center gap-4">
-                <span className="w-24 text-sm text-surface-300 capitalize">{muscle}</span>
+                <span className="w-24 text-sm text-surface-300">{STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}</span>
                 <div className="flex-1 grid grid-cols-3 gap-2">
                   <Input
                     type="number"
