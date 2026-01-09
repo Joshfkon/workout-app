@@ -668,55 +668,65 @@ export default function DashboardPage() {
         }
 
         // Process weekly volume (accounting for compound exercises - secondary muscles get 0.5x credit)
+        // Aggregate by standard muscle groups for consistent tracking
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
           const volumeByMuscle: Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }> = {};
-          
+
           weeklyBlocks.forEach((block: any) => {
             const primaryMuscle = block.exercises?.primary_muscle;
             const secondaryMuscles = block.exercises?.secondary_muscles || [];
             const exerciseId = block.exercises?.id;
             const exerciseName = block.exercises?.name;
             if (!primaryMuscle || !exerciseId) return;
-            
+
             const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
             if (workingSets === 0) return;
-            
-            // Primary muscle: full credit (1.0x)
-            if (!volumeByMuscle[primaryMuscle]) {
-              volumeByMuscle[primaryMuscle] = { sets: 0, exercises: new Map() };
+
+            // Primary muscle: convert to standard and give full credit (1.0x)
+            const standardPrimary = toStandardMuscleForVolume(primaryMuscle) ?? primaryMuscle;
+            if (!volumeByMuscle[standardPrimary]) {
+              volumeByMuscle[standardPrimary] = { sets: 0, exercises: new Map() };
             }
-            volumeByMuscle[primaryMuscle].sets += workingSets;
-            
-            const existingPrimary = volumeByMuscle[primaryMuscle].exercises.get(exerciseId);
+            volumeByMuscle[standardPrimary].sets += workingSets;
+
+            const existingPrimary = volumeByMuscle[standardPrimary].exercises.get(exerciseId);
             if (existingPrimary) {
               existingPrimary.sets += workingSets;
             } else {
-              volumeByMuscle[primaryMuscle].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
+              volumeByMuscle[standardPrimary].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
             }
-            
-            // Secondary muscles: partial credit (0.5x) for compound exercises
+
+            // Secondary muscles: convert to standard and give partial credit (0.5x)
             secondaryMuscles.forEach((secondaryMuscle: string) => {
-              const secondaryMuscleLower = secondaryMuscle.toLowerCase();
-              if (!volumeByMuscle[secondaryMuscleLower]) {
-                volumeByMuscle[secondaryMuscleLower] = { sets: 0, exercises: new Map() };
+              const standardSecondary = toStandardMuscleForVolume(secondaryMuscle.toLowerCase()) ?? secondaryMuscle.toLowerCase();
+              // Skip if same as primary (already counted)
+              if (standardSecondary === standardPrimary) return;
+
+              if (!volumeByMuscle[standardSecondary]) {
+                volumeByMuscle[standardSecondary] = { sets: 0, exercises: new Map() };
               }
               // Give 0.5x credit (round up to at least 1 set if workingSets > 0)
               const indirectSets = Math.max(1, Math.round(workingSets * 0.5));
-              volumeByMuscle[secondaryMuscleLower].sets += indirectSets;
-              
-              const existingSecondary = volumeByMuscle[secondaryMuscleLower].exercises.get(exerciseId);
+              volumeByMuscle[standardSecondary].sets += indirectSets;
+
+              const existingSecondary = volumeByMuscle[standardSecondary].exercises.get(exerciseId);
               if (existingSecondary) {
                 existingSecondary.sets += indirectSets;
               } else {
-                volumeByMuscle[secondaryMuscleLower].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: indirectSets });
+                volumeByMuscle[standardSecondary].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: indirectSets });
               }
             });
           });
 
+          // Volume targets per standard muscle group
           const volumeTargets: Record<string, number> = {
-            chest: 12, back: 14, shoulders: 12, quads: 12, hamstrings: 10,
-            glutes: 10, biceps: 10, triceps: 10, calves: 8, abs: 8,
+            chest_upper: 8, chest_lower: 8,
+            front_delts: 6, lateral_delts: 10, rear_delts: 8,
+            lats: 10, upper_back: 8, traps: 6,
+            biceps: 10, triceps: 10, forearms: 6,
+            quads: 12, hamstrings: 10, glutes: 10, glute_med: 6, adductors: 6,
+            calves: 8, abs: 8, obliques: 6, erectors: 6,
           };
 
           const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
