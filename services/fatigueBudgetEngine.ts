@@ -125,15 +125,15 @@ export function calculateExerciseFatigue(
   
   // === LOCAL FATIGUE ===
   const localCost = new Map<MuscleGroup, number>();
-  
+
   // Primary muscle gets full local fatigue
   const primaryLocalCost = sets * 8 * intensityFactor;
-  localCost.set(exercise.primaryMuscle, primaryLocalCost);
-  
+  localCost.set(exercise.primaryMuscle as MuscleGroup, primaryLocalCost);
+
   // Secondary muscles get partial fatigue
   for (const secondary of exercise.secondaryMuscles) {
     const secondaryCost = sets * 4 * intensityFactor;
-    localCost.set(secondary, secondaryCost);
+    localCost.set(secondary as MuscleGroup, secondaryCost);
   }
   
   // === STIMULUS-TO-FATIGUE RATIO ===
