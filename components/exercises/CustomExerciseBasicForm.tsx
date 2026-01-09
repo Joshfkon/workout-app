@@ -195,7 +195,7 @@ export function CustomExerciseBasicForm({
     setContraindications(contraindications.filter((_, i) => i !== index));
   };
 
-  const toggleMuscleSelection = (muscle: MuscleGroup, list: MuscleGroup[], setter: (list: MuscleGroup[]) => void) => {
+  const toggleMuscleSelection = (muscle: string, list: string[], setter: (list: string[]) => void) => {
     if (list.includes(muscle)) {
       setter(list.filter(m => m !== muscle));
     } else {
