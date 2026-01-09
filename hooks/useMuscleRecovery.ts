@@ -4,36 +4,50 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
-import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
+import {
+  STANDARD_MUSCLE_GROUPS,
+  STANDARD_MUSCLE_DISPLAY_NAMES,
+  type StandardMuscleGroup
+} from '@/types/schema';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import type { ExerciseBlockFull, SetLogRow, MinimalUser } from '@/types/database-queries';
 
 /**
  * Recovery time recommendations in hours based on muscle group size
  * These are general guidelines based on sports science research
  */
-const RECOVERY_HOURS: Record<MuscleGroup, number> = {
+const RECOVERY_HOURS: Record<StandardMuscleGroup, number> = {
   // Large muscle groups - need more recovery (48-72 hours)
-  back: 72,
+  lats: 72,
+  upper_back: 72,
   quads: 72,
   hamstrings: 72,
   glutes: 72,
+  glute_med: 48,
+  erectors: 72,
 
   // Medium muscle groups (48 hours)
-  chest: 48,
-  shoulders: 48,
+  chest_upper: 48,
+  chest_lower: 48,
+  front_delts: 48,
+  lateral_delts: 48,
+  rear_delts: 48,
+  traps: 48,
+  adductors: 48,
 
-  // Smaller muscle groups - recover faster (24-48 hours)
+  // Smaller muscle groups - recover faster (24-36 hours)
   biceps: 36,
   triceps: 36,
+  forearms: 24,
   calves: 36,
   abs: 24,
-  traps: 48,
-  forearms: 24,
-  adductors: 48,
+  obliques: 24,
 };
 
 export interface MuscleRecoveryStatus {
-  muscle: MuscleGroup;
+  muscle: StandardMuscleGroup;
+  /** Display name for the muscle */
+  displayName: string;
   /** When this muscle was last trained */
   lastTrainedAt: Date | null;
   /** Hours since last training */
@@ -185,19 +199,25 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
           const primaryMuscle = exercise.primary_muscle?.toLowerCase();
           const secondaryMuscles = (exercise.secondary_muscles || []).map((m: string) => m.toLowerCase());
 
-          // Update primary muscle
+          // Update primary muscle (convert to standard format)
           if (primaryMuscle) {
-            const existing = muscleLastTrained.get(primaryMuscle);
-            if (!existing || completedAt > existing) {
-              muscleLastTrained.set(primaryMuscle, completedAt);
+            const standardMuscle = toStandardMuscleForVolume(primaryMuscle);
+            if (standardMuscle) {
+              const existing = muscleLastTrained.get(standardMuscle);
+              if (!existing || completedAt > existing) {
+                muscleLastTrained.set(standardMuscle, completedAt);
+              }
             }
           }
 
-          // Update secondary muscles (they also need recovery!)
+          // Update secondary muscles (convert to standard format)
           secondaryMuscles.forEach((muscle: string) => {
-            const existing = muscleLastTrained.get(muscle);
-            if (!existing || completedAt > existing) {
-              muscleLastTrained.set(muscle, completedAt);
+            const standardMuscle = toStandardMuscleForVolume(muscle);
+            if (standardMuscle) {
+              const existing = muscleLastTrained.get(standardMuscle);
+              if (!existing || completedAt > existing) {
+                muscleLastTrained.set(standardMuscle, completedAt);
+              }
             }
           });
         });
@@ -224,14 +244,16 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const recoveryStatus = useMemo((): MuscleRecoveryStatus[] => {
     const now = new Date();
 
-    return MUSCLE_GROUPS.map((muscle): MuscleRecoveryStatus => {
+    return STANDARD_MUSCLE_GROUPS.map((muscle): MuscleRecoveryStatus => {
       const lastTrained = lastTrainedMap.get(muscle) || null;
       const recommendedHours = RECOVERY_HOURS[muscle];
+      const displayName = STANDARD_MUSCLE_DISPLAY_NAMES[muscle];
 
       if (!lastTrained) {
         // Never trained (or not in last 7 days) - considered ready
         return {
           muscle,
+          displayName,
           lastTrainedAt: null,
           hoursSinceTraining: null,
           recommendedRecoveryHours: recommendedHours,
@@ -249,6 +271,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
       return {
         muscle,
+        displayName,
         lastTrainedAt: lastTrained,
         hoursSinceTraining: hoursSince,
         recommendedRecoveryHours: recommendedHours,

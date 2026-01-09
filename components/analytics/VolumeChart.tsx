@@ -14,8 +14,14 @@ import {
 } from 'recharts';
 import { Card, InfoTooltip } from '@/components/ui';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import type { VolumeStatus } from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES, type VolumeStatus, type StandardMuscleGroup } from '@/types/schema';
 import type { RechartsTooltipProps } from '@/types/database-queries';
+
+/** Get display name for a muscle group */
+function getMuscleDisplayName(muscle: string): string {
+  return STANDARD_MUSCLE_DISPLAY_NAMES[muscle as StandardMuscleGroup]
+    ?? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ');
+}
 
 interface VolumeChartDataPoint {
   name: string;
@@ -75,7 +81,7 @@ const getBarColor = (status: VolumeStatus) => {
 export const VolumeChart = memo(function VolumeChart({ data, showLandmarks = true }: VolumeChartProps) {
   const chartData = useMemo(() => {
     return data.map((item) => ({
-      name: item.muscleGroup.charAt(0).toUpperCase() + item.muscleGroup.slice(1),
+      name: getMuscleDisplayName(item.muscleGroup),
       sets: item.totalSets,
       direct: item.directSets,
       indirect: item.indirectSets,
@@ -177,12 +183,13 @@ export const VolumeChartCompact = memo(function VolumeChartCompact({ data }: { d
         const percent = Math.min(100, (item.totalSets / item.landmarks.mrv) * 100);
         const mevPercent = (item.landmarks.mev / item.landmarks.mrv) * 100;
         const mavPercent = (item.landmarks.mav / item.landmarks.mrv) * 100;
+        const displayName = getMuscleDisplayName(item.muscleGroup);
 
         return (
           <div key={item.muscleGroup} className="group">
             <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-surface-300 capitalize group-hover:text-surface-200 transition-colors">
-                {item.muscleGroup}
+              <span className="text-surface-300 group-hover:text-surface-200 transition-colors">
+                {displayName}
               </span>
               <span className="text-surface-500 font-mono">
                 {item.totalSets} sets
