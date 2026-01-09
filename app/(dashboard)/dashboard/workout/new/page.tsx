@@ -239,6 +239,9 @@ function NewWorkoutContent() {
   const [varietyLevel, setVarietyLevel] = useState<ExerciseVarietyLevel>('medium');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  // Location filter dropdown state
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
   const suggestExercises = async () => {
@@ -1745,6 +1748,66 @@ function NewWorkoutContent() {
               {VARIETY_LEVEL_DEFAULTS[varietyLevel].description}
             </p>
           </div>
+
+          {/* Location Filter */}
+          {gymLocations.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>
+                    {selectedLocationId && selectedLocationId !== 'fallback'
+                      ? gymLocations.find(l => l.id === selectedLocationId)?.name || 'Any Location'
+                      : 'Any Location'}
+                  </span>
+                </div>
+                <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Location Dropdown Menu */}
+              {showLocationDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                  <button
+                    onClick={() => { setSelectedLocationId(null); setShowLocationDropdown(false); }}
+                    className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                      !selectedLocationId || selectedLocationId === 'fallback' ? 'text-primary-400' : 'text-surface-200'
+                    }`}
+                  >
+                    <span>Any Location</span>
+                    {(!selectedLocationId || selectedLocationId === 'fallback') && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {gymLocations.filter(l => l.id !== 'fallback').map(location => (
+                    <button
+                      key={location.id}
+                      onClick={() => { setSelectedLocationId(location.id); setShowLocationDropdown(false); }}
+                      className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                        selectedLocationId === location.id ? 'text-primary-400' : 'text-surface-200'
+                      }`}
+                    >
+                      <span>{location.name}</span>
+                      {selectedLocationId === location.id && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Search bar */}
           <div className="relative">
