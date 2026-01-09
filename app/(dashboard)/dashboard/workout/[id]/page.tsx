@@ -2931,7 +2931,7 @@ export default function WorkoutPage() {
           commonMistakes: [],
           setupNote: '',
           movementPattern: '',
-          equipmentRequired: [],
+          equipmentRequired: exercise.equipment_required || [],
         },
         isFirstExercise: blocks.length === 0, // First exercise overall gets general warmup
       }) : [];
