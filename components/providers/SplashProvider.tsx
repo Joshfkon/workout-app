@@ -21,6 +21,19 @@ interface SplashProviderProps {
   children: ReactNode;
 }
 
+/**
+ * Hides the static HTML splash screen that shows before JS loads.
+ * This ensures a seamless transition from static -> React splash.
+ */
+function hideStaticSplash() {
+  if (typeof document !== 'undefined') {
+    const staticSplash = document.getElementById('static-splash');
+    if (staticSplash) {
+      staticSplash.classList.add('hidden');
+    }
+  }
+}
+
 export function SplashProvider({ children }: SplashProviderProps) {
   const [showSplash, setShowSplash] = useState(true);
   const [hasSeenSplash, setHasSeenSplash] = useState(false);
@@ -31,6 +44,11 @@ export function SplashProvider({ children }: SplashProviderProps) {
     if (seen) {
       setShowSplash(false);
       setHasSeenSplash(true);
+      // Hide static splash immediately if user already saw it
+      hideStaticSplash();
+    } else {
+      // React splash is taking over, hide the static one
+      hideStaticSplash();
     }
   }, []);
 
