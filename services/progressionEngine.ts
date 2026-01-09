@@ -892,15 +892,29 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
   // Standard warmup protocol
   const protocol: WarmupSet[] = [];
 
-  // Set 1: Empty bar or very light (if first exercise, add general warmup)
+  // Set 1: Empty bar or light warmup (if first exercise, add general warmup)
+  // Only barbell exercises can use "empty bar" (0%); other equipment uses a light percentage
   if (isFirstExercise) {
-    protocol.push({
-      setNumber: 1,
-      percentOfWorking: 0,
-      targetReps: 10,
-      purpose: 'General warmup',
-      restSeconds: 30,
-    });
+    if (isBarbell) {
+      // Barbell exercises: empty bar for general warmup makes sense
+      protocol.push({
+        setNumber: 1,
+        percentOfWorking: 0,
+        targetReps: 10,
+        purpose: 'General warmup',
+        restSeconds: 30,
+      });
+    } else {
+      // Non-barbell exercises (dumbbells, cables, etc.): use light weight, not 0
+      // Use 30% of working weight as a minimum meaningful warmup
+      protocol.push({
+        setNumber: 1,
+        percentOfWorking: 30,
+        targetReps: 10,
+        purpose: 'General warmup',
+        restSeconds: 30,
+      });
+    }
   }
 
   // For barbell exercises with sufficient working weight, add a bar-only warmup set

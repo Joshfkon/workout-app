@@ -69,6 +69,7 @@ interface Exercise {
   primary_muscle: string;
   mechanic: 'compound' | 'isolation';
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+  equipment_required?: string[];
 }
 
 interface CustomExerciseForm {
@@ -1357,7 +1358,7 @@ function NewWorkoutContent() {
             commonMistakes: [],
             setupNote: '',
             movementPattern: '',
-            equipmentRequired: [],
+            equipmentRequired: exercise?.equipment_required || [],
           },
           isFirstExercise: index === 0, // First exercise overall gets general warmup
         }) : [];

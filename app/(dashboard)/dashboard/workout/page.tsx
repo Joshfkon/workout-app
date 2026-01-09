@@ -1148,7 +1148,7 @@ export default function WorkoutPage() {
         .in('primary_muscle', todayWorkout.muscles);
 
       if (exercises && exercises.length > 0) {
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; equipment_required?: string[] };
         const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
         (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
           if (!exercisesByMuscle[ex.primary_muscle]) {
@@ -1190,7 +1190,7 @@ export default function WorkoutPage() {
                   minWeightIncrementKg: 2.5,
                   formCues: [],
                   commonMistakes: [],
-                  equipmentRequired: [],
+                  equipmentRequired: exercise.equipment_required || [],
                   setupNote: '',
                   movementPattern: isCompound ? 'compound' : 'isolation',
                 },

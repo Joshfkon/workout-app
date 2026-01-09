@@ -529,7 +529,7 @@ describe('generateWarmupProtocol', () => {
     expect(protocol[0].purpose).toContain('activation');
   });
 
-  it('includes general warmup for first exercise', () => {
+  it('includes general warmup for first exercise (barbell)', () => {
     const input: GenerateWarmupInput = {
       workingWeight: 100,
       exercise,
@@ -538,6 +538,28 @@ describe('generateWarmupProtocol', () => {
 
     const protocol = generateWarmupProtocol(input);
     expect(protocol[0].percentOfWorking).toBe(0);
+    expect(protocol[0].purpose).toContain('General warmup');
+  });
+
+  it('uses light weight (not 0) for first exercise warmup with non-barbell equipment', () => {
+    const dumbbellExercise = createMockExercise({
+      id: 'dumbbell-curl',
+      name: 'Dumbbell Curl',
+      primaryMuscle: 'biceps',
+      mechanic: 'isolation',
+      equipmentRequired: ['dumbbell'],
+    });
+
+    const input: GenerateWarmupInput = {
+      workingWeight: 50,
+      exercise: dumbbellExercise,
+      isFirstExercise: true,
+    };
+
+    const protocol = generateWarmupProtocol(input);
+
+    // For dumbbell exercises, first warmup should NOT be 0% (empty dumbbell doesn't make sense)
+    expect(protocol[0].percentOfWorking).toBeGreaterThan(0);
     expect(protocol[0].purpose).toContain('General warmup');
   });
 
