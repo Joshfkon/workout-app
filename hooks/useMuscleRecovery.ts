@@ -16,6 +16,19 @@ import type { ExerciseBlockFull, SetLogRow, MinimalUser } from '@/types/database
  * Recovery time recommendations in hours based on muscle group size
  * These are general guidelines based on sports science research
  */
+/**
+ * Volume-based recovery scaling
+ * More sets = longer recovery needed
+ */
+const VOLUME_SCALING = {
+  /** Sets at or below this count use base recovery time */
+  baselineSetCount: 3,
+  /** Additional hours per set beyond baseline */
+  hoursPerExtraSet: 4,
+  /** Maximum multiplier on base recovery time */
+  maxMultiplier: 1.5,
+};
+
 const RECOVERY_HOURS: Record<StandardMuscleGroup, number> = {
   // Large muscle groups - need more recovery (48-72 hours)
   lats: 72,
@@ -35,13 +48,13 @@ const RECOVERY_HOURS: Record<StandardMuscleGroup, number> = {
   traps: 48,
   adductors: 48,
 
-  // Smaller muscle groups - recover faster (24-36 hours)
+  // Smaller muscle groups - recover faster (24-48 hours)
   biceps: 36,
   triceps: 36,
   forearms: 24,
   calves: 36,
-  abs: 24,
-  obliques: 24,
+  abs: 48,     // Increased from 24h - abs need more recovery especially after intense training
+  obliques: 48, // Increased from 24h - same rationale as abs
 };
 
 export interface MuscleRecoveryStatus {
@@ -105,10 +118,25 @@ function formatTimeRemaining(hours: number): string {
 }
 
 /**
+ * Calculate adjusted recovery hours based on training volume
+ */
+function getAdjustedRecoveryHours(baseHours: number, setCount: number): number {
+  const extraSets = Math.max(0, setCount - VOLUME_SCALING.baselineSetCount);
+  const additionalHours = extraSets * VOLUME_SCALING.hoursPerExtraSet;
+  const maxHours = baseHours * VOLUME_SCALING.maxMultiplier;
+  return Math.min(baseHours + additionalHours, maxHours);
+}
+
+interface MuscleTrainingData {
+  lastTrained: Date;
+  setCount: number;
+}
+
+/**
  * Hook to calculate recovery status for all muscle groups
  */
 export function useMuscleRecovery(): UseMuscleRecoveryResult {
-  const [lastTrainedMap, setLastTrainedMap] = useState<Map<string, Date>>(new Map());
+  const [muscleDataMap, setMuscleDataMap] = useState<Map<string, MuscleTrainingData>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -181,8 +209,9 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         throw blocksError;
       }
 
-      // Build a map of muscle -> most recent training date
-      const muscleLastTrained = new Map<string, Date>();
+      // Build a map of muscle -> most recent training date and set count
+      // We track both when the muscle was trained AND how many sets were done
+      const muscleData = new Map<string, MuscleTrainingData>();
 
       if (blocks && blocks.length > 0) {
         blocks.forEach((block: ExerciseBlockFull) => {
@@ -191,7 +220,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
           if (!exercise || !session?.completed_at) return;
 
-          // Only count if there were working sets
+          // Only count working sets
           const workingSets = (block.set_logs || []).filter((s: SetLogRow) => !s.is_warmup);
           if (workingSets.length === 0) return;
 
@@ -199,14 +228,38 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
           const primaryMuscle = exercise.primary_muscle?.toLowerCase();
           const secondaryMuscles = (exercise.secondary_muscles || []).map((m: string) => m.toLowerCase());
 
+          // Helper to update muscle data
+          const updateMuscleData = (standardMuscle: string, isPrimary: boolean) => {
+            const existing = muscleData.get(standardMuscle);
+            // Count full sets for primary muscle, half for secondary (secondary muscles get less stimulus)
+            const setsToAdd = isPrimary ? workingSets.length : Math.ceil(workingSets.length / 2);
+
+            if (!existing) {
+              muscleData.set(standardMuscle, {
+                lastTrained: completedAt,
+                setCount: setsToAdd,
+              });
+            } else if (completedAt > existing.lastTrained) {
+              // More recent session - reset the count for this session
+              muscleData.set(standardMuscle, {
+                lastTrained: completedAt,
+                setCount: setsToAdd,
+              });
+            } else if (completedAt.getTime() === existing.lastTrained.getTime()) {
+              // Same session - accumulate sets
+              muscleData.set(standardMuscle, {
+                lastTrained: existing.lastTrained,
+                setCount: existing.setCount + setsToAdd,
+              });
+            }
+            // If completedAt < existing.lastTrained, ignore (older session)
+          };
+
           // Update primary muscle (convert to standard format)
           if (primaryMuscle) {
             const standardMuscle = toStandardMuscleForVolume(primaryMuscle);
             if (standardMuscle) {
-              const existing = muscleLastTrained.get(standardMuscle);
-              if (!existing || completedAt > existing) {
-                muscleLastTrained.set(standardMuscle, completedAt);
-              }
+              updateMuscleData(standardMuscle, true);
             }
           }
 
@@ -214,16 +267,13 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
           secondaryMuscles.forEach((muscle: string) => {
             const standardMuscle = toStandardMuscleForVolume(muscle);
             if (standardMuscle) {
-              const existing = muscleLastTrained.get(standardMuscle);
-              if (!existing || completedAt > existing) {
-                muscleLastTrained.set(standardMuscle, completedAt);
-              }
+              updateMuscleData(standardMuscle, false);
             }
           });
         });
       }
 
-      setLastTrainedMap(muscleLastTrained);
+      setMuscleDataMap(muscleData);
     } catch (err: unknown) {
       const message = getErrorMessage(err);
       console.error('[useMuscleRecovery] Error:', message);
@@ -245,18 +295,18 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
     const now = new Date();
 
     return STANDARD_MUSCLE_GROUPS.map((muscle): MuscleRecoveryStatus => {
-      const lastTrained = lastTrainedMap.get(muscle) || null;
-      const recommendedHours = RECOVERY_HOURS[muscle];
+      const muscleTrainingData = muscleDataMap.get(muscle);
+      const baseHours = RECOVERY_HOURS[muscle];
       const displayName = STANDARD_MUSCLE_DISPLAY_NAMES[muscle];
 
-      if (!lastTrained) {
+      if (!muscleTrainingData) {
         // Never trained (or not in last 7 days) - considered ready
         return {
           muscle,
           displayName,
           lastTrainedAt: null,
           hoursSinceTraining: null,
-          recommendedRecoveryHours: recommendedHours,
+          recommendedRecoveryHours: baseHours,
           hoursRemaining: 0,
           recoveryPercent: 100,
           isReady: true,
@@ -264,9 +314,13 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         };
       }
 
+      const { lastTrained, setCount } = muscleTrainingData;
+      // Adjust recovery time based on volume (more sets = longer recovery)
+      const adjustedRecoveryHours = getAdjustedRecoveryHours(baseHours, setCount);
+
       const hoursSince = (now.getTime() - lastTrained.getTime()) / (1000 * 60 * 60);
-      const hoursRemaining = Math.max(0, recommendedHours - hoursSince);
-      const recoveryPercent = Math.min(100, Math.round((hoursSince / recommendedHours) * 100));
+      const hoursRemaining = Math.max(0, adjustedRecoveryHours - hoursSince);
+      const recoveryPercent = Math.min(100, Math.round((hoursSince / adjustedRecoveryHours) * 100));
       const isReady = hoursRemaining <= 0;
 
       return {
@@ -274,14 +328,14 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         displayName,
         lastTrainedAt: lastTrained,
         hoursSinceTraining: hoursSince,
-        recommendedRecoveryHours: recommendedHours,
+        recommendedRecoveryHours: adjustedRecoveryHours,
         hoursRemaining,
         recoveryPercent,
         isReady,
         statusText: formatTimeRemaining(hoursRemaining),
       };
     });
-  }, [lastTrainedMap]);
+  }, [muscleDataMap]);
 
   // Separate recovering and ready muscles
   const recoveringMuscles = useMemo(() =>
