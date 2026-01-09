@@ -251,7 +251,7 @@ export default function MesocyclePage() {
 
       if (exercises && exercises.length > 0) {
         // Group exercises by muscle and pick 1-2 per muscle
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; category?: 'isolation' | 'compound_accessory' | 'compound_primary' };
         const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
         (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
           if (!exercisesByMuscle[ex.primary_muscle]) {
@@ -290,6 +290,7 @@ export default function MesocyclePage() {
                   primaryMuscle: exercise.primary_muscle,
                   secondaryMuscles: [],
                   mechanic: isCompound ? 'compound' : 'isolation',
+                  category: exercise.category || (isCompound ? 'compound_accessory' : 'isolation'),
                   defaultRepRange: repRange,
                   defaultRir: exercise.default_rir || 2,
                   minWeightIncrementKg: 2.5, // Standard barbell increment

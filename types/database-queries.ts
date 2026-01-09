@@ -42,6 +42,7 @@ export interface ExerciseRow {
   primary_muscle: string;
   secondary_muscles: string[];
   mechanic: 'compound' | 'isolation';
+  category?: 'isolation' | 'compound_accessory' | 'compound_primary';
   default_rep_range: number[];
   default_rir: number;
   min_weight_increment_kg: number;

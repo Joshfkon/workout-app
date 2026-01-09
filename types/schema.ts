@@ -267,7 +267,7 @@ export interface Exercise {
    * - compound_accessory: Moderate fatigue (DB rows, lunges, RDLs)
    * - compound_primary: Slower CNS-limited fatigue (squat, bench, deadlift, OHP)
    */
-  category: ExerciseCategory;
+  category?: ExerciseCategory;
 
   /** Default rep range [min, max] */
   defaultRepRange: [number, number];

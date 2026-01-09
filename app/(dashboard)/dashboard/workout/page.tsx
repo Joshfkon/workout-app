@@ -1148,7 +1148,7 @@ export default function WorkoutPage() {
         .in('primary_muscle', todayWorkout.muscles);
 
       if (exercises && exercises.length > 0) {
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; category?: 'isolation' | 'compound_accessory' | 'compound_primary' };
         const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
         (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
           if (!exercisesByMuscle[ex.primary_muscle]) {
