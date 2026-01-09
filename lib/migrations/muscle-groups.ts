@@ -16,6 +16,7 @@ import {
   isDetailedMuscle,
   isStandardMuscle,
   isLegacyMuscle,
+  legacyToStandardMuscles,
 } from '@/types/schema';
 
 /**
@@ -227,25 +228,11 @@ export function toStandardMuscleForVolume(muscle: string): StandardMuscleGroup |
     return lowerMuscle as StandardMuscleGroup;
   }
 
-  // If it's a legacy muscle, convert to standard
+  // If it's a legacy muscle, convert to standard using the canonical mapping
   if (isLegacyMuscle(lowerMuscle)) {
-    // Use the LEGACY_TO_STANDARD_MAP from schema
-    const legacyToStandard: Record<string, StandardMuscleGroup> = {
-      'chest': 'chest_lower',
-      'back': 'lats',
-      'shoulders': 'lateral_delts',
-      'biceps': 'biceps',
-      'triceps': 'triceps',
-      'quads': 'quads',
-      'hamstrings': 'hamstrings',
-      'glutes': 'glutes',
-      'calves': 'calves',
-      'abs': 'abs',
-      'adductors': 'adductors',
-      'forearms': 'forearms',
-      'traps': 'traps',
-    };
-    return legacyToStandard[lowerMuscle] ?? null;
+    // Use legacyToStandardMuscles for consistency - takes first match
+    const standardMuscles = legacyToStandardMuscles(lowerMuscle);
+    return standardMuscles[0] ?? null;
   }
 
   return null;

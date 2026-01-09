@@ -1459,7 +1459,7 @@ export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscl
   glute_med: 'glute_med',
   // Hip
   adductors: 'adductors',
-  abductors: 'adductors',
+  abductors: 'glute_med', // Abductors perform hip abduction, same as glute_med
   // Calves
   calves_gastrocnemius: 'calves',
   calves_soleus: 'calves',

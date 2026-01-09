@@ -358,7 +358,13 @@ function parseAIResponse(
   } else {
     // Fallback: convert the user's input primaryMuscle to detailed
     const inputPrimary = input.primaryMuscle.toLowerCase();
-    primaryMuscleDetailed = LEGACY_TO_DETAILED_FALLBACK[inputPrimary] ?? 'chest_lower';
+    // Check if input is already a valid DetailedMuscleGroup
+    if (isDetailedMuscle(inputPrimary)) {
+      primaryMuscleDetailed = inputPrimary as DetailedMuscleGroup;
+    } else {
+      // Convert from legacy to detailed
+      primaryMuscleDetailed = LEGACY_TO_DETAILED_FALLBACK[inputPrimary] ?? 'chest_lower';
+    }
   }
 
   // Validate and filter secondary muscles (detailed format)
@@ -504,8 +510,10 @@ export function getDefaultsByEquipment(input: BasicExerciseInput): CompletedExer
 
   // Convert input primaryMuscle to detailed format
   const inputPrimary = input.primaryMuscle.toLowerCase();
-  const primaryMuscleDetailed: DetailedMuscleGroup =
-    LEGACY_TO_DETAILED_FALLBACK[inputPrimary] ?? 'chest_lower';
+  // Check if input is already a valid DetailedMuscleGroup
+  const primaryMuscleDetailed: DetailedMuscleGroup = isDetailedMuscle(inputPrimary)
+    ? (inputPrimary as DetailedMuscleGroup)
+    : (LEGACY_TO_DETAILED_FALLBACK[inputPrimary] ?? 'chest_lower');
 
   // Derive mechanic from primary muscle (using legacy mapping)
   const mechanic: 'compound' | 'isolation' = LEGACY_ISOLATION_MUSCLES.includes(inputPrimary)
