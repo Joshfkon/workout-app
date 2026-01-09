@@ -926,3 +926,283 @@ describe('edge cases', () => {
     expect(result).toBeDefined();
   });
 });
+
+// ============================================
+// FATIGUE PROFILES AND PER-SET TARGETS TESTS
+// ============================================
+
+describe('fatigue profiles', () => {
+  it('returns working sets with fatigue dropoff for isolation exercises', () => {
+    const profile = createTestProfile({
+      knownMaxes: [
+        {
+          exercise: 'Barbell Curl',
+          estimated1RM: 40,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date(),
+        },
+      ],
+    });
+
+    const engine = new WeightEstimationEngine(profile);
+    const result = engine.getWorkingWeight('Barbell Curl', { min: 10, max: 12 }, 2, 'isolation', 4);
+
+    expect(result.workingSets).toBeDefined();
+    expect(result.workingSets?.length).toBe(4);
+
+    // Check fatigue dropoff for isolation (~28% over 4 sets)
+    const firstSet = result.workingSets![0];
+    const lastSet = result.workingSets![3];
+    expect(firstSet.targetReps.max).toBe(12);
+    expect(lastSet.targetReps.max).toBeLessThan(firstSet.targetReps.max);
+    // Isolation should show significant dropoff: 12 -> ~9 reps (72% retention)
+    expect(lastSet.targetReps.max).toBeLessThanOrEqual(9);
+  });
+
+  it('returns working sets with slower fatigue for compound primary exercises', () => {
+    const profile = createTestProfile({
+      knownMaxes: [
+        {
+          exercise: 'Barbell Bench Press',
+          estimated1RM: 100,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date(),
+        },
+      ],
+    });
+
+    const engine = new WeightEstimationEngine(profile);
+    const result = engine.getWorkingWeight('Barbell Bench Press', { min: 6, max: 8 }, 2, 'compound_primary', 4);
+
+    expect(result.workingSets).toBeDefined();
+    expect(result.workingSets?.length).toBe(4);
+
+    // Check slower fatigue for compounds (~12% over 4 sets)
+    const firstSet = result.workingSets![0];
+    const lastSet = result.workingSets![3];
+    expect(firstSet.targetReps.max).toBe(8);
+    // Compound primary should show less dropoff: 8 -> ~7 reps (88% retention)
+    expect(lastSet.targetReps.max).toBeGreaterThanOrEqual(7);
+  });
+
+  it('includes expected RPE increase across sets', () => {
+    const profile = createTestProfile({
+      knownMaxes: [
+        {
+          exercise: 'Squat',
+          estimated1RM: 140,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date(),
+        },
+      ],
+    });
+
+    const engine = new WeightEstimationEngine(profile);
+    const result = engine.getWorkingWeight('Squat', { min: 5, max: 8 }, 2, 'compound_primary', 4);
+
+    expect(result.workingSets).toBeDefined();
+
+    // Set 1 at RIR 2 = RPE 8
+    // Set 4 should be ~RPE 9.5 (fatigue accumulates)
+    const firstSet = result.workingSets![0];
+    const lastSet = result.workingSets![3];
+    expect(firstSet.expectedRPE).toBe(8); // 10 - 2 RIR
+    expect(lastSet.expectedRPE).toBeGreaterThan(firstSet.expectedRPE);
+    expect(lastSet.expectedRPE).toBeLessThanOrEqual(10);
+  });
+
+  it('includes sandbagging check threshold', () => {
+    const profile = createTestProfile({
+      knownMaxes: [
+        {
+          exercise: 'Tricep Pushdown',
+          estimated1RM: 30,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date(),
+        },
+      ],
+    });
+
+    const engine = new WeightEstimationEngine(profile);
+    const result = engine.getWorkingWeight('Tricep Pushdown', { min: 12, max: 15 }, 2, 'isolation', 4);
+
+    expect(result.sandbaggingCheck).toBeDefined();
+    expect(result.sandbaggingCheck?.minimumExpectedDropoff).toBeGreaterThan(0);
+    expect(result.sandbaggingCheck?.message).toContain('adding weight');
+  });
+
+  it('does not include working sets when category is not provided', () => {
+    const profile = createTestProfile({
+      knownMaxes: [
+        {
+          exercise: 'Bench Press',
+          estimated1RM: 100,
+          confidence: 'high',
+          source: 'direct_history',
+          lastUpdated: new Date(),
+        },
+      ],
+    });
+
+    const engine = new WeightEstimationEngine(profile);
+    // Call without category parameter
+    const result = engine.getWorkingWeight('Bench Press', { min: 8, max: 12 }, 2);
+
+    // Should still return recommendation but without working sets
+    expect(result.recommendedWeight).toBeGreaterThan(0);
+    expect(result.workingSets).toBeUndefined();
+    expect(result.sandbaggingCheck).toBeUndefined();
+  });
+});
+
+// ============================================
+// SANDBAGGING DETECTION TESTS
+// ============================================
+
+import { detectSandbagging, FATIGUE_PROFILES } from '../weightEstimationEngine';
+
+describe('detectSandbagging', () => {
+  it('detects sandbagging when there is no rep dropoff on isolation exercise', () => {
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    expect(result.isSandbagging).toBe(true);
+    expect(result.suggestion).toContain('adding');
+    expect(result.actualDropoff).toBe(0);
+    // For 4 sets, last set uses index 3 in fatigue profile (0.78)
+    // Expected dropoff = 1 - 0.78 = 0.22
+    expect(result.expectedDropoff).toBeCloseTo(0.22, 1);
+  });
+
+  it('does not flag sandbagging when appropriate fatigue is shown', () => {
+    // Isolation exercises should show ~28% dropoff over 4 sets
+    // 12 -> 11 -> 10 -> 9 is ~25% dropoff (within expected range)
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 11, completed: true },
+      { weight: 15, reps: 10, completed: true },
+      { weight: 15, reps: 9, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    expect(result.isSandbagging).toBe(false);
+    expect(result.actualDropoff).toBeCloseTo(0.25, 2); // (12-9)/12 = 0.25
+  });
+
+  it('returns false for compound primary with minimal dropoff', () => {
+    // Compound primary exercises have slower fatigue
+    // Small dropoff like 8 -> 8 -> 7 -> 7 may be acceptable
+    const sets = [
+      { weight: 100, reps: 8, completed: true },
+      { weight: 100, reps: 8, completed: true },
+      { weight: 100, reps: 7, completed: true },
+      { weight: 100, reps: 7, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'compound_primary');
+
+    // 12.5% dropoff vs expected 12%, threshold is 6% - so this is borderline
+    // actualDropoff = (8-7)/8 = 0.125
+    // expectedDropoff = 1 - 0.88 = 0.12
+    // threshold = 0.12 * 0.5 = 0.06
+    // 0.125 > 0.06 so NOT sandbagging
+    expect(result.isSandbagging).toBe(false);
+  });
+
+  it('requires at least 3 sets to detect sandbagging', () => {
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    expect(result.isSandbagging).toBe(false);
+  });
+
+  it('requires same weight across sets', () => {
+    // Varying weights make dropoff comparison invalid
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 17.5, reps: 10, completed: true },
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    expect(result.isSandbagging).toBe(false);
+  });
+
+  it('only considers completed sets', () => {
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 5, completed: false }, // Failed set - should be ignored
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    // Only 3 completed sets: 12, 12, 12 - no dropoff
+    expect(result.isSandbagging).toBe(true);
+  });
+
+  it('suggests appropriate increment for isolation exercises', () => {
+    const sets = [
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+      { weight: 15, reps: 12, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'isolation');
+
+    expect(result.isSandbagging).toBe(true);
+    expect(result.suggestion).toContain('1kg'); // Isolation uses 1kg increments
+  });
+
+  it('suggests appropriate increment for compound exercises', () => {
+    const sets = [
+      { weight: 100, reps: 8, completed: true },
+      { weight: 100, reps: 8, completed: true },
+      { weight: 100, reps: 8, completed: true },
+      { weight: 100, reps: 8, completed: true },
+    ];
+
+    const result = detectSandbagging(sets, 'compound_accessory');
+
+    expect(result.isSandbagging).toBe(true);
+    expect(result.suggestion).toContain('2.5kg'); // Compound uses 2.5kg increments
+  });
+});
+
+describe('FATIGUE_PROFILES', () => {
+  it('has correct expected values for isolation exercises', () => {
+    const profile = FATIGUE_PROFILES.isolation;
+    expect(profile[0]).toBe(1.0);  // Set 1: 100%
+    expect(profile[4]).toBe(0.72); // Set 5: 72%
+  });
+
+  it('has correct expected values for compound primary exercises', () => {
+    const profile = FATIGUE_PROFILES.compound_primary;
+    expect(profile[0]).toBe(1.0);  // Set 1: 100%
+    expect(profile[4]).toBe(0.88); // Set 5: 88%
+  });
+
+  it('has correct expected values for compound accessory exercises', () => {
+    const profile = FATIGUE_PROFILES.compound_accessory;
+    expect(profile[0]).toBe(1.0);  // Set 1: 100%
+    expect(profile[4]).toBe(0.82); // Set 5: 82%
+  });
+});

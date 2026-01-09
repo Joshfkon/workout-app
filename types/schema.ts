@@ -9,6 +9,14 @@ export type Experience = 'novice' | 'intermediate' | 'advanced';
 /** Exercise mechanic type - affects recovery and volume recommendations */
 export type Mechanic = 'compound' | 'isolation';
 
+/**
+ * Exercise category for fatigue modeling and per-set target calculations
+ * - isolation: Fast local fatigue (curls, raises, extensions)
+ * - compound_accessory: Moderate fatigue (DB rows, lunges, RDLs)
+ * - compound_primary: Slower CNS-limited fatigue (squat, bench, deadlift, OHP)
+ */
+export type ExerciseCategory = 'isolation' | 'compound_accessory' | 'compound_primary';
+
 /** Current state of a workout session */
 export type SessionState = 'planned' | 'in_progress' | 'completed' | 'skipped';
 
@@ -243,16 +251,24 @@ export interface BodyweightEntry {
 export interface Exercise {
   id: string;
   name: string;
-  
+
   /** Primary muscle targeted (e.g., 'chest', 'quads', 'lats') */
   primaryMuscle: string;
-  
+
   /** Secondary muscles worked */
   secondaryMuscles: string[];
-  
+
   /** Compound exercises have higher systemic fatigue */
   mechanic: Mechanic;
-  
+
+  /**
+   * Exercise category for fatigue modeling
+   * - isolation: Fast local fatigue (curls, raises, extensions)
+   * - compound_accessory: Moderate fatigue (DB rows, lunges, RDLs)
+   * - compound_primary: Slower CNS-limited fatigue (squat, bench, deadlift, OHP)
+   */
+  category: ExerciseCategory;
+
   /** Default rep range [min, max] */
   defaultRepRange: [number, number];
   
@@ -1007,7 +1023,7 @@ export interface ExerciseEntry {
   difficulty: ExerciseDifficulty;
   fatigueRating: FatigueRating;
   notes?: string;
-  
+
   // Progression-related fields (optional for backwards compatibility)
   /** Default rep range [min, max] - derived from pattern if not set */
   defaultRepRange?: [number, number];
@@ -1017,7 +1033,14 @@ export interface ExerciseEntry {
   minWeightIncrementKg?: number;
   /** Mechanic type for progression engine */
   mechanic?: Mechanic;
-  
+  /**
+   * Exercise category for fatigue modeling (optional for backwards compatibility)
+   * - isolation: Fast local fatigue (curls, raises, extensions)
+   * - compound_accessory: Moderate fatigue (DB rows, lunges, RDLs)
+   * - compound_primary: Slower CNS-limited fatigue (squat, bench, deadlift, OHP)
+   */
+  category?: ExerciseCategory;
+
   // Hypertrophy scoring (Nippard methodology)
   /** Hypertrophy effectiveness score for exercise selection prioritization */
   hypertrophyScore?: HypertrophyScore;

@@ -71,6 +71,7 @@ export interface Database {
           primary_muscle: string;
           secondary_muscles: string[];
           mechanic: 'compound' | 'isolation';
+          category: 'isolation' | 'compound_accessory' | 'compound_primary';
           default_rep_range: number[];
           default_rir: number;
           min_weight_increment_kg: number;
@@ -89,6 +90,7 @@ export interface Database {
           primary_muscle: string;
           secondary_muscles?: string[];
           mechanic?: 'compound' | 'isolation';
+          category?: 'isolation' | 'compound_accessory' | 'compound_primary';
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
@@ -107,6 +109,7 @@ export interface Database {
           primary_muscle?: string;
           secondary_muscles?: string[];
           mechanic?: 'compound' | 'isolation';
+          category?: 'isolation' | 'compound_accessory' | 'compound_primary';
           default_rep_range?: number[];
           default_rir?: number;
           min_weight_increment_kg?: number;
@@ -418,6 +421,7 @@ export interface Database {
       goal: 'bulk' | 'cut' | 'maintenance';
       experience: 'novice' | 'intermediate' | 'advanced';
       mechanic: 'compound' | 'isolation';
+      exercise_category: 'isolation' | 'compound_accessory' | 'compound_primary';
       session_state: 'planned' | 'in_progress' | 'completed' | 'skipped';
       set_quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
       progression_type: 'load' | 'reps' | 'sets' | 'technique';

@@ -1,50 +1,54 @@
 -- ============================================
 -- EXERCISE SEED DATA
 -- ~50 common hypertrophy exercises
+-- Categories:
+--   compound_primary: Main strength lifts (squat, bench, deadlift, OHP, row)
+--   compound_accessory: Secondary compounds (DB press, lunges, pulldowns, etc.)
+--   isolation: Single-joint movements (curls, raises, extensions)
 -- ============================================
 
-INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, default_rep_range, default_rir, min_weight_increment_kg, form_cues, common_mistakes, setup_note, movement_pattern, equipment_required) VALUES
+INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, category, default_rep_range, default_rir, min_weight_increment_kg, form_cues, common_mistakes, setup_note, movement_pattern, equipment_required) VALUES
 
 -- ============================================
 -- CHEST EXERCISES
 -- ============================================
-('Barbell Bench Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', ARRAY[6, 10], 2, 2.5,
+('Barbell Bench Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', 'compound_primary', ARRAY[6, 10], 2, 2.5,
   ARRAY['Arch upper back, not lower', 'Tuck elbows 45 degrees', 'Touch mid-chest', 'Drive feet into floor'],
   ARRAY['Bouncing bar off chest', 'Flaring elbows 90 degrees', 'Lifting hips off bench'],
   'Set up with eyes under bar, grip slightly wider than shoulders',
   'horizontal_push', ARRAY['barbell', 'bench']),
 
-('Dumbbell Bench Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Dumbbell Bench Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['Keep shoulder blades pinched', 'Control the eccentric', 'Press in slight arc'],
   ARRAY['Going too heavy too fast', 'Letting dumbbells drift outward at bottom'],
   'Kick dumbbells up from thighs to start position',
   'horizontal_push', ARRAY['dumbbells', 'bench']),
 
-('Incline Dumbbell Press', 'chest', ARRAY['shoulders', 'triceps'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Incline Dumbbell Press', 'chest', ARRAY['shoulders', 'triceps'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['30-45 degree incline', 'Drive through upper chest', 'Full stretch at bottom'],
   ARRAY['Angle too steep (becomes shoulder press)', 'Cutting range of motion short'],
   'Set bench to 30-45 degrees, avoid going higher',
   'horizontal_push', ARRAY['dumbbells', 'adjustable bench']),
 
-('Cable Fly', 'chest', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 2.5,
+('Cable Fly', 'chest', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 2.5,
   ARRAY['Slight bend in elbows', 'Squeeze at peak contraction', 'Control the stretch'],
   ARRAY['Using too much weight', 'Turning it into a press'],
   'Set cables at chest height for mid-chest focus',
   'horizontal_push', ARRAY['cable machine']),
 
-('Dumbbell Fly', 'chest', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Dumbbell Fly', 'chest', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Maintain slight elbow bend', 'Lower until chest stretch', 'Squeeze at top', 'Control the descent'],
   ARRAY['Going too heavy', 'Straightening arms completely', 'Turning into a press'],
   'Lie flat on bench, start with dumbbells above chest',
   'horizontal_push', ARRAY['dumbbells', 'bench']),
 
-('Machine Chest Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', ARRAY[8, 12], 2, 5.0,
+('Machine Chest Press', 'chest', ARRAY['triceps', 'shoulders'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 5.0,
   ARRAY['Keep chest up', 'Drive through chest not shoulders', 'Full range of motion'],
   ARRAY['Letting shoulders roll forward', 'Using momentum'],
   'Adjust seat so handles align with mid-chest',
   'horizontal_push', ARRAY['chest press machine']),
 
-('Dips (Chest Focus)', 'chest', ARRAY['triceps', 'shoulders'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Dips (Chest Focus)', 'chest', ARRAY['triceps', 'shoulders'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Lean forward 30 degrees', 'Go to 90 degree elbow bend', 'Keep elbows slightly flared'],
   ARRAY['Staying too upright (tricep focus)', 'Going too deep causing shoulder strain'],
   'Use wider grip and lean forward for chest emphasis',
@@ -53,43 +57,43 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- BACK EXERCISES
 -- ============================================
-('Barbell Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', ARRAY[6, 10], 2, 2.5,
+('Barbell Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', 'compound_primary', ARRAY[6, 10], 2, 2.5,
   ARRAY['Hinge at hips 45 degrees', 'Pull to lower chest/upper abs', 'Squeeze shoulder blades'],
   ARRAY['Using too much momentum', 'Rounding lower back', 'Standing too upright'],
   'Overhand grip slightly wider than shoulders',
   'horizontal_pull', ARRAY['barbell']),
 
-('Dumbbell Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Dumbbell Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['Keep hips square', 'Pull elbow past torso', 'Full stretch at bottom'],
   ARRAY['Rotating torso excessively', 'Cutting range short'],
   'Brace on bench with opposite hand and knee',
   'horizontal_pull', ARRAY['dumbbell', 'bench']),
 
-('Lat Pulldown', 'back', ARRAY['biceps'], 'compound', ARRAY[8, 12], 2, 5.0,
+('Lat Pulldown', 'back', ARRAY['biceps'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 5.0,
   ARRAY['Lean back slightly', 'Pull to upper chest', 'Lead with elbows'],
   ARRAY['Pulling behind neck', 'Using body momentum', 'Grip too wide'],
   'Grip slightly wider than shoulders, lean back 15-20 degrees',
   'vertical_pull', ARRAY['cable machine', 'lat pulldown bar']),
 
-('Pull-Ups', 'back', ARRAY['biceps'], 'compound', ARRAY[6, 12], 2, 2.5,
+('Pull-Ups', 'back', ARRAY['biceps'], 'compound', 'compound_accessory', ARRAY[6, 12], 2, 2.5,
   ARRAY['Full hang at bottom', 'Chin over bar', 'Control the descent'],
   ARRAY['Kipping/swinging', 'Half reps', 'Shrugging shoulders'],
   'Overhand grip, hands shoulder width or slightly wider',
   'vertical_pull', ARRAY['pull-up bar']),
 
-('Cable Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', ARRAY[10, 15], 2, 5.0,
+('Cable Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', 'compound_accessory', ARRAY[10, 15], 2, 5.0,
   ARRAY['Keep chest up', 'Pull to lower chest', 'Pause at contraction'],
   ARRAY['Excessive body swing', 'Rounding forward'],
   'Sit with slight knee bend, maintain upright torso',
   'horizontal_pull', ARRAY['cable machine', 'row handle']),
 
-('Chest Supported Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Chest Supported Row', 'back', ARRAY['biceps', 'rear delts'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['Chest firmly on pad', 'Full stretch at bottom', 'Squeeze at top'],
   ARRAY['Lifting chest off pad', 'Using momentum'],
   'Set bench at 30-45 degrees, lie face down',
   'horizontal_pull', ARRAY['dumbbells', 'incline bench']),
 
-('Deadlift', 'back', ARRAY['glutes', 'hamstrings', 'quads'], 'compound', ARRAY[5, 8], 3, 2.5,
+('Deadlift', 'back', ARRAY['glutes', 'hamstrings', 'quads'], 'compound', 'compound_primary', ARRAY[5, 8], 3, 2.5,
   ARRAY['Bar over mid-foot', 'Push floor away', 'Lockout with glutes', 'Neutral spine throughout'],
   ARRAY['Rounding lower back', 'Bar drifting forward', 'Hyperextending at top'],
   'Stance hip width, grip just outside legs',
@@ -98,49 +102,49 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- SHOULDER EXERCISES
 -- ============================================
-('Overhead Press', 'shoulders', ARRAY['triceps'], 'compound', ARRAY[6, 10], 2, 2.5,
+('Overhead Press', 'shoulders', ARRAY['triceps'], 'compound', 'compound_primary', ARRAY[6, 10], 2, 2.5,
   ARRAY['Brace core tight', 'Press in slight arc', 'Finish with bar over head'],
   ARRAY['Excessive back arch', 'Pressing forward', 'Not finishing lockout'],
   'Start with bar at collar bones, elbows slightly in front',
   'vertical_push', ARRAY['barbell']),
 
-('Dumbbell Shoulder Press', 'shoulders', ARRAY['triceps'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Dumbbell Shoulder Press', 'shoulders', ARRAY['triceps'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['Keep elbows under wrists', 'Press overhead not forward', 'Control the weight'],
   ARRAY['Elbows drifting back', 'Using leg drive', 'Cutting depth short'],
   'Seated for stricter form, standing for more core engagement',
   'vertical_push', ARRAY['dumbbells']),
 
-('Lateral Raise', 'shoulders', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+('Lateral Raise', 'shoulders', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 1.0,
   ARRAY['Slight bend in elbows', 'Lead with elbows not hands', 'Stop at shoulder height'],
   ARRAY['Using momentum', 'Going too heavy', 'Shrugging traps'],
   'Start with arms at sides, palms facing body',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Face Pull', 'shoulders', ARRAY['rear delts', 'back'], 'isolation', ARRAY[15, 20], 2, 2.5,
+('Face Pull', 'shoulders', ARRAY['rear delts', 'back'], 'isolation', 'isolation', ARRAY[15, 20], 2, 2.5,
   ARRAY['Pull to face level', 'Externally rotate at end', 'Squeeze rear delts'],
   ARRAY['Pulling too low', 'Using too much weight', 'Not rotating'],
   'Set cable at face height, use rope attachment',
   'shoulder_isolation', ARRAY['cable machine', 'rope attachment']),
 
-('Rear Delt Fly', 'shoulders', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+('Rear Delt Fly', 'shoulders', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 1.0,
   ARRAY['Slight bend in elbows', 'Lead with elbows', 'Squeeze at top'],
   ARRAY['Using momentum', 'Not feeling rear delts', 'Going too heavy'],
   'Bent over 45-90 degrees or use pec deck reverse',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Front Raise', 'shoulders', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+('Front Raise', 'shoulders', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 1.0,
   ARRAY['Raise to eye level', 'Slight bend in elbows', 'Control the descent', 'Avoid swinging'],
   ARRAY['Using momentum', 'Raising too high', 'Going too heavy'],
   'Can use dumbbells, barbell, or cable',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Dumbbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', ARRAY[12, 15], 2, 2.0,
+('Dumbbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', 'isolation', ARRAY[12, 15], 2, 2.0,
   ARRAY['Shrug straight up', 'Hold at top briefly', 'Full stretch at bottom', 'Keep arms straight'],
   ARRAY['Rolling shoulders', 'Using momentum', 'Shrugging forward'],
   'Let arms hang at sides, palms facing body',
   'shoulder_isolation', ARRAY['dumbbells']),
 
-('Barbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', ARRAY[10, 15], 2, 5.0,
+('Barbell Shrug', 'shoulders', ARRAY['traps'], 'isolation', 'isolation', ARRAY[10, 15], 2, 5.0,
   ARRAY['Shrug straight up toward ears', 'Squeeze at top', 'Control the descent', 'Keep arms straight'],
   ARRAY['Rolling shoulders', 'Using momentum', 'Bending elbows'],
   'Grip slightly wider than shoulders, can use straps for heavy weight',
@@ -149,49 +153,49 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- BICEP EXERCISES
 -- ============================================
-('Barbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[8, 12], 2, 2.5,
+('Barbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[8, 12], 2, 2.5,
   ARRAY['Keep elbows pinned to sides', 'Full extension at bottom', 'Squeeze at top'],
   ARRAY['Swinging body', 'Moving elbows forward', 'Cutting range short'],
   'Shoulder width grip, stand with back against wall for stricter form',
   'elbow_flexion', ARRAY['barbell', 'ez curl bar']),
 
-('Dumbbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Dumbbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Supinate wrist during curl', 'Control the negative', 'Full stretch at bottom'],
   ARRAY['Using momentum', 'Curling too fast', 'Not supinating'],
   'Can alternate or curl simultaneously',
   'elbow_flexion', ARRAY['dumbbells']),
 
-('Incline Dumbbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Incline Dumbbell Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Let arms hang straight down', 'Keep upper arms still', 'Full stretch'],
   ARRAY['Bringing elbows forward', 'Not going to full extension'],
   'Set bench to 45-60 degrees, arms hang behind body',
   'elbow_flexion', ARRAY['dumbbells', 'incline bench']),
 
-('Hammer Curl', 'biceps', ARRAY['forearms'], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Hammer Curl', 'biceps', ARRAY['forearms'], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Keep palms facing each other', 'Elbows pinned', 'Control throughout'],
   ARRAY['Swinging', 'Flaring elbows out'],
   'Neutral grip throughout the movement',
   'elbow_flexion', ARRAY['dumbbells']),
 
-('Cable Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 2.5,
+('Cable Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 2.5,
   ARRAY['Constant tension throughout', 'Squeeze at top', 'Control negative'],
   ARRAY['Leaning back', 'Using momentum'],
   'Use straight bar or EZ bar attachment',
   'elbow_flexion', ARRAY['cable machine']),
 
-('Preacher Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 12], 2, 2.5,
+('Preacher Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 12], 2, 2.5,
   ARRAY['Upper arms flat on pad', 'Full stretch at bottom', 'Don''t hyperextend'],
   ARRAY['Cutting range short', 'Moving shoulders'],
   'Adjust pad height so armpits rest on top',
   'elbow_flexion', ARRAY['preacher bench', 'barbell']),
 
-('EZ Bar Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[8, 12], 2, 2.5,
+('EZ Bar Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[8, 12], 2, 2.5,
   ARRAY['Keep elbows pinned to sides', 'Full range of motion', 'Squeeze at top', 'Control the negative'],
   ARRAY['Using momentum', 'Swinging body', 'Moving elbows forward'],
   'Angled grip reduces wrist strain compared to straight bar',
   'elbow_flexion', ARRAY['ez curl bar']),
 
-('Concentration Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Concentration Curl', 'biceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Brace elbow against inner thigh', 'Full extension at bottom', 'Squeeze at peak', 'Slow controlled movement'],
   ARRAY['Using body momentum', 'Moving elbow off thigh', 'Rushing the movement'],
   'Sit on bench, lean forward, brace elbow on inner thigh',
@@ -200,43 +204,43 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- TRICEP EXERCISES
 -- ============================================
-('Tricep Pushdown', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 2.5,
+('Tricep Pushdown', 'triceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 2.5,
   ARRAY['Keep elbows pinned to sides', 'Full extension', 'Control the return'],
   ARRAY['Elbows moving', 'Using body momentum', 'Partial reps'],
   'Stand upright, slight forward lean okay',
   'elbow_extension', ARRAY['cable machine']),
 
-('Skull Crusher', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[8, 12], 2, 2.5,
+('Skull Crusher', 'triceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[8, 12], 2, 2.5,
   ARRAY['Lower to forehead or behind head', 'Keep elbows narrow', 'Full extension'],
   ARRAY['Flaring elbows', 'Moving upper arms', 'Going too heavy'],
   'Can use EZ bar or dumbbells, lower behind head for more stretch',
   'elbow_extension', ARRAY['ez curl bar', 'bench']),
 
-('Overhead Tricep Extension', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 2.0,
+('Overhead Tricep Extension', 'triceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 2.0,
   ARRAY['Keep elbows close to head', 'Full stretch at bottom', 'Squeeze at top'],
   ARRAY['Flaring elbows', 'Using momentum', 'Not getting full stretch'],
   'Can use dumbbell, cable, or rope attachment',
   'elbow_extension', ARRAY['dumbbell']),
 
-('Triceps Extension (Dumbbell)', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 1.0,
+('Triceps Extension (Dumbbell)', 'triceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 1.0,
   ARRAY['Keep upper arm stationary', 'Full extension at bottom', 'Squeeze triceps at top', 'Control the weight throughout'],
   ARRAY['Swinging the upper arm', 'Using momentum', 'Flaring elbow outward', 'Not achieving full range of motion'],
   'Can be done one arm at a time or both arms with single dumbbell overhead',
   'elbow_extension', ARRAY['dumbbell']),
 
-('Dumbbell Kickback', 'triceps', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 1.0,
+('Dumbbell Kickback', 'triceps', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 1.0,
   ARRAY['Keep upper arm parallel to floor', 'Full extension behind you', 'Squeeze at top', 'Slow controlled movement'],
   ARRAY['Dropping the elbow', 'Using momentum', 'Not fully extending', 'Going too heavy'],
   'Hinge forward at hips, support with opposite hand on bench',
   'elbow_extension', ARRAY['dumbbell']),
 
-('Close Grip Bench Press', 'triceps', ARRAY['chest', 'shoulders'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Close Grip Bench Press', 'triceps', ARRAY['chest', 'shoulders'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Hands shoulder width or slightly narrower', 'Tuck elbows to sides', 'Touch lower chest'],
   ARRAY['Grip too narrow', 'Flaring elbows', 'Bouncing off chest'],
   'Grip inside smooth rings on barbell',
   'elbow_extension', ARRAY['barbell', 'bench']),
 
-('Dips (Tricep Focus)', 'triceps', ARRAY['chest', 'shoulders'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Dips (Tricep Focus)', 'triceps', ARRAY['chest', 'shoulders'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Stay upright', 'Elbows close to body', 'Go to 90 degrees'],
   ARRAY['Leaning too far forward', 'Going too deep'],
   'Narrow grip, stay vertical throughout',
@@ -245,37 +249,37 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- QUAD EXERCISES
 -- ============================================
-('Barbell Back Squat', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', ARRAY[6, 10], 2, 2.5,
+('Barbell Back Squat', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', 'compound_primary', ARRAY[6, 10], 2, 2.5,
   ARRAY['Break at hips and knees together', 'Knees track over toes', 'Maintain neutral spine', 'Drive through whole foot'],
   ARRAY['Knees caving in', 'Excessive forward lean', 'Rising on toes', 'Rounding lower back'],
   'Bar on upper traps, stance shoulder width or slightly wider',
   'squat', ARRAY['barbell', 'squat rack']),
 
-('Leg Press', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', ARRAY[8, 15], 2, 10.0,
+('Leg Press', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', 'compound_accessory', ARRAY[8, 15], 2, 10.0,
   ARRAY['Full depth without butt rising', 'Push through whole foot', 'Control the eccentric'],
   ARRAY['Letting knees cave', 'Butt coming off pad', 'Partial reps'],
   'Feet shoulder width, middle of platform for quad focus',
   'squat', ARRAY['leg press machine']),
 
-('Leg Extension', 'quads', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 15], 2, 2.5,
+('Leg Extension', 'quads', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 15], 2, 2.5,
   ARRAY['Pause at top contraction', 'Control the negative', 'Keep back against pad'],
   ARRAY['Using momentum', 'Lifting hips', 'Going too fast'],
   'Adjust pad to sit just above ankles',
   'knee_flexion', ARRAY['leg extension machine']),
 
-('Hack Squat', 'quads', ARRAY['glutes'], 'compound', ARRAY[8, 12], 2, 5.0,
+('Hack Squat', 'quads', ARRAY['glutes'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 5.0,
   ARRAY['Push through whole foot', 'Don''t lock out aggressively', 'Full depth'],
   ARRAY['Knees caving', 'Heels rising', 'Cutting depth'],
   'Shoulder pads on top, back flat against pad',
   'squat', ARRAY['hack squat machine']),
 
-('Bulgarian Split Squat', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', ARRAY[8, 12], 2, 2.0,
+('Bulgarian Split Squat', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.0,
   ARRAY['Front shin vertical', 'Drop back knee down', 'Keep torso upright'],
   ARRAY['Leaning too far forward', 'Front knee caving', 'Back foot too high'],
   'Back foot on bench, front foot 2-3 feet ahead',
   'lunge', ARRAY['dumbbells', 'bench']),
 
-('Walking Lunges', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', ARRAY[10, 15], 2, 2.0,
+('Walking Lunges', 'quads', ARRAY['glutes', 'hamstrings'], 'compound', 'compound_accessory', ARRAY[10, 15], 2, 2.0,
   ARRAY['Take full steps', 'Keep torso upright', 'Push through front heel'],
   ARRAY['Short steps', 'Knee going past toe excessively', 'Leaning forward'],
   'Long strides for glute emphasis, shorter for quads',
@@ -284,25 +288,25 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- HAMSTRING EXERCISES
 -- ============================================
-('Romanian Deadlift', 'hamstrings', ARRAY['glutes', 'back'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Romanian Deadlift', 'hamstrings', ARRAY['glutes', 'back'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Hinge at hips', 'Keep bar close to body', 'Soft knee bend', 'Feel hamstring stretch'],
   ARRAY['Rounding lower back', 'Bending knees too much', 'Bar drifting forward'],
   'Start standing, hinge back until hamstring stretch',
   'hip_hinge', ARRAY['barbell']),
 
-('Lying Leg Curl', 'hamstrings', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 2.5,
+('Lying Leg Curl', 'hamstrings', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 2.5,
   ARRAY['Don''t lift hips', 'Full range of motion', 'Control the negative'],
   ARRAY['Using momentum', 'Hips rising', 'Cutting range short'],
   'Pad above heels, hips stay down throughout',
   'knee_flexion', ARRAY['leg curl machine']),
 
-('Seated Leg Curl', 'hamstrings', ARRAY[]::TEXT[], 'isolation', ARRAY[10, 15], 2, 2.5,
+('Seated Leg Curl', 'hamstrings', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[10, 15], 2, 2.5,
   ARRAY['Flex fully', 'Control eccentric', 'Keep back against pad'],
   ARRAY['Jerking the weight', 'Lifting off seat', 'Partial reps'],
   'Adjust so knee aligns with machine pivot point',
   'knee_flexion', ARRAY['seated leg curl machine']),
 
-('Good Morning', 'hamstrings', ARRAY['glutes', 'back'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Good Morning', 'hamstrings', ARRAY['glutes', 'back'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Soft knee bend', 'Hinge until parallel', 'Drive hips forward to stand'],
   ARRAY['Rounding back', 'Going too heavy', 'Excessive knee bend'],
   'Bar on upper back like squat, lighter weight than squat',
@@ -311,19 +315,19 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- GLUTE EXERCISES
 -- ============================================
-('Hip Thrust', 'glutes', ARRAY['hamstrings'], 'compound', ARRAY[8, 12], 2, 2.5,
+('Hip Thrust', 'glutes', ARRAY['hamstrings'], 'compound', 'compound_accessory', ARRAY[8, 12], 2, 2.5,
   ARRAY['Drive through heels', 'Squeeze glutes hard at top', 'Don''t hyperextend lower back'],
   ARRAY['Using lower back', 'Not squeezing at top', 'Bar rolling'],
   'Upper back on bench, bar over hips with pad',
   'hip_hinge', ARRAY['barbell', 'bench', 'barbell pad']),
 
-('Cable Pull Through', 'glutes', ARRAY['hamstrings'], 'compound', ARRAY[12, 15], 2, 5.0,
+('Cable Pull Through', 'glutes', ARRAY['hamstrings'], 'compound', 'compound_accessory', ARRAY[12, 15], 2, 5.0,
   ARRAY['Hinge at hips', 'Feel stretch in hamstrings', 'Squeeze glutes at top'],
   ARRAY['Using arms to pull', 'Rounding back', 'Using momentum'],
   'Face away from cable, rope between legs',
   'hip_hinge', ARRAY['cable machine', 'rope attachment']),
 
-('Glute Bridge', 'glutes', ARRAY['hamstrings'], 'isolation', ARRAY[12, 15], 2, 2.0,
+('Glute Bridge', 'glutes', ARRAY['hamstrings'], 'isolation', 'isolation', ARRAY[12, 15], 2, 2.0,
   ARRAY['Drive through heels', 'Squeeze glutes at top', 'Keep ribs down'],
   ARRAY['Overarching back', 'Using hamstrings instead of glutes'],
   'Lie on back, feet flat on floor near glutes',
@@ -332,19 +336,19 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- CALF EXERCISES
 -- ============================================
-('Standing Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 20], 2, 5.0,
+('Standing Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 20], 2, 5.0,
   ARRAY['Full stretch at bottom', 'Pause at top', 'Keep legs straight'],
   ARRAY['Bouncing', 'Bending knees', 'Cutting range short'],
   'Toes on platform, heels hanging off',
   'calf_raise', ARRAY['calf raise machine']),
 
-('Seated Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 20], 2, 5.0,
+('Seated Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 20], 2, 5.0,
   ARRAY['Full stretch at bottom', 'Pause at peak contraction', 'Control tempo'],
   ARRAY['Bouncing', 'Partial reps', 'Going too fast'],
   'Pad on lower thighs, balls of feet on platform',
   'calf_raise', ARRAY['seated calf raise machine']),
 
-('Leg Press Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', ARRAY[15, 25], 2, 10.0,
+('Leg Press Calf Raise', 'calves', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[15, 25], 2, 10.0,
   ARRAY['Only balls of feet on platform', 'Full range of motion', 'Don''t lock knees'],
   ARRAY['Using too much weight', 'Partial reps'],
   'Feet at bottom edge of platform, push through toes',
@@ -353,25 +357,25 @@ INSERT INTO exercises (name, primary_muscle, secondary_muscles, mechanic, defaul
 -- ============================================
 -- AB EXERCISES
 -- ============================================
-('Cable Crunch', 'abs', ARRAY[]::TEXT[], 'isolation', ARRAY[12, 20], 2, 5.0,
+('Cable Crunch', 'abs', ARRAY[]::TEXT[], 'isolation', 'isolation', ARRAY[12, 20], 2, 5.0,
   ARRAY['Crunch rib cage toward pelvis', 'Keep hips still', 'Full stretch at top'],
   ARRAY['Using hip flexors', 'Just bending at hips', 'Going too heavy'],
   'Kneel facing cable, rope behind head',
   'core', ARRAY['cable machine', 'rope attachment']),
 
-('Hanging Leg Raise', 'abs', ARRAY['hip flexors'], 'compound', ARRAY[10, 15], 2, 0.0,
+('Hanging Leg Raise', 'abs', ARRAY['hip flexors'], 'compound', 'compound_accessory', ARRAY[10, 15], 2, 0.0,
   ARRAY['Curl pelvis up', 'Control the swing', 'Full range of motion'],
   ARRAY['Just lifting legs (hip flexors)', 'Swinging', 'Partial reps'],
   'Dead hang from bar, can bend knees to make easier',
   'core', ARRAY['pull-up bar']),
 
-('Ab Wheel Rollout', 'abs', ARRAY[]::TEXT[], 'compound', ARRAY[8, 15], 2, 0.0,
+('Ab Wheel Rollout', 'abs', ARRAY[]::TEXT[], 'compound', 'compound_accessory', ARRAY[8, 15], 2, 0.0,
   ARRAY['Brace core tight', 'Don''t let hips sag', 'Control the rollout'],
   ARRAY['Hips sagging', 'Not controlling eccentric', 'Going too far too soon'],
   'Start on knees, progress to standing',
   'core', ARRAY['ab wheel']),
 
-('Plank', 'abs', ARRAY['shoulders'], 'isolation', ARRAY[30, 60], 2, 0.0,
+('Plank', 'abs', ARRAY['shoulders'], 'isolation', 'isolation', ARRAY[30, 60], 2, 0.0,
   ARRAY['Keep body straight', 'Squeeze glutes', 'Don''t let hips sag or pike'],
   ARRAY['Hips too high', 'Hips sagging', 'Not breathing'],
   'Forearms on ground, elbows under shoulders',

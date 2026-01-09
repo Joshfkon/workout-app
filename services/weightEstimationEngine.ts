@@ -7,7 +7,7 @@
 // - Bodyweight ratios as fallback
 // ============================================================
 
-import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis } from '@/types/schema';
+import type { Experience, MuscleGroup, DexaRegionalData, RegionalAnalysis, ExerciseCategory } from '@/types/schema';
 import { analyzeRegionalComposition, getAverageRegionalLeanMass } from './regionalAnalysis';
 import { normalizeExerciseName, findExerciseMatch } from './exerciseCanonical';
 import {
@@ -50,9 +50,18 @@ export interface WorkingWeightRecommendation {
   exercise: string;
   targetReps: { min: number; max: number };
   targetRIR: number;
+
+  /** Recommended weight for set 1 (backward compatible) */
   recommendedWeight: number;
-  weightUnit: 'kg' | 'lb';  // The unit of the returned weight values
+  /** The unit of the returned weight values */
+  weightUnit: 'kg' | 'lb';
   weightRange: { low: number; high: number };
+
+  /** Per-set targets with expected fatigue dropoff */
+  workingSets?: WorkingSetPlan[];
+  /** Sandbagging detection thresholds */
+  sandbaggingCheck?: SandbaggingCheck;
+
   confidence: 'high' | 'medium' | 'low' | 'find_working_weight';
   rationale: string;
   warmupProtocol?: WarmupSet[];
@@ -72,6 +81,27 @@ export interface FindingWeightProtocol {
   targetRPE: number;
   maxAttempts: number;
   instructions: string;
+}
+
+/**
+ * Per-set target with expected fatigue dropoff
+ */
+export interface WorkingSetPlan {
+  setNumber: number;
+  targetWeight: number;
+  targetReps: { min: number; max: number };
+  expectedRPE: number;
+  isDropSet?: boolean;
+}
+
+/**
+ * Sandbagging detection thresholds and messaging
+ */
+export interface SandbaggingCheck {
+  /** Minimum expected rep dropoff (e.g., 0.10 = 10%) */
+  minimumExpectedDropoff: number;
+  /** Message to show if sandbagging is detected */
+  message: string;
 }
 
 export interface UserStrengthProfile {
@@ -456,6 +486,34 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 }
 
 // ============================================================
+// FATIGUE PROFILES BY EXERCISE CATEGORY
+// ============================================================
+// Rep retention multiplier by set number (index 0 = set 1)
+// Lower = more fatigue = fewer reps expected
+// Based on research on local vs systemic fatigue patterns
+
+/**
+ * Fatigue profiles for different exercise categories.
+ * These represent the expected rep retention across sets at the same weight.
+ * - isolation: Fast local muscle fatigue (curls, raises, extensions)
+ * - compound_accessory: Moderate fatigue (DB rows, lunges, RDLs)
+ * - compound_primary: Slower CNS-limited fatigue (squat, bench, deadlift, OHP)
+ */
+export const FATIGUE_PROFILES: Record<ExerciseCategory, number[]> = {
+  isolation:          [1.0, 0.92, 0.85, 0.78, 0.72],  // Fast local fatigue
+  compound_accessory: [1.0, 0.95, 0.90, 0.86, 0.82],  // Moderate fatigue
+  compound_primary:   [1.0, 0.97, 0.94, 0.91, 0.88],  // Slower fatigue (CNS-limited)
+};
+
+/**
+ * Get fatigue profile for an exercise category
+ * Falls back to compound_accessory if category not found
+ */
+export function getFatigueProfile(category: ExerciseCategory): number[] {
+  return FATIGUE_PROFILES[category] || FATIGUE_PROFILES.compound_accessory;
+}
+
+// ============================================================
 // 1RM ESTIMATION FROM REPS
 // ============================================================
 // NOTE: rpeToRIR, estimate1RM, and calculateWorkingWeight are now imported
@@ -510,10 +568,21 @@ export class WeightEstimationEngine {
     return result;
   }
   
+  /**
+   * Get working weight recommendation with optional per-set fatigue modeling.
+   * @param exerciseName - Name of the exercise
+   * @param targetReps - Target rep range
+   * @param targetRIR - Target reps in reserve
+   * @param category - Exercise category for fatigue modeling (optional)
+   * @param numberOfSets - Number of working sets to plan (default: 4)
+   * @param previousRecommendation - Previous week's recommendation for smoothing
+   */
   getWorkingWeight(
     exerciseName: string,
     targetReps: { min: number; max: number },
     targetRIR: number,
+    category?: ExerciseCategory,
+    numberOfSets: number = 4,
     previousRecommendation?: number
   ): WorkingWeightRecommendation {
     const estimatedMax = this.getEstimated1RM(exerciseName);
@@ -547,7 +616,75 @@ export class WeightEstimationEngine {
       }
     }
 
+    // Add per-set fatigue modeling if category is provided
+    if (category && recommendation.recommendedWeight > 0) {
+      recommendation.workingSets = this.generateWorkingSetPlans(
+        recommendation.recommendedWeight,
+        targetReps,
+        targetRIR,
+        category,
+        numberOfSets
+      );
+      recommendation.sandbaggingCheck = this.generateSandbaggingCheck(category, numberOfSets);
+    }
+
     return recommendation;
+  }
+
+  /**
+   * Generate per-set targets with expected fatigue dropoff
+   */
+  private generateWorkingSetPlans(
+    baseWeight: number,
+    targetReps: { min: number; max: number },
+    targetRIR: number,
+    category: ExerciseCategory,
+    numberOfSets: number = 4
+  ): WorkingSetPlan[] {
+    const fatigueProfile = getFatigueProfile(category);
+    const plans: WorkingSetPlan[] = [];
+
+    for (let i = 0; i < numberOfSets; i++) {
+      const fatigueMultiplier = fatigueProfile[Math.min(i, fatigueProfile.length - 1)];
+
+      // Apply fatigue to rep targets
+      const adjustedMax = Math.round(targetReps.max * fatigueMultiplier);
+      const adjustedMin = Math.round(targetReps.min * fatigueMultiplier);
+
+      // RPE naturally increases as fatigue accumulates
+      const rpeIncrease = i * 0.5;
+      const expectedRPE = Math.min(10, (10 - targetRIR) + rpeIncrease);
+
+      plans.push({
+        setNumber: i + 1,
+        targetWeight: baseWeight,
+        targetReps: { min: adjustedMin, max: adjustedMax },
+        expectedRPE: Math.round(expectedRPE * 10) / 10,
+        isDropSet: false
+      });
+    }
+
+    return plans;
+  }
+
+  /**
+   * Generate sandbagging check thresholds based on exercise category
+   */
+  private generateSandbaggingCheck(
+    category: ExerciseCategory,
+    numberOfSets: number
+  ): SandbaggingCheck {
+    const fatigueProfile = getFatigueProfile(category);
+    const lastSetIndex = Math.min(numberOfSets - 1, fatigueProfile.length - 1);
+    const expectedDropoff = 1 - fatigueProfile[lastSetIndex];
+
+    // Threshold is half expected dropoff - less than this suggests sandbagging
+    const threshold = Math.round(expectedDropoff * 0.5 * 100) / 100;
+
+    return {
+      minimumExpectedDropoff: threshold,
+      message: `You hit all sets with minimal rep dropoff. Consider adding weight next session.`
+    };
   }
   
   private getEstimated1RM(exerciseName: string): EstimatedMax {
@@ -1445,7 +1582,9 @@ export function quickWeightEstimate(
   experience: Experience,
   regionalData?: DexaRegionalData,
   unit: 'kg' | 'lb' = 'kg',
-  knownE1RM?: number
+  knownE1RM?: number,
+  category?: ExerciseCategory,
+  numberOfSets?: number
 ): WorkingWeightRecommendation {
   const profile = createStrengthProfile(
     heightCm,
@@ -1470,7 +1609,7 @@ export function quickWeightEstimate(
   }
 
   const engine = new WeightEstimationEngine(profile, unit);
-  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
+  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR, category, numberOfSets);
 }
 
 // ============================================================
@@ -1515,7 +1654,9 @@ export function quickWeightEstimateWithCalibration(
   }>,
   regionalData?: DexaRegionalData,
   unit: 'kg' | 'lb' = 'kg',
-  knownE1RM?: number
+  knownE1RM?: number,
+  category?: ExerciseCategory,
+  numberOfSets?: number
 ): WorkingWeightRecommendation {
   // Create estimated maxes from calibrated lifts
   const calibratedMaxes = createEstimatedMaxesFromCalibration(calibratedLifts);
@@ -1545,6 +1686,103 @@ export function quickWeightEstimateWithCalibration(
   };
 
   const engine = new WeightEstimationEngine(profile, unit);
-  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR);
+  return engine.getWorkingWeight(exerciseName, targetReps, targetRIR, category, numberOfSets);
+}
+
+// ============================================================
+// SANDBAGGING DETECTION
+// ============================================================
+
+export interface SandbaggingResult {
+  isSandbagging: boolean;
+  suggestion?: string;
+  actualDropoff?: number;
+  expectedDropoff?: number;
+}
+
+/**
+ * Detect if a user is sandbagging (using too light weight) based on their
+ * actual rep dropoff across sets compared to expected fatigue patterns.
+ *
+ * If actual dropoff is significantly less than expected, the weight is likely
+ * too light and the user should increase it.
+ *
+ * @param sets - Array of completed sets with weight and reps
+ * @param category - Exercise category for fatigue modeling
+ * @returns Sandbagging detection result with suggestion if detected
+ *
+ * @example
+ * // 4x12 curls with no dropoff - likely sandbagging
+ * detectSandbagging([
+ *   { weight: 15, reps: 12, completed: true },
+ *   { weight: 15, reps: 12, completed: true },
+ *   { weight: 15, reps: 12, completed: true },
+ *   { weight: 15, reps: 12, completed: true },
+ * ], 'isolation')
+ * // Returns: { isSandbagging: true, suggestion: "..." }
+ *
+ * @example
+ * // 12, 11, 10, 9 rep pattern on curls - appropriate fatigue
+ * detectSandbagging([
+ *   { weight: 15, reps: 12, completed: true },
+ *   { weight: 15, reps: 11, completed: true },
+ *   { weight: 15, reps: 10, completed: true },
+ *   { weight: 15, reps: 9, completed: true },
+ * ], 'isolation')
+ * // Returns: { isSandbagging: false }
+ */
+export function detectSandbagging(
+  sets: Array<{ weight: number; reps: number; completed: boolean }>,
+  category: ExerciseCategory
+): SandbaggingResult {
+  const completedSets = sets.filter(s => s.completed);
+
+  // Need at least 3 sets to detect meaningful patterns
+  if (completedSets.length < 3) {
+    return { isSandbagging: false };
+  }
+
+  // Must be same weight across sets for fair comparison
+  const sameWeight = completedSets.every(s => s.weight === completedSets[0].weight);
+  if (!sameWeight) {
+    return { isSandbagging: false };
+  }
+
+  const reps = completedSets.map(s => s.reps);
+  const firstSetReps = reps[0];
+  const lastSetReps = reps[reps.length - 1];
+
+  // Can't calculate dropoff if first set has 0 reps
+  if (firstSetReps === 0) {
+    return { isSandbagging: false };
+  }
+
+  const actualDropoff = (firstSetReps - lastSetReps) / firstSetReps;
+
+  const fatigueProfile = getFatigueProfile(category);
+  const lastSetIndex = Math.min(completedSets.length - 1, fatigueProfile.length - 1);
+  const expectedDropoff = 1 - fatigueProfile[lastSetIndex];
+
+  // Threshold is half expected dropoff - less than this suggests sandbagging
+  const threshold = expectedDropoff * 0.5;
+
+  if (actualDropoff < threshold) {
+    // Suggest appropriate weight increment based on category
+    const increment = category === 'isolation' ? 1 : 2.5;
+    const unitLabel = 'kg';
+
+    return {
+      isSandbagging: true,
+      actualDropoff,
+      expectedDropoff,
+      suggestion: `Minimal fatigue detected (${Math.round(actualDropoff * 100)}% dropoff vs ${Math.round(expectedDropoff * 100)}% expected). Try adding ${increment}${unitLabel} next session.`
+    };
+  }
+
+  return {
+    isSandbagging: false,
+    actualDropoff,
+    expectedDropoff
+  };
 }
 
