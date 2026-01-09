@@ -3187,13 +3187,13 @@ export default function WorkoutPage() {
         // Don't block on calorie calculation - it's okay if it fails
       }
 
-      // Clear store state and navigate to dashboard to see weekly volume
+      // Clear store state and navigate to dashboard weekly volume section
       endWorkoutSession();
-      router.push('/dashboard');
+      router.push('/dashboard#weekly-volume');
     } catch (err) {
       console.error('Failed to complete workout:', err);
       endWorkoutSession();
-      router.push('/dashboard');
+      router.push('/dashboard#weekly-volume');
     }
   };
 

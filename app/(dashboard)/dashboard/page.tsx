@@ -1452,7 +1452,7 @@ export default function DashboardPage() {
 
         case 'weekly-volume':
           return (
-            <Card>
+            <Card id="weekly-volume">
               <FirstTimeHint
                 id="dashboard-weekly-volume"
                 title="Understanding Weekly Volume"
