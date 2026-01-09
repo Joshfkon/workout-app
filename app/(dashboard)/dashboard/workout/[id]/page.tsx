@@ -33,7 +33,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
-import { formatWeight, getLocalDateString } from '@/lib/utils';
+import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -2901,10 +2901,12 @@ export default function WorkoutPage() {
         }
 
         if (weightRec.confidence !== 'find_working_weight') {
-          suggestedWeight = weightRec.recommendedWeight;
+          // recommendedWeight is in display units (kg or lb based on user preference)
+          // Convert back to kg for storage since target_weight_kg expects kg
+          suggestedWeight = inputWeightToKg(weightRec.recommendedWeight, preferences.units);
         }
       }
-      
+
       // Check if this is the first exercise for this muscle group in the workout
       const muscleAlreadyWarmedUp = blocks.some(
         block => block.exercise.primaryMuscle === exercise.primary_muscle
@@ -4190,8 +4192,12 @@ export default function WorkoutPage() {
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
                 );
+                // recommendedWeight is in display units (kg or lb), convert to kg for calculations
                 const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
-                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
+                const aiRecommendedWeightKg = aiRecommendedWeight > 0
+                  ? inputWeightToKg(aiRecommendedWeight, preferences.units)
+                  : 0;
+                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeightKg;
                 
                 return (
                   // Exercise group container - visually connects name with card
@@ -4306,7 +4312,7 @@ export default function WorkoutPage() {
                     )}
                     isActive={isCurrent}
                     unit={preferences.units}
-                    recommendedWeight={aiRecommendedWeight}
+                    recommendedWeight={aiRecommendedWeightKg}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     adjustedTargetRir={
