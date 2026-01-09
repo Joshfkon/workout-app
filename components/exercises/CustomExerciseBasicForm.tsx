@@ -91,7 +91,7 @@ export function CustomExerciseBasicForm({
   initialData,
 }: CustomExerciseBasicFormProps) {
   const [name, setName] = useState(initialData?.name || '');
-  const [primaryMuscle, setPrimaryMuscle] = useState<MuscleGroup | ''>(
+  const [primaryMuscle, setPrimaryMuscle] = useState<string>(
     initialData?.primaryMuscle || ''
   );
   const [equipment, setEquipment] = useState<Equipment | ''>(
@@ -102,7 +102,7 @@ export function CustomExerciseBasicForm({
   const [variationOf, setVariationOf] = useState(initialData?.variationOf || '');
 
   // Optional detailed fields
-  const [secondaryMuscles, setSecondaryMuscles] = useState<MuscleGroup[]>(initialData?.secondaryMuscles || []);
+  const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>(initialData?.secondaryMuscles || []);
   const [pattern, setPattern] = useState<MovementPattern | 'isolation' | 'carry' | ''>(initialData?.pattern || '');
   const [mechanic, setMechanic] = useState<'compound' | 'isolation' | ''>(initialData?.mechanic || '');
   const [difficulty, setDifficulty] = useState<ExerciseDifficulty | ''>(initialData?.difficulty || '');
@@ -117,7 +117,7 @@ export function CustomExerciseBasicForm({
   const [mistakeInput, setMistakeInput] = useState('');
   const [setupNote, setSetupNote] = useState(initialData?.setupNote || '');
   const [spinalLoading, setSpinalLoading] = useState<SpinalLoading | ''>(initialData?.spinalLoading || '');
-  const [stabilizers, setStabilizers] = useState<MuscleGroup[]>(initialData?.stabilizers || []);
+  const [stabilizers, setStabilizers] = useState<string[]>(initialData?.stabilizers || []);
   const [requiresBackArch, setRequiresBackArch] = useState(initialData?.requiresBackArch || false);
   const [requiresSpinalFlexion, setRequiresSpinalFlexion] = useState(initialData?.requiresSpinalFlexion || false);
   const [requiresSpinalExtension, setRequiresSpinalExtension] = useState(initialData?.requiresSpinalExtension || false);
