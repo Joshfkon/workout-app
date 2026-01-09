@@ -6,7 +6,8 @@ import { useUserStore } from '@/stores';
 import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from '@/services/volumeTracker';
 import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS } from '@/types/schema';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { getLocalDateString } from '@/lib/utils';
 
 interface UseWeeklyVolumeOptions {
@@ -45,25 +46,28 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
         .eq('week_start', weekStart);
 
       if (storedVolume && storedVolume.length > 0) {
-        // Use stored volume data
-        const mapped: MuscleVolumeData[] = storedVolume.map((row: WeeklyMuscleVolumeRow) => {
-          const landmarks = getVolumeLandmarks(row.muscle_group);
-          return {
-            muscleGroup: row.muscle_group,
+        // Use stored volume data - convert to standard muscle groups
+        const mapped: MuscleVolumeData[] = [];
+        storedVolume.forEach((row: WeeklyMuscleVolumeRow) => {
+          const standardMuscle = toStandardMuscleForVolume(row.muscle_group);
+          if (!standardMuscle) return; // Skip if can't convert
+          const landmarks = getVolumeLandmarks(standardMuscle);
+          mapped.push({
+            muscleGroup: standardMuscle,
             totalSets: row.total_sets,
             directSets: row.total_sets, // Not tracked separately in DB
             indirectSets: 0,
             landmarks,
             status: row.status,
             percentOfMrv: Math.round((row.total_sets / landmarks.mrv) * 100),
-          };
+          });
         });
         setVolumeData(mapped);
       } else {
         // Calculate from set logs if no pre-computed data
         // This would be a more complex query joining sets -> blocks -> exercises
         // For now, return empty/default data
-        const defaultData: MuscleVolumeData[] = MUSCLE_GROUPS.map((muscle) => {
+        const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
           const landmarks = getVolumeLandmarks(muscle);
           return {
             muscleGroup: muscle,
