@@ -2,37 +2,70 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint, SkeletonCard } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
-import { QuickFoodLogger } from '@/components/nutrition/QuickFoodLogger';
-import { StepTracking } from '@/components/nutrition/StepTracking';
-import { DailyCheckIn } from '@/components/dashboard/DailyCheckIn';
-import { HydrationTracker } from '@/components/dashboard/HydrationTracker';
-import { ActivityCard } from '@/components/dashboard/ActivityCard';
-import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { DashboardCard } from '@/components/dashboard/DashboardCard';
-import { CardioTracker } from '@/components/dashboard/CardioTracker';
-import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 
-// Lazy load heavy chart components for faster initial render
+// Loading placeholder for dashboard cards
+const CardSkeleton = () => (
+  <div className="animate-pulse bg-surface-800 rounded-lg p-4 space-y-3">
+    <div className="h-4 bg-surface-700 rounded w-3/4" />
+    <div className="h-8 bg-surface-700 rounded w-full" />
+  </div>
+);
+
+// Lazy load heavy components for faster initial render
 const WeightGraph = dynamic(
   () => import('@/components/analytics/WeightGraph').then(mod => ({ default: mod.WeightGraph })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-[200px] bg-surface-800/50 rounded-lg animate-pulse flex items-center justify-center">
-        <span className="text-surface-500 text-sm">Loading chart...</span>
-      </div>
-    ),
-  }
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const QuickFoodLogger = dynamic(
+  () => import('@/components/nutrition/QuickFoodLogger').then(mod => ({ default: mod.QuickFoodLogger })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const StepTracking = dynamic(
+  () => import('@/components/nutrition/StepTracking').then(mod => ({ default: mod.StepTracking })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const DailyCheckIn = dynamic(
+  () => import('@/components/dashboard/DailyCheckIn').then(mod => ({ default: mod.DailyCheckIn })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const HydrationTracker = dynamic(
+  () => import('@/components/dashboard/HydrationTracker').then(mod => ({ default: mod.HydrationTracker })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const ActivityCard = dynamic(
+  () => import('@/components/dashboard/ActivityCard').then(mod => ({ default: mod.ActivityCard })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const MuscleRecoveryCard = dynamic(
+  () => import('@/components/dashboard/MuscleRecoveryCard').then(mod => ({ default: mod.MuscleRecoveryCard })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const CardioTracker = dynamic(
+  () => import('@/components/dashboard/CardioTracker').then(mod => ({ default: mod.CardioTracker })),
+  { ssr: false, loading: () => <CardSkeleton /> }
+);
+
+const AtrophyRiskAlert = dynamic(
+  () => import('@/components/analytics/AtrophyRiskAlert').then(mod => ({ default: mod.AtrophyRiskAlert })),
+  { ssr: false, loading: () => <CardSkeleton /> }
 );
 
 // Card identifiers for reordering

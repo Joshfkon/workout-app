@@ -1,221 +1,163 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface SplashScreenProps {
   onComplete: () => void;
   duration?: number; // milliseconds
 }
 
-export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps) {
-  const [phase, setPhase] = useState<'logo' | 'expand' | 'fade'>('logo');
+/**
+ * Lightweight CSS-only splash screen for fast initial load.
+ * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
+ */
+export function SplashScreen({ onComplete, duration = 1800 }: SplashScreenProps) {
+  const [isVisible, setIsVisible] = useState(true);
+  const [isFading, setIsFading] = useState(false);
 
   useEffect(() => {
-    // Phase 1: Logo animation (0-1500ms)
-    const expandTimer = setTimeout(() => setPhase('expand'), 1500);
-    
-    // Phase 2: Expand and fade (1500-2500ms)
-    const fadeTimer = setTimeout(() => setPhase('fade'), 2000);
-    
-    // Complete
-    const completeTimer = setTimeout(() => onComplete(), duration);
+    // Start fade out slightly before duration completes
+    const fadeTimer = setTimeout(() => setIsFading(true), duration - 300);
+
+    // Complete and unmount
+    const completeTimer = setTimeout(() => {
+      setIsVisible(false);
+      onComplete();
+    }, duration);
 
     return () => {
-      clearTimeout(expandTimer);
       clearTimeout(fadeTimer);
       clearTimeout(completeTimer);
     };
   }, [duration, onComplete]);
 
+  if (!isVisible) return null;
+
   return (
-    <AnimatePresence>
-      {phase !== 'fade' && (
-        <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden"
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Animated background */}
-          <motion.div
-            className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950"
-            initial={{ scale: 1 }}
-            animate={phase === 'expand' ? { scale: 1.2 } : { scale: 1 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          />
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-300 ${
+        isFading ? 'opacity-0' : 'opacity-100'
+      }`}
+    >
+      {/* Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-surface-950 via-surface-900 to-surface-950" />
 
-          {/* Dynamic lines animation */}
-          <div className="absolute inset-0 overflow-hidden">
-            {[...Array(8)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute h-[2px] bg-gradient-to-r from-transparent via-primary-500/30 to-transparent"
-                style={{
-                  top: `${15 + i * 12}%`,
-                  left: '-100%',
-                  right: '-100%',
-                  transform: `rotate(${-15 + i * 4}deg)`,
-                }}
-                initial={{ x: '-100%', opacity: 0 }}
-                animate={{ 
-                  x: ['100%', '-100%'],
-                  opacity: [0, 1, 1, 0],
-                }}
-                transition={{
-                  duration: 1.5,
-                  delay: i * 0.1,
-                  ease: 'easeInOut',
-                }}
-              />
-            ))}
-          </div>
+      {/* Pulsing circles - CSS only */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="splash-ring splash-ring-1" />
+        <div className="splash-ring splash-ring-2" />
+        <div className="splash-ring splash-ring-3" />
+      </div>
 
-          {/* Pulsing circles */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {[...Array(3)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full border border-primary-500/20"
-                initial={{ width: 100, height: 100, opacity: 0 }}
-                animate={{
-                  width: [100, 400 + i * 100],
-                  height: [100, 400 + i * 100],
-                  opacity: [0.8, 0],
-                }}
-                transition={{
-                  duration: 2,
-                  delay: i * 0.3,
-                  repeat: Infinity,
-                  ease: 'easeOut',
-                }}
-              />
-            ))}
-          </div>
+      {/* Main logo container */}
+      <div className="relative z-10 flex flex-col items-center splash-logo-enter">
+        {/* Icon with glow */}
+        <div className="relative mb-4">
+          {/* Glow effect */}
+          <div className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full splash-glow" />
 
-          {/* Main logo container */}
-          <motion.div
-            className="relative z-10 flex flex-col items-center"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ 
-              duration: 0.6, 
-              ease: [0.34, 1.56, 0.64, 1], // Spring-like bounce
-            }}
+          {/* Dumbbell Icon */}
+          <svg
+            className="w-20 h-20 text-primary-500 relative z-10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
           >
-            {/* Icon */}
-            <motion.div
-              className="relative mb-4"
-              initial={{ y: 20, rotateY: -90 }}
-              animate={{ y: 0, rotateY: 0 }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
-            >
-              {/* Glow effect */}
-              <motion.div
-                className="absolute inset-0 blur-2xl bg-primary-500/50 rounded-full"
-                animate={{
-                  scale: [1, 1.2, 1],
-                  opacity: [0.5, 0.8, 0.5],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-              />
-              
-              {/* Dumbbell Icon */}
-              <motion.svg
-                className="w-24 h-24 text-primary-500 relative z-10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.5}
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 1.5, ease: 'easeInOut' }}
-              >
-                <motion.path
-                  d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 1.2, ease: 'easeInOut' }}
-                />
-              </motion.svg>
-            </motion.div>
+            <path
+              d="M6.5 6.5V17.5M17.5 6.5V17.5M6.5 12H17.5M4 8V16M20 8V16M2 9.5V14.5M22 9.5V14.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="splash-path"
+            />
+          </svg>
+        </div>
 
-            {/* App name with staggered letters */}
-            <div className="flex items-center gap-1">
-              {'HYPERTROPHY'.split('').map((letter, i) => (
-                <motion.span
-                  key={i}
-                  className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider"
-                  initial={{ y: 50, opacity: 0, rotateX: -90 }}
-                  animate={{ y: 0, opacity: 1, rotateX: 0 }}
-                  transition={{
-                    duration: 0.4,
-                    delay: 0.3 + i * 0.05,
-                    ease: [0.34, 1.56, 0.64, 1],
-                  }}
-                >
-                  {letter}
-                </motion.span>
-              ))}
-            </div>
+        {/* App name */}
+        <h1 className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-text">
+          HYPERTRACK
+        </h1>
 
-            {/* Tagline */}
-            <motion.p
-              className="mt-3 text-sm text-primary-400 font-medium tracking-widest uppercase"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1, duration: 0.5 }}
-            >
-              Train Smarter
-            </motion.p>
+        {/* Tagline */}
+        <p className="mt-2 text-sm text-primary-400 font-medium tracking-widest uppercase splash-tagline">
+          Train Smarter
+        </p>
 
-            {/* Loading bar */}
-            <motion.div
-              className="mt-8 w-48 h-1 bg-surface-800 rounded-full overflow-hidden"
-              initial={{ opacity: 0, scaleX: 0 }}
-              animate={{ opacity: 1, scaleX: 1 }}
-              transition={{ delay: 0.5, duration: 0.3 }}
-            >
-              <motion.div
-                className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full"
-                initial={{ x: '-100%' }}
-                animate={{ x: '0%' }}
-                transition={{ 
-                  duration: 1.8,
-                  delay: 0.6,
-                  ease: 'easeInOut',
-                }}
-              />
-            </motion.div>
-          </motion.div>
+        {/* Loading bar */}
+        <div className="mt-6 w-40 h-1 bg-surface-800 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-primary-500 via-accent-500 to-primary-500 rounded-full splash-progress" />
+        </div>
+      </div>
 
-          {/* Corner accents */}
-          <motion.div
-            className="absolute top-0 left-0 w-32 h-32"
-            initial={{ x: -100, y: -100 }}
-            animate={{ x: 0, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="w-full h-full border-l-2 border-t-2 border-primary-500/30" />
-          </motion.div>
-          
-          <motion.div
-            className="absolute bottom-0 right-0 w-32 h-32"
-            initial={{ x: 100, y: 100 }}
-            animate={{ x: 0, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-          >
-            <div className="w-full h-full border-r-2 border-b-2 border-primary-500/30" />
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      {/* CSS Animations */}
+      <style jsx>{`
+        .splash-logo-enter {
+          animation: logoEnter 0.5s ease-out forwards;
+        }
+
+        .splash-text {
+          animation: textEnter 0.4s ease-out 0.2s both;
+        }
+
+        .splash-tagline {
+          animation: textEnter 0.4s ease-out 0.4s both;
+        }
+
+        .splash-glow {
+          animation: glowPulse 2s ease-in-out infinite;
+        }
+
+        .splash-progress {
+          animation: progressFill 1.5s ease-out 0.3s forwards;
+          transform: translateX(-100%);
+        }
+
+        .splash-ring {
+          position: absolute;
+          border-radius: 50%;
+          border: 1px solid rgb(var(--primary-500) / 0.2);
+          animation: ringExpand 2s ease-out infinite;
+        }
+
+        .splash-ring-1 { animation-delay: 0s; }
+        .splash-ring-2 { animation-delay: 0.4s; }
+        .splash-ring-3 { animation-delay: 0.8s; }
+
+        .splash-path {
+          stroke-dasharray: 100;
+          stroke-dashoffset: 100;
+          animation: pathDraw 1s ease-out 0.1s forwards;
+        }
+
+        @keyframes logoEnter {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes textEnter {
+          from { transform: translateY(10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes glowPulse {
+          0%, 100% { transform: scale(1); opacity: 0.5; }
+          50% { transform: scale(1.1); opacity: 0.7; }
+        }
+
+        @keyframes progressFill {
+          to { transform: translateX(0); }
+        }
+
+        @keyframes ringExpand {
+          0% { width: 60px; height: 60px; opacity: 0.6; }
+          100% { width: 300px; height: 300px; opacity: 0; }
+        }
+
+        @keyframes pathDraw {
+          to { stroke-dashoffset: 0; }
+        }
+      `}</style>
+    </div>
   );
 }
 

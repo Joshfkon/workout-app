@@ -16,11 +16,15 @@ export const viewport: Viewport = {
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",  // Show fallback font immediately, swap when loaded
+  preload: true,
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
+  display: "swap",  // Prevent invisible text during font load
+  preload: true,
 });
 
 export const metadata: Metadata = {
