@@ -250,7 +250,7 @@ export interface ActivityComment {
 // Workout Sharing
 // ============================================================================
 
-export type ShareType = 'single_workout' | 'program' | 'template' | 'crash_the_economy';
+export type ShareType = 'single_workout' | 'program' | 'template';
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced';
 
 export interface SharedWorkout {
