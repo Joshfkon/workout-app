@@ -116,15 +116,21 @@ export const FirstTimeHint = memo(function FirstTimeHint({
     setTooltipPosition({ top, left });
   }, [position]);
 
-  // Delay showing the hint
+  // Delay showing the hint, and reset visibility when shouldShow becomes false or on unmount
   useEffect(() => {
-    if (!shouldShow && !forceShow) return;
+    if (!shouldShow && !forceShow) {
+      setIsVisible(false);
+      return;
+    }
 
     const timer = setTimeout(() => {
       setIsVisible(true);
     }, delay);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      setIsVisible(false);
+    };
   }, [shouldShow, forceShow, delay]);
 
   // Update position when visible

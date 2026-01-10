@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { DEFAULT_EDUCATION_PREFERENCES, type EducationPreferences } from '@/types/education';
@@ -144,9 +145,9 @@ export function useFirstTimeHint(hintId: string) {
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
   const dismissedHints = useEducationStore((state) => state.dismissedHints);
   const activeHintId = useEducationStore((state) => state.activeHintId);
-  const dismissHint = useEducationStore((state) => state.dismissHint);
-  const registerHint = useEducationStore((state) => state.registerHint);
-  const unregisterHint = useEducationStore((state) => state.unregisterHint);
+  const dismissHintAction = useEducationStore((state) => state.dismissHint);
+  const registerHintAction = useEducationStore((state) => state.registerHint);
+  const unregisterHintAction = useEducationStore((state) => state.unregisterHint);
 
   const isDismissed = dismissedHints.includes(hintId);
   const isActive = activeHintId === hintId;
@@ -154,11 +155,16 @@ export function useFirstTimeHint(hintId: string) {
   // Only show if: beginner tips on, not dismissed, AND this is the active hint
   const shouldShow = showBeginnerTips && !isDismissed && isActive;
 
+  // Memoize callbacks to prevent useEffect re-runs on every render
+  const dismiss = useCallback(() => dismissHintAction(hintId), [dismissHintAction, hintId]);
+  const register = useCallback(() => registerHintAction(hintId), [registerHintAction, hintId]);
+  const unregister = useCallback(() => unregisterHintAction(hintId), [unregisterHintAction, hintId]);
+
   return {
     shouldShow,
-    dismiss: () => dismissHint(hintId),
-    register: () => registerHint(hintId),
-    unregister: () => unregisterHint(hintId),
+    dismiss,
+    register,
+    unregister,
     // Whether this hint would be eligible to show (ignoring queue position)
     isEligible: showBeginnerTips && !isDismissed,
   };
