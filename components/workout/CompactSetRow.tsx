@@ -3,6 +3,7 @@
 import { useState, memo } from 'react';
 import { Button } from '@/components/ui';
 import { SetFeedbackCard } from './SetFeedbackCard';
+import { DurationTimerInput } from './DurationTimerInput';
 import type {
   SetLog,
   WeightUnit,
@@ -58,6 +59,8 @@ interface CompactSetRowProps {
   disabled?: boolean;
   /** If true, this is a duration-based exercise (plank, hold) - show seconds instead of reps */
   isDurationBased?: boolean;
+  /** Exercise ID for timer persistence */
+  exerciseId?: string;
 }
 
 type InputPhase = 'input' | 'feedback';
@@ -85,6 +88,7 @@ export const CompactSetRow = memo(function CompactSetRow({
   unit = 'kg',
   disabled = false,
   isDurationBased = false,
+  exerciseId,
 }: CompactSetRowProps) {
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
   const [weight, setWeight] = useState(
@@ -292,17 +296,26 @@ export const CompactSetRow = memo(function CompactSetRow({
       </div>
 
       {/* Reps/seconds input - prominent */}
-      <div className="w-20">
-        <input
-          type="number"
-          value={reps}
-          onChange={(e) => setReps(e.target.value)}
-          disabled={disabled}
-          min="0"
-          max={isDurationBased ? 600 : 100}
-          placeholder={isDurationBased ? 'sec' : undefined}
-          className="w-full px-2 py-2 bg-surface-900 border border-surface-700 rounded text-center font-mono text-base font-semibold text-surface-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
-        />
+      <div className={isDurationBased ? 'w-32' : 'w-20'}>
+        {isDurationBased ? (
+          <DurationTimerInput
+            value={parseInt(reps) || 0}
+            onChange={(seconds) => setReps(String(seconds))}
+            targetSeconds={targetRepRange[1]}
+            disabled={disabled}
+            exerciseId={exerciseId ? `${exerciseId}-set-${setNumber}` : undefined}
+          />
+        ) : (
+          <input
+            type="number"
+            value={reps}
+            onChange={(e) => setReps(e.target.value)}
+            disabled={disabled}
+            min="0"
+            max={100}
+            className="w-full px-2 py-2 bg-surface-900 border border-surface-700 rounded text-center font-mono text-base font-semibold text-surface-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+          />
+        )}
       </div>
 
       {/* Check button */}
