@@ -148,10 +148,10 @@ export function CustomExerciseBasicForm({
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Load exercises for variation selection
+  // Load exercises for variation selection (include custom exercises)
   useEffect(() => {
     async function loadExercises() {
-      const allExercises = await getExercises(false); // Exclude custom
+      const allExercises = await getExercises(true);
       setExercises(allExercises);
     }
     loadExercises();
