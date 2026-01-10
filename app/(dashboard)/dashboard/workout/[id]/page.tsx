@@ -121,6 +121,15 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
   foam_roller: ['foam roller', 'roller'],
 };
 
+// Normalize exercise search terms for better matching
+// Handles variations like "situps" vs "sit up" vs "sit-up"
+function normalizeForSearch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[-\s]/g, '')  // Remove hyphens and spaces
+    .replace(/s$/, '');     // Remove trailing 's' for basic plural handling
+}
+
 interface CalibratedLift {
   lift_name: string;
   estimated_1rm: number;
@@ -3575,8 +3584,9 @@ export default function WorkoutPage() {
 
                   // Filter by search
                   if (exerciseSearch) {
+                    const normalizedSearch = normalizeForSearch(exerciseSearch);
                     filteredExercises = filteredExercises.filter(ex =>
-                      ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                      normalizeForSearch(ex.name).includes(normalizedSearch)
                     );
                   }
 
@@ -4850,8 +4860,9 @@ export default function WorkoutPage() {
 
                 // Filter by search
                 if (exerciseSearch) {
+                  const normalizedSearch = normalizeForSearch(exerciseSearch);
                   filteredExercises = filteredExercises.filter(ex =>
-                    ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
+                    normalizeForSearch(ex.name).includes(normalizedSearch)
                   );
                 }
 
