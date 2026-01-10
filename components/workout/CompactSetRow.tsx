@@ -56,6 +56,8 @@ interface CompactSetRowProps {
   unit?: WeightUnit;
   /** Whether input is disabled */
   disabled?: boolean;
+  /** If true, this is a duration-based exercise (plank, hold) - show seconds instead of reps */
+  isDurationBased?: boolean;
 }
 
 type InputPhase = 'input' | 'feedback';
@@ -82,6 +84,7 @@ export const CompactSetRow = memo(function CompactSetRow({
   onEdit,
   unit = 'kg',
   disabled = false,
+  isDurationBased = false,
 }: CompactSetRowProps) {
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
   const [weight, setWeight] = useState(
@@ -121,7 +124,7 @@ export const CompactSetRow = memo(function CompactSetRow({
           {completedDisplayWeight} {unit}
         </div>
         <div className="w-20 text-center text-sm font-semibold text-surface-300">
-          {completedSet.reps}
+          {completedSet.reps}{isDurationBased ? 's' : ''}
         </div>
         <div className="w-10 flex justify-center">
           <svg className="w-5 h-5 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
@@ -272,7 +275,7 @@ export const CompactSetRow = memo(function CompactSetRow({
         )}
       </div>
 
-      {/* Reps input - prominent */}
+      {/* Reps/seconds input - prominent */}
       <div className="w-20">
         <input
           type="number"
@@ -280,7 +283,8 @@ export const CompactSetRow = memo(function CompactSetRow({
           onChange={(e) => setReps(e.target.value)}
           disabled={disabled}
           min="0"
-          max="100"
+          max={isDurationBased ? 600 : 100}
+          placeholder={isDurationBased ? 'sec' : undefined}
           className="w-full px-2 py-2 bg-surface-900 border border-surface-700 rounded text-center font-mono text-base font-semibold text-surface-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
         />
       </div>
