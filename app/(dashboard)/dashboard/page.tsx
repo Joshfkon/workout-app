@@ -1451,6 +1451,10 @@ export default function DashboardPage() {
           ) : null;
 
         case 'weekly-volume':
+          // Calculate muscles with zero volume
+          const trainedMuscles = new Set(muscleVolume.map(mv => mv.muscle));
+          const zeroVolumeMuscles = ALL_MUSCLE_GROUPS.filter(muscle => !trainedMuscles.has(muscle));
+
           return (
             <Card>
               <FirstTimeHint
@@ -1528,6 +1532,49 @@ export default function DashboardPage() {
                   <div className="text-center py-6">
                     <p className="text-surface-400 text-sm">Complete workouts to track volume</p>
                   </div>
+                )}
+
+                {/* Zero Volume Muscles - Expandable Section */}
+                {zeroVolumeMuscles.length > 0 && (
+                  <details className="mt-4 pt-3 border-t border-surface-800 group/zero">
+                    <summary className="cursor-pointer list-none flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-3 h-3 text-red-500/70 transition-transform group-open/zero:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        <span className="text-red-400/80">No volume this week</span>
+                        <span className="text-xs text-red-500/50 ml-1">({zeroVolumeMuscles.length})</span>
+                      </div>
+                      <span className="text-xs text-red-500/60 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        atrophy risk
+                      </span>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {zeroVolumeMuscles.map((muscle) => {
+                        const target = MEV_TARGETS[muscle] || 4;
+                        return (
+                          <div key={muscle} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-red-400/70 ml-5">{STANDARD_MUSCLE_DISPLAY_NAMES[muscle] ?? muscle}</span>
+                              <span className="text-red-500/60 font-medium">
+                                0/{target}
+                                <span className="text-xs text-red-500/40 ml-1">↓</span>
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
+                              <div className="h-full bg-red-500/30 w-0" />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <p className="text-xs text-red-500/50 mt-3 ml-5 italic">
+                        Muscles not trained for extended periods may experience strength and size loss
+                      </p>
+                    </div>
+                  </details>
                 )}
 
                 {/* First week progress interpretation */}
