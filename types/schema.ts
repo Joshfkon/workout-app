@@ -303,6 +303,15 @@ export interface Exercise {
 
 // ============ MESOCYCLE ============
 
+/** Day of the week for workout scheduling */
+export type WorkoutDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+/** All days of the week */
+export const DAYS_OF_WEEK: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Weekdays only */
+export const WEEKDAYS: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+
 /**
  * Training mesocycle (typically 4-8 weeks) with progressive overload structure
  */
@@ -311,25 +320,31 @@ export interface Mesocycle {
   userId: string;
   name: string;
   state: MesocycleState;
-  
+
   /** Total planned weeks in the mesocycle */
   totalWeeks: number;
-  
+
   /** Current week (1-indexed) */
   currentWeek: number;
-  
+
   /** Week number designated as deload (usually last week) */
   deloadWeek: number;
-  
+
   /** Training days per week */
   daysPerWeek: number;
-  
+
   /** Split type (e.g., 'PPL', 'Upper/Lower', 'Full Body', 'Bro Split') */
   splitType: string;
-  
+
   /** Accumulated fatigue score (0-100), triggers deload recommendations */
   fatigueScore: number;
-  
+
+  /**
+   * User's preferred workout days (e.g., ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] for weekdays only)
+   * If null, uses default schedule patterns based on daysPerWeek
+   */
+  preferredWorkoutDays: WorkoutDay[] | null;
+
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
