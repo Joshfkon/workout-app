@@ -27,7 +27,7 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType, ExerciseType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -806,6 +806,8 @@ export default function WorkoutPage() {
               demoGifUrl: block.exercises.demo_gif_url as string | undefined,
               demoThumbnailUrl: block.exercises.demo_thumbnail_url as string | undefined,
               youtubeVideoId: block.exercises.youtube_video_id as string | undefined,
+              // Exercise type for duration-based exercises (planks, holds)
+              exerciseType: block.exercises.exercise_type as ExerciseType | undefined,
             },
           }));
 
@@ -2275,14 +2277,16 @@ export default function WorkoutPage() {
                 resistanceProfile: fullExData.resistance_profile || 3,
                 progressionEase: fullExData.progression_ease || 3,
               } : undefined,
+              // Exercise type for duration-based exercises (planks, holds)
+              exerciseType: fullExData.exercise_type as ExerciseType | undefined,
             };
-            
-            setBlocks(prevBlocks => prevBlocks.map(b => 
-              b.id === block.id 
+
+            setBlocks(prevBlocks => prevBlocks.map(b =>
+              b.id === block.id
                 ? { ...b, exerciseId: result.replacement!.id, exercise: completeExercise }
                 : b
             ));
-            
+
             adjustments.push(`${result.originalName} → ${result.replacement.name}`);
           }
         } catch (err) {
@@ -2677,11 +2681,13 @@ export default function WorkoutPage() {
             resistanceProfile: fullExerciseData.resistance_profile || 3,
             progressionEase: fullExerciseData.progression_ease || 3,
           } : undefined,
+          // Exercise type for duration-based exercises (planks, holds)
+          exerciseType: fullExerciseData.exercise_type as ExerciseType | undefined,
         };
-        
+
         // Update local state with complete exercise data
-        setBlocks(prevBlocks => prevBlocks.map(block => 
-          block.id === blockId 
+        setBlocks(prevBlocks => prevBlocks.map(block =>
+          block.id === blockId
             ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise }
             : block
         ));
@@ -3026,6 +3032,8 @@ export default function WorkoutPage() {
           setupNote: exerciseData.setup_note || '',
           movementPattern: exerciseData.movement_pattern || '',
           equipmentRequired: exerciseData.equipment_required || [],
+          // Exercise type for duration-based exercises (planks, holds)
+          exerciseType: exerciseData.exercise_type as ExerciseType | undefined,
         },
       };
 
