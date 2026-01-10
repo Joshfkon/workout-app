@@ -1455,14 +1455,19 @@ export default function DashboardPage() {
           const trainedMuscles = new Set(muscleVolume.map(mv => mv.muscle));
           const zeroVolumeMuscles = ALL_MUSCLE_GROUPS.filter(muscle => !trainedMuscles.has(muscle));
 
+          // Only show the weekly volume hint if user has started training
+          const hasStartedTraining = activeMesocycle || muscleVolume.length > 0;
+
           return (
             <Card>
-              <FirstTimeHint
-                id="dashboard-weekly-volume"
-                title="Understanding Weekly Volume"
-                description="Volume tracking shows how many sets per muscle group you've done this week. Your body needs enough volume (MEV) to grow, but not so much (MRV) that you can't recover. Green means you're in the sweet spot!"
-                position="top"
-              />
+              {hasStartedTraining && (
+                <FirstTimeHint
+                  id="dashboard-weekly-volume"
+                  title="Understanding Weekly Volume"
+                  description="Volume tracking shows how many sets per muscle group you've done this week. Your body needs enough volume (MEV) to grow, but not so much (MRV) that you can't recover. Green means you're in the sweet spot!"
+                  position="top"
+                />
+              )}
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-2">
