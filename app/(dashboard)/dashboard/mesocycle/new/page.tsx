@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
@@ -13,12 +13,13 @@ import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
 import { WEEKDAYS } from '@/types/schema';
-import { WorkoutDaySelector } from '@/components/mesocycle';
+import { WorkoutDaySelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
   recommendSplit,
   calculateRecoveryFactors,
+  evaluateMesocycleLength,
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
@@ -274,6 +275,11 @@ export default function NewMesocyclePage() {
 
   // Calculate recovery factors for display
   const recoveryFactors = calculateRecoveryFactors(extendedProfile);
+
+  // Evaluate mesocycle length selection and provide guidance
+  const mesocycleLengthGuidance = useMemo(() => {
+    return evaluateMesocycleLength(totalWeeks, userGoal, userExperience, recoveryFactors);
+  }, [totalWeeks, userGoal, userExperience, recoveryFactors]);
 
   // Generate recommendations when days change
   useEffect(() => {
@@ -853,6 +859,12 @@ export default function NewMesocyclePage() {
                 { value: 7, label: '7' },
                 { value: 8, label: '8' },
               ]}
+            />
+
+            {/* Mesocycle length guidance */}
+            <MesocycleLengthGuidance
+              guidance={mesocycleLengthGuidance}
+              onAcceptRecommendation={(weeks) => setTotalWeeks(weeks)}
             />
 
             <div className="p-4 bg-surface-800/50 rounded-lg">
