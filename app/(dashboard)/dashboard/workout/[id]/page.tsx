@@ -4994,6 +4994,7 @@ export default function WorkoutPage() {
                 userId={session.userId}
                 onSuccess={handleCustomExerciseSuccess}
                 onCancel={() => setShowCustomExercise(false)}
+                initialName={exerciseSearch}
               />
             </div>
           </div>
