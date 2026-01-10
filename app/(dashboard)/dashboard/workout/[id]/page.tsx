@@ -3354,13 +3354,14 @@ export default function WorkoutPage() {
 
         {/* Add Exercise Modal */}
         {showAddExercise && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div 
+          <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
+            <div
               className="absolute inset-0 bg-black/60"
               onClick={handleCloseAddExerciseModal}
             />
-            <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+            {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
+            <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
                 <button
                   onClick={handleCloseAddExerciseModal}
                   className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
@@ -3384,7 +3385,7 @@ export default function WorkoutPage() {
               </div>
               
               {/* Search and Filters */}
-              <div className="p-4 border-b border-surface-800 space-y-3">
+              <div className="p-4 border-b border-surface-800 space-y-3 flex-shrink-0">
                 <input
                   type="text"
                   value={exerciseSearch}
@@ -4609,17 +4610,17 @@ export default function WorkoutPage() {
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
           {/* Backdrop */}
-          <div 
+          <div
             className="absolute inset-0 bg-black/60"
             onClick={handleCloseAddExerciseModal}
           />
-          
-          {/* Modal */}
-          <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+
+          {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
+          <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
               <button
                 onClick={handleCloseAddExerciseModal}
                 className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
@@ -4643,7 +4644,7 @@ export default function WorkoutPage() {
             </div>
 
             {/* Search and Filters */}
-            <div className="p-4 space-y-3 border-b border-surface-800">
+            <div className="p-4 space-y-3 border-b border-surface-800 flex-shrink-0">
               <Input
                 placeholder="Search exercises..."
                 value={exerciseSearch}
