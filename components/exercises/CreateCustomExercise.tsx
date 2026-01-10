@@ -19,6 +19,7 @@ interface CreateCustomExerciseProps {
   onSuccess?: (exerciseId: string) => void;
   onCancel?: () => void;
   userId: string;
+  initialName?: string;
 }
 
 type Phase = 'input' | 'review';
@@ -27,6 +28,7 @@ export function CreateCustomExercise({
   onSuccess,
   onCancel,
   userId,
+  initialName,
 }: CreateCustomExerciseProps) {
   const [phase, setPhase] = useState<Phase>('input');
   const [isLoading, setIsLoading] = useState(false);
@@ -145,7 +147,7 @@ export function CreateCustomExercise({
           onSubmit={handleBasicSubmit}
           onCancel={onCancel}
           isLoading={isLoading}
-          initialData={basicInput || undefined}
+          initialData={basicInput || (initialName ? { name: initialName } : undefined)}
         />
       )}
 

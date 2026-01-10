@@ -1212,9 +1212,9 @@ function NewWorkoutContent() {
   };
 
   const openCustomExerciseModal = (muscle: string) => {
-    setCustomExerciseForm({ 
-      name: '', 
-      muscle, 
+    setCustomExerciseForm({
+      name: exerciseSearch,
+      muscle,
       mechanic: 'compound',
       equipmentRequired: [],
       secondaryMuscles: [],
