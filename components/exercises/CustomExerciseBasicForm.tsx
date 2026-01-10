@@ -764,7 +764,7 @@ export function CustomExerciseBasicForm({
           isLoading={isLoading}
           className="flex-1"
         >
-          {isLoading ? 'Analyzing...' : 'Continue'}
+          Continue
         </Button>
       </div>
     </form>
