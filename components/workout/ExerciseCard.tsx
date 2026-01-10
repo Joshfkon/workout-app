@@ -352,6 +352,10 @@ export const ExerciseCard = memo(function ExerciseCard({
   const canUseAssistance = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'assisted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
   const isPureBodyweight = isBodyweightExercise && exerciseWithBodyweight.bodyweightType === 'pure';
 
+  // Check if this is a duration-based exercise (plank, hold, etc.)
+  // These exercises track seconds instead of reps
+  const isDurationBased = exercise.exerciseType === 'duration_based';
+
   // Weight mode state for bodyweight exercises (header-level selection)
   const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
     isPureBodyweight ? 'bodyweight' : 'bodyweight'
@@ -1182,7 +1186,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-surface-500">PR:</span>
                     <span className="text-sm font-medium text-success-400">
-                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}
+                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}
                     </span>
                   </div>
                 )}
@@ -1220,11 +1224,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {exerciseHistory.lastWorkoutSets.map((set, idx) => (
-                        <span 
+                        <span
                           key={idx}
                           className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                         >
-                          {displayWeight(set.weightKg, true)} × {set.reps}
+                          {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
                           {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                         </span>
                       ))}
@@ -1299,7 +1303,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr>
                     <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
                     <th className="px-1 py-2 w-10"></th>
@@ -1490,6 +1494,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   completedSet={set}
                   onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
                   unit={unit}
+                  isDurationBased={isDurationBased}
                 />
               );
             }
@@ -1570,6 +1575,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 }}
                 unit={unit}
                 disabled={isCompletingSet}
+                isDurationBased={isDurationBased}
               />
             );
           })}
@@ -1598,7 +1604,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <tr>
                 <th className="w-8 px-1 py-2 text-left text-surface-400 font-medium">Set</th>
                 <th className="w-[72px] px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
                 <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
                 <th className="w-12 px-1 py-2 text-center text-surface-400 font-medium">Form</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
@@ -1705,7 +1711,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        {set.reps}
+                        {set.reps}{isDurationBased ? 's' : ''}
                       </td>
                       <td
                         className="px-1 py-2.5 text-center"
@@ -2070,8 +2076,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                               onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
                               onFocus={(e) => e.target.select()}
                               min="0"
-                              max="100"
-                              title={isOutsideRange ? `Estimated reps outside target range (${block.targetRepRange[0]}-${block.targetRepRange[1]})` : undefined}
+                              max={isDurationBased ? 600 : 100}
+                              title={isOutsideRange ? `Estimated ${isDurationBased ? 'seconds' : 'reps'} outside target range (${block.targetRepRange[0]}-${block.targetRepRange[1]})` : undefined}
                               className={`w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
                                 isOutsideRange
                                   ? 'border-danger-500 text-danger-400'
@@ -2079,7 +2085,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               }`}
                             />
                             {isOutsideRange && (
-                              <span className="absolute -top-1 -right-1 w-2 h-2 bg-danger-500 rounded-full" title="Outside target rep range" />
+                              <span className="absolute -top-1 -right-1 w-2 h-2 bg-danger-500 rounded-full" title={`Outside target ${isDurationBased ? 'duration' : 'rep'} range`} />
                             )}
                           </div>
                         );
@@ -2692,7 +2698,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div>
                 <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
                 <p className="text-xs text-surface-400">
-                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} reps
+                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} {isDurationBased ? 'sec' : 'reps'}
                 </p>
               </div>
               <button

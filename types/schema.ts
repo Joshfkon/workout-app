@@ -105,6 +105,9 @@ export type DeloadStrategy = 'proactive' | 'reactive' | 'none';
 /** Exercise difficulty levels */
 export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
 
+/** Exercise type - determines if reps or duration is tracked */
+export type ExerciseType = 'rep_based' | 'duration_based';
+
 /** Fatigue rating (1 = low CNS demand, 3 = high) */
 export type FatigueRating = 1 | 2 | 3;
 
@@ -290,6 +293,12 @@ export interface Exercise {
 
   /** YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ") */
   youtubeVideoId?: string;
+
+  /**
+   * Exercise type: rep_based (default) or duration_based (for holds/planks)
+   * Duration-based exercises store seconds in the reps field
+   */
+  exerciseType?: ExerciseType;
 }
 
 // ============ MESOCYCLE ============
