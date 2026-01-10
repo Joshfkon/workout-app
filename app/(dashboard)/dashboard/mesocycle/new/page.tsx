@@ -11,7 +11,9 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString } from '@/lib/utils';
-import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
+import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
+import { WEEKDAYS } from '@/types/schema';
+import { WorkoutDaySelector } from '@/components/mesocycle';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
@@ -64,6 +66,34 @@ export default function NewMesocyclePage() {
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
+
+  // Preferred workout days
+  const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
+    'Monday', 'Tuesday', 'Thursday', 'Friday'
+  ]);
+
+  // Get default workout days based on frequency
+  const getDefaultWorkoutDays = (days: number): WorkoutDay[] => {
+    const patterns: Record<number, WorkoutDay[]> = {
+      2: ['Monday', 'Thursday'],
+      3: ['Monday', 'Wednesday', 'Friday'],
+      4: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+      5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      6: ['Monday', 'Tuesday', 'Wednesday', 'Friday', 'Saturday', 'Sunday'],
+    };
+    return patterns[days] || patterns[4];
+  };
+
+  // Update preferred days when daysPerWeek changes (only if not manually customized)
+  useEffect(() => {
+    const defaultDays = getDefaultWorkoutDays(daysPerWeek);
+    // Auto-select weekdays if possible (user preference from the feedback)
+    if (daysPerWeek <= 5) {
+      setPreferredWorkoutDays(WEEKDAYS.slice(0, daysPerWeek));
+    } else {
+      setPreferredWorkoutDays(defaultDays);
+    }
+  }, [daysPerWeek]);
 
   // Calculate estimated exercises based on time (proper estimation with rest periods)
   const getExerciseEstimate = (minutes: number) => {
@@ -338,6 +368,8 @@ export default function NewMesocyclePage() {
           fatigue_score: 0,
           is_active: true,
           start_date: getLocalDateString(),
+          // Preferred workout days (user-selected)
+          preferred_workout_days: preferredWorkoutDays,
           // New fields for training science integration
           periodization_model: fullProgram?.periodization?.model || 'linear',
           program_data: fullProgram,
@@ -558,6 +590,22 @@ export default function NewMesocyclePage() {
                 { value: 6, label: '6' },
               ]}
             />
+
+            {/* Preferred workout days selector */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-surface-200">
+                Which days do you want to train?
+              </label>
+              <p className="text-xs text-surface-500">
+                Pick {daysPerWeek} days that work best for your schedule
+              </p>
+              <WorkoutDaySelector
+                daysPerWeek={daysPerWeek}
+                selectedDays={preferredWorkoutDays}
+                onChange={setPreferredWorkoutDays}
+                showPresets={true}
+              />
+            </div>
 
             <Slider
               label="Time per Session"
@@ -870,12 +918,21 @@ export default function NewMesocyclePage() {
                 <span className="text-surface-400">Duration</span>
                 <span className="text-surface-200 font-medium">{totalWeeks} weeks</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-2 border-b border-surface-800">
                 <span className="text-surface-400">Deload</span>
                 <span className="text-surface-200 font-medium">Week {totalWeeks}</span>
               </div>
+              <div className="flex justify-between py-2">
+                <span className="text-surface-400">Workout Days</span>
+                <span className="text-surface-200 font-medium text-right">
+                  {preferredWorkoutDays
+                    .sort((a, b) => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(a) - ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(b))
+                    .map(d => d.slice(0, 3))
+                    .join(', ')}
+                </span>
+              </div>
             </div>
-            
+
             {/* Weekly time commitment with status */}
             <div className={`p-3 rounded-lg border ${
               volumeAssessment.status === 'optimal'

@@ -7,7 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimati
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import type { Split, MuscleGroup } from '@/types/schema';
+import type { Split, MuscleGroup, WorkoutDay } from '@/types/schema';
+import { DAYS_OF_WEEK } from '@/types/schema';
 
 interface Mesocycle {
   id: string;
@@ -19,6 +20,7 @@ interface Mesocycle {
   split_type: string;
   deload_week: number;
   created_at: string;
+  preferred_workout_days: WorkoutDay[] | null;
 }
 
 interface TodayWorkout {
@@ -51,8 +53,27 @@ function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGr
   return isCompound ? 150 : 75;    // 2.5min / 1.25min
 }
 
-// Get workout schedule based on split type
-function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): TodayWorkout | null {
+// Convert day name to day number (Monday=1, Sunday=7)
+function dayNameToNumber(dayName: WorkoutDay): number {
+  const dayMap: Record<WorkoutDay, number> = {
+    'Monday': 1,
+    'Tuesday': 2,
+    'Wednesday': 3,
+    'Thursday': 4,
+    'Friday': 5,
+    'Saturday': 6,
+    'Sunday': 7,
+  };
+  return dayMap[dayName];
+}
+
+// Get workout schedule based on split type and preferred days
+function getWorkoutForDay(
+  splitType: string,
+  dayOfWeek: number,
+  daysPerWeek: number,
+  preferredWorkoutDays?: WorkoutDay[] | null
+): TodayWorkout | null {
   const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
     'Full Body': [
       { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
@@ -88,17 +109,27 @@ function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: num
   };
 
   const schedule = splits[splitType] || splits['Upper/Lower'];
-  
-  // Typical training days (Mon=1, Tue=2, etc.)
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],        // Mon, Thu
-    3: [1, 3, 5],     // Mon, Wed, Fri
-    4: [1, 2, 4, 5],  // Mon, Tue, Thu, Fri
-    5: [1, 2, 3, 5, 6], // Mon-Wed, Fri-Sat
-    6: [1, 2, 3, 4, 5, 6], // Mon-Sat
-  };
 
-  const trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  // Determine training days - use preferred days if available
+  let trainingDays: number[];
+
+  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
+    // Use user's preferred workout days
+    trainingDays = preferredWorkoutDays
+      .map(dayNameToNumber)
+      .sort((a, b) => a - b);
+  } else {
+    // Fall back to default patterns (Mon=1, Tue=2, etc.)
+    const trainingDayMaps: Record<number, number[]> = {
+      2: [1, 4],        // Mon, Thu
+      3: [1, 3, 5],     // Mon, Wed, Fri
+      4: [1, 2, 4, 5],  // Mon, Tue, Thu, Fri
+      5: [1, 2, 3, 5, 6], // Mon-Wed, Fri-Sat
+      6: [1, 2, 3, 4, 5, 6], // Mon-Sat
+    };
+    trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  }
+
   const dayIndex = trainingDays.indexOf(dayOfWeek);
 
   if (dayIndex === -1) {
@@ -178,7 +209,12 @@ export default function MesocyclePage() {
         if (active) {
           const today = new Date();
           const dayOfWeek = today.getDay() || 7; // Convert Sunday(0) to 7
-          const workout = getWorkoutForDay(active.split_type, dayOfWeek, active.days_per_week);
+          const workout = getWorkoutForDay(
+            active.split_type,
+            dayOfWeek,
+            active.days_per_week,
+            active.preferred_workout_days
+          );
           setTodayWorkout(workout);
         }
       }
@@ -497,17 +533,22 @@ export default function MesocyclePage() {
                 <div className="flex gap-2 overflow-x-auto pb-2">
                   {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
                     const dayNum = index + 1;
-                    const workout = getWorkoutForDay(activeMesocycle.split_type, dayNum, activeMesocycle.days_per_week);
+                    const workout = getWorkoutForDay(
+                      activeMesocycle.split_type,
+                      dayNum,
+                      activeMesocycle.days_per_week,
+                      activeMesocycle.preferred_workout_days
+                    );
                     const isToday = (new Date().getDay() || 7) === dayNum;
-                    
+
                     return (
-                      <div 
+                      <div
                         key={day}
                         className={`shrink-0 p-3 rounded-lg text-center min-w-[80px] ${
-                          isToday 
-                            ? 'bg-primary-500/20 border border-primary-500/40' 
-                            : workout 
-                              ? 'bg-surface-800/50' 
+                          isToday
+                            ? 'bg-primary-500/20 border border-primary-500/40'
+                            : workout
+                              ? 'bg-surface-800/50'
                               : 'bg-surface-900/30'
                         }`}
                       >
