@@ -1495,6 +1495,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
                   unit={unit}
                   isDurationBased={isDurationBased}
+                  exerciseId={exercise.id}
                 />
               );
             }
@@ -1576,6 +1577,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 unit={unit}
                 disabled={isCompletingSet}
                 isDurationBased={isDurationBased}
+                exerciseId={exercise.id}
               />
             );
           })}
