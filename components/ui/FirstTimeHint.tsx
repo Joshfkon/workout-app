@@ -53,7 +53,7 @@ export const FirstTimeHint = memo(function FirstTimeHint({
   showArrow = true,
   forceShow = false,
 }: FirstTimeHintProps) {
-  const { shouldShow, dismiss } = useFirstTimeHint(id);
+  const { shouldShow, dismiss, register, unregister, isEligible } = useFirstTimeHint(id);
   const [isVisible, setIsVisible] = useState(false);
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
@@ -66,6 +66,14 @@ export const FirstTimeHint = memo(function FirstTimeHint({
     setIsMounted(true);
     return () => setIsMounted(false);
   }, []);
+
+  // Register this hint with the queue when eligible (and unregister on unmount)
+  useEffect(() => {
+    if (isEligible && !forceShow) {
+      register();
+      return () => unregister();
+    }
+  }, [isEligible, forceShow, register, unregister]);
 
   // Calculate tooltip position based on wrapper element
   const updatePosition = useCallback(() => {
@@ -277,7 +285,15 @@ export const InlineHint = memo(function InlineHint({
   children: ReactNode;
   className?: string;
 }) {
-  const { shouldShow, dismiss } = useFirstTimeHint(id);
+  const { shouldShow, dismiss, register, unregister, isEligible } = useFirstTimeHint(id);
+
+  // Register this hint with the queue when eligible
+  useEffect(() => {
+    if (isEligible) {
+      register();
+      return () => unregister();
+    }
+  }, [isEligible, register, unregister]);
 
   if (!shouldShow) return null;
 

@@ -5,6 +5,10 @@ import { persist } from 'zustand/middleware';
 import { DEFAULT_EDUCATION_PREFERENCES, type EducationPreferences } from '@/types/education';
 
 interface EducationState extends EducationPreferences {
+  // Active hint queue - only one hint shown at a time
+  activeHintId: string | null;
+  hintQueue: string[];
+
   // Actions
   setShowBeginnerTips: (show: boolean) => void;
   setExplainScienceTerms: (explain: boolean) => void;
@@ -16,10 +20,15 @@ interface EducationState extends EducationPreferences {
   resetAllTours: () => void;
   resetAll: () => void;
 
+  // Hint queue actions
+  registerHint: (hintId: string) => void;
+  unregisterHint: (hintId: string) => void;
+
   // Getters
   isHintDismissed: (hintId: string) => boolean;
   isTourCompleted: (tourId: string) => boolean;
   shouldShowEducation: () => boolean;
+  isActiveHint: (hintId: string) => boolean;
 }
 
 export const useEducationStore = create<EducationState>()(
@@ -28,15 +37,27 @@ export const useEducationStore = create<EducationState>()(
       // Initial state
       ...DEFAULT_EDUCATION_PREFERENCES,
 
+      // Hint queue state (not persisted, managed at runtime)
+      activeHintId: null,
+      hintQueue: [],
+
       // Actions
       setShowBeginnerTips: (show) => set({ showBeginnerTips: show }),
 
       setExplainScienceTerms: (explain) => set({ explainScienceTerms: explain }),
 
       dismissHint: (hintId) => {
-        const { dismissedHints } = get();
+        const { dismissedHints, hintQueue, activeHintId } = get();
         if (!dismissedHints.includes(hintId)) {
-          set({ dismissedHints: [...dismissedHints, hintId] });
+          // Add to dismissed and remove from queue
+          const newQueue = hintQueue.filter((id) => id !== hintId);
+          // If this was the active hint, activate the next one
+          const newActiveHint = activeHintId === hintId ? (newQueue[0] || null) : activeHintId;
+          set({
+            dismissedHints: [...dismissedHints, hintId],
+            hintQueue: newQueue,
+            activeHintId: newActiveHint,
+          });
         }
       },
 
@@ -45,7 +66,7 @@ export const useEducationStore = create<EducationState>()(
         set({ dismissedHints: dismissedHints.filter((id) => id !== hintId) });
       },
 
-      resetAllHints: () => set({ dismissedHints: [] }),
+      resetAllHints: () => set({ dismissedHints: [], hintQueue: [], activeHintId: null }),
 
       completeTour: (tourId) => {
         const { completedTours } = get();
@@ -61,7 +82,34 @@ export const useEducationStore = create<EducationState>()(
 
       resetAllTours: () => set({ completedTours: [] }),
 
-      resetAll: () => set(DEFAULT_EDUCATION_PREFERENCES),
+      resetAll: () => set({ ...DEFAULT_EDUCATION_PREFERENCES, hintQueue: [], activeHintId: null }),
+
+      // Hint queue actions
+      registerHint: (hintId) => {
+        const { hintQueue, activeHintId, dismissedHints, showBeginnerTips } = get();
+        // Don't register dismissed hints or if beginner tips are off
+        if (dismissedHints.includes(hintId) || !showBeginnerTips) return;
+        // Don't re-register if already in queue
+        if (hintQueue.includes(hintId)) return;
+
+        const newQueue = [...hintQueue, hintId];
+        // If no active hint, make this one active
+        set({
+          hintQueue: newQueue,
+          activeHintId: activeHintId || hintId,
+        });
+      },
+
+      unregisterHint: (hintId) => {
+        const { hintQueue, activeHintId } = get();
+        const newQueue = hintQueue.filter((id) => id !== hintId);
+        // If this was the active hint, activate the next one
+        const newActiveHint = activeHintId === hintId ? (newQueue[0] || null) : activeHintId;
+        set({
+          hintQueue: newQueue,
+          activeHintId: newActiveHint,
+        });
+      },
 
       // Getters
       isHintDismissed: (hintId) => get().dismissedHints.includes(hintId),
@@ -72,26 +120,47 @@ export const useEducationStore = create<EducationState>()(
         const { showBeginnerTips, explainScienceTerms } = get();
         return showBeginnerTips || explainScienceTerms;
       },
+
+      isActiveHint: (hintId) => get().activeHintId === hintId,
     }),
     {
       name: 'education-preferences',
+      // Don't persist the queue state - it's runtime only
+      partialize: (state) => ({
+        showBeginnerTips: state.showBeginnerTips,
+        explainScienceTerms: state.explainScienceTerms,
+        dismissedHints: state.dismissedHints,
+        completedTours: state.completedTours,
+      }),
     }
   )
 );
 
 /**
  * Hook for checking if a specific hint should be shown
+ * Uses a queue system so only one hint displays at a time
  */
 export function useFirstTimeHint(hintId: string) {
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
   const dismissedHints = useEducationStore((state) => state.dismissedHints);
+  const activeHintId = useEducationStore((state) => state.activeHintId);
   const dismissHint = useEducationStore((state) => state.dismissHint);
+  const registerHint = useEducationStore((state) => state.registerHint);
+  const unregisterHint = useEducationStore((state) => state.unregisterHint);
 
-  const shouldShow = showBeginnerTips && !dismissedHints.includes(hintId);
+  const isDismissed = dismissedHints.includes(hintId);
+  const isActive = activeHintId === hintId;
+
+  // Only show if: beginner tips on, not dismissed, AND this is the active hint
+  const shouldShow = showBeginnerTips && !isDismissed && isActive;
 
   return {
     shouldShow,
     dismiss: () => dismissHint(hintId),
+    register: () => registerHint(hintId),
+    unregister: () => unregisterHint(hintId),
+    // Whether this hint would be eligible to show (ignoring queue position)
+    isEligible: showBeginnerTips && !isDismissed,
   };
 }
 
