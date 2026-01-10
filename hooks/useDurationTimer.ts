@@ -22,7 +22,7 @@ interface UseDurationTimerOptions {
 
 /**
  * Hook for duration-based exercises (planks, holds, etc.)
- * Counts UP from 0 (stopwatch mode) with optional target duration
+ * Counts DOWN from target when running, shows elapsed when paused
  */
 export function useDurationTimer({
   targetSeconds,
@@ -32,6 +32,8 @@ export function useDurationTimer({
   const [elapsed, setElapsed] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [hasReachedTarget, setHasReachedTarget] = useState(false);
+  // Track if timer has ever been started (to differentiate target display vs elapsed)
+  const [hasStarted, setHasStarted] = useState(false);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -145,6 +147,7 @@ export function useDurationTimer({
             accumulatedRef.current = totalElapsed;
             setElapsed(totalElapsed);
             setIsRunning(true);
+            setHasStarted(true);
             hasNotifiedTarget.current = targetSeconds ? totalElapsed >= targetSeconds : false;
             setHasReachedTarget(hasNotifiedTarget.current);
           }
@@ -163,6 +166,7 @@ export function useDurationTimer({
     startTimeRef.current = now;
     hasNotifiedTarget.current = false;
     setHasReachedTarget(false);
+    setHasStarted(true);
     setIsRunning(true);
     saveTimerState(now, accumulatedRef.current);
   }, [isRunning, saveTimerState]);
@@ -193,6 +197,7 @@ export function useDurationTimer({
     setIsRunning(false);
     setElapsed(0);
     setHasReachedTarget(false);
+    setHasStarted(false);
     accumulatedRef.current = 0;
     startTimeRef.current = null;
     hasNotifiedTarget.current = false;
@@ -208,6 +213,11 @@ export function useDurationTimer({
     const validSeconds = Math.max(0, Math.min(600, seconds));
     accumulatedRef.current = validSeconds;
     setElapsed(validSeconds);
+
+    // If manually setting a non-zero time, count as "started"
+    if (validSeconds > 0) {
+      setHasStarted(true);
+    }
 
     if (targetSeconds) {
       setHasReachedTarget(validSeconds >= targetSeconds);
@@ -225,11 +235,16 @@ export function useDurationTimer({
     ? Math.min(100, (elapsed / targetSeconds) * 100)
     : 0;
 
+  // Countdown value (can go negative if elapsed > target)
+  const remaining = targetSeconds ? targetSeconds - elapsed : 0;
+
   return {
     // State
     elapsed,
+    remaining,
     isRunning,
     hasReachedTarget,
+    hasStarted,
     progressPercent,
     // Actions
     start,

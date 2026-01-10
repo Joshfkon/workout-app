@@ -33,8 +33,10 @@ export const DurationTimerInput = memo(function DurationTimerInput({
 
   const {
     elapsed,
+    remaining,
     isRunning,
     hasReachedTarget,
+    hasStarted,
     progressPercent,
     toggle,
     reset,
@@ -63,11 +65,14 @@ export const DurationTimerInput = memo(function DurationTimerInput({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Format seconds to MM:SS display
+  // Format seconds to MM:SS display (handles negative for overtime)
   const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    const isNegative = seconds < 0;
+    const absSeconds = Math.abs(seconds);
+    const mins = Math.floor(absSeconds / 60);
+    const secs = absSeconds % 60;
+    const timeStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+    return isNegative ? `-${timeStr}` : timeStr;
   };
 
   // Handle starting edit mode
@@ -113,19 +118,51 @@ export const DurationTimerInput = memo(function DurationTimerInput({
     onChange(0);
   };
 
-  // Display value - use timer elapsed when running, otherwise use prop value
-  const displaySeconds = isRunning ? elapsed : (value || elapsed);
+  // Display logic:
+  // - Not started: show target time
+  // - Running: show countdown (remaining)
+  // - Paused after starting: show elapsed time
+  const getDisplayValue = (): { time: string; label?: string } => {
+    if (!hasStarted) {
+      // Show target before starting
+      return {
+        time: formatTime(targetSeconds || 0),
+        label: 'TARGET',
+      };
+    }
+    if (isRunning) {
+      // Show countdown while running
+      return {
+        time: formatTime(remaining),
+      };
+    }
+    // Paused - show elapsed time
+    return {
+      time: formatTime(elapsed),
+      label: 'DONE',
+    };
+  };
+
+  const displayValue = getDisplayValue();
 
   // Determine colors based on state
   const getTimerColor = () => {
-    if (hasReachedTarget) return 'text-success-400';
-    if (isRunning) return 'text-primary-400';
-    return 'text-surface-100';
+    if (!hasStarted) return 'text-surface-300'; // Target display - dimmer
+    if (hasReachedTarget && !isRunning) return 'text-success-400'; // Completed successfully
+    if (isRunning && remaining <= 0) return 'text-warning-400'; // Overtime
+    if (isRunning) return 'text-primary-400'; // Counting down
+    return 'text-surface-100'; // Paused with time
   };
 
   const getProgressColor = () => {
     if (hasReachedTarget) return 'bg-success-500';
+    if (remaining <= 0 && isRunning) return 'bg-warning-500';
     return 'bg-primary-500';
+  };
+
+  const getLabelColor = () => {
+    if (!hasStarted) return 'text-surface-500';
+    return 'text-success-500';
   };
 
   if (isEditing) {
@@ -156,23 +193,29 @@ export const DurationTimerInput = memo(function DurationTimerInput({
         onClick={handleStartEdit}
         disabled={disabled}
         className={`
-          flex-1 relative px-2 py-2 bg-surface-900 border rounded text-center font-mono text-base font-semibold
+          flex-1 relative px-2 py-1.5 bg-surface-900 border rounded text-center font-mono
           transition-all overflow-hidden
           ${disabled ? 'opacity-50 cursor-not-allowed border-surface-700' : 'cursor-pointer hover:border-primary-500 border-surface-700'}
-          ${getTimerColor()}
         `}
         title="Click to edit time"
       >
         {/* Progress bar background */}
-        {targetSeconds && targetSeconds > 0 && (
+        {targetSeconds && targetSeconds > 0 && hasStarted && (
           <div
             className={`absolute inset-y-0 left-0 ${getProgressColor()} opacity-20 transition-all duration-300`}
-            style={{ width: `${progressPercent}%` }}
+            style={{ width: `${Math.min(100, progressPercent)}%` }}
           />
         )}
-        <span className="relative z-10">
-          {formatTime(displaySeconds)}
-        </span>
+        <div className="relative z-10 flex flex-col items-center leading-tight">
+          {displayValue.label && (
+            <span className={`text-[9px] font-medium uppercase tracking-wider ${getLabelColor()}`}>
+              {displayValue.label}
+            </span>
+          )}
+          <span className={`text-base font-semibold ${getTimerColor()}`}>
+            {displayValue.time}
+          </span>
+        </div>
       </button>
 
       {/* Play/Pause button */}
@@ -185,7 +228,7 @@ export const DurationTimerInput = memo(function DurationTimerInput({
           ${disabled ? 'opacity-50 cursor-not-allowed bg-surface-800' : 'hover:bg-surface-700 bg-surface-800'}
           ${isRunning ? 'text-primary-400' : 'text-surface-300'}
         `}
-        title={isRunning ? 'Stop timer' : 'Start timer'}
+        title={isRunning ? 'Pause timer' : 'Start timer'}
       >
         {isRunning ? (
           // Pause icon
@@ -201,8 +244,8 @@ export const DurationTimerInput = memo(function DurationTimerInput({
         )}
       </button>
 
-      {/* Reset button - only show when there's time to reset */}
-      {displaySeconds > 0 && (
+      {/* Reset button - only show when timer has been used */}
+      {hasStarted && (
         <button
           type="button"
           onClick={handleReset}
