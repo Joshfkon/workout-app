@@ -94,12 +94,6 @@ export function LoadingAnimation({
               <div className="w-2 h-10 bg-gradient-to-b from-primary-400 to-primary-600 rounded-sm" />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes barbellLift {
-              0%, 100% { transform: translateY(8px); }
-              50% { transform: translateY(-8px); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -131,12 +125,6 @@ export function LoadingAnimation({
               }}
             />
           ))}
-          <style jsx>{`
-            @keyframes repPulse {
-              0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
-              50% { transform: scaleY(1); opacity: 1; }
-            }
-          `}</style>
         </div>
       )}
 
@@ -152,15 +140,6 @@ export function LoadingAnimation({
               d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
             />
           </svg>
-          <style jsx>{`
-            @keyframes heartbeat {
-              0%, 100% { transform: scale(1); }
-              25% { transform: scale(1.1); }
-              35% { transform: scale(1); }
-              45% { transform: scale(1.15); }
-              55% { transform: scale(1); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -184,12 +163,6 @@ export function LoadingAnimation({
               />
             ))}
           </div>
-          <style jsx>{`
-            @keyframes weightPulse {
-              0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
-              50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
-            }
-          `}</style>
         </div>
       )}
 
@@ -211,12 +184,6 @@ export function LoadingAnimation({
               <div className="w-4 h-4 bg-surface-800 rounded-full" />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes kettlebellSwing {
-              0%, 100% { transform: rotate(-20deg); }
-              50% { transform: rotate(20deg); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -246,12 +213,6 @@ export function LoadingAnimation({
               </linearGradient>
             </defs>
           </svg>
-          <style jsx>{`
-            @keyframes muscleFlex {
-              0%, 100% { transform: scale(1) rotate(-5deg); }
-              50% { transform: scale(1.15) rotate(5deg); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -295,12 +256,6 @@ export function LoadingAnimation({
               }}
             />
           ))}
-          <style jsx>{`
-            @keyframes dotBounce {
-              0%, 100% { transform: translateY(0); opacity: 0.5; }
-              50% { transform: translateY(-8px); opacity: 1; }
-            }
-          `}</style>
         </div>
       )}
 
@@ -327,16 +282,6 @@ export function LoadingAnimation({
               <div className="w-1 h-6 bg-primary-400 rounded-full origin-top" style={{ transform: 'rotate(30deg)' }} />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes pullupMove {
-              0%, 100% { transform: translateY(10px); }
-              50% { transform: translateY(-2px); }
-            }
-            @keyframes pullupArms {
-              0%, 100% { transform: scaleY(1); }
-              50% { transform: scaleY(0.5); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -363,16 +308,6 @@ export function LoadingAnimation({
               <div className="w-2 h-8 bg-primary-600 rounded-sm origin-top" />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes squatMove {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(12px); }
-            }
-            @keyframes squatLegs {
-              0%, 100% { transform: scaleY(1); }
-              50% { transform: scaleY(0.6); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -397,20 +332,6 @@ export function LoadingAnimation({
             {/* Ground line */}
             <div className="w-20 h-0.5 bg-surface-600 mt-1 rounded-full" />
           </div>
-          <style jsx>{`
-            @keyframes pushupMove {
-              0%, 100% { transform: translateY(-6px); }
-              50% { transform: translateY(0); }
-            }
-            @keyframes pushupArms {
-              0%, 100% { transform: scaleY(1); }
-              50% { transform: scaleY(0.6); }
-            }
-            @keyframes pushupBody {
-              0%, 100% { transform: rotate(-12deg); }
-              50% { transform: rotate(-3deg); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -438,16 +359,6 @@ export function LoadingAnimation({
               <div className="w-1.5 h-4 bg-primary-600 rounded-sm" />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes ropeSpinFast {
-              0% { transform: rotateX(0deg); }
-              100% { transform: rotateX(360deg); }
-            }
-            @keyframes jumpMove {
-              0%, 100% { transform: translateY(2px); }
-              50% { transform: translateY(-6px); }
-            }
-          `}</style>
         </div>
       )}
 
@@ -479,20 +390,6 @@ export function LoadingAnimation({
               <div className="w-3 h-4 bg-accent-500 rounded-sm" />
             </div>
           </div>
-          <style jsx>{`
-            @keyframes deadliftMove {
-              0%, 100% { transform: translateY(0); }
-              50% { transform: translateY(-14px); }
-            }
-            @keyframes deadliftBend {
-              0%, 100% { transform: rotate(30deg); }
-              50% { transform: rotate(0deg); }
-            }
-            @keyframes barbellUp {
-              0%, 100% { transform: translateY(8px); }
-              50% { transform: translateY(-6px); }
-            }
-          `}</style>
         </div>
       )}
 

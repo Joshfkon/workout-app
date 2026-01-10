@@ -193,6 +193,105 @@
   }
 }
 
+/* Loading Animation Keyframes */
+@keyframes barbellLift {
+  0%, 100% { transform: translateY(8px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes repPulse {
+  0%, 100% { transform: scaleY(0.3); opacity: 0.5; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  25% { transform: scale(1.1); }
+  35% { transform: scale(1); }
+  45% { transform: scale(1.15); }
+  55% { transform: scale(1); }
+}
+
+@keyframes weightPulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
+  50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+}
+
+@keyframes kettlebellSwing {
+  0%, 100% { transform: rotate(-20deg); }
+  50% { transform: rotate(20deg); }
+}
+
+@keyframes muscleFlex {
+  0%, 100% { transform: scale(1) rotate(-5deg); }
+  50% { transform: scale(1.15) rotate(5deg); }
+}
+
+@keyframes dotBounce {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50% { transform: translateY(-8px); opacity: 1; }
+}
+
+@keyframes pullupMove {
+  0%, 100% { transform: translateY(10px); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes pullupArms {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.5); }
+}
+
+@keyframes squatMove {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(12px); }
+}
+
+@keyframes squatLegs {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.6); }
+}
+
+@keyframes pushupMove {
+  0%, 100% { transform: translateY(-6px); }
+  50% { transform: translateY(0); }
+}
+
+@keyframes pushupArms {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.6); }
+}
+
+@keyframes pushupBody {
+  0%, 100% { transform: rotate(-12deg); }
+  50% { transform: rotate(-3deg); }
+}
+
+@keyframes ropeSpinFast {
+  0% { transform: rotateX(0deg); }
+  100% { transform: rotateX(360deg); }
+}
+
+@keyframes jumpMove {
+  0%, 100% { transform: translateY(2px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes deadliftMove {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+
+@keyframes deadliftBend {
+  0%, 100% { transform: rotate(30deg); }
+  50% { transform: rotate(0deg); }
+}
+
+@keyframes barbellUp {
+  0%, 100% { transform: translateY(8px); }
+  50% { transform: translateY(-6px); }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
