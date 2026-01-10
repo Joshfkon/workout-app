@@ -348,9 +348,12 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Use type assertion to access bodyweight properties that may exist on the exercise
   const exerciseWithBodyweight = exercise as any;
   const isBodyweightExercise = exerciseWithBodyweight.isBodyweight || exerciseWithBodyweight.equipment === 'bodyweight' || (exerciseWithBodyweight.equipmentRequired && exerciseWithBodyweight.equipmentRequired.includes('bodyweight'));
-  const canAddWeight = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'weighted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
-  const canUseAssistance = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'assisted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
-  const isPureBodyweight = isBodyweightExercise && exerciseWithBodyweight.bodyweightType === 'pure';
+  // For bodyweight exercises without a specific bodyweightType set, default to allowing both weighted and assisted
+  // This handles exercises like pull-ups, dips that can be done weighted or with assistance
+  const bodyweightType = exerciseWithBodyweight.bodyweightType;
+  const canAddWeight = isBodyweightExercise && (bodyweightType === 'weighted_possible' || bodyweightType === 'both' || !bodyweightType);
+  const canUseAssistance = isBodyweightExercise && (bodyweightType === 'assisted_possible' || bodyweightType === 'both' || !bodyweightType);
+  const isPureBodyweight = isBodyweightExercise && bodyweightType === 'pure';
 
   // Check if this is a duration-based exercise (plank, hold, etc.)
   // These exercises track seconds instead of reps
@@ -1365,7 +1368,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const warmupWeightForDisplay = parseFloat(
                     convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
                   );
-                  const displayWarmupWeight = warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay;
+                  // For bodyweight exercises, show "BW" instead of numeric weight
+                  // Warmups for bodyweight exercises are done at bodyweight (not a percentage)
+                  const displayWarmupWeight = isBodyweightExercise
+                    ? 'BW'
+                    : (warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay);
                   const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
                   const isEditingThis = editingWarmupId === warmup.setNumber;
                   
