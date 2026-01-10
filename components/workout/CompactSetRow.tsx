@@ -134,13 +134,20 @@ export const CompactSetRow = memo(function CompactSetRow({
 
   // Show feedback phase
   if (phase === 'feedback') {
+    // For bodyweight exercises, use bodyweightData if available, otherwise calculate from user's bodyweight
+    const feedbackWeightKg = isBodyweight
+      ? (bodyweightData?.effectiveLoadKg ?? userBodyweightKg ?? 0)
+      : inputWeightToKg(parseFloat(weight) || 0, unit);
+
     return (
       <SetFeedbackCard
         setNumber={setNumber}
-        weightKg={isBodyweight && bodyweightData ? bodyweightData.effectiveLoadKg : parseFloat(weight) || 0}
+        weightKg={feedbackWeightKg}
         reps={parseInt(reps) || 0}
         unit={unit}
         defaultFeedback={previousSet?.feedback}
+        isBodyweight={isBodyweight}
+        userBodyweightKg={userBodyweightKg}
         onSave={async (feedback) => {
           if (onSubmit) {
             const weightKg = isBodyweight && bodyweightData
@@ -149,12 +156,21 @@ export const CompactSetRow = memo(function CompactSetRow({
 
             const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
 
+            // For bodyweight exercises without explicit bodyweightData, create it from user's bodyweight
+            const submitBodyweightData = isBodyweight && !bodyweightData && userBodyweightKg
+              ? {
+                  userBodyweightKg,
+                  modification: 'none' as const,
+                  effectiveLoadKg: userBodyweightKg,
+                }
+              : bodyweightData;
+
             await onSubmit({
-              weightKg,
+              weightKg: isBodyweight ? (submitBodyweightData?.effectiveLoadKg ?? userBodyweightKg ?? 0) : weightKg,
               reps: parseInt(reps) || 0,
               rpe,
               feedback,
-              bodyweightData,
+              bodyweightData: submitBodyweightData,
             });
             setPhase('input');
             setReps(String(targetRepRange[1]));
