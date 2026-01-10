@@ -652,7 +652,7 @@ export default function FeedPage() {
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-2">Type</label>
               <div className="flex flex-wrap gap-2">
-                {(['all', 'single_workout', 'template', 'program', 'crash_the_economy'] as const).map((type) => (
+                {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setShareType(type)}
@@ -663,7 +663,7 @@ export default function FeedPage() {
                         : 'bg-surface-800 text-surface-400 hover:text-surface-200'
                     )}
                   >
-                    {type === 'all' ? 'All Types' : type === 'crash_the_economy' ? 'Crash The Economy' : type.replace('_', ' ')}
+                    {type === 'all' ? 'All Types' : type.replace('_', ' ')}
                   </button>
                 ))}
               </div>
