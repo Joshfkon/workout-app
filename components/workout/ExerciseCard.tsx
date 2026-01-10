@@ -378,7 +378,19 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Track whether AMRAP prefill has already occurred to avoid overwriting user edits
   const amrapPrefillDoneRef = useRef(false);
-  
+
+  // Track pending reps auto-calculation timeouts per set index
+  // This allows canceling the debounced calculation if user manually edits reps
+  const repsCalcTimeoutsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
+
+  // Cleanup pending reps calculation timeouts on unmount
+  useEffect(() => {
+    return () => {
+      repsCalcTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      repsCalcTimeoutsRef.current.clear();
+    };
+  }, []);
+
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
     if (pendingSetsCount === 0) return;
@@ -776,24 +788,34 @@ export const ExerciseCard = memo(function ExerciseCard({
   };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
+    // If user manually edits reps, cancel any pending debounced reps calculation
+    // This prevents overwriting the user's manual input
+    if (field === 'reps') {
+      const existingTimeout = repsCalcTimeoutsRef.current.get(index);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        repsCalcTimeoutsRef.current.delete(index);
+      }
+    }
+
     setPendingInputs(prev => {
       const updated = [...prev];
       if (updated[index]) {
         updated[index] = { ...updated[index], [field]: value };
-        
-        // If weight changed, auto-adjust recommended reps
+
+        // If weight changed, schedule debounced auto-adjust of reps
         if (field === 'weight' && value) {
           const newWeightDisplay = parseFloat(value);
           if (!isNaN(newWeightDisplay) && newWeightDisplay > 0) {
             const newWeightKg = inputWeightToKg(newWeightDisplay, unit);
-            
+
             // Get reference data
             const lastCompleted = completedSets[completedSets.length - 1];
             const prevSet = previousSets[completedSets.length + index];
-            
+
             let refWeight = 0;
             let refReps = 0;
-            
+
             if (lastCompleted) {
               refWeight = lastCompleted.weightKg;
               refReps = lastCompleted.reps;
@@ -804,12 +826,33 @@ export const ExerciseCard = memo(function ExerciseCard({
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
             }
-            
+
             if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
-              // Weight changed significantly, recalculate reps
-              // Don't clamp - show actual estimate so user can see if weight is outside target range
-              const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
-              updated[index].reps = String(newReps);
+              // Weight changed significantly - schedule debounced reps recalculation
+              // Clear any existing timeout for this index
+              const existingTimeout = repsCalcTimeoutsRef.current.get(index);
+              if (existingTimeout) {
+                clearTimeout(existingTimeout);
+              }
+
+              // Store current reps value to check if user changes it before timeout fires
+              const currentReps = updated[index].reps;
+
+              // Schedule debounced reps update (400ms delay)
+              const timeout = setTimeout(() => {
+                repsCalcTimeoutsRef.current.delete(index);
+                setPendingInputs(prevInputs => {
+                  const newInputs = [...prevInputs];
+                  // Only update reps if user hasn't manually changed it since we scheduled
+                  if (newInputs[index] && newInputs[index].reps === currentReps) {
+                    const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
+                    newInputs[index] = { ...newInputs[index], reps: String(newReps) };
+                  }
+                  return newInputs;
+                });
+              }, 400);
+
+              repsCalcTimeoutsRef.current.set(index, timeout);
             }
           }
         }
