@@ -37,12 +37,12 @@ interface ValidatedWeight {
 }
 
 /**
- * Validates and corrects a weight entry from the database.
- * This function trusts the stored unit and only infers unit when missing.
+ * Validates a weight entry from the database.
+ * This function trusts the stored unit completely - no correction logic.
  *
  * @param weight - The weight value from the database
  * @param unit - The unit from the database ('lb', 'kg', or null)
- * @returns Validated weight with corrected value and unit
+ * @returns Validated weight with unit (defaults to 'lb' if missing)
  */
 export function validateWeightEntry(
   weight: number,
@@ -50,49 +50,14 @@ export function validateWeightEntry(
 ): ValidatedWeight {
   const originalWeight = weight;
   const originalUnit = unit || null;
-  let correctedWeight = weight;
-  let correctedUnit: 'lb' | 'kg' = unit || 'lb';
-  let wasCorrected = false;
 
-  // Handle null/undefined unit - only infer when unit is missing
-  if (!unit) {
-    // If no unit specified and weight > 200, it's likely in lbs
-    // (most people don't weigh > 200 kg = 440 lbs)
-    if (weight > 200) {
-      correctedUnit = 'lb';
-    } else {
-      // For weights <= 200 with no unit, default to lb (most common)
-      // This is a safe default since:
-      // - 200 lb = 90.7 kg (reasonable adult weight)
-      // - 200 kg = 440 lb (extremely rare)
-      correctedUnit = 'lb';
-    }
-    wasCorrected = true;
-  }
-
-  // Trust the stored unit - only correct clearly impossible values
-  // A weight > 500 lbs labeled as 'lb' is extremely unlikely
-  if (correctedUnit === 'lb' && weight > 500) {
-    // This is likely a kg value stored with wrong unit
-    // 500 kg = 1100 lbs, so if stored as > 500 'lb', probably kg
-    correctedWeight = weight * KG_TO_LBS;
-    wasCorrected = true;
-  }
-
-  // A weight > 250 kg is extremely unlikely (> 550 lbs)
-  if (correctedUnit === 'kg' && weight > 250) {
-    // This might be a lb value stored with wrong unit
-    // 250 kg = 550 lbs, already very rare
-    // If > 250 'kg', it's probably already in lbs
-    correctedWeight = weight;
-    correctedUnit = 'lb';
-    wasCorrected = true;
-  }
+  // Simply use the stored unit, defaulting to 'lb' if not specified
+  const finalUnit: 'lb' | 'kg' = unit || 'lb';
 
   return {
-    weight: correctedWeight,
-    unit: correctedUnit,
-    wasCorrected,
+    weight: weight,
+    unit: finalUnit,
+    wasCorrected: !unit, // Only "corrected" if we had to default the unit
     originalWeight,
     originalUnit,
   };
