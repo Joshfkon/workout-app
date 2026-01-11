@@ -56,9 +56,14 @@ export const DurationTimerInput = memo(function DurationTimerInput({
     }
   }, [elapsed, isRunning, onChange]);
 
-  // Sync initial value to timer
+  // Sync initial value to timer (only for previously logged values, not defaults)
   useEffect(() => {
-    if (!isRunning && value !== elapsed && value > 0) {
+    // Only sync if:
+    // 1. Timer is not running
+    // 2. Value differs from current elapsed
+    // 3. Value is positive
+    // 4. Value differs from target (otherwise it's the default, not logged time)
+    if (!isRunning && value !== elapsed && value > 0 && value !== targetSeconds) {
       setTime(value);
     }
   // Only sync on mount or when value changes externally while not running
