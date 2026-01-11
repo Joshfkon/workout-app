@@ -1459,9 +1459,11 @@ export function quickWeightEstimate(
 
   // If we have a known E1RM from exercise history, add it to knownMaxes
   // This takes priority over bodyweight-based estimation
+  // Use canonical name for consistency with lookup in getEstimated1RM
   if (knownE1RM && knownE1RM > 0) {
+    const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
     profile.knownMaxes.push({
-      exercise: exerciseName,
+      exercise: canonicalName,
       estimated1RM: knownE1RM,
       confidence: 'high',
       source: 'direct_history',
@@ -1522,9 +1524,11 @@ export function quickWeightEstimateWithCalibration(
 
   // If we have a known E1RM from exercise history, add it with highest priority
   // This takes precedence over calibrated lifts for this specific exercise
+  // Use canonical name for consistency with lookup in getEstimated1RM
   if (knownE1RM && knownE1RM > 0) {
+    const canonicalName = findExerciseMatch(exerciseName) || exerciseName;
     calibratedMaxes.push({
-      exercise: exerciseName,
+      exercise: canonicalName,
       estimated1RM: knownE1RM,
       confidence: 'high',
       source: 'direct_history',
