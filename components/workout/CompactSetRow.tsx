@@ -186,6 +186,7 @@ export const CompactSetRow = memo(function CompactSetRow({
         }}
         onCancel={() => setPhase('input')}
         disabled={disabled}
+        isDurationBased={isDurationBased}
       />
     );
   }

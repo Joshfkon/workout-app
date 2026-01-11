@@ -44,6 +44,8 @@ interface BodyweightSetInputRowProps {
   disabled?: boolean;
   /** Weight unit for display */
   unit?: WeightUnit;
+  /** Whether this is a duration-based exercise (plank, hold) - shows RPE instead of RIR */
+  isDurationBased?: boolean;
 }
 
 type InputPhase = 'weight_reps' | 'feedback';
@@ -66,6 +68,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
   isPureBodyweight = false,
   disabled = false,
   unit = 'kg',
+  isDurationBased = false,
 }: BodyweightSetInputRowProps) {
   // Initialize from previous set if available
   const getInitialBodyweightData = (): BodyweightData => {
@@ -159,6 +162,7 @@ export const BodyweightSetInputRow = memo(function BodyweightSetInputRow({
         onSave={handleFeedbackSave}
         onCancel={handleBackToWeightReps}
         disabled={disabled}
+        isDurationBased={isDurationBased}
       />
     );
   }

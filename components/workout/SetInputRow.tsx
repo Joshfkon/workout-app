@@ -122,6 +122,7 @@ export const SetInputRow = memo(function SetInputRow({
         onSave={handleFeedbackSave}
         onCancel={handleBackToWeightReps}
         disabled={disabled}
+        isDurationBased={isDurationBased}
       />
     );
   }

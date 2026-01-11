@@ -35,6 +35,8 @@ interface SetFeedbackCardProps {
   isBodyweight?: boolean;
   /** User's body weight in kg (for bodyweight exercises) */
   userBodyweightKg?: number;
+  /** Whether this is a duration-based exercise (plank, hold) - shows RPE instead of RIR */
+  isDurationBased?: boolean;
 }
 
 /**
@@ -53,6 +55,7 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
   disabled = false,
   isBodyweight = false,
   userBodyweightKg,
+  isDurationBased = false,
 }: SetFeedbackCardProps) {
   const [repsInTank, setRepsInTank] = useState<RepsInTank | null>(
     defaultFeedback?.repsInTank ?? null
@@ -104,7 +107,11 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
               <>
                 <span className="text-surface-400">BW</span>{' '}
                 {displayBwWeight ? `(${displayBwWeight})` : ''} {unitLabel}{' '}
-                <span className="text-surface-400">x</span> {reps}
+                <span className="text-surface-400">{isDurationBased ? 'for' : 'x'}</span> {reps}{isDurationBased ? 's' : ''}
+              </>
+            ) : isDurationBased ? (
+              <>
+                {reps} <span className="text-surface-400">seconds</span>
               </>
             ) : (
               <>
@@ -120,8 +127,8 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
         )}
       </div>
 
-      {/* RIR Selection */}
-      <RIRSelector value={repsInTank} onChange={setRepsInTank} disabled={disabled} />
+      {/* RIR Selection (RPE for duration exercises) */}
+      <RIRSelector value={repsInTank} onChange={setRepsInTank} disabled={disabled} isDurationBased={isDurationBased} />
 
       {/* Form Selection */}
       <FormRatingSelector value={form} onChange={setForm} disabled={disabled} />
@@ -165,7 +172,7 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
               Save Set
             </>
           ) : (
-            'Select RIR & Form'
+            isDurationBased ? 'Select Effort & Form' : 'Select RIR & Form'
           )}
         </Button>
       </div>
@@ -173,7 +180,9 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
       {/* Validation hint */}
       {!canSave && (
         <p className="text-xs text-surface-500 text-center">
-          Please select both reps in tank and form quality to save the set
+          {isDurationBased
+            ? 'Please select both effort level and form quality to save the set'
+            : 'Please select both reps in tank and form quality to save the set'}
         </p>
       )}
     </div>
