@@ -1368,11 +1368,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const warmupWeightForDisplay = parseFloat(
                     convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
                   );
-                  // For bodyweight exercises, show "BW" instead of numeric weight
-                  // Warmups for bodyweight exercises are done at bodyweight (not a percentage)
-                  const displayWarmupWeight = isBodyweightExercise
-                    ? 'BW'
-                    : (warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay);
+                  // For bodyweight exercises with no added weight, show "BW"
+                  // For weighted/assisted bodyweight exercises, show the actual warmup weight
+                  const displayWarmupWeight = warmupWeightForDisplayKg === 0
+                    ? (isBodyweightExercise ? 'BW' : 'Empty')
+                    : warmupWeightForDisplay;
                   const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
                   const isEditingThis = editingWarmupId === warmup.setNumber;
                   
