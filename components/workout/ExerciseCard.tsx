@@ -2861,6 +2861,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.targetSets === nextProps.block.targetSets &&
     prevProps.block.targetWeightKg === nextProps.block.targetWeightKg &&
     prevProps.sets.length === nextProps.sets.length &&
+    // Compare set content (RPE, form, weight, reps) to detect feedback updates
+    prevProps.sets.every((s, i) =>
+      s.id === nextProps.sets[i]?.id &&
+      s.rpe === nextProps.sets[i]?.rpe &&
+      s.feedback?.form === nextProps.sets[i]?.feedback?.form &&
+      s.weightKg === nextProps.sets[i]?.weightKg &&
+      s.reps === nextProps.sets[i]?.reps
+    ) &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.unit === nextProps.unit &&
     prevProps.recommendedWeight === nextProps.recommendedWeight &&
