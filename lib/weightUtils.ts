@@ -38,8 +38,8 @@ interface ValidatedWeight {
 
 /**
  * Validates and corrects a weight entry from the database.
- * This function detects common unit errors and corrects them.
- * 
+ * This function trusts the stored unit and only infers unit when missing.
+ *
  * @param weight - The weight value from the database
  * @param unit - The unit from the database ('lb', 'kg', or null)
  * @returns Validated weight with corrected value and unit
@@ -49,75 +49,44 @@ export function validateWeightEntry(
   unit: 'lb' | 'kg' | null | undefined
 ): ValidatedWeight {
   const originalWeight = weight;
-  const originalUnit = (unit || 'lb') as 'lb' | 'kg';
+  const originalUnit = unit || null;
   let correctedWeight = weight;
-  let correctedUnit = originalUnit;
+  let correctedUnit: 'lb' | 'kg' = unit || 'lb';
   let wasCorrected = false;
 
-  // Handle null/undefined unit
+  // Handle null/undefined unit - only infer when unit is missing
   if (!unit) {
-    // If no unit specified, try to infer from weight value
-    if (weight >= 30 && weight <= 200) {
-      // Likely in lbs (common human weight range)
+    // If no unit specified and weight > 200, it's likely in lbs
+    // (most people don't weigh > 200 kg = 440 lbs)
+    if (weight > 200) {
       correctedUnit = 'lb';
-    } else if (weight > 200 && weight < 500) {
-      // Could be either - check if converting lbs to kg gives reasonable value
-      const asKg = weight * LBS_TO_KG;
-      if (asKg >= 100 && asKg <= 200) {
-        // Treating as kg gives reasonable value, so it's probably in kg
-        correctedUnit = 'kg';
-        wasCorrected = true;
-      } else {
-        correctedUnit = 'lb';
-      }
     } else {
+      // For weights <= 200 with no unit, default to lb (most common)
+      // This is a safe default since:
+      // - 200 lb = 90.7 kg (reasonable adult weight)
+      // - 200 kg = 440 lb (extremely rare)
       correctedUnit = 'lb';
     }
+    wasCorrected = true;
   }
 
-  // Validate weights labeled as 'lb'
-  if (correctedUnit === 'lb') {
-    if (weight > 400) {
-      // Weight > 400 lbs is probably in kg, convert kg to lbs
-      correctedWeight = weight * KG_TO_LBS;
-      correctedUnit = 'lb'; // Keep as lb after conversion
-      wasCorrected = true;
-    } else if (weight > 300) {
-      // Weight 300-400 lbs is suspicious - check if treating as kg makes sense
-      const asKg = weight * LBS_TO_KG;
-      if (asKg >= 100 && asKg <= 200) {
-        // If treating as kg gives reasonable human weight, it's probably in kg
-        correctedWeight = weight * KG_TO_LBS;
-        correctedUnit = 'lb'; // Keep as lb after conversion
-        wasCorrected = true;
-      }
-    } else if (weight <= 85 && weight >= 30) {
-      // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
-      correctedWeight = weight * KG_TO_LBS;
-      correctedUnit = 'lb'; // Keep as lb after conversion
-      wasCorrected = true;
-    }
+  // Trust the stored unit - only correct clearly impossible values
+  // A weight > 500 lbs labeled as 'lb' is extremely unlikely
+  if (correctedUnit === 'lb' && weight > 500) {
+    // This is likely a kg value stored with wrong unit
+    // 500 kg = 1100 lbs, so if stored as > 500 'lb', probably kg
+    correctedWeight = weight * KG_TO_LBS;
+    wasCorrected = true;
   }
 
-  // Validate weights labeled as 'kg'
-  if (correctedUnit === 'kg') {
-    if (weight >= 30 && weight <= 200) {
-      // Common weights 30-200 kg are likely human weights in lbs, mislabeled as kg
-      // Most people weigh 100-400 lbs (45-181 kg), so values in this range
-      // labeled as 'kg' are very suspicious - likely lb values with wrong unit
-      correctedWeight = weight; // Already in lbs, just mislabeled
-      correctedUnit = 'lb'; // Correct the unit
-      wasCorrected = true;
-    } else if (weight > 200) {
-      // Weight > 200 kg is suspicious - check if it's actually in lbs
-      const asLbs = weight * KG_TO_LBS;
-      if (asLbs > 500) {
-        // If converting to lbs gives > 500, it's probably already in lbs
-        correctedWeight = weight;
-        correctedUnit = 'lb';
-        wasCorrected = true;
-      }
-    }
+  // A weight > 250 kg is extremely unlikely (> 550 lbs)
+  if (correctedUnit === 'kg' && weight > 250) {
+    // This might be a lb value stored with wrong unit
+    // 250 kg = 550 lbs, already very rare
+    // If > 250 'kg', it's probably already in lbs
+    correctedWeight = weight;
+    correctedUnit = 'lb';
+    wasCorrected = true;
   }
 
   return {
