@@ -601,12 +601,13 @@ export default function WorkoutPage() {
 
       const recoveryFactors = calculateRecoveryFactors(extendedProfile);
 
+      type WorkoutSessionRow = { id: string; planned_date: string; state: string };
       const { data: existingSessions } = await supabaseClient
         .from('workout_sessions')
         .select('id, planned_date, state')
         .eq('mesocycle_id', mesocycleId);
 
-      const plannedSessions = existingSessions?.filter(session => session.state === 'planned') || [];
+      const plannedSessions = (existingSessions as WorkoutSessionRow[] | null)?.filter(session => session.state === 'planned') || [];
 
       if (plannedSessions.length > 0) {
         const today = getLocalDateString();
@@ -619,7 +620,7 @@ export default function WorkoutPage() {
           .gte('planned_date', today);
 
         const lockedDates = new Set(
-          (existingSessions || [])
+          ((existingSessions as WorkoutSessionRow[] | null) || [])
             .filter(session => session.state !== 'planned')
             .map(session => session.planned_date)
         );
