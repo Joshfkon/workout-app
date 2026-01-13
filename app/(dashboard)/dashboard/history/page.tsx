@@ -883,7 +883,7 @@ function HistoryPageContent() {
                           handleRepeatWorkout(workout);
                         }}
                         disabled={repeatingId === workout.id}
-                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-primary-500/20 text-surface-500 hover:text-primary-400 transition-all"
+                        className="p-1.5 rounded-lg hover:bg-primary-500/20 text-primary-400 hover:text-primary-300 transition-all"
                         title="Do this workout again"
                       >
                         {repeatingId === workout.id ? (
