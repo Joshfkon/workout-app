@@ -710,17 +710,26 @@ export const ExerciseCard = memo(function ExerciseCard({
   };
 
   // Calculate reps based on weight change using percentage of 1RM
-  // Uses Epley formula: 1RM = weight × (1 + reps/30)
-  const calculateRepsFromWeight = (newWeightKg: number, referenceWeightKg: number, referenceReps: number): number => {
+  // Uses Epley formula with RPE adjustment: 1RM = weight × (1 + effectiveReps/30)
+  // where effectiveReps = reps + RIR (reps in reserve)
+  const calculateRepsFromWeight = (
+    newWeightKg: number,
+    referenceWeightKg: number,
+    referenceReps: number,
+    referenceRpe: number = 8
+  ): number => {
     if (referenceWeightKg <= 0 || newWeightKg <= 0 || referenceReps <= 0) return referenceReps;
-    
-    // Estimate 1RM from reference
-    const e1rm = referenceWeightKg * (1 + referenceReps / 30);
-    
-    // Calculate what reps we can do at new weight
-    // reps = 30 × (1RM/weight - 1)
-    const estimatedReps = Math.round(30 * (e1rm / newWeightKg - 1));
-    
+
+    // Estimate 1RM from reference, accounting for RPE (reps in reserve)
+    const rir = 10 - referenceRpe;
+    const effectiveReps = referenceReps + rir;
+    const e1rm = referenceWeightKg * (1 + effectiveReps / 30);
+
+    // Calculate what reps we can do at new weight at same RPE
+    // Reverse: effectiveReps = 30 × (1RM/weight - 1), then subtract RIR
+    const effectiveRepsAtNewWeight = 30 * (e1rm / newWeightKg - 1);
+    const estimatedReps = Math.round(effectiveRepsAtNewWeight - rir);
+
     // Clamp to reasonable range
     return Math.max(1, Math.min(30, estimatedReps));
   };
@@ -818,16 +827,21 @@ export const ExerciseCard = memo(function ExerciseCard({
 
             let refWeight = 0;
             let refReps = 0;
+            let refRpe = 8; // Default RPE if not available
 
             if (lastCompleted) {
               refWeight = lastCompleted.weightKg;
               refReps = lastCompleted.reps;
+              refRpe = lastCompleted.rpe;
             } else if (prevSet) {
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
+              // previousSets doesn't include RPE, use target RPE from block
+              refRpe = 10 - effectiveTargetRir;
             } else if (suggestedWeight > 0) {
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+              refRpe = 10 - effectiveTargetRir;
             }
 
             if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
@@ -848,7 +862,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const newInputs = [...prevInputs];
                   // Only update reps if user hasn't manually changed it since we scheduled
                   if (newInputs[index] && newInputs[index].reps === currentReps) {
-                    const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
+                    const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps, refRpe);
                     newInputs[index] = { ...newInputs[index], reps: String(newReps) };
                   }
                   return newInputs;
