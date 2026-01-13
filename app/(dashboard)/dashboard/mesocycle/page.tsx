@@ -3,11 +3,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimation, Slider } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import type { Split, MuscleGroup, WorkoutDay } from '@/types/schema';
+import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
+import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
+import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
+import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
 
 interface Mesocycle {
@@ -21,6 +24,8 @@ interface Mesocycle {
   deload_week: number;
   created_at: string;
   preferred_workout_days: WorkoutDay[] | null;
+  session_duration_minutes: number | null;
+  program_data: unknown;
 }
 
 interface TodayWorkout {
@@ -151,6 +156,124 @@ export default function MesocyclePage() {
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Edit session duration state
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [editDuration, setEditDuration] = useState(60);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Regenerate mesocycle program with new session duration
+  const handleUpdateSessionDuration = async (mesocycleId: string, newDuration: number) => {
+    setIsRegenerating(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      // Fetch user profile data needed for regeneration
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      // Fetch latest DEXA scan if available
+      const { data: dexaScans } = await supabase
+        .from('dexa_scans')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('scan_date', { ascending: false })
+        .limit(1);
+
+      const latestDexa: DexaScan | null = dexaScans?.[0] ? {
+        id: dexaScans[0].id,
+        userId: dexaScans[0].user_id,
+        scanDate: dexaScans[0].scan_date,
+        weightKg: dexaScans[0].weight_kg,
+        leanMassKg: dexaScans[0].lean_mass_kg,
+        fatMassKg: dexaScans[0].fat_mass_kg,
+        bodyFatPercent: dexaScans[0].body_fat_percent,
+        boneMassKg: dexaScans[0].bone_mass_kg || null,
+        regionalData: dexaScans[0].regional_data || null,
+        notes: dexaScans[0].notes || null,
+        createdAt: dexaScans[0].created_at,
+      } : null;
+
+      // Get the current mesocycle
+      const mesocycle = mesocycles.find(m => m.id === mesocycleId);
+      if (!mesocycle) throw new Error('Mesocycle not found');
+
+      // Build extended user profile
+      const extendedProfile: ExtendedUserProfile = {
+        age: userData?.age || 30,
+        experience: (userProfile?.experience as Experience) || 'intermediate',
+        goal: (userProfile?.goal as SchemaGoal) || 'maintenance',
+        sleepQuality: (userData?.sleep_quality as Rating) || 3,
+        stressLevel: (userData?.stress_level as Rating) || 3,
+        trainingAge: userData?.training_age_years || 1,
+        availableEquipment: (userData?.available_equipment as Equipment[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
+        injuryHistory: (userData?.injury_history as MuscleGroup[]) || [],
+        heightCm: userData?.height_cm || null,
+        latestDexa: latestDexa,
+      };
+
+      // Analyze regional data for lagging areas (if available)
+      let laggingAreas: string[] = [];
+      if (latestDexa?.regionalData && latestDexa.leanMassKg) {
+        const regionalAnalysis = analyzeRegionalComposition(
+          latestDexa.regionalData as DexaRegionalData,
+          latestDexa.leanMassKg
+        );
+        laggingAreas = regionalAnalysis.laggingAreas;
+      }
+
+      // Regenerate the program with new session duration
+      const newProgram = generateFullMesocycleWithFatigue(
+        mesocycle.days_per_week,
+        extendedProfile,
+        newDuration,
+        laggingAreas,
+        [] // unavailableEquipmentIds - could fetch from gym locations if needed
+      );
+
+      // Calculate recovery factors
+      const recoveryFactors = calculateRecoveryFactors(extendedProfile);
+
+      // Update the mesocycle in the database
+      const { error: updateError } = await supabase
+        .from('mesocycles')
+        .update({
+          session_duration_minutes: newDuration,
+          program_data: newProgram,
+          fatigue_budget_config: newProgram?.fatigueBudget || null,
+          volume_per_muscle: newProgram?.volumePerMuscle || null,
+          periodization_model: newProgram?.periodization?.model || 'linear',
+          recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
+        })
+        .eq('id', mesocycleId);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setMesocycles(mesocycles.map(m =>
+        m.id === mesocycleId
+          ? { ...m, session_duration_minutes: newDuration, program_data: newProgram }
+          : m
+      ));
+
+      setIsEditingDuration(false);
+    } catch (error) {
+      console.error('Failed to update session duration:', error);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
 
   const handleDeleteMesocycle = async (id: string) => {
     setDeletingId(id);
@@ -490,7 +613,7 @@ export default function MesocyclePage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 sm:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
                 <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                   <p className="text-2xl font-bold text-surface-100">
                     {activeMesocycle.current_week}/{activeMesocycle.total_weeks}
@@ -501,11 +624,23 @@ export default function MesocyclePage() {
                   <p className="text-2xl font-bold text-surface-100">{activeMesocycle.days_per_week}</p>
                   <p className="text-sm text-surface-500">Days/Week</p>
                 </div>
+                <div
+                  className="text-center p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-700/50 transition-colors"
+                  onClick={() => {
+                    setEditDuration(activeMesocycle.session_duration_minutes || 60);
+                    setIsEditingDuration(true);
+                  }}
+                  title="Click to edit session duration"
+                >
+                  <p className="text-2xl font-bold text-surface-100">{activeMesocycle.session_duration_minutes || 60}</p>
+                  <p className="text-sm text-surface-500">Min/Session</p>
+                  <p className="text-xs text-primary-400 mt-1">Edit</p>
+                </div>
                 <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                   <p className="text-2xl font-bold text-surface-100">{activeMesocycle.deload_week}</p>
                   <p className="text-sm text-surface-500">Deload Week</p>
                 </div>
-                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg col-span-2 sm:col-span-1">
                   <p className="text-2xl font-bold text-primary-400">
                     {Math.round((activeMesocycle.current_week / activeMesocycle.total_weeks) * 100)}%
                   </p>
@@ -520,12 +655,56 @@ export default function MesocyclePage() {
                   <span>Week {activeMesocycle.current_week} of {activeMesocycle.total_weeks}</span>
                 </div>
                 <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-primary-500 to-accent-500 rounded-full transition-all"
                     style={{ width: `${(activeMesocycle.current_week / activeMesocycle.total_weeks) * 100}%` }}
                   />
                 </div>
               </div>
+
+              {/* Edit Session Duration */}
+              {isEditingDuration && (
+                <div className="mt-6 p-4 bg-surface-800/50 rounded-lg border border-primary-500/30">
+                  <h4 className="text-sm font-medium text-surface-300 mb-4">Edit Session Duration</h4>
+                  <p className="text-xs text-surface-400 mb-4">
+                    Changing this will regenerate your workout program with exercises optimized for the new time limit.
+                  </p>
+                  <div className="mb-4">
+                    <div className="flex justify-between text-sm text-surface-400 mb-2">
+                      <span>Time per session</span>
+                      <span className="text-primary-400 font-medium">{editDuration} min</span>
+                    </div>
+                    <Slider
+                      value={editDuration}
+                      onChange={(e) => setEditDuration(parseInt(e.target.value, 10))}
+                      min={15}
+                      max={120}
+                      step={5}
+                    />
+                    <div className="flex justify-between text-xs text-surface-500 mt-1">
+                      <span>15 min</span>
+                      <span>120 min</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingDuration(false)}
+                      disabled={isRegenerating}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpdateSessionDuration(activeMesocycle.id, editDuration)}
+                      disabled={isRegenerating || editDuration === (activeMesocycle.session_duration_minutes || 60)}
+                    >
+                      {isRegenerating ? 'Regenerating...' : 'Update & Regenerate'}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Week Schedule */}
               <div className="mt-6 pt-6 border-t border-surface-800">

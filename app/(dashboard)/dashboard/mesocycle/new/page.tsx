@@ -376,6 +376,8 @@ export default function NewMesocyclePage() {
           start_date: getLocalDateString(),
           // Preferred workout days (user-selected)
           preferred_workout_days: preferredWorkoutDays,
+          // Session duration for time-based workout planning
+          session_duration_minutes: sessionDurationMinutes,
           // New fields for training science integration
           periodization_model: fullProgram?.periodization?.model || 'linear',
           program_data: fullProgram,
