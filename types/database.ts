@@ -135,6 +135,7 @@ export interface Database {
           days_per_week: number;
           split_type: string;
           fatigue_score: number;
+          session_duration_minutes: number | null;
           created_at: string;
           started_at: string | null;
           completed_at: string | null;
@@ -150,6 +151,7 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          session_duration_minutes?: number | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -165,6 +167,7 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          session_duration_minutes?: number | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;

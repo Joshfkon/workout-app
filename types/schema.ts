@@ -345,6 +345,9 @@ export interface Mesocycle {
    */
   preferredWorkoutDays: WorkoutDay[] | null;
 
+  /** Target workout duration in minutes (15-120), used for exercise planning */
+  sessionDurationMinutes: number | null;
+
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;

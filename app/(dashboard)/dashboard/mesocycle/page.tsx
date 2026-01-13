@@ -490,7 +490,7 @@ export default function MesocyclePage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 sm:grid-cols-4">
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
                 <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                   <p className="text-2xl font-bold text-surface-100">
                     {activeMesocycle.current_week}/{activeMesocycle.total_weeks}
@@ -502,10 +502,14 @@ export default function MesocyclePage() {
                   <p className="text-sm text-surface-500">Days/Week</p>
                 </div>
                 <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                  <p className="text-2xl font-bold text-surface-100">{activeMesocycle.session_duration_minutes || 60}</p>
+                  <p className="text-sm text-surface-500">Min/Session</p>
+                </div>
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                   <p className="text-2xl font-bold text-surface-100">{activeMesocycle.deload_week}</p>
                   <p className="text-sm text-surface-500">Deload Week</p>
                 </div>
-                <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                <div className="text-center p-4 bg-surface-800/50 rounded-lg col-span-2 sm:col-span-1">
                   <p className="text-2xl font-bold text-primary-400">
                     {Math.round((activeMesocycle.current_week / activeMesocycle.total_weeks) * 100)}%
                   </p>
