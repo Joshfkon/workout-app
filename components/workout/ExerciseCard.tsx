@@ -419,20 +419,30 @@ export const ExerciseCard = memo(function ExerciseCard({
       smartReps = lastCompleted.reps;
     }
 
-    // Update all pending inputs
+    // Update all pending inputs with per-set fatigue estimation
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
     for (let i = 0; i < pendingSetsCount; i++) {
       const isLastSet = i === pendingSetsCount - 1;
       // If this is the last set and AMRAP is suggested, use 9.5 for RPE
       const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
+      // Estimate reps for this set based on cumulative fatigue
+      // i+1 because i=0 is the first pending set (1 set away from last completed)
+      const setDistance = i + 1;
+      const { estimatedReps: fatigueAdjustedReps } = estimateSetFatigue(
+        setDistance,
+        smartReps,
+        lastRpe,
+        block.targetRepRange
+      );
+
       // For AMRAP sets, predict max reps at failure based on last set's RPE
       // Formula: predicted max reps = lastReps + (10 - lastRpe)
-      let setReps = smartReps;
+      let setReps = fatigueAdjustedReps;
       if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
         const repsInReserve = 10 - lastCompleted.rpe;
         const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-        setReps = Math.max(predictedMaxReps, smartReps); // Use higher of predicted or smart
+        setReps = Math.max(predictedMaxReps, fatigueAdjustedReps); // Use higher of predicted or fatigue-adjusted
       }
 
       updatedInputs.push({
@@ -479,19 +489,30 @@ export const ExerciseCard = memo(function ExerciseCard({
         smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
       }
       
-      // Create updated pending inputs - all based on the last completed set
+      // Create updated pending inputs with per-set fatigue estimation
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
+      const lastRpe = lastCompleted?.rpe || targetRpe;
+
       for (let i = 0; i < pendingSetsCount; i++) {
         const isLastSet = i === pendingSetsCount - 1;
         // If this is the last set and AMRAP is suggested, use 9.5 for RPE
         const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
+        // Estimate reps for this set based on cumulative fatigue
+        const setDistance = i + 1;
+        const { estimatedReps: fatigueAdjustedReps } = estimateSetFatigue(
+          setDistance,
+          smartReps,
+          lastRpe,
+          block.targetRepRange
+        );
+
         // For AMRAP sets, predict max reps at failure based on last set's RPE
-        let setReps = smartReps;
+        let setReps = fatigueAdjustedReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
           const repsInReserve = 10 - lastCompleted.rpe;
           const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-          setReps = Math.max(predictedMaxReps, smartReps);
+          setReps = Math.max(predictedMaxReps, fatigueAdjustedReps);
         }
 
         updatedInputs.push({
@@ -538,14 +559,26 @@ export const ExerciseCard = memo(function ExerciseCard({
           const lastRpe = lastCompleted.rpe || targetRpe;
           // Adjust weight and reps based on RPE difference or rep range overshoot
           const exceedsRepRange = lastCompleted.reps > block.targetRepRange[1] + 1;
+          let baseReps: number;
           if (lastRpe && (Math.abs(lastRpe - targetRpe) > 0.3 || exceedsRepRange)) {
             defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg, lastCompleted.reps, block.targetRepRange);
-            defaultReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
+            baseReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
           } else {
             // Close to target - keep same weight and reps
             defaultWeight = lastCompleted.weightKg;
-            defaultReps = lastCompleted.reps;
+            baseReps = lastCompleted.reps;
           }
+
+          // Apply per-set fatigue estimation
+          // setDistance is how many sets away from the last completed set
+          const setDistance = i + 1;
+          const { estimatedReps } = estimateSetFatigue(
+            setDistance,
+            baseReps,
+            lastRpe,
+            block.targetRepRange
+          );
+          defaultReps = estimatedReps;
         } else if (prevSet) {
           defaultWeight = prevSet.weightKg;
           defaultReps = prevSet.reps;
@@ -553,7 +586,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
         }
-        
+
         // If this is the last set and AMRAP is suggested, pre-fill RPE with 9.5
         if (isLastSet && isAmrapSuggested) {
           defaultRpe = 9.5;
@@ -788,6 +821,47 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     // On target or slightly easy at top of range - keep same reps
     return lastReps;
+  };
+
+  // Estimate expected rep performance for future sets based on cumulative fatigue
+  // Research shows ~1-2 rep drop per set at same weight with 2-3min rest
+  const estimateSetFatigue = (
+    setDistanceFromLast: number,  // How many sets away from the last completed set (1, 2, 3, etc.)
+    baseReps: number,
+    lastRpe: number,
+    targetRepRange: [number, number]
+  ): { estimatedReps: number; confidence: 'high' | 'medium' | 'low' } => {
+    if (setDistanceFromLast <= 0) {
+      return { estimatedReps: baseReps, confidence: 'high' };
+    }
+
+    // Fatigue accumulation model:
+    // - Higher RPE = more fatigue = steeper rep drop
+    // - Base drop rate: ~0.7 reps per set at RPE 8
+    // - Scale by (RPE / 8) to adjust for effort level
+    const rpeScalar = Math.max(0.5, lastRpe / 8);
+    const baseDropRate = 0.7; // reps per set at RPE 8
+
+    // Non-linear fatigue: first few sets drop more, then stabilizes
+    // Using sqrt to model this diminishing returns
+    const cumulativeDropFactor = Math.sqrt(setDistanceFromLast) * 1.2;
+    const expectedRepDrop = baseDropRate * rpeScalar * cumulativeDropFactor;
+
+    // Calculate estimated reps, respecting the rep range floor
+    const estimatedReps = Math.max(
+      targetRepRange[0], // Don't go below rep range minimum
+      Math.round(baseReps - expectedRepDrop)
+    );
+
+    // Confidence decreases with distance
+    let confidence: 'high' | 'medium' | 'low' = 'high';
+    if (setDistanceFromLast >= 3) {
+      confidence = 'low';
+    } else if (setDistanceFromLast >= 2) {
+      confidence = 'medium';
+    }
+
+    return { estimatedReps, confidence };
   };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
