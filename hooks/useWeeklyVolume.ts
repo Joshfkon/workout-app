@@ -65,21 +65,97 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
         setVolumeData(mapped);
       } else {
         // Calculate from set logs if no pre-computed data
-        // This would be a more complex query joining sets -> blocks -> exercises
-        // For now, return empty/default data
-        const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
-          const landmarks = getVolumeLandmarks(muscle);
-          return {
-            muscleGroup: muscle,
-            totalSets: 0,
-            directSets: 0,
-            indirectSets: 0,
-            landmarks,
-            status: 'below_mev' as const,
-            percentOfMrv: 0,
-          };
-        });
-        setVolumeData(defaultData);
+        // Calculate end of week
+        const weekEnd = new Date();
+        weekEnd.setHours(23, 59, 59, 999);
+        const weekEndStr = weekEnd.toISOString();
+
+        // Fetch exercise blocks and sets for current week
+        const { data: blocks } = await supabase
+          .from('exercise_blocks')
+          .select(`
+            id,
+            exercise_id,
+            exercises!inner (
+              id,
+              name,
+              primary_muscle,
+              secondary_muscles
+            ),
+            workout_sessions!inner (
+              id,
+              completed_at,
+              user_id,
+              state
+            ),
+            set_logs (
+              id,
+              is_warmup,
+              weight_kg,
+              reps,
+              rpe
+            )
+          `)
+          .gte('workout_sessions.completed_at', weekStart)
+          .lte('workout_sessions.completed_at', weekEndStr)
+          .eq('workout_sessions.state', 'completed');
+
+        if (blocks && blocks.length > 0) {
+          // Calculate volume from blocks
+          const volumeByMuscle = new Map<string, number>();
+
+          blocks.forEach((block: any) => {
+            const exercise = block.exercises;
+            if (!exercise) return;
+
+            const allSets = block.set_logs || [];
+            const workingSets = allSets.filter((s: any) => !s.is_warmup);
+
+            if (workingSets.length === 0) return;
+
+            const primaryMuscle = exercise.primary_muscle?.toLowerCase();
+            if (!primaryMuscle) return;
+
+            // Convert to standard muscle group
+            const standardMuscle = toStandardMuscleForVolume(primaryMuscle);
+            if (!standardMuscle) return;
+
+            const currentSets = volumeByMuscle.get(standardMuscle) || 0;
+            volumeByMuscle.set(standardMuscle, currentSets + workingSets.length);
+          });
+
+          // Convert to MuscleVolumeData format with all standard muscles
+          const calculatedData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
+            const totalSets = volumeByMuscle.get(muscle) || 0;
+            const landmarks = getVolumeLandmarks(muscle);
+            return {
+              muscleGroup: muscle,
+              totalSets,
+              directSets: totalSets,
+              indirectSets: 0,
+              landmarks,
+              status: assessVolumeStatus(totalSets, landmarks),
+              percentOfMrv: Math.round((totalSets / landmarks.mrv) * 100),
+            };
+          });
+
+          setVolumeData(calculatedData);
+        } else {
+          // No data found - return empty defaults
+          const defaultData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
+            const landmarks = getVolumeLandmarks(muscle);
+            return {
+              muscleGroup: muscle,
+              totalSets: 0,
+              directSets: 0,
+              indirectSets: 0,
+              landmarks,
+              status: 'below_mev' as const,
+              percentOfMrv: 0,
+            };
+          });
+          setVolumeData(defaultData);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch volume');
