@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
+import { MUSCLE_GROUPS, type MuscleGroup, legacyToStandardMuscles, type StandardMuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
+import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString } from '@/lib/utils';
 import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
@@ -242,6 +245,86 @@ function NewWorkoutContent() {
 
   // Location filter dropdown state
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+
+  // Recovery and volume tracking for muscle selection guidance
+  const { recoveryStatus, isLoading: isLoadingRecovery } = useMuscleRecovery();
+  const { volumeData, isLoading: isLoadingVolume } = useWeeklyVolume();
+
+  // Aggregate recovery and volume data for UI muscle groups (legacy 13)
+  // Since UI groups map to multiple standard groups, we take the worst-case for recovery
+  // and sum the volume data
+  const muscleIndicators = useMemo(() => {
+    const indicators = new Map<MuscleGroup, {
+      recoveryPercent: number;
+      isReady: boolean;
+      statusText: string;
+      totalSets: number;
+      targetSets: number; // MAV midpoint
+      volumeStatus: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
+    }>();
+
+    MUSCLE_GROUPS.forEach((muscle) => {
+      const standardMuscles = legacyToStandardMuscles(muscle);
+
+      // Get recovery data - use the worst (lowest) recovery percentage
+      let worstRecoveryPercent = 100;
+      let isReady = true;
+      let statusText = 'Ready';
+
+      standardMuscles.forEach((sm) => {
+        const recovery = recoveryStatus.find((r) => r.muscle === sm);
+        if (recovery) {
+          if (recovery.recoveryPercent < worstRecoveryPercent) {
+            worstRecoveryPercent = recovery.recoveryPercent;
+            statusText = recovery.statusText;
+          }
+          if (!recovery.isReady) {
+            isReady = false;
+          }
+        }
+      });
+
+      // Get volume data - sum across all mapped standard muscles
+      let totalSets = 0;
+      let targetSets = 0;
+      let worstVolumeStatus: MuscleVolumeData['status'] = 'below_mev';
+      const statusPriority: Record<MuscleVolumeData['status'], number> = {
+        'exceeding_mrv': 0,
+        'approaching_mrv': 1,
+        'optimal': 2,
+        'effective': 3,
+        'below_mev': 4,
+      };
+      let currentPriority = 4;
+
+      standardMuscles.forEach((sm) => {
+        const vol = volumeData.find((v) => v.muscleGroup === sm);
+        if (vol) {
+          totalSets += vol.totalSets;
+          // Use midpoint of MEV-MAV as target for display
+          targetSets += Math.round((vol.landmarks.mev + vol.landmarks.mav) / 2);
+
+          // Track worst volume status
+          const priority = statusPriority[vol.status];
+          if (priority < currentPriority) {
+            currentPriority = priority;
+            worstVolumeStatus = vol.status;
+          }
+        }
+      });
+
+      indicators.set(muscle, {
+        recoveryPercent: worstRecoveryPercent,
+        isReady,
+        statusText,
+        totalSets,
+        targetSets,
+        volumeStatus: worstVolumeStatus,
+      });
+    });
+
+    return indicators;
+  }, [recoveryStatus, volumeData]);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
@@ -1587,19 +1670,74 @@ function NewWorkoutContent() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {MUSCLE_GROUPS.map((muscle) => (
-                  <button
-                    key={muscle}
-                    onClick={() => toggleMuscle(muscle)}
-                    className={`p-4 rounded-lg text-left transition-all capitalize ${
-                      selectedMuscles.includes(muscle)
-                        ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
-                        : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
-                    }`}
-                  >
-                    {muscle}
-                  </button>
-                ))}
+                {MUSCLE_GROUPS.map((muscle) => {
+                  const indicator = muscleIndicators.get(muscle);
+                  const isSelected = selectedMuscles.includes(muscle);
+
+                  // Determine recovery color
+                  const getRecoveryColor = () => {
+                    if (!indicator) return 'bg-surface-600';
+                    if (indicator.recoveryPercent >= 100) return 'bg-success-500';
+                    if (indicator.recoveryPercent >= 70) return 'bg-warning-500';
+                    return 'bg-error-500';
+                  };
+
+                  // Determine volume indicator style
+                  const getVolumeStyle = () => {
+                    if (!indicator) return 'text-surface-500';
+                    switch (indicator.volumeStatus) {
+                      case 'below_mev': return 'text-primary-400'; // Needs more volume
+                      case 'effective': return 'text-surface-400';
+                      case 'optimal': return 'text-success-400';
+                      case 'approaching_mrv': return 'text-warning-400';
+                      case 'exceeding_mrv': return 'text-error-400';
+                      default: return 'text-surface-500';
+                    }
+                  };
+
+                  return (
+                    <button
+                      key={muscle}
+                      onClick={() => toggleMuscle(muscle)}
+                      className={`p-4 rounded-lg text-left transition-all capitalize relative ${
+                        isSelected
+                          ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                          : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{muscle}</span>
+                        {indicator && !isLoadingRecovery && (
+                          <div
+                            className={`w-2 h-2 rounded-full ${getRecoveryColor()}`}
+                            title={`Recovery: ${indicator.statusText}`}
+                          />
+                        )}
+                      </div>
+                      {indicator && !isLoadingVolume && (
+                        <div className={`text-xs mt-1 ${getVolumeStyle()}`}>
+                          {indicator.totalSets}/{indicator.targetSets} sets
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Subtle legend */}
+              <div className="flex items-center gap-4 mt-4 text-xs text-surface-500">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-success-500" />
+                  <span>Recovered</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-warning-500" />
+                  <span>Recovering</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-error-500" />
+                  <span>Fatigued</span>
+                </div>
               </div>
 
               <div className="flex justify-between mt-6 pt-4 border-t border-surface-800">
