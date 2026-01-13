@@ -805,11 +805,15 @@ export default function WorkoutPage() {
         const reps = exercise.sets.map(set => set.reps).filter(rep => rep > 0);
         const minReps = reps.length > 0 ? Math.min(...reps) : defaultRepRange[0];
         const maxReps = reps.length > 0 ? Math.max(...reps) : defaultRepRange[1];
-        const targetSets = exercise.sets.length > 0
-          ? exercise.sets.length
-          : exerciseInfo?.mechanic === 'compound'
-            ? 4
-            : 3;
+        const maxTargetSets = 10;
+        const targetSets = Math.min(
+          exercise.sets.length > 0
+            ? exercise.sets.length
+            : exerciseInfo?.mechanic === 'compound'
+              ? 4
+              : 3,
+          maxTargetSets
+        );
         const targetWeightKg = exercise.sets.length > 0
           ? exercise.sets[exercise.sets.length - 1].weight_kg
           : 0;
