@@ -207,6 +207,7 @@ const validMesocycle: Mesocycle = {
   splitType: 'Upper/Lower',
   fatigueScore: 45,
   preferredWorkoutDays: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+  sessionDurationMinutes: 60,
   createdAt: '2024-01-01T00:00:00Z',
   startedAt: '2024-01-01T00:00:00Z',
   completedAt: null,
