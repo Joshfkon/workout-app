@@ -21,15 +21,13 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
   const { user, getVolumeLandmarks } = useUserStore();
 
-  // Calculate week start (Monday)
+  // Calculate week start (rolling 7 days including today)
   const weekStart = useMemo(() => {
     if (options.weekStart) return options.weekStart;
     const now = new Date();
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    // Create a new Date instead of mutating 'now'
-    const monday = new Date(now.getFullYear(), now.getMonth(), diff);
-    return getLocalDateString(monday);
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 6);
+    return getLocalDateString(sevenDaysAgo);
   }, [options.weekStart]);
 
   const fetchVolume = useCallback(async () => {
