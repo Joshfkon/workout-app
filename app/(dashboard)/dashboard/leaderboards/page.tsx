@@ -9,7 +9,7 @@ import { useUserStore } from '@/stores';
 import { cn } from '@/lib/utils';
 import type { LeaderboardType } from '@/types/social';
 
-type TimeFrame = 'week' | 'month';
+type TimeFrame = 'week' | 'month' | 'alltime';
 
 const LEADERBOARD_TABS: Array<{
   id: LeaderboardType;
@@ -40,6 +40,18 @@ const LEADERBOARD_TABS: Array<{
     label: 'Monthly Workouts',
     timeFrame: 'month',
     description: 'Workouts completed this month',
+  },
+  {
+    id: 'total_volume_alltime',
+    label: 'All-Time Volume',
+    timeFrame: 'alltime',
+    description: 'Total weight lifted all time',
+  },
+  {
+    id: 'workouts_completed_alltime',
+    label: 'All-Time Workouts',
+    timeFrame: 'alltime',
+    description: 'Total workouts completed all time',
   },
 ];
 

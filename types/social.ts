@@ -308,10 +308,12 @@ export interface SavedWorkout {
 export type LeaderboardType =
   | 'total_volume_week'
   | 'total_volume_month'
+  | 'total_volume_alltime'
   | 'workout_streak'
   | 'exercise_1rm'
   | 'workouts_completed_week'
-  | 'workouts_completed_month';
+  | 'workouts_completed_month'
+  | 'workouts_completed_alltime';
 
 export interface LeaderboardEntry {
   id: string;

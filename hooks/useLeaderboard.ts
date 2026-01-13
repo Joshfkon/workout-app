@@ -54,6 +54,14 @@ export function useLeaderboard({
           await supabase.rpc('calculate_weekly_volume_leaderboard' as never);
         } else if (type === 'workouts_completed_week') {
           await supabase.rpc('calculate_weekly_workouts_leaderboard' as never);
+        } else if (type === 'total_volume_month') {
+          await supabase.rpc('calculate_monthly_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_month') {
+          await supabase.rpc('calculate_monthly_workouts_leaderboard' as never);
+        } else if (type === 'total_volume_alltime') {
+          await supabase.rpc('calculate_alltime_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_alltime') {
+          await supabase.rpc('calculate_alltime_workouts_leaderboard' as never);
         }
       }
 
