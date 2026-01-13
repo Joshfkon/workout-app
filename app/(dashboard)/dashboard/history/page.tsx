@@ -280,7 +280,7 @@ function HistoryPageContent() {
           target_weight_kg: weightEstimate.recommendedWeight,
           target_rest_seconds: 120, // Default 2 minutes
           suggestion_reason: 'Repeated from previous workout',
-          warmup_protocol: index === 0 ? { sets: [] } : null, // Warmup only for first exercise
+          warmup_protocol: { sets: [] },
         };
       });
 
