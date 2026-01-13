@@ -195,12 +195,14 @@ export default function MesocyclePage() {
         id: dexaScans[0].id,
         userId: dexaScans[0].user_id,
         scanDate: dexaScans[0].scan_date,
-        bodyFatPercent: dexaScans[0].body_fat_percent,
+        weightKg: dexaScans[0].weight_kg,
         leanMassKg: dexaScans[0].lean_mass_kg,
         fatMassKg: dexaScans[0].fat_mass_kg,
-        boneMineralDensity: dexaScans[0].bone_mineral_density,
-        visceralFatArea: dexaScans[0].visceral_fat_area,
-        regionalData: dexaScans[0].regional_data,
+        bodyFatPercent: dexaScans[0].body_fat_percent,
+        boneMassKg: dexaScans[0].bone_mass_kg || null,
+        regionalData: dexaScans[0].regional_data || null,
+        notes: dexaScans[0].notes || null,
+        createdAt: dexaScans[0].created_at,
       } : null;
 
       // Get the current mesocycle
