@@ -588,6 +588,7 @@ export default function AnalyticsPage() {
             splitType: meso.split_type,
             fatigueScore: meso.fatigue_score || 0,
             preferredWorkoutDays: meso.preferred_workout_days || null,
+            sessionDurationMinutes: meso.session_duration_minutes || null,
             createdAt: meso.created_at,
             startedAt: meso.started_at,
             completedAt: meso.completed_at,
