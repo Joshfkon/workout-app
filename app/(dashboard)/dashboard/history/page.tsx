@@ -1073,12 +1073,12 @@ function HistoryPageContent() {
                                 {exercise.primaryMuscle}
                               </Badge>
                             </button>
-                            
+
                             {exercise.sets.length > 0 ? (
                               <div className="space-y-1">
                                 {exercise.sets.map((set, idx) => (
-                                  <div 
-                                    key={set.id} 
+                                  <div
+                                    key={set.id}
                                     className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50"
                                   >
                                     <span className="text-surface-500 w-8">#{idx + 1}</span>
@@ -1107,6 +1107,33 @@ function HistoryPageContent() {
                           </div>
                         ))}
                       </div>
+                    )}
+
+                    {/* Restart Workout Button - only for completed workouts */}
+                    {workout.state === 'completed' && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRepeatWorkout(workout);
+                        }}
+                        disabled={repeatingId === workout.id}
+                        className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary-500/10 hover:bg-primary-500/20 border border-primary-500/30 rounded-lg text-primary-400 hover:text-primary-300 transition-all disabled:opacity-50"
+                      >
+                        {repeatingId === workout.id ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                            <span className="text-sm font-medium">Starting workout...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span className="text-sm font-medium">Restart Workout</span>
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
                 )}
