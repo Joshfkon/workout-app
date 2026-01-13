@@ -232,12 +232,16 @@ function HistoryPageContent() {
           ? Math.round(exercise.sets.reduce((sum, set) => sum + set.reps, 0) / exercise.sets.length)
           : 10;
 
+        // Calculate rep range, ensuring min <= max
+        const repRangeMin = Math.max(avgReps - 2, 5);
+        const repRangeMax = Math.max(avgReps + 2, repRangeMin);
+
         return {
           workout_session_id: session.id,
           exercise_id: exercise.exerciseId,
           order: index + 1,
           target_sets: Math.max(exercise.sets.length, 3), // At least 3 sets
-          target_rep_range: [Math.max(avgReps - 2, 5), avgReps + 2],
+          target_rep_range: [repRangeMin, repRangeMax],
           target_rir: 2,
           target_weight_kg: targetWeight,
           target_rest_seconds: 120, // Default 2 minutes
