@@ -3,9 +3,9 @@
 import { useState, useEffect, Suspense } from 'react';
 import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/components/ui';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, getLocalDateString } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
@@ -70,11 +70,13 @@ function calculateE1RM(weight: number, reps: number): number {
 
 function HistoryPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const exerciseIdParam = searchParams.get('exercise');
-  
+
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
@@ -184,6 +186,81 @@ function HistoryPageContent() {
       alert('Failed to delete workout. Please try again.');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleRepeatWorkout = async (workout: WorkoutHistory) => {
+    if (workout.exercises.length === 0) {
+      alert('This workout has no exercises to repeat.');
+      return;
+    }
+
+    setRepeatingId(workout.id);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        alert('You must be logged in to repeat a workout.');
+        return;
+      }
+
+      // Create a new workout session
+      const { data: session, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          state: 'planned',
+          planned_date: getLocalDateString(),
+          completion_percent: 0,
+        })
+        .select()
+        .single();
+
+      if (sessionError || !session) {
+        throw sessionError || new Error('Failed to create workout session');
+      }
+
+      // Create exercise blocks based on the historical workout
+      const exerciseBlocks = workout.exercises.map((exercise, index) => {
+        // Calculate target weight from the last set of this exercise (most accurate)
+        const lastSet = exercise.sets[exercise.sets.length - 1];
+        const targetWeight = lastSet?.weight_kg || 0;
+
+        // Calculate average reps from the workout
+        const avgReps = exercise.sets.length > 0
+          ? Math.round(exercise.sets.reduce((sum, set) => sum + set.reps, 0) / exercise.sets.length)
+          : 10;
+
+        return {
+          workout_session_id: session.id,
+          exercise_id: exercise.exerciseId,
+          order: index + 1,
+          target_sets: Math.max(exercise.sets.length, 3), // At least 3 sets
+          target_rep_range: [Math.max(avgReps - 2, 5), avgReps + 2],
+          target_rir: 2,
+          target_weight_kg: targetWeight,
+          target_rest_seconds: 120, // Default 2 minutes
+          suggestion_reason: 'Repeated from previous workout',
+          warmup_protocol: index === 0 ? { sets: [] } : null, // Warmup only for first exercise
+        };
+      });
+
+      const { error: blocksError } = await supabase
+        .from('exercise_blocks')
+        .insert(exerciseBlocks);
+
+      if (blocksError) {
+        throw blocksError;
+      }
+
+      // Navigate to the new workout
+      router.push(`/dashboard/workout/${session.id}`);
+    } catch (err) {
+      console.error('Failed to repeat workout:', err);
+      alert('Failed to repeat workout. Please try again.');
+    } finally {
+      setRepeatingId(null);
     }
   };
 
@@ -756,26 +833,50 @@ function HistoryPageContent() {
                   </button>
                 )}
 
-                {/* Delete button - small icon in top right (hidden in select mode) */}
+                {/* Action buttons - top right (hidden in select mode) */}
                 {!isSelectMode && (
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleDeleteWorkout(workout.id, workout.state);
-                    }}
-                    disabled={deletingId === workout.id}
-                    className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
-                    title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
-                  >
-                    {deletingId === workout.id ? (
-                      <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
+                  <div className="absolute top-3 right-3 flex items-center gap-1 z-10">
+                    {/* Repeat button - only for completed workouts */}
+                    {workout.state === 'completed' && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleRepeatWorkout(workout);
+                        }}
+                        disabled={repeatingId === workout.id}
+                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-primary-500/20 text-surface-500 hover:text-primary-400 transition-all"
+                        title="Do this workout again"
+                      >
+                        {repeatingId === workout.id ? (
+                          <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        )}
+                      </button>
                     )}
-                  </button>
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleDeleteWorkout(workout.id, workout.state);
+                      }}
+                      disabled={deletingId === workout.id}
+                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all"
+                      title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
+                    >
+                      {deletingId === workout.id ? (
+                        <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 )}
 
                 {/* Main clickable area */}
