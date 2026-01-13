@@ -289,6 +289,7 @@ export default function WorkoutPage() {
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyDeletingId, setHistoryDeletingId] = useState<string | null>(null);
+  const [redoLoadingId, setRedoLoadingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
@@ -723,6 +724,154 @@ export default function WorkoutPage() {
     }
   };
 
+  const handleRedoWorkout = async (workout: WorkoutHistory) => {
+    if (redoLoadingId || workout.exercises.length === 0) return;
+    setRedoLoadingId(workout.id);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+
+      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+
+      const exerciseIds = workout.exercises.map(exercise => exercise.exerciseId);
+
+      type ExerciseRow = {
+        id: string;
+        name: string;
+        primary_muscle: MuscleGroup;
+        secondary_muscles?: MuscleGroup[];
+        mechanic: 'compound' | 'isolation';
+        default_rep_range?: [number, number];
+        default_rir?: number;
+        min_weight_increment_kg?: number;
+        form_cues?: string[];
+        common_mistakes?: string[];
+        equipment_required?: string[];
+        setup_note?: string;
+        movement_pattern?: string;
+      };
+
+      const { data: exerciseRows, error: exerciseError } = await supabase
+        .from('exercises')
+        .select(`
+          id,
+          name,
+          primary_muscle,
+          secondary_muscles,
+          mechanic,
+          default_rep_range,
+          default_rir,
+          min_weight_increment_kg,
+          form_cues,
+          common_mistakes,
+          equipment_required,
+          setup_note,
+          movement_pattern
+        `)
+        .in('id', exerciseIds);
+
+      if (exerciseError) throw exerciseError;
+
+      const exerciseMap = new Map<string, ExerciseRow>(
+        (exerciseRows || []).map((row: ExerciseRow) => [row.id, row])
+      );
+
+      const { data: session, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          state: 'in_progress',
+          planned_date: getLocalDateString(),
+          started_at: new Date().toISOString(),
+          completion_percent: 0,
+        })
+        .select()
+        .single();
+
+      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
+
+      const warmedUpMuscles = new Set<string>();
+
+      const exerciseBlocks = workout.exercises.map((exercise, index) => {
+        const exerciseInfo = exerciseMap.get(exercise.exerciseId);
+        const defaultRepRange = exerciseInfo?.default_rep_range ?? [8, 12];
+        const reps = exercise.sets.map(set => set.reps).filter(rep => rep > 0);
+        const minReps = reps.length > 0 ? Math.min(...reps) : defaultRepRange[0];
+        const maxReps = reps.length > 0 ? Math.max(...reps) : defaultRepRange[1];
+        const targetSets = exercise.sets.length > 0
+          ? exercise.sets.length
+          : exerciseInfo?.mechanic === 'compound'
+            ? 4
+            : 3;
+        const targetWeightKg = exercise.sets.length > 0
+          ? exercise.sets[exercise.sets.length - 1].weight_kg
+          : 0;
+        const isCompound = (exerciseInfo?.mechanic || 'compound') === 'compound';
+        const primaryMuscle = (exerciseInfo?.primary_muscle || exercise.primaryMuscle) as MuscleGroup;
+        const shouldWarmup = primaryMuscle && !warmedUpMuscles.has(primaryMuscle);
+
+        let warmupSets: any[] = [];
+        if (shouldWarmup) {
+          warmupSets = generateWarmupProtocol({
+            workingWeight: targetWeightKg > 0 ? targetWeightKg : 60,
+            exercise: {
+              id: exercise.exerciseId,
+              name: exerciseInfo?.name || exercise.name,
+              primaryMuscle,
+              secondaryMuscles: exerciseInfo?.secondary_muscles || [],
+              mechanic: isCompound ? 'compound' : 'isolation',
+              defaultRepRange,
+              defaultRir: exerciseInfo?.default_rir || 2,
+              minWeightIncrementKg: exerciseInfo?.min_weight_increment_kg || 2.5,
+              formCues: exerciseInfo?.form_cues || [],
+              commonMistakes: exerciseInfo?.common_mistakes || [],
+              equipmentRequired: exerciseInfo?.equipment_required || [],
+              setupNote: exerciseInfo?.setup_note || '',
+              movementPattern: exerciseInfo?.movement_pattern || '',
+            },
+            isFirstExercise: index === 0,
+          });
+          warmedUpMuscles.add(primaryMuscle);
+        }
+
+        return {
+          workout_session_id: session.id,
+          exercise_id: exercise.exerciseId,
+          order: index + 1,
+          target_sets: targetSets,
+          target_rep_range: [minReps, maxReps],
+          target_rir: exerciseInfo?.default_rir || 2,
+          target_weight_kg: targetWeightKg,
+          target_rest_seconds: getRestPeriod(isCompound, userGoal, primaryMuscle),
+          suggestion_reason: `Redo of ${formatHistoryDate(workout.completed_at || workout.planned_date)}`,
+          warmup_protocol: { sets: warmupSets },
+        };
+      });
+
+      if (exerciseBlocks.length > 0) {
+        const { error: blocksError } = await supabase
+          .from('exercise_blocks')
+          .insert(exerciseBlocks);
+
+        if (blocksError) throw blocksError;
+      }
+
+      router.push(`/dashboard/workout/${session.id}`);
+    } catch (err) {
+      console.error('Failed to redo workout:', err);
+      alert('Failed to redo workout. Please try again.');
+    } finally {
+      setRedoLoadingId(null);
+    }
+  };
+
   const toggleSelectMode = () => {
     setIsSelectMode(!isSelectMode);
     if (isSelectMode) {
@@ -934,7 +1083,7 @@ export default function WorkoutPage() {
     setExpandedWorkout(expandedWorkout === workoutId ? null : workoutId);
   };
 
-  const formatHistoryDate = (dateString: string) => {
+  function formatHistoryDate(dateString: string) {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -942,7 +1091,7 @@ export default function WorkoutPage() {
       month: 'long',
       day: 'numeric',
     });
-  };
+  }
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -2239,26 +2388,49 @@ export default function WorkoutPage() {
                       </button>
                     )}
 
-                    {/* Delete button */}
+                    {/* Action buttons */}
                     {!isSelectMode && (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteWorkout(workout.id, workout.state);
-                        }}
-                        disabled={historyDeletingId === workout.id}
-                        className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
-                        title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
-                      >
-                        {historyDeletingId === workout.id ? (
-                          <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                      <div className="absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+                        {workout.state === 'completed' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRedoWorkout(workout);
+                            }}
+                            disabled={redoLoadingId === workout.id}
+                            className="p-1.5 rounded-lg hover:bg-primary-500/20 text-surface-500 hover:text-primary-300 transition-colors"
+                            title="Redo workout"
+                          >
+                            {redoLoadingId === workout.id ? (
+                              <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12a9 9 0 0115.364-6.364L21 8m-3-2v6h-6" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-15.364 6.364L3 16m3 2v-6h6" />
+                              </svg>
+                            )}
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteWorkout(workout.id, workout.state);
+                          }}
+                          disabled={historyDeletingId === workout.id}
+                          className="p-1.5 rounded-lg hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-colors"
+                          title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
+                        >
+                          {historyDeletingId === workout.id ? (
+                            <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
                     )}
 
                     {/* Main clickable area */}
