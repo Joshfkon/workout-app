@@ -25,8 +25,7 @@ interface Mesocycle {
   created_at: string;
   preferred_workout_days: WorkoutDay[] | null;
   session_duration_minutes: number | null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  program_data: any;
+  program_data: unknown;
 }
 
 interface TodayWorkout {
