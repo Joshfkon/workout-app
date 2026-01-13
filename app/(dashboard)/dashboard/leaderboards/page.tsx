@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
-import { LeaderboardTable, UserRankCard, TopWorkoutsCard } from '@/components/social/leaderboards';
+import { LeaderboardTable, UserRankCard } from '@/components/social/leaderboards';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useUserStore } from '@/stores';
 import { cn } from '@/lib/utils';
@@ -151,9 +151,6 @@ export default function LeaderboardsPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Top Workouts */}
-        <TopWorkoutsCard />
 
         {/* Info card */}
         <Card className="bg-surface-800/50">
