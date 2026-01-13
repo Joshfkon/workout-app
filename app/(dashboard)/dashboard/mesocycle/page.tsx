@@ -10,7 +10,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
+import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
 
 interface Mesocycle {
@@ -211,7 +211,7 @@ export default function MesocyclePage() {
       const extendedProfile: ExtendedUserProfile = {
         age: userData?.age || 30,
         experience: (userProfile?.experience as Experience) || 'intermediate',
-        goal: (userProfile?.goal as Goal) || 'maintenance',
+        goal: (userProfile?.goal as SchemaGoal) || 'maintenance',
         sleepQuality: (userData?.sleep_quality as Rating) || 3,
         stressLevel: (userData?.stress_level as Rating) || 3,
         trainingAge: userData?.training_age_years || 1,
