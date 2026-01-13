@@ -2223,7 +2223,12 @@ export default function WorkoutPage() {
                                 <CardTitle>{activeMeso.name}</CardTitle>
                                 <p className="text-surface-400 text-sm mt-1">{activeMeso.split_type}</p>
                               </div>
-                              <Badge variant="success">Active</Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="success">Active</Badge>
+                                <Button variant="ghost" size="sm" onClick={openScheduleEditor}>
+                                  Edit Schedule
+                                </Button>
+                              </div>
                             </div>
                           </CardHeader>
                           <CardContent>
