@@ -676,7 +676,7 @@ export default function MesocyclePage() {
                     </div>
                     <Slider
                       value={editDuration}
-                      onChange={setEditDuration}
+                      onChange={(e) => setEditDuration(parseInt(e.target.value, 10))}
                       min={15}
                       max={120}
                       step={5}
