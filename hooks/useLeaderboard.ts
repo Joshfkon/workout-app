@@ -48,6 +48,15 @@ export function useLeaderboard({
       const { data: { user } } = await supabase.auth.getUser();
       const currentOffset = loadMore ? offset : 0;
 
+      // Calculate leaderboard data before fetching (only on initial load/refresh)
+      if (!loadMore) {
+        if (type === 'total_volume_week') {
+          await supabase.rpc('calculate_weekly_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_week') {
+          await supabase.rpc('calculate_weekly_workouts_leaderboard' as never);
+        }
+      }
+
       // Fetch leaderboard entries
       const { data, error: fetchError } = await supabase.rpc('get_leaderboard' as never, {
         p_type: type,
