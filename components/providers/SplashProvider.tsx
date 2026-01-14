@@ -54,10 +54,10 @@ export function SplashProvider({ children }: SplashProviderProps) {
   const [isAppReady, setIsAppReady] = useState(false);
   const [minDurationPassed, setMinDurationPassed] = useState(false);
 
-  // Mark app as ready when document is fully loaded
+  // Mark app as ready when the document is at least interactive
   useEffect(() => {
     const checkReady = () => {
-      if (document.readyState === 'complete') {
+      if (document.readyState !== 'loading') {
         setIsAppReady(true);
       }
     };
@@ -66,20 +66,20 @@ export function SplashProvider({ children }: SplashProviderProps) {
     checkReady();
 
     // Also listen for load event
-    if (document.readyState !== 'complete') {
-      window.addEventListener('load', checkReady, { once: true });
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', checkReady, { once: true });
       // Fallback timeout - ensure we eventually become ready
-      const fallbackTimer = setTimeout(() => setIsAppReady(true), 3000);
+      const fallbackTimer = setTimeout(() => setIsAppReady(true), 1500);
       return () => {
-        window.removeEventListener('load', checkReady);
+        window.removeEventListener('DOMContentLoaded', checkReady);
         clearTimeout(fallbackTimer);
       };
     }
   }, []);
 
-  // Minimum splash duration for branding (reduced from 2800ms to 1200ms)
+  // Minimum splash duration for branding (reduced to keep initial load snappy)
   useEffect(() => {
-    const timer = setTimeout(() => setMinDurationPassed(true), 1200);
+    const timer = setTimeout(() => setMinDurationPassed(true), 300);
     return () => clearTimeout(timer);
   }, []);
 
@@ -130,13 +130,9 @@ export function SplashProvider({ children }: SplashProviderProps) {
           duration={1500}
         />
       )}
-      <div
-        className={shouldShowSplash ? 'opacity-0' : 'opacity-100 transition-opacity duration-300'}
-        style={{ visibility: shouldShowSplash ? 'hidden' : 'visible' }}
-      >
+      <div className="transition-opacity duration-300 opacity-100">
         {children}
       </div>
     </SplashContext.Provider>
   );
 }
-
