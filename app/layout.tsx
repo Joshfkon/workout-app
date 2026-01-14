@@ -120,12 +120,15 @@ export default function RootLayout({
             height: 96px;
             color: #0ea5e9;
             margin-bottom: 16px;
+            animation: staticIconPulse 1.5s ease-in-out infinite, staticIconEnter 0.5s ease-out forwards;
           }
           #static-splash .app-name {
             font-size: 1.875rem;
             font-weight: 900;
             color: #fafafa;
             letter-spacing: 0.1em;
+            opacity: 0;
+            animation: staticTextEnter 0.4s ease-out 0.15s forwards;
           }
           #static-splash .tagline {
             margin-top: 12px;
@@ -134,8 +137,45 @@ export default function RootLayout({
             font-weight: 500;
             letter-spacing: 0.1em;
             text-transform: uppercase;
+            opacity: 0;
+            animation: staticTextEnter 0.3s ease-out 0.3s forwards;
+          }
+          #static-splash .progress-bar {
+            margin-top: 32px;
+            width: 192px;
+            height: 4px;
+            background: #27272a;
+            border-radius: 4px;
+            overflow: hidden;
+            opacity: 0;
+            animation: staticTextEnter 0.2s ease-out 0.4s forwards;
+          }
+          #static-splash .progress-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #0ea5e9, #8b5cf6, #0ea5e9);
+            border-radius: 4px;
+            transform: translateX(-100%);
+            animation: staticProgressFill 2s ease-in-out 0.5s forwards;
           }
           #static-splash.hidden { display: none; }
+
+          @keyframes staticIconEnter {
+            from { transform: scale(0.8) translateY(10px); opacity: 0; }
+            to { transform: scale(1) translateY(0); opacity: 1; }
+          }
+          @keyframes staticIconPulse {
+            0%, 100% { filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.4)); }
+            50% { filter: drop-shadow(0 0 20px rgba(14, 165, 233, 0.8)); }
+          }
+          @keyframes staticTextEnter {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+          @keyframes staticProgressFill {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(0%); }
+          }
         `}} />
       </head>
       <body
@@ -155,6 +195,9 @@ export default function RootLayout({
             </svg>
             <span className="app-name">HYPERTROPHY</span>
             <span className="tagline">Train Smarter</span>
+            <div className="progress-bar">
+              <div className="progress-fill"></div>
+            </div>
           </div>
         </div>
 
