@@ -42,11 +42,11 @@ function hideStaticSplash() {
 }
 
 /**
- * Optimized SplashProvider that:
- * 1. Uses sessionStorage to skip splash on subsequent navigations
- * 2. Monitors actual app readiness (document load state)
- * 3. Hides splash immediately when ready (no artificial delays)
- * 4. Lazy loads the animated splash component
+ * Optimized SplashProvider with balanced performance:
+ * 1. First visit: Shows full branded animation (~1.3s) for user experience
+ * 2. Repeat visits: Skips splash entirely via sessionStorage for instant loads
+ * 3. Handoff: Smoothly transitions from static HTML splash to React splash
+ * 4. Performance: Server-side data fetching + caching means content loads during animation
  */
 export function SplashProvider({ children }: SplashProviderProps) {
   const [showSplash, setShowSplash] = useState(true);
@@ -93,15 +93,10 @@ export function SplashProvider({ children }: SplashProviderProps) {
     hideStaticSplash();
   }, []);
 
-  // Auto-hide splash immediately when app is ready (no artificial delays)
-  useEffect(() => {
-    if (isAppReady && showSplash && !hasSeenSplash) {
-      // Hide immediately - no waiting
-      setShowSplash(false);
-      setHasSeenSplash(true);
-      sessionStorage.setItem('splash_seen', 'true');
-    }
-  }, [isAppReady, showSplash, hasSeenSplash]);
+  // Note: We intentionally do NOT auto-hide splash when app is ready.
+  // First visit: Let the animation complete fully (brand experience)
+  // Repeat visits: Skip via sessionStorage (fast load)
+  // The SplashScreen component controls its own timing via duration prop.
 
   const hideSplash = useCallback(() => {
     setShowSplash(false);
@@ -117,7 +112,7 @@ export function SplashProvider({ children }: SplashProviderProps) {
         <SplashScreen
           onComplete={hideSplash}
           onReady={handleSplashReady}
-          duration={600}
+          duration={1300}
         />
       )}
       <div className="transition-opacity duration-300 opacity-100">
