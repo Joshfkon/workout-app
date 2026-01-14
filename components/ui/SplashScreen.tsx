@@ -28,8 +28,8 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
   }, [onReady]);
 
   useEffect(() => {
-    // Start fade out earlier for faster perceived load (at 1000ms)
-    const fadeTimer = setTimeout(() => setIsFading(true), Math.max(800, duration - 500));
+    // Start fade out 200ms before completion for smooth transition
+    const fadeTimer = setTimeout(() => setIsFading(true), Math.max(100, duration - 200));
 
     // Complete and unmount
     const completeTimer = setTimeout(() => {
@@ -47,7 +47,7 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-200 ${
         isFading ? 'opacity-0' : 'opacity-100'
       }`}
     >
@@ -186,17 +186,17 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
 
         .splash-tagline {
           opacity: 0;
-          animation: taglineEnter 0.3s ease-out 0.4s forwards;
+          animation: taglineEnter 0.2s ease-out 0.2s forwards;
         }
 
         .splash-bar-container {
           opacity: 0;
-          animation: barContainerEnter 0.2s ease-out 0.25s forwards;
+          animation: barContainerEnter 0.15s ease-out 0.15s forwards;
         }
 
         .splash-progress {
           transform: translateX(-100%);
-          animation: progressFill 0.9s ease-in-out 0.3s forwards;
+          animation: progressFill 0.35s ease-in-out 0.2s forwards;
         }
 
         .splash-corner-tl {

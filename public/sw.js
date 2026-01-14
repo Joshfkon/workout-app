@@ -16,7 +16,7 @@
  * - Aggressive caching of Next.js static chunks
  */
 
-const CACHE_NAME = 'hypertrack-v2';
+const CACHE_NAME = 'hypertrack-v3';
 
 // Critical assets to cache on install (app shell + key routes)
 const PRECACHE_ASSETS = [
@@ -31,6 +31,15 @@ const PREFETCH_ROUTES = [
   '/dashboard/workout',
   '/dashboard/nutrition',
   '/dashboard/analytics',
+  '/dashboard/mesocycle',
+  '/dashboard/history',
+];
+
+// Routes that should use stale-while-revalidate for instant loads
+const INSTANT_LOAD_ROUTES = [
+  '/dashboard',
+  '/dashboard/workout',
+  '/dashboard/nutrition',
 ];
 
 // Install event - cache app shell
@@ -155,7 +164,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For HTML pages - network-first with cache fallback
+  // For instant-load routes - stale-while-revalidate (show cached immediately, update in background)
+  const isInstantLoadRoute = INSTANT_LOAD_ROUTES.some(route =>
+    url.pathname === route || url.pathname === route + '/'
+  );
+
+  if (isInstantLoadRoute) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, responseToCache);
+              });
+            }
+            return response;
+          })
+          .catch(() => cached || new Response('Offline', { status: 503 }));
+
+        // Return cached immediately if available, otherwise wait for network
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // For other HTML pages - network-first with cache fallback
   event.respondWith(
     fetch(request)
       .then((response) => {
