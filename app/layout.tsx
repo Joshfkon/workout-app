@@ -69,49 +69,36 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" style={{ backgroundColor: '#09090b' }}>
       <head>
-        {/* Preconnect to critical origins for faster subsequent requests */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* DNS prefetch for Supabase - loaded dynamically */}
         <link rel="dns-prefetch" href="https://*.supabase.co" />
 
         {/*
-          Non-blocking font loading strategy:
-          1. Use preload with as="style" for early fetch (high priority but non-blocking)
-          2. System fonts show immediately, Inter loads in background
-          3. Script swaps in the loaded font stylesheet after page is interactive
+          CRITICAL: No render-blocking resources in <head>
+          - Google Fonts preload REMOVED - it was causing 2s white screen by blocking first paint
+          - Fonts now load lazily after splash is visible (see script below)
+          - System fonts provide instant text rendering
         */}
-        <link
-          rel="preload"
-          as="style"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
-        />
-        <link
-          id="google-fonts"
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
-          media="print"
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // Swap font stylesheet to 'all' media after load to prevent render-blocking
-              if (document.getElementById('google-fonts')) {
-                document.getElementById('google-fonts').media = 'all';
-              }
-            `,
-          }}
-        />
 
         {/* Inline critical CSS for instant splash screen - prevents white flash */}
-        {/* Static splash is minimal - just shows logo until React splash takes over */}
+        {/* CRITICAL: Use !important to guarantee dark background before any other CSS loads */}
         <style dangerouslySetInnerHTML={{ __html: `
           :root {
             --font-inter: ${systemFontStack};
             --font-mono: ${monoFontStack};
           }
-          html, body {
-            background-color: #09090b;
+          /* CRITICAL: Absolute fallback to prevent white screen - !important overrides everything */
+          html {
+            background-color: #09090b !important;
+          }
+          html::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
+            z-index: -1;
+          }
+          body {
+            background-color: #09090b !important;
             font-family: var(--font-inter);
           }
           #static-splash {
@@ -170,6 +157,34 @@ export default function RootLayout({
             <span className="tagline">Train Smarter</span>
           </div>
         </div>
+
+        {/* Lazy-load Google Fonts AFTER splash is visible (non-blocking) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Load fonts after first paint to avoid blocking initial render
+              // This runs after the static splash is already visible
+              if (typeof window !== 'undefined') {
+                function loadGoogleFonts() {
+                  // Create and inject the font stylesheet lazily
+                  var link = document.createElement('link');
+                  link.rel = 'stylesheet';
+                  link.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap';
+                  document.head.appendChild(link);
+                }
+
+                // Load after DOMContentLoaded to ensure splash is painted first
+                if (document.readyState === 'loading') {
+                  document.addEventListener('DOMContentLoaded', loadGoogleFonts);
+                } else {
+                  // Already loaded, defer slightly to prioritize paint
+                  setTimeout(loadGoogleFonts, 0);
+                }
+              }
+            `,
+          }}
+        />
+
         <ServiceWorkerRegistration />
         <NativeAppBehavior />
         <SplashProvider>
