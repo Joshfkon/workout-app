@@ -104,6 +104,23 @@ const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
 const HIDDEN_CARDS_STORAGE_KEY = 'dashboard-hidden-cards';
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const DASHBOARD_CACHE_KEY = 'dashboard_data_cache';
+const DASHBOARD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes - short TTL for fresh data
+
+// Type for cached dashboard data
+interface DashboardCacheData {
+  userId: string;
+  userGoal: string;
+  activeMesocycle: ActiveMesocycle | null;
+  nutritionTotals: NutritionTotals;
+  nutritionTargets: NutritionTargets | null;
+  todaysWeight: { weight: number; unit: string } | null;
+  weightUnit: 'lb' | 'kg';
+  muscleVolume: MuscleVolumeStats[];
+  completedWorkoutsCount: number;
+  timestamp: number;
+  dateKey: string; // To invalidate cache on new day
+}
 
 // MEV targets (minimum effective volume per muscle) - defined outside component for stable reference
 // Uses StandardMuscleGroup (20 muscles) for consistent volume tracking
@@ -301,6 +318,37 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Load cached dashboard data on mount for instant content display
+  useEffect(() => {
+    try {
+      const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      if (cached) {
+        const data: DashboardCacheData = JSON.parse(cached);
+        const todayStr = getLocalDateString();
+
+        // Use cache if: within TTL AND same day (nutrition/workout data is day-specific)
+        const isValid = Date.now() - data.timestamp < DASHBOARD_CACHE_TTL && data.dateKey === todayStr;
+
+        if (isValid) {
+          // Apply cached data immediately - show content without waiting for fetch
+          setUserId(data.userId);
+          setUserGoal(data.userGoal as any);
+          setActiveMesocycle(data.activeMesocycle);
+          setNutritionTotals(data.nutritionTotals);
+          setNutritionTargets(data.nutritionTargets);
+          setTodaysWeight(data.todaysWeight);
+          setWeightUnit(data.weightUnit);
+          setMuscleVolume(data.muscleVolume);
+          setCompletedWorkoutsCount(data.completedWorkoutsCount);
+          // Show content immediately with cached data
+          setIsLoading(false);
+        }
+      }
+    } catch (e) {
+      // Ignore cache errors - fresh data will be fetched
+    }
+  }, []);
+
   // Save card order to localStorage
   const saveCardOrder = useCallback((newOrder: DashboardCardId[]) => {
     setCardOrder(newOrder);
@@ -438,7 +486,8 @@ export default function DashboardPage() {
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6); // Rolling 7 days (including today)
         
-        // OPTIMIZATION: Run ALL independent queries in parallel
+        // OPTIMIZATION: Split queries into critical (blocks render) and deferred (loads in background)
+        // Critical queries - needed for initial content display
         const [
           userProfileResult,
           mesocyclesResult,
@@ -448,52 +497,50 @@ export default function DashboardPage() {
           weightResult,
           weightHistoryResult,
           weeklyBlocksResult,
-          frequentDataResult,
-          systemFoodsResult,
           completedWorkoutsResult,
         ] = await Promise.all([
           // User profile (goal)
           supabase.from('users').select('goal').eq('id', user.id).single(),
-          
+
           // Mesocycles with sessions
           supabase.from('mesocycles')
             .select(`id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
               workout_sessions (id, planned_date, state, completed_at)`)
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
-          
+
           // Today's nutrition
           supabase.from('food_log')
             .select('calories, protein, carbs, fat')
             .eq('user_id', user.id)
             .eq('logged_at', todayStr),
-          
+
           // Nutrition targets - try with cardio_prescription first
           supabase.from('nutrition_targets')
             .select('calories, protein, carbs, fat, cardio_prescription')
             .eq('user_id', user.id)
             .maybeSingle(),
-          
+
           // User preferences
           supabase.from('user_preferences')
             .select('weight_unit')
             .eq('user_id', user.id)
             .single(),
-          
+
           // Today's weight
           supabase.from('weight_log')
             .select('weight, unit')
             .eq('user_id', user.id)
             .eq('logged_at', todayStr)
             .maybeSingle(),
-          
+
           // Weight history (90 days for graph timeframe options)
           supabase.from('weight_log')
             .select('logged_at, weight, unit')
             .eq('user_id', user.id)
             .gte('logged_at', getLocalDateString(ninetyDaysAgo))
             .order('logged_at', { ascending: true }),
-          
+
           // Weekly volume data (include secondary_muscles for compound exercise credit)
           supabase.from('exercise_blocks')
             .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
@@ -501,20 +548,6 @@ export default function DashboardPage() {
             .eq('workout_sessions.user_id', user.id)
             .eq('workout_sessions.state', 'completed')
             .gte('workout_sessions.completed_at', weekStart.toISOString()),
-          
-          // Frequent foods - smaller initial load, rest loaded on-demand in QuickFoodLogger
-          supabase.from('food_log')
-            .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(50),
-
-          // System foods - smaller initial load for faster dashboard render
-          supabase.from('system_foods')
-            .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-            .eq('is_active', true)
-            .order('name')
-            .limit(100),
 
           // Count completed workouts (for first week hints)
           supabase.from('workout_sessions')
@@ -522,6 +555,63 @@ export default function DashboardPage() {
             .eq('user_id', user.id)
             .eq('state', 'completed'),
         ]);
+
+        // Deferred queries - load in background, only needed for food logging
+        // These don't block initial render
+        const deferredQueries = Promise.all([
+          // Frequent foods - only needed when opening food logger
+          supabase.from('food_log')
+            .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(50),
+
+          // System foods - only needed when opening food logger
+          supabase.from('system_foods')
+            .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+            .eq('is_active', true)
+            .order('name')
+            .limit(100),
+        ]).then(([frequentDataResult, systemFoodsResult]) => {
+          // Process deferred data in background
+          if (frequentDataResult.data && frequentDataResult.data.length > 0) {
+            const frequencyMap = new Map<string, FrequentFood>();
+            for (const entry of frequentDataResult.data) {
+              if (!entry.food_name) continue;
+              const key = `${entry.meal_type}:${entry.food_name}`;
+              const existing = frequencyMap.get(key);
+              const servingsNum = entry.servings || 1;
+
+              if (existing) {
+                const totalLogs = existing.times_logged + 1;
+                existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
+                existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
+                existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
+                existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
+                existing.times_logged = totalLogs;
+              } else {
+                frequencyMap.set(key, {
+                  user_id: user.id,
+                  meal_type: entry.meal_type as MealType,
+                  food_name: entry.food_name,
+                  serving_size: entry.serving_size,
+                  avg_calories: (entry.calories || 0) / servingsNum,
+                  avg_protein: (entry.protein || 0) / servingsNum,
+                  avg_carbs: (entry.carbs || 0) / servingsNum,
+                  avg_fat: (entry.fat || 0) / servingsNum,
+                  times_logged: 1,
+                  last_logged: new Date().toISOString(),
+                });
+              }
+            }
+            setFrequentFoods(Array.from(frequencyMap.values()));
+          }
+          if (systemFoodsResult.data) {
+            setSystemFoods(systemFoodsResult.data as SystemFood[]);
+          }
+        }).catch(() => {
+          // Ignore errors in deferred queries - not critical
+        });
         
         // Process user profile
         if (userProfileResult.data?.goal) {
@@ -743,46 +833,58 @@ export default function DashboardPage() {
           setMuscleVolume(stats);
         }
 
-        // Process frequent foods
-        const frequentData = frequentDataResult.data;
-        if (frequentData && frequentData.length > 0) {
-          const frequencyMap = new Map<string, FrequentFood>();
-          
-          for (const entry of frequentData) {
-            if (!entry.food_name) continue;
-            const key = `${entry.meal_type}:${entry.food_name}`;
-            const existing = frequencyMap.get(key);
-            const servingsNum = entry.servings || 1;
-            
-            if (existing) {
-              const totalLogs = existing.times_logged + 1;
-              existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
-              existing.avg_protein = (existing.avg_protein * existing.times_logged + (entry.protein || 0) / servingsNum) / totalLogs;
-              existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (entry.carbs || 0) / servingsNum) / totalLogs;
-              existing.avg_fat = (existing.avg_fat * existing.times_logged + (entry.fat || 0) / servingsNum) / totalLogs;
-              existing.times_logged = totalLogs;
-            } else {
-              frequencyMap.set(key, {
-                user_id: user.id,
-                meal_type: entry.meal_type as MealType,
-                food_name: entry.food_name,
-                serving_size: entry.serving_size,
-                avg_calories: (entry.calories || 0) / servingsNum,
-                avg_protein: (entry.protein || 0) / servingsNum,
-                avg_carbs: (entry.carbs || 0) / servingsNum,
-                avg_fat: (entry.fat || 0) / servingsNum,
-                times_logged: 1,
-                last_logged: new Date().toISOString(),
-              });
-            }
-          }
-          
-          setFrequentFoods(Array.from(frequencyMap.values()));
+        // NOTE: Frequent foods and system foods are loaded via deferred queries above
+        // They don't block initial render and are processed in the background
+
+        // Cache dashboard data for instant load on next visit
+        // Build the processed mesocycle data for caching
+        let cachedMesocycle: ActiveMesocycle | null = null;
+        if (mesocycle) {
+          const startDate = new Date(mesocycle.start_date);
+          const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+          const sessions = mesocycle.workout_sessions || [];
+          const completed = sessions.filter((s: any) => s.state === 'completed').length;
+          cachedMesocycle = {
+            id: mesocycle.id,
+            name: mesocycle.name,
+            startDate: mesocycle.start_date,
+            weeks: mesocycle.total_weeks,
+            currentWeek: Math.min(weeksSinceStart, mesocycle.total_weeks),
+            workoutsCompleted: completed,
+            totalWorkouts: sessions.length,
+            splitType: mesocycle.split_type,
+            daysPerWeek: mesocycle.days_per_week,
+          };
         }
 
-        // Process system foods
-        if (systemFoodsResult.data) {
-          setSystemFoods(systemFoodsResult.data as SystemFood[]);
+        try {
+          const cacheData: DashboardCacheData = {
+            userId: user.id,
+            userGoal: userProfileResult.data?.goal || 'maintain',
+            activeMesocycle: cachedMesocycle,
+            nutritionTotals: nutritionResult.data?.reduce(
+              (acc: NutritionTotals, entry: any) => ({
+                calories: acc.calories + (entry.calories || 0),
+                protein: acc.protein + (entry.protein || 0),
+                carbs: acc.carbs + (entry.carbs || 0),
+                fat: acc.fat + (entry.fat || 0),
+              }),
+              { calories: 0, protein: 0, carbs: 0, fat: 0 }
+            ) || { calories: 0, protein: 0, carbs: 0, fat: 0 },
+            nutritionTargets: targetsResult.data || null,
+            todaysWeight: weightResult.data ? {
+              weight: weightResult.data.weight,
+              unit: weightResult.data.unit || prefsResult.data?.weight_unit || 'lb'
+            } : null,
+            weightUnit: (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb',
+            muscleVolume: [], // Volume is computed, skip for cache simplicity
+            completedWorkoutsCount: completedWorkoutsResult.count || 0,
+            timestamp: Date.now(),
+            dateKey: todayStr,
+          };
+          localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(cacheData));
+        } catch (e) {
+          // Ignore cache write errors
         }
 
       } catch (error) {

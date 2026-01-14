@@ -45,14 +45,13 @@ function hideStaticSplash() {
  * Optimized SplashProvider that:
  * 1. Uses sessionStorage to skip splash on subsequent navigations
  * 2. Monitors actual app readiness (document load state)
- * 3. Uses a shorter minimum duration (1200ms) for faster perceived load
+ * 3. Hides splash immediately when ready (no artificial delays)
  * 4. Lazy loads the animated splash component
  */
 export function SplashProvider({ children }: SplashProviderProps) {
   const [showSplash, setShowSplash] = useState(true);
   const [hasSeenSplash, setHasSeenSplash] = useState(false);
   const [isAppReady, setIsAppReady] = useState(false);
-  const [minDurationPassed, setMinDurationPassed] = useState(false);
 
   // Mark app as ready when the document is at least interactive
   useEffect(() => {
@@ -68,19 +67,13 @@ export function SplashProvider({ children }: SplashProviderProps) {
     // Also listen for load event
     if (document.readyState === 'loading') {
       window.addEventListener('DOMContentLoaded', checkReady, { once: true });
-      // Fallback timeout - ensure we eventually become ready
-      const fallbackTimer = setTimeout(() => setIsAppReady(true), 1500);
+      // Fallback timeout - ensure we eventually become ready (reduced from 1500ms)
+      const fallbackTimer = setTimeout(() => setIsAppReady(true), 800);
       return () => {
         window.removeEventListener('DOMContentLoaded', checkReady);
         clearTimeout(fallbackTimer);
       };
     }
-  }, []);
-
-  // Minimum splash duration for branding (reduced to keep initial load snappy)
-  useEffect(() => {
-    const timer = setTimeout(() => setMinDurationPassed(true), 300);
-    return () => clearTimeout(timer);
   }, []);
 
   // Check session storage - but don't hide static splash yet
@@ -100,18 +93,15 @@ export function SplashProvider({ children }: SplashProviderProps) {
     hideStaticSplash();
   }, []);
 
-  // Auto-hide splash when both conditions are met
+  // Auto-hide splash immediately when app is ready (no artificial delays)
   useEffect(() => {
-    if (isAppReady && minDurationPassed && showSplash && !hasSeenSplash) {
-      // Small delay for smooth transition
-      const hideTimer = setTimeout(() => {
-        setShowSplash(false);
-        setHasSeenSplash(true);
-        sessionStorage.setItem('splash_seen', 'true');
-      }, 300);
-      return () => clearTimeout(hideTimer);
+    if (isAppReady && showSplash && !hasSeenSplash) {
+      // Hide immediately - no waiting
+      setShowSplash(false);
+      setHasSeenSplash(true);
+      sessionStorage.setItem('splash_seen', 'true');
     }
-  }, [isAppReady, minDurationPassed, showSplash, hasSeenSplash]);
+  }, [isAppReady, showSplash, hasSeenSplash]);
 
   const hideSplash = useCallback(() => {
     setShowSplash(false);
@@ -127,7 +117,7 @@ export function SplashProvider({ children }: SplashProviderProps) {
         <SplashScreen
           onComplete={hideSplash}
           onReady={handleSplashReady}
-          duration={1500}
+          duration={600}
         />
       )}
       <div className="transition-opacity duration-300 opacity-100">
