@@ -75,10 +75,32 @@ export default function RootLayout({
         {/* DNS prefetch for Supabase - loaded dynamically */}
         <link rel="dns-prefetch" href="https://*.supabase.co" />
 
-        {/* Load Google Fonts with display=swap for non-blocking render */}
+        {/*
+          Non-blocking font loading strategy:
+          1. Use preload with as="style" for early fetch (high priority but non-blocking)
+          2. System fonts show immediately, Inter loads in background
+          3. Script swaps in the loaded font stylesheet after page is interactive
+        */}
         <link
+          rel="preload"
+          as="style"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+        />
+        <link
+          id="google-fonts"
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap"
+          media="print"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Swap font stylesheet to 'all' media after load to prevent render-blocking
+              if (document.getElementById('google-fonts')) {
+                document.getElementById('google-fonts').media = 'all';
+              }
+            `,
+          }}
         />
 
         {/* Inline critical CSS for instant splash screen - prevents white flash */}
