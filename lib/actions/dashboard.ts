@@ -18,7 +18,7 @@ export interface DashboardMesocycle {
 export interface TodaysWorkoutData {
   id: string;
   name: string;
-  state: string;
+  state: 'planned' | 'in_progress' | 'completed';
   exercises: number;
   completedSets: number;
   totalSets: number;
