@@ -15,7 +15,7 @@ const APP_NAME = 'HYPERTROPHY';
  * Uses pure CSS animations instead of Framer Motion to reduce bundle size.
  * Optimized for fast load times with reduced animation duration.
  */
-export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, onReady, duration = 800 }: SplashScreenProps) {
   const [isVisible, setIsVisible] = useState(true);
   const [isFading, setIsFading] = useState(false);
 
@@ -106,7 +106,7 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
             <span
               key={i}
               className="text-3xl md:text-4xl font-black text-surface-100 tracking-wider splash-letter"
-              style={{ animationDelay: `${0.15 + i * 0.025}s` }}
+              style={{ animationDelay: `${0.08 + i * 0.015}s` }}
             >
               {letter}
             </span>
@@ -162,49 +162,49 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
         .splash-ring-3 { animation-delay: 0.3s; }
 
         .splash-logo-enter {
-          animation: logoEnter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          animation: logoEnter 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
         .splash-icon-enter {
-          animation: iconEnter 0.4s ease-out forwards;
+          animation: iconEnter 0.25s ease-out forwards;
         }
 
         .splash-glow {
-          animation: glowPulse 1.2s ease-in-out infinite;
+          animation: glowPulse 0.8s ease-in-out infinite;
         }
 
         .splash-path {
           stroke-dasharray: 100;
           stroke-dashoffset: 100;
-          animation: pathDraw 0.6s ease-in-out forwards;
+          animation: pathDraw 0.35s ease-in-out forwards;
         }
 
         .splash-letter {
           opacity: 0;
-          animation: letterEnter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          animation: letterEnter 0.15s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
         .splash-tagline {
           opacity: 0;
-          animation: taglineEnter 0.2s ease-out 0.2s forwards;
+          animation: taglineEnter 0.15s ease-out 0.1s forwards;
         }
 
         .splash-bar-container {
           opacity: 0;
-          animation: barContainerEnter 0.15s ease-out 0.15s forwards;
+          animation: barContainerEnter 0.1s ease-out 0.1s forwards;
         }
 
         .splash-progress {
           transform: translateX(-100%);
-          animation: progressFill 0.35s ease-in-out 0.2s forwards;
+          animation: progressFill 0.25s ease-in-out 0.15s forwards;
         }
 
         .splash-corner-tl {
-          animation: cornerTL 0.4s ease-out 0.1s both;
+          animation: cornerTL 0.25s ease-out 0.05s both;
         }
 
         .splash-corner-br {
-          animation: cornerBR 0.4s ease-out 0.1s both;
+          animation: cornerBR 0.25s ease-out 0.05s both;
         }
 
         @keyframes bgScale {

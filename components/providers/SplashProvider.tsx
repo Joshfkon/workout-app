@@ -108,7 +108,7 @@ export function SplashProvider({ children }: SplashProviderProps) {
         <SplashScreen
           onComplete={hideSplash}
           onReady={handleSplashReady}
-          duration={1300}
+          duration={800}
         />
       )}
       <div className="transition-opacity duration-300 opacity-100">
