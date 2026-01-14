@@ -6,7 +6,32 @@ Users experience two distinct issues on site load:
 1. **2-second white screen** before any content appears
 2. **0.15-second static image flash** where the non-animated splash shows briefly before the animated splash begins
 
-## Current Architecture
+## Implemented Fixes
+
+The following fixes have been applied to eliminate the static image flash:
+
+### 1. Z-Index Fix (`components/ui/SplashScreen.tsx`)
+Changed React splash z-index from `100` to `10000` (higher than static splash's `9999`):
+```typescript
+<div className="fixed inset-0 z-[10000] ..."
+```
+
+### 2. Instant Handoff (`components/providers/SplashProvider.tsx`)
+Removed the 150ms fade transition - static splash now hides instantly:
+```typescript
+function hideStaticSplash() {
+  const staticSplash = document.getElementById('static-splash');
+  if (staticSplash) {
+    staticSplash.style.display = 'none'; // Instant, no fade
+  }
+}
+```
+
+**Result**: When React splash mounts, it immediately covers the static splash (higher z-index), then the static splash is hidden. The animation plays from frame 1 with no visible transition.
+
+---
+
+## Architecture (Before Fixes)
 
 ### Layer 1: Static HTML Splash (`app/layout.tsx:160-172`)
 - Inline CSS + HTML rendered server-side

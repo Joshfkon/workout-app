@@ -47,7 +47,7 @@ export function SplashScreen({ onComplete, onReady, duration = 1500 }: SplashScr
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center overflow-hidden transition-opacity duration-200 ${
+      className={`fixed inset-0 z-[10000] flex items-center justify-center overflow-hidden transition-opacity duration-200 ${
         isFading ? 'opacity-0' : 'opacity-100'
       }`}
     >

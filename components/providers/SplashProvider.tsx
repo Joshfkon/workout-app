@@ -25,18 +25,14 @@ interface SplashProviderProps {
 
 /**
  * Hides the static HTML splash screen that shows before JS loads.
- * Uses a fade-out transition for seamless handoff to React splash.
+ * Instant hide since React splash (higher z-index) covers it seamlessly.
  */
 function hideStaticSplash() {
   if (typeof document !== 'undefined') {
     const staticSplash = document.getElementById('static-splash');
     if (staticSplash) {
-      // Fade out then hide to prevent flash
-      staticSplash.style.opacity = '0';
-      staticSplash.style.transition = 'opacity 150ms ease-out';
-      setTimeout(() => {
-        staticSplash.classList.add('hidden');
-      }, 150);
+      // Instant hide - React splash covers it with higher z-index
+      staticSplash.style.display = 'none';
     }
   }
 }
