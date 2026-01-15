@@ -1821,7 +1821,8 @@ export default function WorkoutPage() {
       if (insertError) {
         console.error('Failed to save set:', insertError);
         setError(`Failed to save set: ${insertError.message}`);
-        return; // Don't add to local state if save failed
+        showError('Failed to save set - please try again');
+        return null; // Don't add to local state if save failed
       }
       
       // Create the set object with the database-generated ID
@@ -2009,6 +2010,7 @@ export default function WorkoutPage() {
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
+      showError('Failed to save set - please try again');
       return null;
     }
   };
@@ -3215,14 +3217,13 @@ export default function WorkoutPage() {
   };
 
   if (phase === 'loading') {
-    // Skip showing loading screen if coming from quick workout page (already saw one)
-    if (fromCreate) {
-      return null;
-    }
+    // Show a minimal loading skeleton - even for fromCreate to prevent blank screen
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
         <LoadingAnimation type="spinner" size="lg" />
-        <p className="mt-4 text-surface-400">Loading workout...</p>
+        <p className="mt-4 text-surface-400">
+          {fromCreate ? 'Starting workout...' : 'Loading workout...'}
+        </p>
       </div>
     );
   }

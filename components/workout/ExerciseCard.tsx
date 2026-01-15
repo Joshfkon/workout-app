@@ -902,33 +902,40 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Use target RPE as default (will be updated if user provides feedback)
     const targetRpe = 10 - effectiveTargetRir;
 
-    // Complete the set immediately (rest timer starts in parent)
-    const result = await onSetComplete({
-      weightKg,
-      reps: repsNum,
-      rpe: targetRpe,
-      setType: asDropset && dropsetMode ? 'dropset' : 'normal',
-      parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
-      // No feedback yet - user can add it optionally
-    });
-
-    // Clear dropset mode after completing
-    if (asDropset) {
-      setDropsetMode(null);
-    }
-
-    // Show feedback overlay if we got a set ID back
-    if (result && typeof result === 'string') {
-      setPendingFeedbackSet({
-        setId: result,
+    try {
+      // Complete the set immediately (rest timer starts in parent)
+      const result = await onSetComplete({
         weightKg,
         reps: repsNum,
-        setNumber,
+        rpe: targetRpe,
+        setType: asDropset && dropsetMode ? 'dropset' : 'normal',
+        parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
+        // No feedback yet - user can add it optionally
       });
-    }
 
-    // Unlock after a short delay
-    setTimeout(() => setIsCompletingSet(false), 500);
+      // Clear dropset mode after completing
+      if (asDropset) {
+        setDropsetMode(null);
+      }
+
+      // Show feedback overlay if we got a set ID back (submission succeeded)
+      if (result && typeof result === 'string') {
+        setPendingFeedbackSet({
+          setId: result,
+          weightKg,
+          reps: repsNum,
+          setNumber,
+        });
+      }
+      // If result is null/undefined, submission failed - lock will be released below
+    } catch (error) {
+      console.error('Set submission failed:', error);
+      // Lock will be released in finally block
+    } finally {
+      // Always unlock after async operation completes (success or failure)
+      // Small delay to prevent accidental double-taps on fast networks
+      setTimeout(() => setIsCompletingSet(false), 100);
+    }
   };
 
   // Submit feedback for the pending set
