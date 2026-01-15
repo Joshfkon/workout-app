@@ -1362,64 +1362,64 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                   </div>
                 )}
 
-                {(() => {
-                  if (!nutritionTargets) return null;
-
-                  const targets = nutritionTargets;
-
-                  return (
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-surface-300">Calories</span>
-                          <span className="text-sm text-surface-400">
-                            <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
-                            {' / '}{targets.calories}
-                          </span>
-                        </div>
-                        <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${
-                              nutritionTotals.calories > targets.calories
-                                ? 'bg-danger-500'
-                                : nutritionTotals.calories > targets.calories * 0.9
-                                ? 'bg-success-500'
-                                : 'bg-primary-500'
-                            }`}
-                            style={{ width: `${Math.min(100, (nutritionTotals.calories / targets.calories) * 100)}%` }}
-                          />
-                        </div>
+                <div className="space-y-3">
+                  {/* Calories - always show totals */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-surface-300">Calories</span>
+                      <span className="text-sm text-surface-400">
+                        <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
+                        {nutritionTargets && <>{' / '}{nutritionTargets.calories}</>}
+                      </span>
+                    </div>
+                    {nutritionTargets && (
+                      <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${
+                            nutritionTotals.calories > nutritionTargets.calories
+                              ? 'bg-danger-500'
+                              : nutritionTotals.calories > nutritionTargets.calories * 0.9
+                              ? 'bg-success-500'
+                              : 'bg-primary-500'
+                          }`}
+                          style={{ width: `${Math.min(100, (nutritionTotals.calories / nutritionTargets.calories) * 100)}%` }}
+                        />
                       </div>
+                    )}
+                  </div>
 
-                      {(() => {
-                        const now = new Date();
-                        const hours = now.getHours();
-                        const minutes = now.getMinutes();
-                        const currentTimeInHours = hours + minutes / 60;
-                        const startHour = 7;
-                        const endHour = 21;
-                        const totalWindow = endHour - startHour;
+                  {/* Macros - always show totals, progress bars only when targets exist */}
+                  {nutritionTargets ? (
+                    (() => {
+                      const targets = nutritionTargets;
+                      const now = new Date();
+                      const hours = now.getHours();
+                      const minutes = now.getMinutes();
+                      const currentTimeInHours = hours + minutes / 60;
+                      const startHour = 7;
+                      const endHour = 21;
+                      const totalWindow = endHour - startHour;
 
-                        let expectedPercent: number;
-                        if (currentTimeInHours <= startHour) {
-                          expectedPercent = 0;
-                        } else if (currentTimeInHours >= endHour) {
-                          expectedPercent = 100;
-                        } else {
-                          expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
-                        }
+                      let expectedPercent: number;
+                      if (currentTimeInHours <= startHour) {
+                        expectedPercent = 0;
+                      } else if (currentTimeInHours >= endHour) {
+                        expectedPercent = 100;
+                      } else {
+                        expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
+                      }
 
-                        const getPaceStatus = (actual: number, target: number) => {
-                          const actualPercent = (actual / target) * 100;
-                          const diff = actualPercent - expectedPercent;
-                          if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
-                          if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
-                          return { status: 'on-track', color: 'text-success-400', icon: '✓' };
-                        };
+                      const getPaceStatus = (actual: number, target: number) => {
+                        const actualPercent = (actual / target) * 100;
+                        const diff = actualPercent - expectedPercent;
+                        if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
+                        if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
+                        return { status: 'on-track', color: 'text-success-400', icon: '✓' };
+                      };
 
-                        const proteinPace = getPaceStatus(nutritionTotals.protein, targets.protein);
-                        const carbsPace = getPaceStatus(nutritionTotals.carbs, targets.carbs);
-                        const fatPace = getPaceStatus(nutritionTotals.fat, targets.fat);
+                      const proteinPace = getPaceStatus(nutritionTotals.protein, targets.protein);
+                      const carbsPace = getPaceStatus(nutritionTotals.carbs, targets.carbs);
+                      const fatPace = getPaceStatus(nutritionTotals.fat, targets.fat);
 
                       return (
                         <div className="grid grid-cols-3 gap-4">
@@ -1494,18 +1494,33 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                           </div>
                         </div>
                       );
-                    })()}
-                    </div>
-                  );
-                })()}
-                {!nutritionTargets && (
-                  <div className="text-center py-6">
-                    <p className="text-surface-400 text-sm mb-3">No nutrition targets set</p>
-                    <Link href="/dashboard/nutrition">
-                      <Button variant="outline" size="sm">Set Up Targets</Button>
-                    </Link>
-                  </div>
-                )}
+                    })()
+                  ) : (
+                    <>
+                      {/* Show simple totals when no targets are set */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <span className="text-xs text-surface-500">Protein</span>
+                          <p className="text-sm font-medium text-surface-200">{Math.round(nutritionTotals.protein)}g</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-surface-500">Carbs</span>
+                          <p className="text-sm font-medium text-surface-200">{Math.round(nutritionTotals.carbs)}g</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-surface-500">Fat</span>
+                          <p className="text-sm font-medium text-surface-200">{Math.round(nutritionTotals.fat)}g</p>
+                        </div>
+                      </div>
+                      <div className="text-center pt-3 border-t border-surface-800">
+                        <p className="text-surface-400 text-sm mb-2">Set targets to track your progress</p>
+                        <Link href="/dashboard/nutrition">
+                          <Button variant="outline" size="sm">Set Up Targets</Button>
+                        </Link>
+                      </div>
+                    </>
+                  )}
+                </div>
               </CardContent>
             </Card>
           );
