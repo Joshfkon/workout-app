@@ -419,6 +419,29 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     });
   }, []);
 
+  // Helper function to update the dashboard cache after data mutations
+  // This prevents stale data from being shown on page reload
+  const updateDashboardCache = useCallback((updates: Partial<Pick<DashboardCacheData, 'nutritionTotals' | 'todaysWeight'>>) => {
+    try {
+      const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
+      if (cached) {
+        const data: DashboardCacheData = JSON.parse(cached);
+        const todayStr = getLocalDateString();
+        // Only update if cache is for today (don't corrupt cache for different day)
+        if (data.dateKey === todayStr) {
+          const updatedData: DashboardCacheData = {
+            ...data,
+            ...updates,
+            timestamp: Date.now(), // Refresh timestamp so cache stays valid
+          };
+          localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(updatedData));
+        }
+      }
+    } catch (e) {
+      // Ignore cache update errors
+    }
+  }, []);
+
   // Get volume data for atrophy risk alert - use the same data source as Weekly Volume box
   // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
   const { volumeSummary } = useAdaptiveVolume();
@@ -1045,12 +1068,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         return;
       }
 
-      setNutritionTotals((prev) => ({
-        calories: prev.calories + food.calories,
-        protein: prev.protein + food.protein,
-        carbs: prev.carbs + food.carbs,
-        fat: prev.fat + food.fat,
-      }));
+      // Update local state and cache together to prevent stale data on reload
+      setNutritionTotals((prev) => {
+        const newTotals = {
+          calories: prev.calories + food.calories,
+          protein: prev.protein + food.protein,
+          carbs: prev.carbs + food.carbs,
+          fat: prev.fat + food.fat,
+        };
+        // Update cache with new totals to persist across reloads
+        updateDashboardCache({ nutritionTotals: newTotals });
+        return newTotals;
+      });
       setShowQuickLogger(false);
     } catch (err) {
       console.error('handleAddFood: Exception:', err);
@@ -1118,9 +1147,41 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       if (error) throw error;
 
-      setTodaysWeight({ weight, unit: weightUnit });
+      const newWeight = { weight, unit: weightUnit };
+      setTodaysWeight(newWeight);
       setWeightInput('');
       setShowWeightLogger(false);
+
+      // Update dashboard cache with new weight to persist across reloads
+      updateDashboardCache({ todaysWeight: newWeight });
+
+      // Also update weight history cache to include today's entry
+      try {
+        const historyCache = localStorage.getItem(WEIGHT_HISTORY_CACHE_KEY);
+        if (historyCache) {
+          const { data: historyData } = JSON.parse(historyCache);
+          if (Array.isArray(historyData)) {
+            // Update or add today's entry
+            const todayEntry = { date: today, weight, unit: weightUnit };
+            const existingIndex = historyData.findIndex((h: any) => h.date === today);
+            if (existingIndex >= 0) {
+              historyData[existingIndex] = todayEntry;
+            } else {
+              historyData.push(todayEntry);
+              // Sort by date descending (newest first)
+              historyData.sort((a: any, b: any) => b.date.localeCompare(a.date));
+            }
+            localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({
+              data: historyData,
+              timestamp: Date.now(),
+            }));
+            // Also update local state for immediate UI update
+            setWeightHistory(historyData);
+          }
+        }
+      } catch (e) {
+        // Ignore weight history cache update errors
+      }
     } catch (err) {
       console.error('Failed to save weight:', err);
     } finally {
