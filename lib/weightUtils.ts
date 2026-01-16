@@ -54,39 +54,40 @@ export function validateWeightEntry(
   let correctedUnit: 'lb' | 'kg' = unit || 'lb';
   let wasCorrected = false;
 
-  // Handle null/undefined unit - only infer when unit is missing
+  // Handle null/undefined unit - infer default but do not mark as corrected
   if (!unit) {
-    // If no unit specified and weight > 200, it's likely in lbs
-    // (most people don't weigh > 200 kg = 440 lbs)
-    if (weight > 200) {
-      correctedUnit = 'lb';
-    } else {
-      // For weights <= 200 with no unit, default to lb (most common)
-      // This is a safe default since:
-      // - 200 lb = 90.7 kg (reasonable adult weight)
-      // - 200 kg = 440 lb (extremely rare)
-      correctedUnit = 'lb';
-    }
-    wasCorrected = true;
-  }
-
-  // Trust the stored unit - only correct clearly impossible values
-  // A weight > 500 lbs labeled as 'lb' is extremely unlikely
-  if (correctedUnit === 'lb' && weight > 500) {
-    // This is likely a kg value stored with wrong unit
-    // 500 kg = 1100 lbs, so if stored as > 500 'lb', probably kg
-    correctedWeight = weight * KG_TO_LBS;
-    wasCorrected = true;
-  }
-
-  // A weight > 250 kg is extremely unlikely (> 550 lbs)
-  if (correctedUnit === 'kg' && weight > 250) {
-    // This might be a lb value stored with wrong unit
-    // 250 kg = 550 lbs, already very rare
-    // If > 250 'kg', it's probably already in lbs
-    correctedWeight = weight;
     correctedUnit = 'lb';
-    wasCorrected = true;
+  }
+
+  if (correctedUnit === 'lb') {
+    // Suspiciously low lbs often indicate kg entered with lb unit
+    if (weight >= 30 && weight <= 85) {
+      correctedWeight = weight * KG_TO_LBS;
+      wasCorrected = true;
+    }
+
+    // Very high lbs may actually be kg
+    if (weight > 400) {
+      correctedWeight = weight * KG_TO_LBS;
+      wasCorrected = true;
+    } else if (weight >= 300) {
+      const asKg = weight * LBS_TO_KG;
+      if (asKg >= 30 && asKg <= 200) {
+        correctedWeight = weight * KG_TO_LBS;
+        wasCorrected = true;
+      }
+    }
+  }
+
+  if (correctedUnit === 'kg') {
+    // Common human weights in lbs mistakenly stored as kg
+    if (weight >= 30 && weight <= 200) {
+      correctedUnit = 'lb';
+      wasCorrected = true;
+    } else if (weight > 200) {
+      correctedUnit = 'lb';
+      wasCorrected = true;
+    }
   }
 
   return {
@@ -244,4 +245,3 @@ export function calculateWeightChange(
   const previousDisplay = getDisplayWeight(previousWeight, previousUnit, preferredUnit);
   return currentDisplay - previousDisplay;
 }
-
