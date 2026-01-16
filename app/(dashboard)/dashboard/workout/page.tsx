@@ -2148,7 +2148,7 @@ export default function WorkoutPage() {
                         {todayWorkout ? (
                           <Card variant="elevated" className="border-2 border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-accent-500/5">
                             <CardContent className="p-6">
-                              <div className="flex items-center justify-between">
+                              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                   <div className="flex items-center gap-3 mb-2">
                                     <span className="text-3xl">🏋️</span>
@@ -2172,7 +2172,7 @@ export default function WorkoutPage() {
                                   size="lg"
                                   onClick={handleStartMesocycleWorkout}
                                   isLoading={isStartingWorkout}
-                                  className="shrink-0"
+                                  className="w-full shrink-0 sm:w-auto"
                                 >
                                   <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
