@@ -27,6 +27,7 @@ interface CardioLogEntry {
   minutes: number;
   modality: string;
   notes?: string;
+  calories_burned?: number;
 }
 
 // Memoized options to prevent re-creation on each render
@@ -45,6 +46,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const [showLogForm, setShowLogForm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [minutes, setMinutes] = useState('');
+  const [caloriesBurned, setCaloriesBurned] = useState('');
   const [modality, setModality] = useState<CardioModality>('incline_walk');
   const [notes, setNotes] = useState('');
 
@@ -57,7 +59,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
 
     const { data: cardioLogs } = await supabase
       .from('cardio_log')
-      .select('id, logged_at, minutes, modality, notes')
+      .select('id, logged_at, minutes, modality, notes, calories_burned')
       .eq('user_id', userId)
       .eq('logged_at', today)
       .order('created_at', { ascending: false });
@@ -81,12 +83,15 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     const today = getLocalDateString();
 
     try {
+      const caloriesNum = caloriesBurned ? parseInt(caloriesBurned) : null;
+
       const { error } = await supabase.from('cardio_log').insert({
         user_id: userId,
         logged_at: today,
         minutes: minutesNum,
         modality: modality,
         notes: notes || null,
+        calories_burned: caloriesNum && caloriesNum > 0 ? caloriesNum : null,
       });
 
       if (error) throw error;
@@ -95,6 +100,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
       await loadTodayData();
       setShowLogForm(false);
       setMinutes('');
+      setCaloriesBurned('');
       setNotes('');
       setModality(prescription?.modality || 'incline_walk');
     } catch (error) {
@@ -102,7 +108,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     } finally {
       setIsLogging(false);
     }
-  }, [minutes, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
+  }, [minutes, caloriesBurned, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
 
   const deleteLog = useCallback(async (id: string) => {
     const { error } = await supabase
@@ -123,6 +129,10 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     setModality(e.target.value as CardioModality);
   }, []);
 
+  const handleCaloriesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setCaloriesBurned(e.target.value);
+  }, []);
+
   const handleNotesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setNotes(e.target.value);
   }, []);
@@ -132,6 +142,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const handleCancelLogForm = useCallback(() => {
     setShowLogForm(false);
     setMinutes('');
+    setCaloriesBurned('');
     setNotes('');
   }, []);
 
@@ -239,6 +250,9 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
             >
               <div className="flex items-center gap-2 text-xs">
                 <span className="font-medium text-surface-200">{log.minutes} min</span>
+                {log.calories_burned && (
+                  <span className="text-warning-400">{log.calories_burned} cal</span>
+                )}
                 <span className="text-surface-500 capitalize">
                   {log.modality.replace('_', ' ')}
                 </span>
@@ -260,7 +274,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
       {/* Log Form */}
       {showLogForm ? (
         <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-surface-300 mb-1">
                 Minutes
@@ -270,6 +284,18 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
                 value={minutes}
                 onChange={handleMinutesChange}
                 placeholder="30"
+                min="1"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-surface-300 mb-1">
+                Calories
+              </label>
+              <Input
+                type="number"
+                value={caloriesBurned}
+                onChange={handleCaloriesChange}
+                placeholder="200"
                 min="1"
               />
             </div>
