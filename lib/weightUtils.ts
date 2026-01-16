@@ -17,10 +17,16 @@ const LBS_TO_KG = 1 / KG_TO_LBS;
 
 /**
  * Weight validation and correction rules:
- * - Weights 30-85 lbs labeled as 'lb' are likely in kg (common human weight range)
- * - Weights > 300 lbs labeled as 'lb' are suspicious (check if dividing by 2.20462 gives reasonable kg)
- * - Weights 30-150 kg labeled as 'kg' are likely in lbs (common human weight range)
- * - Weights > 200 kg labeled as 'kg' are suspicious
+ *
+ * IMPORTANT: This utility now TRUSTS the stored unit by default. Previous heuristics
+ * were too aggressive and caused incorrect conversions (e.g., 75 kg → 75 lb).
+ *
+ * Current approach:
+ * - If unit is provided (lb or kg), trust it unless clearly impossible
+ * - If unit is null/undefined, default to 'lb' (most common in US-based apps)
+ * - Only apply corrections for clearly erroneous values:
+ *   - lb > 500: likely a kg value mislabeled (500+ lbs is extremely rare)
+ *   - kg > 300: likely a lb value mislabeled (300+ kg is extremely rare)
  */
 
 interface ValidatedWeight {
@@ -59,35 +65,32 @@ export function validateWeightEntry(
     correctedUnit = 'lb';
   }
 
-  if (correctedUnit === 'lb') {
-    // Suspiciously low lbs often indicate kg entered with lb unit
-    if (weight >= 30 && weight <= 85) {
-      correctedWeight = weight * KG_TO_LBS;
-      wasCorrected = true;
-    }
+  // Trust the stored unit for normal human weight ranges
+  // Only apply corrections for clearly impossible values
 
-    // Very high lbs may actually be kg
-    if (weight > 400) {
+  if (correctedUnit === 'lb') {
+    // Only correct if weight > 500 lbs (extremely rare, likely kg mislabeled as lb)
+    // In this case, the value is probably actually in kg, so convert to lbs
+    if (weight > 500) {
+      // e.g., 150 stored as 'lb' but meant 150 kg → convert to 330 lbs
       correctedWeight = weight * KG_TO_LBS;
       wasCorrected = true;
-    } else if (weight >= 300) {
-      const asKg = weight * LBS_TO_KG;
-      if (asKg >= 30 && asKg <= 200) {
-        correctedWeight = weight * KG_TO_LBS;
-        wasCorrected = true;
-      }
+      console.warn(`[Weight] Corrected likely mislabeled weight: ${weight} lb → ${correctedWeight.toFixed(1)} lb (interpreted ${weight} as kg)`);
     }
+    // Note: We no longer auto-convert 30-85 lbs to kg - these could be legitimate light weights
   }
 
   if (correctedUnit === 'kg') {
-    // Common human weights in lbs mistakenly stored as kg
-    if (weight >= 30 && weight <= 200) {
+    // Only correct if weight > 300 kg (extremely rare, likely lb mislabeled as kg)
+    // In this case, the value is probably actually in lbs, so just change the unit
+    if (weight > 300) {
+      // e.g., 350 stored as 'kg' but meant 350 lbs → keep value, change unit
       correctedUnit = 'lb';
       wasCorrected = true;
-    } else if (weight > 200) {
-      correctedUnit = 'lb';
-      wasCorrected = true;
+      console.warn(`[Weight] Corrected likely mislabeled weight: ${weight} kg → ${weight} lb (interpreted as lbs)`);
     }
+    // Note: We no longer auto-convert 30-200 kg to lb - these ARE valid kg weights!
+    // A 75 kg person should stay 75 kg, not become 75 lb
   }
 
   return {

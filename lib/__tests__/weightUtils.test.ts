@@ -36,53 +36,67 @@ describe('validateWeightEntry', () => {
     });
   });
 
-  describe('suspicious lb values (likely in kg)', () => {
-    it('corrects weights 30-85 lbs (likely kg)', () => {
-      const result = validateWeightEntry(70, 'lb');
-      expect(result.wasCorrected).toBe(true);
-      expect(result.unit).toBe('lb');
-      // 70 kg = ~154 lbs
-      expect(result.weight).toBeCloseTo(154.3, 0);
-    });
-
-    it('corrects weights > 400 lbs (likely kg)', () => {
-      const result = validateWeightEntry(450, 'lb');
-      expect(result.wasCorrected).toBe(true);
-      // 450 kg = ~992 lbs, but that's > 400 so converts
-    });
-
-    it('corrects suspicious weights 300-400 lbs if they make sense as kg', () => {
-      // 350 lb / 2.20462 = ~158.7 kg - in human range, so probably in kg
-      const result = validateWeightEntry(350, 'lb');
-      expect(result.wasCorrected).toBe(true);
-    });
-
-    it('does not correct normal lb weights', () => {
+  describe('trusts stored lb values (conservative approach)', () => {
+    it('trusts normal lb weights without correction', () => {
       const result = validateWeightEntry(175, 'lb');
       expect(result.wasCorrected).toBe(false);
       expect(result.weight).toBe(175);
       expect(result.unit).toBe('lb');
     });
-  });
 
-  describe('suspicious kg values (likely in lbs)', () => {
-    it('corrects weights 30-200 kg (likely lbs mislabeled)', () => {
-      const result = validateWeightEntry(150, 'kg');
-      expect(result.wasCorrected).toBe(true);
+    it('trusts light weights as legitimate (no auto-correction for 30-85 lbs)', () => {
+      // A light person (child, small adult) could legitimately weigh 70 lbs
+      const result = validateWeightEntry(70, 'lb');
+      expect(result.wasCorrected).toBe(false);
+      expect(result.weight).toBe(70);
       expect(result.unit).toBe('lb');
-      expect(result.weight).toBe(150); // Keep same value, just fix unit
     });
 
-    it('corrects weights > 200 kg that are probably in lbs', () => {
-      const result = validateWeightEntry(250, 'kg');
+    it('trusts weights in 300-500 range as legitimate', () => {
+      // Some people do weigh 350 lbs
+      const result = validateWeightEntry(350, 'lb');
+      expect(result.wasCorrected).toBe(false);
+      expect(result.weight).toBe(350);
+    });
+
+    it('corrects only extreme weights > 500 lbs (likely kg mislabeled)', () => {
+      // 550 lbs is extremely rare - likely meant 550 kg (wait, that's too heavy)
+      // Actually 550 is probably a kg value mislabeled, convert: 550 * 2.2 = 1212
+      // This triggers because it's unlikely someone weighs 550 lbs
+      const result = validateWeightEntry(550, 'lb');
       expect(result.wasCorrected).toBe(true);
-      expect(result.unit).toBe('lb');
+      expect(result.weight).toBeCloseTo(550 * 2.20462, 0);
     });
 
     it('preserves original values for reference', () => {
-      const result = validateWeightEntry(70, 'lb');
-      expect(result.originalWeight).toBe(70);
+      const result = validateWeightEntry(175, 'lb');
+      expect(result.originalWeight).toBe(175);
       expect(result.originalUnit).toBe('lb');
+    });
+  });
+
+  describe('trusts stored kg values (conservative approach)', () => {
+    it('trusts normal kg weights without correction', () => {
+      // 75 kg is a perfectly normal weight (~165 lbs) - should NOT be changed to 75 lb!
+      const result = validateWeightEntry(75, 'kg');
+      expect(result.wasCorrected).toBe(false);
+      expect(result.weight).toBe(75);
+      expect(result.unit).toBe('kg');
+    });
+
+    it('trusts weights in 30-200 kg range as legitimate', () => {
+      const result = validateWeightEntry(150, 'kg');
+      expect(result.wasCorrected).toBe(false);
+      expect(result.unit).toBe('kg');
+      expect(result.weight).toBe(150);
+    });
+
+    it('corrects only extreme weights > 300 kg (likely lbs mislabeled)', () => {
+      // 350 kg = 770 lbs - extremely unlikely, probably meant 350 lbs
+      const result = validateWeightEntry(350, 'kg');
+      expect(result.wasCorrected).toBe(true);
+      expect(result.unit).toBe('lb');
+      expect(result.weight).toBe(350); // Keep value, just change unit
     });
   });
 
@@ -188,12 +202,23 @@ describe('getDisplayWeight', () => {
     expect(result).toBe(175);
   });
 
-  it('corrects and converts in one step', () => {
-    // 70 stored as 'lb' but is actually kg
-    // Should correct to 154.3 lb, then user wants kg, so back to ~70
+  it('converts units without auto-correction', () => {
+    // 70 stored as 'lb' - now trusted as is (could be a light person)
+    // Convert 70 lb to kg = ~31.8 kg
     const result = getDisplayWeight(70, 'lb', 'kg');
-    // 70 "lb" -> corrected to 154.3 lb -> converted to 70 kg
-    expect(result).toBeCloseTo(70, 0);
+    expect(result).toBeCloseTo(31.8, 0);
+  });
+
+  it('handles kg weights correctly without converting to lb', () => {
+    // 75 kg should stay 75 kg, not become 75 lb!
+    const result = getDisplayWeight(75, 'kg', 'kg');
+    expect(result).toBe(75);
+  });
+
+  it('converts kg to lb correctly', () => {
+    // 75 kg = ~165 lb
+    const result = getDisplayWeight(75, 'kg', 'lb');
+    expect(result).toBeCloseTo(165.3, 0);
   });
 });
 
@@ -348,12 +373,11 @@ describe('calculateWeightChange', () => {
   });
 
   it('handles mixed units with same preferred display', () => {
-    // Note: validateWeightEntry may correct kg values 30-200 to lb
-    // 80 'kg' -> gets corrected to 80 lb
-    // So the calculation becomes 80 lb - 175 lb = -95 lb
+    // 80 kg should now be trusted as 80 kg (not auto-corrected to 80 lb)
+    // 80 kg = ~176 lb, 175 lb = 175 lb
+    // Change = 176 - 175 = 1 lb
     const change = calculateWeightChange(80, 'kg', 175, 'lb', 'lb');
-    // Due to weight correction logic, this is -95
-    expect(change).toBeCloseTo(-95, 0);
+    expect(change).toBeCloseTo(1, 0);
   });
 
   it('handles null units', () => {
@@ -406,11 +430,10 @@ describe('weight utils integration', () => {
   });
 
   it('calculates progress across unit changes', () => {
-    // Note: validateWeightEntry corrects kg values 30-200 to lb (mislabeled)
-    // 80 'kg' -> gets corrected to 80 lb
-    // 176 'lb' -> stays 176 lb
-    // So the calculation becomes 80 lb - 176 lb = -96 lb
+    // 80 kg is now trusted as kg (not auto-corrected)
+    // 80 kg = ~176.4 lb, 176 lb = 176 lb
+    // Change = 176.4 - 176 = 0.4 lb
     const change = calculateWeightChange(80, 'kg', 176, 'lb', 'lb');
-    expect(change).toBeCloseTo(-96, 0);
+    expect(change).toBeCloseTo(0.4, 0);
   });
 });

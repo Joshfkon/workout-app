@@ -23,6 +23,7 @@ import {
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { getEnhancedDailyDataPoints } from '@/lib/actions/wearable';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
+import { validateWeightEntry } from '@/lib/weightUtils';
 
 export interface TDEEData {
   adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null;
@@ -114,8 +115,12 @@ export async function getAdaptiveTDEE(
     
     if (weightLogs && weightLogs.length > 0) {
       const latest = weightLogs[0];
-      const weightUnit = latest.unit || 'lb';
-      currentWeight = weightUnit === 'kg' ? latest.weight * 2.20462 : latest.weight;
+      // Use unified weight validation for consistency with enhanced data path
+      const validated = validateWeightEntry(latest.weight, latest.unit as 'lb' | 'kg' | null);
+      // Convert to lbs for TDEE calculations
+      currentWeight = validated.unit === 'kg'
+        ? validated.weight * 2.20462
+        : validated.weight;
     }
   }
 
