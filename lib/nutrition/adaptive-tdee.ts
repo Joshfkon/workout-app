@@ -433,9 +433,10 @@ function detectLowCalorieOutliers(
     return outlierDates;
   }
   
-  // First pass: Remove extreme outliers (< 500 cal) to get a robust mean/SD
+  // First pass: Remove extreme outliers (< 1000 cal) to get a robust mean/SD
   // These are clearly incomplete logging days and shouldn't influence the threshold
-  const extremeOutlierThreshold = 500;
+  // 1000 cal is a reasonable minimum - even aggressive diets rarely go below this
+  const extremeOutlierThreshold = 1000;
   const trimmedCalories = calories.filter(c => c >= extremeOutlierThreshold);
   
   // If we have at least 3 non-extreme days, use trimmed data for mean/SD
@@ -509,10 +510,21 @@ function createSmoothedPairs(
       if (lowCalorieOutliers.has(data[i].date)) {
         continue; // Skip this pair
       }
-      
+
+      // CRITICAL: Only pair consecutive days
+      // Non-consecutive days would create incorrect calorie-weight relationships
+      const todayDate = new Date(data[i].date);
+      const tomorrowDate = new Date(data[i + 1].date);
+      const daysDiff = Math.round((tomorrowDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysDiff !== 1) {
+        // Skip non-consecutive days - can't pair Monday's calories with Wednesday's weight
+        continue;
+      }
+
       const smoothedWeightToday = getSmoothedWeight(data, i, smoothingWindow);
       const smoothedWeightTomorrow = getSmoothedWeight(data, i + 1, smoothingWindow);
-      
+
       // Pair Day N's calories with weight change from Day N to Day N+1
       pairs.push({
         weight: data[i].weight, // Use actual weight for TDEE calculation
@@ -848,11 +860,23 @@ export function getRegressionAnalysis(
         console.warn(`[TDEE Regression] Excluding low-calorie outlier day: ${filtered[i].date} with ${filtered[i].calories.toFixed(0)} cal`);
         continue; // Skip this pair
       }
-      
+
+      // CRITICAL: Only pair consecutive days
+      // Non-consecutive days would create incorrect calorie-weight relationships
+      const todayDate = new Date(filtered[i].date);
+      const tomorrowDate = new Date(filtered[i + 1].date);
+      const daysDiff = Math.round((tomorrowDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysDiff !== 1) {
+        // Skip non-consecutive days - can't pair Monday's calories with Wednesday's weight
+        console.warn(`[TDEE Regression] Skipping non-consecutive pair: ${filtered[i].date} -> ${filtered[i + 1].date} (${daysDiff} days apart)`);
+        continue;
+      }
+
       // Pair Day N's calories with weight change from Day N to Day N+1
       // Weight change = weight[N+1] - weight[N] reflects Day N's calorie impact
       const actualChange = filtered[i + 1].weight - filtered[i].weight;
-      
+
       // Sanity check: exclude physically impossible weight changes
       if (Math.abs(actualChange) > MAX_REASONABLE_DAILY_CHANGE) {
         console.warn(`[TDEE Regression] Excluding extreme outlier: ${filtered[i].date} to ${filtered[i + 1].date}: ${actualChange.toFixed(2)} lbs/day change (threshold: ${MAX_REASONABLE_DAILY_CHANGE} lbs/day)`);
@@ -860,7 +884,7 @@ export function getRegressionAnalysis(
         console.warn(`  - Calories: ${filtered[i].calories.toFixed(0)} cal`);
         continue; // Skip this pair
       }
-      
+
       pairs.push({
         date: filtered[i].date,
         weight: filtered[i].weight,
