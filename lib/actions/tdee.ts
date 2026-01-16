@@ -551,3 +551,182 @@ export async function onWeightLoggedRecalculateTDEE(): Promise<{
     syncResult,
   };
 }
+
+/**
+ * Reset and recalculate TDEE estimates from scratch.
+ * Use this after fixing weight unit bugs or when data needs to be recalculated.
+ *
+ * This function:
+ * 1. Deletes the stored TDEE estimate (calculated with potentially buggy data)
+ * 2. Recalculates TDEE fresh using the corrected weight validation logic
+ * 3. Returns the new estimate and comparison with old values
+ */
+export async function resetAndRecalculateTDEE(): Promise<{
+  success: boolean;
+  oldEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+  } | null;
+  newEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+    dataPointsUsed: number;
+    rSquared: number | null;
+  } | null;
+  weightDataSummary: {
+    totalEntries: number;
+    entriesWithKgUnit: number;
+    entriesWithLbUnit: number;
+    entriesWithNullUnit: number;
+    dateRange: { earliest: string; latest: string } | null;
+  };
+  message: string;
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      success: false,
+      oldEstimate: null,
+      newEstimate: null,
+      weightDataSummary: {
+        totalEntries: 0,
+        entriesWithKgUnit: 0,
+        entriesWithLbUnit: 0,
+        entriesWithNullUnit: 0,
+        dateRange: null,
+      },
+      message: 'User not authenticated',
+    };
+  }
+
+  // Step 1: Get the old stored estimate (if any)
+  const { data: oldData } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>)
+    .select('*')
+    .eq('user_id', user.id)
+    .single() as {
+      data: {
+        burn_rate_per_lb: number;
+        estimated_tdee: number;
+        current_weight: number;
+        confidence: string;
+      } | null;
+    };
+
+  const oldEstimate = oldData ? {
+    tdee: oldData.estimated_tdee,
+    burnRate: oldData.burn_rate_per_lb,
+    currentWeight: oldData.current_weight,
+    confidence: oldData.confidence,
+  } : null;
+
+  // Step 2: Analyze raw weight data to understand what we're working with
+  const { data: weightLogs } = await supabase
+    .from('weight_log')
+    .select('logged_at, weight, unit')
+    .eq('user_id', user.id)
+    .order('logged_at', { ascending: true }) as {
+      data: Array<{ logged_at: string; weight: number; unit: string | null }> | null;
+    };
+
+  const weightDataSummary = {
+    totalEntries: weightLogs?.length || 0,
+    entriesWithKgUnit: weightLogs?.filter(w => w.unit === 'kg').length || 0,
+    entriesWithLbUnit: weightLogs?.filter(w => w.unit === 'lb').length || 0,
+    entriesWithNullUnit: weightLogs?.filter(w => !w.unit).length || 0,
+    dateRange: weightLogs && weightLogs.length > 0 ? {
+      earliest: weightLogs[0].logged_at,
+      latest: weightLogs[weightLogs.length - 1].logged_at,
+    } : null,
+  };
+
+  // Log the raw weight data for debugging
+  console.log('[TDEE Reset] Raw weight data summary:', weightDataSummary);
+  if (weightLogs && weightLogs.length > 0) {
+    console.log('[TDEE Reset] Sample weight entries (first 5):');
+    weightLogs.slice(0, 5).forEach(w => {
+      const validated = validateWeightEntry(w.weight, w.unit as 'lb' | 'kg' | null);
+      const weightInLbs = validated.unit === 'kg' ? validated.weight * 2.20462 : validated.weight;
+      console.log(`  ${w.logged_at}: ${w.weight} ${w.unit || '(null)'} → ${weightInLbs.toFixed(1)} lbs`);
+    });
+  }
+
+  // Step 3: Delete the old TDEE estimate
+  const { error: deleteError } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>)
+    .delete()
+    .eq('user_id', user.id);
+
+  if (deleteError) {
+    console.error('[TDEE Reset] Failed to delete old estimate:', deleteError);
+  } else {
+    console.log('[TDEE Reset] Deleted old TDEE estimate');
+  }
+
+  // Step 4: Recalculate TDEE fresh with corrected weight validation
+  const tdeeData = await getAdaptiveTDEE();
+
+  if (!tdeeData) {
+    return {
+      success: false,
+      oldEstimate,
+      newEstimate: null,
+      weightDataSummary,
+      message: 'Failed to recalculate TDEE - not enough data or error occurred',
+    };
+  }
+
+  // Step 5: Save the new estimate
+  if (tdeeData.adaptiveEstimate) {
+    await saveTDEEEstimate(tdeeData.adaptiveEstimate as TDEEEstimate | EnhancedTDEEEstimate);
+  }
+
+  const newEstimate = tdeeData.adaptiveEstimate ? {
+    tdee: tdeeData.adaptiveEstimate.estimatedTDEE,
+    burnRate: tdeeData.adaptiveEstimate.burnRatePerLb,
+    currentWeight: tdeeData.adaptiveEstimate.currentWeight,
+    confidence: tdeeData.adaptiveEstimate.confidence,
+    dataPointsUsed: tdeeData.adaptiveEstimate.dataPointsUsed,
+    rSquared: tdeeData.regressionAnalysis?.rSquared ?? null,
+  } : {
+    tdee: tdeeData.formulaEstimate.estimatedTDEE,
+    burnRate: tdeeData.formulaEstimate.burnRatePerLb,
+    currentWeight: tdeeData.formulaEstimate.currentWeight,
+    confidence: tdeeData.formulaEstimate.confidence,
+    dataPointsUsed: 0,
+    rSquared: null,
+  };
+
+  // Build comparison message
+  let message = 'TDEE recalculated successfully with corrected weight validation.';
+  if (oldEstimate && newEstimate) {
+    const tdeeDiff = newEstimate.tdee - oldEstimate.tdee;
+    const weightDiff = newEstimate.currentWeight - oldEstimate.currentWeight;
+    if (Math.abs(tdeeDiff) > 50 || Math.abs(weightDiff) > 5) {
+      message += ` Significant change detected: TDEE ${tdeeDiff > 0 ? '+' : ''}${tdeeDiff} cal/day, Weight ${weightDiff > 0 ? '+' : ''}${weightDiff.toFixed(1)} lbs.`;
+      if (Math.abs(weightDiff) > 50) {
+        message += ' Large weight difference suggests previous unit conversion bug was affecting your data.';
+      }
+    }
+  }
+
+  if (newEstimate.rSquared !== null) {
+    const rSquaredPercent = (newEstimate.rSquared * 100).toFixed(1);
+    message += ` New R² correlation: ${rSquaredPercent}%.`;
+  }
+
+  return {
+    success: true,
+    oldEstimate,
+    newEstimate,
+    weightDataSummary,
+    message,
+  };
+}
