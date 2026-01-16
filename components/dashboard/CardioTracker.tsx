@@ -39,6 +39,21 @@ const CARDIO_OPTIONS = [
   { value: 'other', label: 'Other' },
 ];
 
+// Estimated calories burned per minute for each modality (Zone 2 intensity)
+// Based on average values for moderate intensity cardio
+const CALORIES_PER_MINUTE: Record<string, number> = {
+  incline_walk: 5.5,  // ~330 cal/hr
+  bike: 7.0,          // ~420 cal/hr
+  elliptical: 8.0,    // ~480 cal/hr
+  rower: 9.0,         // ~540 cal/hr
+  other: 6.0,         // ~360 cal/hr (conservative estimate)
+};
+
+function estimateCaloriesBurned(minutes: number, modality: string): number {
+  const calPerMin = CALORIES_PER_MINUTE[modality] || CALORIES_PER_MINUTE.other;
+  return Math.round(minutes * calPerMin);
+}
+
 export const CardioTracker = memo(function CardioTracker({ userId, prescription }: CardioTrackerProps) {
   const [todayTotal, setTodayTotal] = useState(0);
   const [todayLogs, setTodayLogs] = useState<CardioLogEntry[]>([]);
@@ -46,7 +61,6 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const [showLogForm, setShowLogForm] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [minutes, setMinutes] = useState('');
-  const [caloriesBurned, setCaloriesBurned] = useState('');
   const [modality, setModality] = useState<CardioModality>('incline_walk');
   const [notes, setNotes] = useState('');
 
@@ -83,7 +97,8 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     const today = getLocalDateString();
 
     try {
-      const caloriesNum = caloriesBurned ? parseInt(caloriesBurned) : null;
+      // Auto-estimate calories based on modality and duration
+      const estimatedCalories = estimateCaloriesBurned(minutesNum, modality);
 
       const { error } = await supabase.from('cardio_log').insert({
         user_id: userId,
@@ -91,7 +106,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
         minutes: minutesNum,
         modality: modality,
         notes: notes || null,
-        calories_burned: caloriesNum && caloriesNum > 0 ? caloriesNum : null,
+        calories_burned: estimatedCalories,
       });
 
       if (error) throw error;
@@ -100,7 +115,6 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
       await loadTodayData();
       setShowLogForm(false);
       setMinutes('');
-      setCaloriesBurned('');
       setNotes('');
       setModality(prescription?.modality || 'incline_walk');
     } catch (error) {
@@ -108,7 +122,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     } finally {
       setIsLogging(false);
     }
-  }, [minutes, caloriesBurned, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
+  }, [minutes, modality, notes, prescription?.modality, supabase, userId, loadTodayData]);
 
   const deleteLog = useCallback(async (id: string) => {
     const { error } = await supabase
@@ -129,10 +143,6 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
     setModality(e.target.value as CardioModality);
   }, []);
 
-  const handleCaloriesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setCaloriesBurned(e.target.value);
-  }, []);
-
   const handleNotesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setNotes(e.target.value);
   }, []);
@@ -142,7 +152,6 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
   const handleCancelLogForm = useCallback(() => {
     setShowLogForm(false);
     setMinutes('');
-    setCaloriesBurned('');
     setNotes('');
   }, []);
 
@@ -274,7 +283,7 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
       {/* Log Form */}
       {showLogForm ? (
         <div className="space-y-3 p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-surface-300 mb-1">
                 Minutes
@@ -289,18 +298,6 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
             </div>
             <div>
               <label className="block text-xs font-medium text-surface-300 mb-1">
-                Calories
-              </label>
-              <Input
-                type="number"
-                value={caloriesBurned}
-                onChange={handleCaloriesChange}
-                placeholder="200"
-                min="1"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-surface-300 mb-1">
                 Type
               </label>
               <Select
@@ -310,6 +307,11 @@ export const CardioTracker = memo(function CardioTracker({ userId, prescription 
               />
             </div>
           </div>
+          {minutes && parseInt(minutes) > 0 && (
+            <div className="text-xs text-surface-400">
+              Est. ~{estimateCaloriesBurned(parseInt(minutes), modality)} cal burned
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-surface-300 mb-1">
               Notes (optional)
