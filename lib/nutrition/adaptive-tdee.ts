@@ -433,9 +433,10 @@ function detectLowCalorieOutliers(
     return outlierDates;
   }
   
-  // First pass: Remove extreme outliers (< 500 cal) to get a robust mean/SD
+  // First pass: Remove extreme outliers (< 1000 cal) to get a robust mean/SD
   // These are clearly incomplete logging days and shouldn't influence the threshold
-  const extremeOutlierThreshold = 500;
+  // 1000 cal is a reasonable minimum - even aggressive diets rarely go below this
+  const extremeOutlierThreshold = 1000;
   const trimmedCalories = calories.filter(c => c >= extremeOutlierThreshold);
   
   // If we have at least 3 non-extreme days, use trimmed data for mean/SD
