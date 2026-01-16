@@ -31,6 +31,32 @@ import {
   type BodyCompProjection,
 } from '@/lib/body-composition/p-ratio';
 
+interface ResetResult {
+  success: boolean;
+  oldEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+  } | null;
+  newEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+    dataPointsUsed: number;
+    rSquared: number | null;
+  } | null;
+  weightDataSummary: {
+    totalEntries: number;
+    entriesWithKgUnit: number;
+    entriesWithLbUnit: number;
+    entriesWithNullUnit: number;
+    dateRange: { earliest: string; latest: string } | null;
+  };
+  message: string;
+}
+
 interface TDEEDashboardProps {
   estimate: TDEEEstimate | EnhancedTDEEEstimate | null;
   formulaEstimate: TDEEEstimate | null;
@@ -56,6 +82,7 @@ interface TDEEDashboardProps {
   regressionAnalysis?: RegressionAnalysis | null;
   onRefresh?: () => void;
   onSetTarget?: () => void;
+  onReset?: () => Promise<ResetResult>;
 }
 
 export function TDEEDashboard({
@@ -78,8 +105,46 @@ export function TDEEDashboard({
   regressionAnalysis,
   onRefresh,
   onSetTarget,
+  onReset,
 }: TDEEDashboardProps) {
   const [showDetails, setShowDetails] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<ResetResult | null>(null);
+
+  const handleReset = async () => {
+    if (!onReset) return;
+
+    setIsResetting(true);
+    setResetResult(null);
+
+    try {
+      const result = await onReset();
+      setResetResult(result);
+
+      // Auto-refresh after successful reset
+      if (result.success && onRefresh) {
+        setTimeout(() => {
+          onRefresh();
+        }, 1500);
+      }
+    } catch (error) {
+      setResetResult({
+        success: false,
+        oldEstimate: null,
+        newEstimate: null,
+        weightDataSummary: {
+          totalEntries: 0,
+          entriesWithKgUnit: 0,
+          entriesWithLbUnit: 0,
+          entriesWithNullUnit: 0,
+          dateRange: null,
+        },
+        message: 'Failed to reset TDEE: ' + (error instanceof Error ? error.message : 'Unknown error'),
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const activeEstimate = estimate || formulaEstimate;
   const isAdaptive = estimate?.source === 'regression';
@@ -343,6 +408,166 @@ export function TDEEDashboard({
               {activeEstimate.confidence === 'stable'
                 ? 'Your estimate has stabilized. Predictions should be accurate!'
                 : 'Keep logging data for more accurate estimates'}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reset & Recalculate Section (shown when expanded) */}
+      {showDetails && onReset && (
+        <Card className="p-6">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Recalculate TDEE</CardTitle>
+            <p className="text-xs text-surface-500">
+              Reset and recalculate your TDEE estimate from your weight data
+            </p>
+          </CardHeader>
+          <CardContent>
+            {/* Reset Result Display */}
+            {resetResult && (
+              <div
+                className={`mb-4 p-4 rounded-lg border ${
+                  resetResult.success
+                    ? 'bg-success-500/10 border-success-500/20'
+                    : 'bg-danger-500/10 border-danger-500/20'
+                }`}
+              >
+                <p
+                  className={`text-sm font-medium ${
+                    resetResult.success ? 'text-success-300' : 'text-danger-300'
+                  }`}
+                >
+                  {resetResult.success ? '✓ ' : '✗ '}
+                  {resetResult.message}
+                </p>
+
+                {resetResult.success && resetResult.weightDataSummary.totalEntries > 0 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-surface-400">Weight Data Summary:</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-surface-500">Total entries:</span>
+                        <span className="text-surface-300">
+                          {resetResult.weightDataSummary.totalEntries}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-surface-500">In kg:</span>
+                        <span className="text-surface-300">
+                          {resetResult.weightDataSummary.entriesWithKgUnit}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-surface-500">In lbs:</span>
+                        <span className="text-surface-300">
+                          {resetResult.weightDataSummary.entriesWithLbUnit}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-surface-500">No unit:</span>
+                        <span className="text-surface-300">
+                          {resetResult.weightDataSummary.entriesWithNullUnit}
+                        </span>
+                      </div>
+                    </div>
+
+                    {resetResult.oldEstimate && resetResult.newEstimate && (
+                      <div className="mt-3 pt-3 border-t border-surface-700">
+                        <p className="text-xs text-surface-400 mb-2">Before → After:</p>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span className="text-surface-500">TDEE:</span>
+                            <span>
+                              <span className="text-surface-400">
+                                {resetResult.oldEstimate.tdee.toLocaleString()}
+                              </span>
+                              <span className="text-surface-500 mx-1">→</span>
+                              <span className="text-success-400">
+                                {resetResult.newEstimate.tdee.toLocaleString()} cal/day
+                              </span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-surface-500">Weight:</span>
+                            <span>
+                              <span className="text-surface-400">
+                                {resetResult.oldEstimate.currentWeight.toFixed(1)}
+                              </span>
+                              <span className="text-surface-500 mx-1">→</span>
+                              <span className="text-success-400">
+                                {resetResult.newEstimate.currentWeight.toFixed(1)} lbs
+                              </span>
+                            </span>
+                          </div>
+                          {resetResult.newEstimate.rSquared !== null && (
+                            <div className="flex justify-between">
+                              <span className="text-surface-500">R² correlation:</span>
+                              <span className="text-success-400">
+                                {(resetResult.newEstimate.rSquared * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Button
+              onClick={handleReset}
+              disabled={isResetting}
+              variant="outline"
+              size="sm"
+              className="w-full"
+            >
+              {isResetting ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Recalculating...
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-4 h-4 mr-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  Reset &amp; Recalculate TDEE
+                </>
+              )}
+            </Button>
+
+            <p className="text-xs text-surface-500 mt-3 text-center">
+              This will delete your current TDEE estimate and recalculate it fresh from your weight
+              and calorie data.
             </p>
           </CardContent>
         </Card>
