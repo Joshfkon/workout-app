@@ -490,6 +490,14 @@ export async function getEnhancedDailyDataPoints(
     .eq('user_id', user.id)
     .gte('date', cutoffStr);
 
+  // Get manual cardio log data (for users without wearables)
+  const { data: cardioData } = await supabase
+    .from('cardio_log')
+    .select('logged_at, calories_burned')
+    .eq('user_id', user.id)
+    .gte('logged_at', cutoffStr)
+    .not('calories_burned', 'is', null);
+
   // Create a map of dates to weight (convert to lbs for TDEE calculations)
   // Use unified weight utility for validation
   // Add validation to detect and fix unit errors
@@ -536,6 +544,15 @@ export async function getEnhancedDailyDataPoints(
     activityByDate.set(a.date, a);
   });
 
+  // Aggregate manual cardio calories by date
+  const cardioCaloriesByDate = new Map<string, number>();
+  cardioData?.forEach((c) => {
+    if (c.calories_burned && c.calories_burned > 0) {
+      const current = cardioCaloriesByDate.get(c.logged_at) || 0;
+      cardioCaloriesByDate.set(c.logged_at, current + c.calories_burned);
+    }
+  });
+
   // Combine into enhanced data points
   const dataPoints: Array<{
     date: string;
@@ -554,12 +571,14 @@ export async function getEnhancedDailyDataPoints(
     ...Array.from(weightByDate.keys()), // Must have weight
     ...Array.from(caloriesByDate.keys()),
     ...Array.from(activityByDate.keys()),
+    ...Array.from(cardioCaloriesByDate.keys()), // Include manual cardio dates
   ]);
 
   Array.from(allDates).forEach((date) => {
     const weight = weightByDate.get(date); // Don't default to 0 - use undefined if missing
     const calories = caloriesByDate.get(date) || 0;
     const activity = activityByDate.get(date);
+    const manualCardioCalories = cardioCaloriesByDate.get(date) || 0;
 
     // Only include days with valid weight data (skip days with 0 or missing weight)
     // This prevents creating invalid pairs in regression
@@ -570,6 +589,11 @@ export async function getEnhancedDailyDataPoints(
     // Consider day complete if we have weight and calories
     const isComplete = weight > 0 && calories > 0;
 
+    // Combine wearable workout calories with manual cardio calories
+    // This allows users without wearables to still get enhanced TDEE
+    const wearableWorkoutCals = activity?.workout_expenditure || 0;
+    const totalWorkoutCalories = wearableWorkoutCals + manualCardioCalories;
+
     dataPoints.push({
       date,
       weight,
@@ -577,7 +601,7 @@ export async function getEnhancedDailyDataPoints(
       isComplete,
       steps: activity?.steps_total || 0,
       netSteps: activity?.steps_total || 0, // Will be calculated with workout overlap
-      workoutCalories: activity?.workout_expenditure || 0,
+      workoutCalories: totalWorkoutCalories,
       activityLevel: activity?.activity_level || 'sedentary',
     });
   });
