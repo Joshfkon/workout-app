@@ -730,3 +730,219 @@ export async function resetAndRecalculateTDEE(): Promise<{
     message,
   };
 }
+
+/**
+ * Get detailed regression diagnostic data for manual verification.
+ * Returns all the raw data points used in the regression calculation.
+ */
+export async function getRegressionDiagnostics(): Promise<{
+  success: boolean;
+  rawData: Array<{
+    date: string;
+    weight: number;
+    calories: number;
+    isComplete: boolean;
+  }>;
+  regressionPairs: Array<{
+    date: string;
+    calories: number;
+    weight: number;
+    weightNextDay: number;
+    actualChange: number;
+    predictedChange: number;
+    residual: number;
+  }>;
+  regressionStats: {
+    burnRatePerLb: number;
+    estimatedTDEE: number;
+    rSquared: number;
+    standardError: number;
+    dataPointsUsed: number;
+    meanActualChange: number;
+    ssTot: number;
+    ssRes: number;
+  } | null;
+  manualVerification: {
+    sumNumerator: number;
+    sumDenominator: number;
+    calculatedAlpha: number;
+    residuals: number[];
+    residualMean: number;
+    residualStdDev: number;
+  } | null;
+  message: string;
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      success: false,
+      rawData: [],
+      regressionPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'User not authenticated',
+    };
+  }
+
+  // Get enhanced daily data points (includes weight and calories)
+  const enhancedDataPoints = await getEnhancedDailyDataPoints(35);
+
+  const basicDataPoints: DailyDataPoint[] = enhancedDataPoints.map(dp => ({
+    date: dp.date,
+    weight: dp.weight,
+    calories: dp.calories,
+    isComplete: dp.isComplete,
+  }));
+
+  // Get current weight
+  let currentWeight: number | null = null;
+  if (enhancedDataPoints.length > 0) {
+    const latestPoint = enhancedDataPoints[enhancedDataPoints.length - 1];
+    currentWeight = latestPoint.weight;
+  }
+
+  if (!currentWeight) {
+    return {
+      success: false,
+      rawData: basicDataPoints.map(dp => ({
+        date: dp.date,
+        weight: dp.weight,
+        calories: dp.calories,
+        isComplete: dp.isComplete,
+      })),
+      regressionPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'No weight data available',
+    };
+  }
+
+  // Get regression analysis
+  const regressionAnalysis = getRegressionAnalysis(basicDataPoints, currentWeight);
+
+  if (!regressionAnalysis) {
+    return {
+      success: false,
+      rawData: basicDataPoints.map(dp => ({
+        date: dp.date,
+        weight: dp.weight,
+        calories: dp.calories,
+        isComplete: dp.isComplete,
+      })),
+      regressionPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'Insufficient data for regression analysis',
+    };
+  }
+
+  // Build detailed regression pairs showing the day-to-day pairing
+  const CALORIES_PER_LB = 3500;
+  const validPairs = basicDataPoints
+    .filter(dp => dp.weight > 0 && dp.calories > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const regressionPairs: Array<{
+    date: string;
+    calories: number;
+    weight: number;
+    weightNextDay: number;
+    actualChange: number;
+    predictedChange: number;
+    residual: number;
+  }> = [];
+
+  for (let i = 0; i < validPairs.length - 1; i++) {
+    const today = validPairs[i];
+    const tomorrow = validPairs[i + 1];
+
+    // Check if dates are consecutive (within 2 days to allow for gaps)
+    const todayDate = new Date(today.date);
+    const tomorrowDate = new Date(tomorrow.date);
+    const daysDiff = Math.floor((tomorrowDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff === 1) {
+      const actualChange = tomorrow.weight - today.weight;
+      const predictedChange = (today.calories - regressionAnalysis.burnRatePerLb * today.weight) / CALORIES_PER_LB;
+
+      regressionPairs.push({
+        date: today.date,
+        calories: today.calories,
+        weight: today.weight,
+        weightNextDay: tomorrow.weight,
+        actualChange,
+        predictedChange,
+        residual: actualChange - predictedChange,
+      });
+    }
+  }
+
+  // Manual verification of regression math
+  let manualVerification = null;
+  if (regressionPairs.length >= 2) {
+    let sumNumerator = 0;
+    let sumDenominator = 0;
+
+    for (const pair of regressionPairs) {
+      sumNumerator += pair.weight * (pair.calories / CALORIES_PER_LB - pair.actualChange);
+      sumDenominator += (pair.weight * pair.weight) / CALORIES_PER_LB;
+    }
+
+    const calculatedAlpha = sumNumerator / sumDenominator;
+
+    // Recalculate residuals with our alpha
+    const residuals = regressionPairs.map(pair => {
+      const predicted = (pair.calories - calculatedAlpha * pair.weight) / CALORIES_PER_LB;
+      return pair.actualChange - predicted;
+    });
+
+    const residualMean = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+    const residualVariance = residuals.reduce((sum, r) => sum + (r - residualMean) ** 2, 0) / residuals.length;
+    const residualStdDev = Math.sqrt(residualVariance);
+
+    manualVerification = {
+      sumNumerator,
+      sumDenominator,
+      calculatedAlpha,
+      residuals,
+      residualMean,
+      residualStdDev,
+    };
+  }
+
+  // Calculate detailed R² stats
+  const actualChanges = regressionPairs.map(p => p.actualChange);
+  const meanActualChange = actualChanges.reduce((a, b) => a + b, 0) / actualChanges.length;
+  const ssTot = actualChanges.reduce((sum, ac) => sum + (ac - meanActualChange) ** 2, 0);
+  const ssRes = regressionPairs.reduce((sum, p) => sum + p.residual ** 2, 0);
+
+  const regressionStats = {
+    burnRatePerLb: regressionAnalysis.burnRatePerLb,
+    estimatedTDEE: regressionAnalysis.estimatedTDEE,
+    rSquared: regressionAnalysis.rSquared,
+    standardError: regressionAnalysis.standardError,
+    dataPointsUsed: regressionAnalysis.dataPoints.length,
+    meanActualChange,
+    ssTot,
+    ssRes,
+  };
+
+  return {
+    success: true,
+    rawData: basicDataPoints.map(dp => ({
+      date: dp.date,
+      weight: dp.weight,
+      calories: dp.calories,
+      isComplete: dp.isComplete,
+    })),
+    regressionPairs,
+    regressionStats,
+    manualVerification,
+    message: `Found ${regressionPairs.length} valid consecutive day pairs for regression`,
+  };
+}
