@@ -752,6 +752,11 @@ export async function getRegressionDiagnostics(): Promise<{
     predictedChange: number;
     residual: number;
   }>;
+  excludedPairs: Array<{
+    date: string;
+    calories: number;
+    reason: string;
+  }>;
   regressionStats: {
     burnRatePerLb: number;
     estimatedTDEE: number;
@@ -783,6 +788,7 @@ export async function getRegressionDiagnostics(): Promise<{
       success: false,
       rawData: [],
       regressionPairs: [],
+      excludedPairs: [],
       regressionStats: null,
       manualVerification: null,
       message: 'User not authenticated',
@@ -816,6 +822,7 @@ export async function getRegressionDiagnostics(): Promise<{
         isComplete: dp.isComplete,
       })),
       regressionPairs: [],
+      excludedPairs: [],
       regressionStats: null,
       manualVerification: null,
       message: 'No weight data available',
@@ -835,6 +842,7 @@ export async function getRegressionDiagnostics(): Promise<{
         isComplete: dp.isComplete,
       })),
       regressionPairs: [],
+      excludedPairs: [],
       regressionStats: null,
       manualVerification: null,
       message: 'Insufficient data for regression analysis',
@@ -843,6 +851,8 @@ export async function getRegressionDiagnostics(): Promise<{
 
   // Build detailed regression pairs showing the day-to-day pairing
   const CALORIES_PER_LB = 3500;
+  const MIN_CALORIES_THRESHOLD = 1000; // Same as in adaptive-tdee.ts
+
   const validPairs = basicDataPoints
     .filter(dp => dp.weight > 0 && dp.calories > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -857,29 +867,52 @@ export async function getRegressionDiagnostics(): Promise<{
     residual: number;
   }> = [];
 
+  const excludedPairs: Array<{
+    date: string;
+    calories: number;
+    reason: string;
+  }> = [];
+
   for (let i = 0; i < validPairs.length - 1; i++) {
     const today = validPairs[i];
     const tomorrow = validPairs[i + 1];
 
-    // Check if dates are consecutive (within 2 days to allow for gaps)
+    // Check if dates are consecutive
     const todayDate = new Date(today.date);
     const tomorrowDate = new Date(tomorrow.date);
     const daysDiff = Math.floor((tomorrowDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
 
-    if (daysDiff === 1) {
-      const actualChange = tomorrow.weight - today.weight;
-      const predictedChange = (today.calories - regressionAnalysis.burnRatePerLb * today.weight) / CALORIES_PER_LB;
-
-      regressionPairs.push({
+    if (daysDiff !== 1) {
+      excludedPairs.push({
         date: today.date,
         calories: today.calories,
-        weight: today.weight,
-        weightNextDay: tomorrow.weight,
-        actualChange,
-        predictedChange,
-        residual: actualChange - predictedChange,
+        reason: `Non-consecutive: ${daysDiff} days to next entry`,
       });
+      continue;
     }
+
+    // Exclude low-calorie days (likely incomplete logging)
+    if (today.calories < MIN_CALORIES_THRESHOLD) {
+      excludedPairs.push({
+        date: today.date,
+        calories: today.calories,
+        reason: `Low calories: ${today.calories} < ${MIN_CALORIES_THRESHOLD} threshold`,
+      });
+      continue;
+    }
+
+    const actualChange = tomorrow.weight - today.weight;
+    const predictedChange = (today.calories - regressionAnalysis.burnRatePerLb * today.weight) / CALORIES_PER_LB;
+
+    regressionPairs.push({
+      date: today.date,
+      calories: today.calories,
+      weight: today.weight,
+      weightNextDay: tomorrow.weight,
+      actualChange,
+      predictedChange,
+      residual: actualChange - predictedChange,
+    });
   }
 
   // Manual verification of regression math
@@ -941,8 +974,9 @@ export async function getRegressionDiagnostics(): Promise<{
       isComplete: dp.isComplete,
     })),
     regressionPairs,
+    excludedPairs,
     regressionStats,
     manualVerification,
-    message: `Found ${regressionPairs.length} valid consecutive day pairs for regression`,
+    message: `Found ${regressionPairs.length} valid pairs (${excludedPairs.length} excluded)`,
   };
 }
