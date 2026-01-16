@@ -13,7 +13,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // Loading placeholder for dashboard cards
@@ -220,8 +220,35 @@ interface DashboardClientProps {
   initialData?: DashboardInitialData;
 }
 
+const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function dayNameToNumber(dayName: WorkoutDay): number {
+  return WEEKDAY_NAMES.indexOf(dayName) + 1;
+}
+
+function getTrainingDays(daysPerWeek: number, preferredWorkoutDays?: WorkoutDay[] | null): number[] {
+  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
+    return preferredWorkoutDays.map(dayNameToNumber).sort((a, b) => a - b);
+  }
+
+  const trainingDayMaps: Record<number, number[]> = {
+    2: [1, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 5, 6],
+    6: [1, 2, 3, 4, 5, 6],
+  };
+
+  return trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+}
+
 // Helper to calculate workout schedule based on split type
-function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): ScheduledWorkout | null {
+function getWorkoutForDay(
+  splitType: string,
+  dayOfWeek: number,
+  daysPerWeek: number,
+  preferredWorkoutDays?: WorkoutDay[] | null
+): ScheduledWorkout | null {
   const splits: Record<string, { dayName: string; muscles: string[] }[]> = {
     'Full Body': [
       { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
@@ -247,15 +274,7 @@ function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: num
   };
 
   const schedule = splits[splitType] || splits['Upper/Lower'];
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 5, 6],
-    6: [1, 2, 3, 4, 5, 6],
-  };
-
-  const trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  const trainingDays = getTrainingDays(daysPerWeek, preferredWorkoutDays);
   const dayIndex = trainingDays.indexOf(dayOfWeek);
 
   if (dayIndex === -1) return null;
@@ -647,7 +666,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           // Mesocycles with sessions
           supabase.from('mesocycles')
-            .select(`id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
+            .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, state, is_active,
               workout_sessions (id, planned_date, state, completed_at)`)
             .eq('user_id', user.id)
             .order('created_at', { ascending: false }),
@@ -825,7 +844,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             const scheduled = getWorkoutForDay(
               mesocycle.split_type || 'Upper/Lower',
               dayOfWeek,
-              mesocycle.days_per_week || 4
+              mesocycle.days_per_week || 4,
+              mesocycle.preferred_workout_days
             );
             setScheduledWorkout(scheduled);
           }
