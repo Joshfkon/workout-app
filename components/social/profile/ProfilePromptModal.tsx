@@ -167,7 +167,6 @@ export function ProfilePromptModal({
       }
     } else {
       // Update existing profile
-      // @ts-expect-error - user_profiles table not in generated types yet
       const { error } = await supabase
         .from('user_profiles')
         .update({
