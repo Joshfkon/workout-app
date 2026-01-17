@@ -183,10 +183,11 @@ export default function FeedPage() {
         return;
       }
 
-      setProfile(profileData);
+      const typedProfile = profileData as UserProfile;
+      setProfile(typedProfile);
 
       // Check if user has an anonymous username and hasn't dismissed the prompt
-      const hasAnonymous = isAnonymousUsername(profileData.username);
+      const hasAnonymous = isAnonymousUsername(typedProfile.username);
       const dismissedPrompt = localStorage.getItem('profile_prompt_dismissed');
       if (hasAnonymous && !dismissedPrompt) {
         setShowProfilePrompt(true);
