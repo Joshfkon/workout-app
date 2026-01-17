@@ -90,6 +90,7 @@ export function ProfilePromptModal({
       setCheckingUsername(true);
       const supabase = createClient();
 
+      // @ts-expect-error - user_profiles table not in generated types yet
       const { data } = await supabase
         .from('user_profiles')
         .select('id')
@@ -146,6 +147,7 @@ export function ProfilePromptModal({
 
     if (needsProfile) {
       // Create new profile
+      // @ts-expect-error - user_profiles table not in generated types yet
       const { error } = await supabase.from('user_profiles').insert({
         user_id: user.id,
         username: normalizeUsername(username),
@@ -166,6 +168,7 @@ export function ProfilePromptModal({
       }
     } else {
       // Update existing profile
+      // @ts-expect-error - user_profiles table not in generated types yet
       const { error } = await supabase
         .from('user_profiles')
         .update({
