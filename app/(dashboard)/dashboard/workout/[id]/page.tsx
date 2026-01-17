@@ -20,6 +20,7 @@ const ExerciseCard = dynamic(
   }
 );
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
+import { useWorkoutEstimate } from '@/hooks/useWorkoutEstimate';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -641,6 +642,13 @@ export default function WorkoutPage() {
   const workoutTimer = useWorkoutTimer({
     sessionId,
     startedAt: session?.startedAt ?? null,
+  });
+
+  // Workout time estimate - calculates estimated duration based on sets/rest
+  const workoutEstimate = useWorkoutEstimate({
+    exerciseBlocks: blocks,
+    completedSets: completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length,
+    defaultRestSeconds: preferences?.restTimerDefault ?? 180,
   });
 
   // Clear timer when session changes or component unmounts
@@ -3817,6 +3825,17 @@ export default function WorkoutPage() {
                   )}
                   <span>{workoutTimer.formattedTime}</span>
                 </button>
+              )}
+              {/* Estimated time remaining */}
+              {workoutEstimate.totalMinutes > 0 && (
+                <span
+                  className="text-sm text-surface-500"
+                  title={`Total estimated: ${workoutEstimate.formattedTotal}`}
+                >
+                  {workoutEstimate.completedSets > 0
+                    ? workoutEstimate.formattedRemaining
+                    : workoutEstimate.formattedTotal}
+                </span>
               )}
             </div>
           </div>
