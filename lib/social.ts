@@ -254,7 +254,7 @@ export function getReactionEmoji(type: 'like' | 'fire' | 'muscle' | 'clap'): str
  * Generate a profile URL path
  */
 export function getProfileUrl(username: string): string {
-  return `/profile/${encodeURIComponent(username)}`;
+  return `/dashboard/profile/${encodeURIComponent(username)}`;
 }
 
 /**
@@ -262,5 +262,5 @@ export function getProfileUrl(username: string): string {
  */
 export function getProfileShareUrl(username: string, baseUrl?: string): string {
   const base = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
-  return `${base}/profile/${encodeURIComponent(username)}`;
+  return `${base}/dashboard/profile/${encodeURIComponent(username)}`;
 }
