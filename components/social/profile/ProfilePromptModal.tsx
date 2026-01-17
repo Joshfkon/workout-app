@@ -90,7 +90,6 @@ export function ProfilePromptModal({
       setCheckingUsername(true);
       const supabase = createClient();
 
-      // @ts-expect-error - user_profiles table not in generated types yet
       const { data } = await supabase
         .from('user_profiles')
         .select('id')
