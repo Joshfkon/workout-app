@@ -25,3 +25,6 @@ export { PlateCalculatorModal } from './PlateCalculatorModal';
 // Resume Banner
 export { ResumeWorkoutBanner } from './ResumeWorkoutBanner';
 
+// Pause Overlay
+export { PauseOverlay } from './PauseOverlay';
+

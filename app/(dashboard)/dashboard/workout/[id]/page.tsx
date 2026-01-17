@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimerControlPanel } from '@/components/workout';
+import { RestTimerControlPanel, PauseOverlay } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -3761,6 +3761,13 @@ export default function WorkoutPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-8">
+      {/* Pause overlay - shown when workout is paused */}
+      <PauseOverlay
+        isPaused={workoutTimer.isPaused}
+        elapsedTime={workoutTimer.formattedTime}
+        onResume={workoutTimer.resume}
+      />
+
       {/* Auto-adjust message */}
       {autoAdjustMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
