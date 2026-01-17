@@ -264,3 +264,23 @@ export function getProfileShareUrl(username: string, baseUrl?: string): string {
   const base = baseUrl || (typeof window !== 'undefined' ? window.location.origin : '');
   return `${base}/dashboard/profile/${encodeURIComponent(username)}`;
 }
+
+/**
+ * Generate a random anonymous username for auto-created profiles
+ * Format: Lifter_XXXXX where X is alphanumeric (lowercase + digits)
+ */
+export function generateAnonymousUsername(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let suffix = '';
+  for (let i = 0; i < 5; i++) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `Lifter_${suffix}`;
+}
+
+/**
+ * Check if a username is an auto-generated anonymous username
+ */
+export function isAnonymousUsername(username: string): boolean {
+  return /^Lifter_[a-z0-9]{5}$/i.test(username);
+}
