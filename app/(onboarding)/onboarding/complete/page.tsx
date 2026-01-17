@@ -6,7 +6,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Badge, ExplainedTerm 
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { usePWA } from '@/hooks/usePWA';
-import { 
+import {
   CoachingSessionManager,
   type StrengthProfile,
   type BodyComposition,
@@ -18,6 +18,7 @@ import {
   analyzeStrengthBalance
 } from '@/services/coachingEngine';
 import { kgToLbs, roundToIncrement } from '@/lib/utils';
+import { generateAnonymousUsername } from '@/lib/social';
 import type { WeightUnit } from '@/types/schema';
 
 function PercentileBar({ percentile, label, showValue = true }: { percentile: number; label: string; showValue?: boolean }) {
@@ -182,14 +183,54 @@ function CompleteContent() {
         .from('users')
         .update({ onboarding_completed: true })
         .eq('id', user.id);
+
+      // Check if user already has a profile
+      const { data: existingProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      // Auto-create a default profile if none exists
+      if (!existingProfile) {
+        // Generate a unique anonymous username (retry if collision)
+        let username = generateAnonymousUsername();
+        let retries = 0;
+        const maxRetries = 5;
+
+        while (retries < maxRetries) {
+          const { error: insertError } = await supabase
+            .from('user_profiles')
+            .insert({
+              user_id: user.id,
+              username: username,
+              display_name: null,
+              bio: null,
+              profile_visibility: 'public',
+              show_workouts: true,
+              show_stats: true,
+              show_progress_photos: false,
+            });
+
+          if (!insertError) {
+            break;
+          }
+
+          // If username collision, generate a new one
+          if (insertError.code === '23505') {
+            username = generateAnonymousUsername();
+            retries++;
+          } else {
+            // Other errors - log and continue
+            console.error('Error creating profile:', insertError);
+            break;
+          }
+        }
+      }
     }
 
-    // Check if we should show the install prompt
-    if (shouldShowInOnboarding()) {
-      router.push(`/onboarding/install?session=${sessionId}`);
-    } else {
-      router.push('/dashboard');
-    }
+    // Redirect to profile setup step to let user customize their profile
+    router.push(`/onboarding/profile?session=${sessionId}`);
   };
   
   if (isLoading) {
