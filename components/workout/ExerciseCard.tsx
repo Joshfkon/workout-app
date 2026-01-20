@@ -792,7 +792,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     } else if (rpeDiff < -0.3) {
       // Hard set - decrease reps slightly
       const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
-      return Math.max(targetRepRange[0], lastReps - repDecrease);
+      const nextReps = lastReps - repDecrease;
+      // If the user is already below the target range, don't force them up to the minimum.
+      if (lastReps < targetRepRange[0]) {
+        return Math.max(1, nextReps);
+      }
+      return Math.max(targetRepRange[0], nextReps);
     }
 
     // On target or slightly easy at top of range - keep same reps

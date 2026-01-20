@@ -4359,6 +4359,12 @@ export default function WorkoutPage() {
                     isActive={isCurrent}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
+                    previousSets={
+                      exerciseHistories[block.exerciseId]?.lastWorkoutSets?.map((set) => ({
+                        weightKg: set.weightKg,
+                        reps: set.reps,
+                      })) ?? []
+                    }
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     adjustedTargetRir={
