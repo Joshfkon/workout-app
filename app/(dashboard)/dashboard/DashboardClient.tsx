@@ -185,6 +185,7 @@ interface ActiveMesocycle {
   totalWorkouts: number;
   splitType?: string;
   daysPerWeek?: number;
+  preferredWorkoutDays?: WorkoutDay[] | null;
 }
 
 interface ScheduledWorkout {
@@ -290,7 +291,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [isLoading, setIsLoading] = useState(!hasInitialData);
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(initialData?.mesocycle ?? null);
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(initialData?.todaysWorkout ?? null);
-  const [scheduledWorkout, setScheduledWorkout] = useState<ScheduledWorkout | null>(null);
+  const [scheduledWorkout, setScheduledWorkout] = useState<ScheduledWorkout | null>(() => {
+    if (!initialData?.mesocycle || initialData.todaysWorkout) return null;
+    const today = new Date();
+    const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+    return getWorkoutForDay(
+      initialData.mesocycle.splitType || 'Upper/Lower',
+      dayOfWeek,
+      initialData.mesocycle.daysPerWeek || 4,
+      initialData.mesocycle.preferredWorkoutDays
+    );
+  });
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(initialData?.nutritionTargets ?? null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
@@ -380,6 +391,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           setWeightUnit(data.weightUnit);
           setMuscleVolume(data.muscleVolume);
           setCompletedWorkoutsCount(data.completedWorkoutsCount);
+          if (!todaysWorkout && data.activeMesocycle) {
+            const today = new Date();
+            const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
+            setScheduledWorkout(getWorkoutForDay(
+              data.activeMesocycle.splitType || 'Upper/Lower',
+              dayOfWeek,
+              data.activeMesocycle.daysPerWeek || 4,
+              data.activeMesocycle.preferredWorkoutDays
+            ));
+          }
           // Show content immediately with cached data
           setIsLoading(false);
         }
@@ -808,6 +829,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             totalWorkouts: sessions.length,
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
+            preferredWorkoutDays: mesocycle.preferred_workout_days || null,
           });
 
           const todaySession = sessions.find((s: any) => 
@@ -1017,6 +1039,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             totalWorkouts: sessions.length,
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
+            preferredWorkoutDays: mesocycle.preferred_workout_days || null,
           };
         }
 

@@ -2,6 +2,7 @@
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { getLocalDateString } from '@/lib/utils';
+import { type WorkoutDay } from '@/types/schema';
 
 export interface DashboardMesocycle {
   id: string;
@@ -13,6 +14,7 @@ export interface DashboardMesocycle {
   totalWorkouts: number;
   splitType: string;
   daysPerWeek: number;
+  preferredWorkoutDays?: WorkoutDay[] | null;
 }
 
 export interface TodaysWorkoutData {
@@ -48,7 +50,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
 
   const { data: mesocycles } = await supabase
     .from('mesocycles')
-    .select(`id, name, start_date, total_weeks, split_type, days_per_week, state, is_active,
+    .select(`id, name, start_date, total_weeks, split_type, days_per_week, preferred_workout_days, state, is_active,
       workout_sessions (id, planned_date, state, completed_at)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
@@ -77,6 +79,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
     totalWorkouts: sessions.length,
     splitType: mesocycle.split_type,
     daysPerWeek: mesocycle.days_per_week,
+    preferredWorkoutDays: mesocycle.preferred_workout_days || null,
   };
 
   // Check for today's workout
