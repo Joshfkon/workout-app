@@ -14,6 +14,86 @@ import type {
 import { formatWeightValue, convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 import { calculateEffectiveLoad } from '@/types/schema';
 
+/**
+ * Calculate RPE-adjusted reps for the next set based on previous set's performance.
+ * If user hit RPE 10 at fewer reps than target, we should NOT suggest more reps.
+ */
+function getRpeAdjustedReps(
+  previousSet: { reps: number; rpe?: number },
+  targetRepRange: [number, number],
+  targetRir: number
+): number {
+  const lastReps = previousSet.reps;
+  const lastRpe = previousSet.rpe ?? 8; // Default to RPE 8 if not provided
+  const targetRpe = 10 - targetRir;
+  const rpeDiff = targetRpe - lastRpe; // positive = set was easier, negative = set was harder
+
+  // If user significantly exceeded rep range, suggest mid-range reps (weight will increase)
+  if (lastReps > targetRepRange[1] + 1) {
+    return Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
+  }
+
+  // If RPE is significantly low AND at/near top of range, weight will increase
+  // So suggest mid-range reps for the heavier weight
+  if (rpeDiff > 1 && lastReps >= targetRepRange[1]) {
+    return Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
+  }
+
+  // If set was slightly easy, add reps (but don't exceed target range)
+  if (rpeDiff > 0.3 && lastReps < targetRepRange[1]) {
+    const repIncrease = Math.min(2, Math.floor(rpeDiff));
+    return Math.min(targetRepRange[1], lastReps + repIncrease);
+  }
+
+  // If set was harder than target (negative rpeDiff), decrease reps
+  if (rpeDiff < -0.3) {
+    const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
+    return Math.max(targetRepRange[0], lastReps - repDecrease);
+  }
+
+  // On target - keep same reps
+  return lastReps;
+}
+
+/**
+ * Calculate RPE-adjusted weight for the next set based on previous set's performance.
+ * If user hit RPE 10 (maxed out), we should reduce weight to allow proper reps.
+ */
+function getRpeAdjustedWeight(
+  previousSet: { weightKg: number; reps: number; rpe?: number },
+  targetRepRange: [number, number],
+  targetRir: number
+): number {
+  const lastWeightKg = previousSet.weightKg;
+  const lastReps = previousSet.reps;
+  const lastRpe = previousSet.rpe ?? 8;
+  const targetRpe = 10 - targetRir;
+  const rpeDiff = targetRpe - lastRpe; // positive = easier, negative = harder
+
+  // If user exceeded rep range significantly, increase weight to bring back to mid-range
+  if (lastReps > targetRepRange[1] + 1) {
+    // Estimate 1RM using Epley: 1RM = weight * (1 + reps/30)
+    const effectiveReps = lastReps + (10 - lastRpe); // reps + RIR
+    const e1rm = lastWeightKg * (1 + effectiveReps / 30);
+    const targetReps = Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
+    const effectiveTargetReps = targetReps + targetRir;
+    // Reverse Epley: weight = E1RM / (1 + effectiveReps/30)
+    return e1rm / (1 + effectiveTargetReps / 30);
+  }
+
+  // Standard RPE-based adjustment
+  let adjustmentPercent: number;
+  if (rpeDiff > 0) {
+    // Set was easier than target - increase weight (4% per RPE point)
+    adjustmentPercent = rpeDiff * 0.04;
+  } else {
+    // Set was harder than target - decrease weight (3% per RPE point)
+    adjustmentPercent = rpeDiff * 0.03;
+  }
+
+  return lastWeightKg * (1 + adjustmentPercent);
+}
+
 interface CompactSetRowProps {
   setNumber: number;
   /** User's current body weight in kg */
@@ -90,12 +170,36 @@ export const CompactSetRow = memo(function CompactSetRow({
   isDurationBased = false,
   exerciseId,
 }: CompactSetRowProps) {
-  const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
-  const [weight, setWeight] = useState(
-    previousSet?.weightKg 
-      ? formatWeightValue(previousSet.weightKg, unit).toString()
-      : (suggestedWeight > 0 ? formatWeightValue(suggestedWeight, unit).toString() : '')
-  );
+  // Use RPE-aware logic when previous set exists
+  const getInitialReps = (): string => {
+    if (!previousSet) {
+      return String(targetRepRange[1]);
+    }
+    // Use RPE-adjusted reps if we have RPE data
+    if (previousSet.rpe !== undefined) {
+      return String(getRpeAdjustedReps(previousSet, targetRepRange, targetRir));
+    }
+    // Fallback to previous reps
+    return String(previousSet.reps);
+  };
+
+  const getInitialWeight = (): string => {
+    if (previousSet?.weightKg) {
+      // Use RPE-adjusted weight if we have RPE data
+      if (previousSet.rpe !== undefined) {
+        const adjustedWeightKg = getRpeAdjustedWeight(previousSet, targetRepRange, targetRir);
+        return formatWeightValue(adjustedWeightKg, unit).toString();
+      }
+      return formatWeightValue(previousSet.weightKg, unit).toString();
+    }
+    if (suggestedWeight > 0) {
+      return formatWeightValue(suggestedWeight, unit).toString();
+    }
+    return '';
+  };
+
+  const [reps, setReps] = useState(getInitialReps);
+  const [weight, setWeight] = useState(getInitialWeight);
   const [phase, setPhase] = useState<InputPhase>('input');
   const [bodyweightData, setBodyweightData] = useState<BodyweightData | undefined>(
     previousSet?.bodyweightData

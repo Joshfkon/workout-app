@@ -205,6 +205,93 @@ function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
   return weight * (36 / (37 - effectiveReps));
 }
 
+/**
+ * Fetch exercise history for a specific exercise ID.
+ * Used when adding a new exercise mid-workout that wasn't in the original query.
+ */
+async function fetchExerciseHistory(
+  exerciseId: string,
+  userId: string
+): Promise<ExerciseHistoryData | null> {
+  const supabase = createUntypedClient();
+
+  const { data: historyBlocks, error } = await supabase
+    .from('exercise_blocks')
+    .select(`
+      id,
+      exercise_id,
+      workout_sessions!inner (
+        id,
+        completed_at,
+        state,
+        user_id
+      ),
+      set_logs (
+        weight_kg,
+        reps,
+        rpe,
+        is_warmup,
+        logged_at
+      )
+    `)
+    .eq('exercise_id', exerciseId)
+    .eq('workout_sessions.user_id', userId)
+    .eq('workout_sessions.state', 'completed')
+    .order('workout_sessions(completed_at)', { ascending: false })
+    .limit(10);
+
+  if (error || !historyBlocks || historyBlocks.length === 0) {
+    return null;
+  }
+
+  let bestE1RM = 0;
+  let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+  let totalSessions = 0;
+  const seenSessions = new Set<string>();
+
+  // Get last workout data
+  const lastBlock = historyBlocks[0];
+  const lastSession = lastBlock.workout_sessions as any;
+  const lastSets = ((lastBlock.set_logs as any[]) || [])
+    .filter((s: any) => !s.is_warmup)
+    .map((s: any) => ({
+      weightKg: s.weight_kg,
+      reps: s.reps,
+      rpe: s.rpe,
+    }));
+
+  // Calculate best E1RM and PR
+  historyBlocks.forEach((block: any) => {
+    const session = block.workout_sessions;
+    if (session && !seenSessions.has(session.id)) {
+      seenSessions.add(session.id);
+      totalSessions++;
+    }
+
+    const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+    sets.forEach((set: any) => {
+      const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      if (e1rm > bestE1RM) {
+        bestE1RM = e1rm;
+        personalRecord = {
+          weightKg: set.weight_kg,
+          reps: set.reps,
+          e1rm,
+          date: session?.completed_at || set.logged_at,
+        };
+      }
+    });
+  });
+
+  return {
+    lastWorkoutDate: lastSession?.completed_at || '',
+    lastWorkoutSets: lastSets,
+    estimatedE1RM: bestE1RM,
+    personalRecord,
+    totalSessions,
+  };
+}
+
 // Generate coach message based on workout structure and user context
 function generateCoachMessage(
   blocks: ExerciseBlockWithExercise[],
@@ -2886,13 +2973,27 @@ export default function WorkoutPage() {
 
       // Get weight recommendation for the new exercise
       let suggestedWeight = 0;
-      if (userProfile) {
+      if (userProfile && session?.userId) {
         const repRange = { min: exerciseRepRange[0], max: exerciseRepRange[1] };
         const targetRir = exerciseRir;
         let weightRec: WorkingWeightRecommendation;
 
         // Check if we have exercise history for this exercise (using exercise.id)
-        const exerciseHistory = exerciseHistories[exercise.id];
+        // If not in cache, fetch it from the database (for exercises added mid-workout)
+        let exerciseHistory: ExerciseHistoryData | undefined = exerciseHistories[exercise.id];
+        if (!exerciseHistory) {
+          // Fetch history for this exercise since it wasn't in the original query
+          const fetchedHistory = await fetchExerciseHistory(exercise.id, session.userId);
+          exerciseHistory = fetchedHistory ?? undefined;
+
+          // Cache the result for future use (even if null, to avoid re-fetching)
+          if (exerciseHistory) {
+            setExerciseHistories(prev => ({
+              ...prev,
+              [exercise.id]: exerciseHistory!,
+            }));
+          }
+        }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
 
         // Use calibration data if available
