@@ -1,6 +1,6 @@
 # Mesocycle Feature Refactoring Plan
 
-> **Status**: In Progress (Phase 1 Complete)
+> **Status**: In Progress (Phase 1 & 2 Complete)
 > **Created**: 2026-01-26
 > **Last Updated**: 2026-01-26
 
@@ -704,10 +704,10 @@ To upgrade:
 - [x] Refactor `handleStartWorkout()` to use `program_data` - **Done 2026-01-26**
 - [x] Integrate `WeightEstimationEngine` for `target_weight_kg` - **Done 2026-01-26**
 
-### Phase 2: Important (Should Fix)
+### Phase 2: Important (Should Fix) - COMPLETED
 - [x] Apply weekly progression modifiers - **Done 2026-01-26** (included in handleStartWorkout refactor)
-- [ ] Store exercise IDs in program_data
-- [ ] Track completed sessions per week
+- [x] Store exercise IDs in program_data - **Done 2026-01-26** (added `id` field to ExerciseEntry in types/schema.ts)
+- [x] Track completed sessions per week - **Done 2026-01-26** (uses completedSessionsThisWeek for session index)
 
 ### Phase 3: Nice to Have
 - [ ] Time budget validation UI

@@ -39,6 +39,17 @@ interface TodayWorkout {
 type Goal = 'bulk' | 'cut' | 'maintain';
 
 /**
+ * Get the Monday of the current week (for tracking completed sessions this week)
+ */
+function getWeekStart(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
+  const monday = new Date(now.setDate(diff));
+  return monday.toISOString().split('T')[0];
+}
+
+/**
  * Get rest period based on exercise type and user's goal
  * - Compound exercises need more rest for recovery
  * - Cutting: shorter rest for metabolic demand
@@ -156,6 +167,7 @@ export default function MesocyclePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
+  const [completedSessionsThisWeek, setCompletedSessionsThisWeek] = useState<number>(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -328,7 +340,7 @@ export default function MesocyclePage() {
 
       if (data && !error) {
         setMesocycles(data);
-        
+
         // Calculate today's workout for active mesocycle
         const active = data.find((m: Mesocycle) => m.state === 'active');
         if (active) {
@@ -341,6 +353,17 @@ export default function MesocyclePage() {
             active.preferred_workout_days
           );
           setTodayWorkout(workout);
+
+          // Fetch completed sessions this week for session tracking
+          const weekStart = getWeekStart();
+          const { data: completedSessions } = await supabase
+            .from('workout_sessions')
+            .select('id')
+            .eq('mesocycle_id', active.id)
+            .eq('state', 'completed')
+            .gte('planned_date', weekStart);
+
+          setCompletedSessionsThisWeek(completedSessions?.length || 0);
         }
       }
       setIsLoading(false);
@@ -412,10 +435,13 @@ export default function MesocyclePage() {
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
       // Try to get session from program_data first (preferred - uses pre-calculated exercises & sets)
+      // Use completedSessionsThisWeek as the session index to handle skipped days correctly
+      // e.g., if user skipped Monday, Tuesday's workout should still be the first session of the week
       const programData = activeMesocycle.program_data as FullProgramRecommendation | null;
+      const sessionIndex = completedSessionsThisWeek; // 0-based: 0 completed = get session 0
       const programSession = getSessionFromProgramData(
         programData,
-        todayWorkout.dayNumber - 1, // Convert to 0-based index
+        sessionIndex,
         activeMesocycle.current_week,
         activeMesocycle.total_weeks
       );
@@ -679,7 +705,7 @@ export default function MesocyclePage() {
                       ))}
                     </div>
                     <p className="text-sm text-surface-400 mt-3">
-                      Week {activeMesocycle.current_week} • Day {todayWorkout.dayNumber} of {activeMesocycle.days_per_week}
+                      Week {activeMesocycle.current_week} • Session {completedSessionsThisWeek + 1} of {activeMesocycle.days_per_week} this week
                     </p>
                   </div>
                   <Button

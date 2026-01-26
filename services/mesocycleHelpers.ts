@@ -10,7 +10,6 @@ import type {
   DetailedSession,
   DetailedExerciseWithFatigue,
   DetailedExercise,
-  ExerciseEntry,
 } from '@/types/schema';
 
 /**
@@ -89,10 +88,8 @@ function extractMusclesFromExercises(
  * Convert DetailedExerciseWithFatigue to ExtractedExercise
  */
 function convertFatigueExercise(ex: DetailedExerciseWithFatigue): ExtractedExercise {
-  // ExerciseEntry doesn't have id - it may be stored separately or looked up by name
-  const exerciseWithId = ex.exercise as ExerciseEntry & { id?: string };
   return {
-    exerciseId: exerciseWithId.id,
+    exerciseId: ex.exercise.id, // Now available in ExerciseEntry
     exerciseName: ex.exercise.name,
     primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
     sets: ex.sets,
@@ -111,10 +108,8 @@ function convertFatigueExercise(ex: DetailedExerciseWithFatigue): ExtractedExerc
  * Convert DetailedExercise (legacy format) to ExtractedExercise
  */
 function convertLegacyExercise(ex: DetailedExercise): ExtractedExercise {
-  // ExerciseEntry doesn't have id - it may be stored separately or looked up by name
-  const exerciseWithId = ex.exercise as ExerciseEntry & { id?: string };
   return {
-    exerciseId: exerciseWithId.id,
+    exerciseId: ex.exercise.id, // Now available in ExerciseEntry
     exerciseName: ex.exercise.name,
     primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
     sets: ex.sets,
