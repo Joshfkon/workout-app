@@ -34,6 +34,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
+import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
@@ -2738,9 +2739,12 @@ export default function WorkoutPage() {
   }, [isDraggingBlock, blocks.length, handleBlockDragEnd]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
+    // Capture original exercise info before swap for override tracking
+    const originalBlock = blocks.find(b => b.id === blockId);
+
     try {
       const supabase = createUntypedClient();
-      
+
       // Fetch full exercise data from database (for hypertrophy scores, equipment, etc.)
       const { data: fullExerciseData, error: fetchError } = await supabase
         .from('exercises')
@@ -2795,12 +2799,42 @@ export default function WorkoutPage() {
         .from('exercise_blocks')
         .update({ exercise_id: newExercise.id })
         .eq('id', blockId);
-      
+
       if (updateError) {
         console.error('Failed to swap exercise:', updateError);
         setError(`Failed to swap exercise: ${updateError.message}`);
       } else {
         setError(null);
+
+        // Save exercise override to mesocycle for future sessions
+        if (session?.mesocycleId && originalBlock) {
+          try {
+            // Fetch current mesocycle overrides
+            const { data: mesocycle } = await supabase
+              .from('mesocycles')
+              .select('exercise_overrides')
+              .eq('id', session.mesocycleId)
+              .single();
+
+            const currentOverrides = (mesocycle?.exercise_overrides || []) as ExerciseOverride[];
+            const updatedOverrides = addExerciseOverride(
+              currentOverrides,
+              originalBlock.exerciseId,
+              originalBlock.exercise.name,
+              newExercise.id!,
+              newExercise.name
+            );
+
+            // Save updated overrides
+            await supabase
+              .from('mesocycles')
+              .update({ exercise_overrides: updatedOverrides })
+              .eq('id', session.mesocycleId);
+          } catch (overrideErr) {
+            // Don't fail the swap if override save fails
+            console.error('Failed to save exercise override:', overrideErr);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to swap exercise:', err);

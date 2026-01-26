@@ -10,7 +10,9 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
+import { getSessionFromProgramData, getWeeklyProgressionModifiers, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
 
 interface Mesocycle {
@@ -26,6 +28,7 @@ interface Mesocycle {
   preferred_workout_days: WorkoutDay[] | null;
   session_duration_minutes: number | null;
   program_data: unknown;
+  exercise_overrides?: ExerciseOverride[];
 }
 
 interface TodayWorkout {
@@ -35,6 +38,17 @@ interface TodayWorkout {
 }
 
 type Goal = 'bulk' | 'cut' | 'maintain';
+
+/**
+ * Get the Monday of the current week (for tracking completed sessions this week)
+ */
+function getWeekStart(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
+  const monday = new Date(now.setDate(diff));
+  return monday.toISOString().split('T')[0];
+}
 
 /**
  * Get rest period based on exercise type and user's goal
@@ -154,6 +168,8 @@ export default function MesocyclePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
+  const [completedSessionsThisWeek, setCompletedSessionsThisWeek] = useState<number>(0);
+  const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -326,7 +342,7 @@ export default function MesocyclePage() {
 
       if (data && !error) {
         setMesocycles(data);
-        
+
         // Calculate today's workout for active mesocycle
         const active = data.find((m: Mesocycle) => m.state === 'active');
         if (active) {
@@ -339,6 +355,30 @@ export default function MesocyclePage() {
             active.preferred_workout_days
           );
           setTodayWorkout(workout);
+
+          // Fetch completed sessions this week for session tracking
+          const weekStart = getWeekStart();
+          const { data: completedSessions } = await supabase
+            .from('workout_sessions')
+            .select('id')
+            .eq('mesocycle_id', active.id)
+            .eq('state', 'completed')
+            .gte('planned_date', weekStart);
+
+          const completedCount = completedSessions?.length || 0;
+          setCompletedSessionsThisWeek(completedCount);
+
+          // Get estimated time from program_data for time budget validation
+          const programData = active.program_data as FullProgramRecommendation | null;
+          const sessionFromProgram = getSessionFromProgramData(
+            programData,
+            completedCount, // Use completed count as session index
+            active.current_week,
+            active.total_weeks
+          );
+          if (sessionFromProgram) {
+            setEstimatedSessionTime(sessionFromProgram.estimatedMinutes);
+          }
         }
       }
       setIsLoading(false);
@@ -352,23 +392,30 @@ export default function MesocyclePage() {
   // Start today's workout from the mesocycle
   const handleStartWorkout = async () => {
     if (!activeMesocycle || !todayWorkout) return;
-    
+
     setIsStartingWorkout(true);
-    
+
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) throw new Error('Not logged in');
 
-      // Fetch user's goal from profile
+      // Fetch user profile for goal and weight estimation
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('goal')
+        .select('goal, experience')
         .eq('user_id', user.id)
         .single();
-      
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('height_cm, weight_kg, body_fat_percent, experience')
+        .eq('id', user.id)
+        .single();
+
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const userExperience = (userData?.experience || userProfile?.experience || 'intermediate') as Experience;
 
       // Check if there's already a workout for today
       const today = getLocalDateString();
@@ -402,86 +449,204 @@ export default function MesocyclePage() {
 
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
-      // Get exercises for the target muscles
-      const { data: exercises } = await supabase
-        .from('exercises')
-        .select('*')
-        .in('primary_muscle', todayWorkout.muscles);
+      // Try to get session from program_data first (preferred - uses pre-calculated exercises & sets)
+      // Use completedSessionsThisWeek as the session index to handle skipped days correctly
+      // e.g., if user skipped Monday, Tuesday's workout should still be the first session of the week
+      const programData = activeMesocycle.program_data as FullProgramRecommendation | null;
+      const sessionIndex = completedSessionsThisWeek; // 0-based: 0 completed = get session 0
+      const programSession = getSessionFromProgramData(
+        programData,
+        sessionIndex,
+        activeMesocycle.current_week,
+        activeMesocycle.total_weeks
+      );
 
-      if (exercises && exercises.length > 0) {
-        // Group exercises by muscle and pick 1-2 per muscle
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
-        const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
-        (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
-          if (!exercisesByMuscle[ex.primary_muscle]) {
-            exercisesByMuscle[ex.primary_muscle] = [];
+      // Get weekly progression modifiers for intensity/volume adjustments
+      const progressionModifiers = getWeeklyProgressionModifiers(
+        programData,
+        activeMesocycle.current_week
+      );
+
+      const blocks = [];
+      let order = 1;
+      const seenMuscles = new Set<string>();
+
+      if (programSession && programSession.exercises.length > 0) {
+        // Apply any exercise overrides (user's swapped exercises)
+        const overrides = (activeMesocycle.exercise_overrides || []) as ExerciseOverride[];
+        const exercisesWithOverrides = applyExerciseOverrides(programSession.exercises, overrides);
+
+        // USE PROGRAM_DATA: Create exercise blocks from pre-calculated program
+        for (const exercise of exercisesWithOverrides) {
+          const isCompound = exercise.primaryMuscle && ['chest', 'back', 'quads', 'hamstrings', 'glutes'].includes(exercise.primaryMuscle);
+          const isFirstForMuscle = !seenMuscles.has(exercise.primaryMuscle);
+
+          // Look up exercise_id from database by name
+          const { data: dbExercise } = await supabase
+            .from('exercises')
+            .select('id, mechanic, default_rep_range, default_rir')
+            .eq('name', exercise.exerciseName)
+            .single();
+
+          const exerciseId = exercise.exerciseId || dbExercise?.id;
+          if (!exerciseId) continue; // Skip if exercise not found
+
+          // Get weight estimate using the WeightEstimationEngine
+          let targetWeight = 0;
+          if (userData?.height_cm && userData?.weight_kg) {
+            const weightRec = quickWeightEstimate(
+              exercise.exerciseName,
+              exercise.repRange,
+              exercise.targetRir,
+              userData.weight_kg,
+              userData.height_cm,
+              userData.body_fat_percent || 20,
+              userExperience
+            );
+            const baseWeight = weightRec.recommendedWeight || 0;
+
+            // Apply progressive overload: increase weight based on weekly intensity modifier
+            // intensityModifier typically ranges from 1.0 (week 1) to 1.05-1.10 (later weeks)
+            // Deload weeks have lower modifier (0.85-0.9)
+            targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2; // Round to nearest 0.5kg
           }
-          exercisesByMuscle[ex.primary_muscle].push(ex);
-        });
 
-        // Create exercise blocks
-        const blocks = [];
-        let order = 1;
-        const seenMuscles = new Set<string>();
-        
-        for (const muscle of todayWorkout.muscles) {
-          const muscleExercises = exercisesByMuscle[muscle] || [];
-          // Pick up to 2 exercises per muscle
-          const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
-          
-          let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
-          
-          for (const exercise of selected) {
-            const isCompound = exercise.mechanic === 'compound';
-            
-            // Generate warmup for first exercise of each muscle group (compound or isolation)
-            let warmupSets: any[] = [];
-            if (isFirstExerciseForMuscle) {
-              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
-                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
-                : [8, 12]) as [number, number];
-
-              warmupSets = generateWarmupProtocol({
-                workingWeight: 60, // Default working weight, will be adjusted in workout
-                exercise: {
-                  id: exercise.id,
-                  name: exercise.name,
-                  primaryMuscle: exercise.primary_muscle,
-                  secondaryMuscles: [],
-                  mechanic: isCompound ? 'compound' : 'isolation',
-                  defaultRepRange: repRange,
-                  defaultRir: exercise.default_rir || 2,
-                  minWeightIncrementKg: 2.5, // Standard barbell increment
-                  formCues: [],
-                  commonMistakes: [],
-                  equipmentRequired: [],
-                  setupNote: '',
-                  movementPattern: isCompound ? 'compound' : 'isolation',
-                },
-                isFirstExercise: order === 1, // First exercise overall gets general warmup
-              });
-              seenMuscles.add(muscle);
-              isFirstExerciseForMuscle = false;
-            }
-            
-            blocks.push({
-              workout_session_id: session.id,
-              exercise_id: exercise.id,
-              order: order++,
-              target_sets: isCompound ? 4 : 3,
-              target_rep_range: exercise.default_rep_range || [8, 12],
-              target_rir: exercise.default_rir || 2,
-              target_weight_kg: 0, // Will be filled from history or user input
-              target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
-              suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
-              warmup_protocol: { sets: warmupSets },
+          // Generate warmup for first exercise of each muscle group
+          let warmupSets: any[] = [];
+          if (isFirstForMuscle) {
+            warmupSets = generateWarmupProtocol({
+              workingWeight: targetWeight || 60,
+              exercise: {
+                id: exerciseId,
+                name: exercise.exerciseName,
+                primaryMuscle: exercise.primaryMuscle,
+                secondaryMuscles: [],
+                mechanic: isCompound ? 'compound' : 'isolation',
+                defaultRepRange: [exercise.repRange.min, exercise.repRange.max] as [number, number],
+                defaultRir: exercise.targetRir,
+                minWeightIncrementKg: 2.5,
+                formCues: [],
+                commonMistakes: [],
+                equipmentRequired: [],
+                setupNote: '',
+                movementPattern: isCompound ? 'compound' : 'isolation',
+              },
+              isFirstExercise: order === 1,
             });
+            seenMuscles.add(exercise.primaryMuscle);
+          }
+
+          blocks.push({
+            workout_session_id: session.id,
+            exercise_id: exerciseId,
+            order: order++,
+            target_sets: exercise.sets, // From program_data (respects session duration & fatigue budget)
+            target_rep_range: [exercise.repRange.min, exercise.repRange.max],
+            target_rir: exercise.targetRir,
+            target_weight_kg: targetWeight, // From WeightEstimationEngine
+            target_rest_seconds: exercise.restSeconds || getRestPeriod(isCompound, userGoal, exercise.primaryMuscle),
+            suggestion_reason: `${programSession.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
+            warmup_protocol: { sets: warmupSets },
+          });
+        }
+      } else {
+        // FALLBACK: Query exercises and use default logic (legacy behavior)
+        const { data: exercises } = await supabase
+          .from('exercises')
+          .select('*')
+          .in('primary_muscle', todayWorkout.muscles);
+
+        if (exercises && exercises.length > 0) {
+          type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+          const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
+          (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
+            if (!exercisesByMuscle[ex.primary_muscle]) {
+              exercisesByMuscle[ex.primary_muscle] = [];
+            }
+            exercisesByMuscle[ex.primary_muscle].push(ex);
+          });
+
+          for (const muscle of todayWorkout.muscles) {
+            const muscleExercises = exercisesByMuscle[muscle] || [];
+            const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
+
+            let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
+
+            for (const exercise of selected) {
+              const isCompound = exercise.mechanic === 'compound';
+
+              // Get weight estimate with progressive overload
+              let targetWeight = 0;
+              if (userData?.height_cm && userData?.weight_kg) {
+                const repRange = exercise.default_rep_range || [8, 12];
+                const weightRec = quickWeightEstimate(
+                  exercise.name,
+                  { min: repRange[0], max: repRange[1] },
+                  exercise.default_rir || 2,
+                  userData.weight_kg,
+                  userData.height_cm,
+                  userData.body_fat_percent || 20,
+                  userExperience
+                );
+                const baseWeight = weightRec.recommendedWeight || 0;
+                // Apply progressive overload intensity modifier
+                targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2;
+              }
+
+              let warmupSets: any[] = [];
+              if (isFirstExerciseForMuscle) {
+                const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
+                  ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
+                  : [8, 12]) as [number, number];
+
+                warmupSets = generateWarmupProtocol({
+                  workingWeight: targetWeight || 60,
+                  exercise: {
+                    id: exercise.id,
+                    name: exercise.name,
+                    primaryMuscle: exercise.primary_muscle,
+                    secondaryMuscles: [],
+                    mechanic: isCompound ? 'compound' : 'isolation',
+                    defaultRepRange: repRange,
+                    defaultRir: exercise.default_rir || 2,
+                    minWeightIncrementKg: 2.5,
+                    formCues: [],
+                    commonMistakes: [],
+                    equipmentRequired: [],
+                    setupNote: '',
+                    movementPattern: isCompound ? 'compound' : 'isolation',
+                  },
+                  isFirstExercise: order === 1,
+                });
+                seenMuscles.add(muscle);
+                isFirstExerciseForMuscle = false;
+              }
+
+              // Apply volume modifier for deload weeks (fallback uses 50% on deload)
+              const baseSets = isCompound ? 4 : 3;
+              const adjustedSets = progressionModifiers.isDeload
+                ? Math.max(2, Math.round(baseSets * 0.5))
+                : baseSets;
+
+              blocks.push({
+                workout_session_id: session.id,
+                exercise_id: exercise.id,
+                order: order++,
+                target_sets: adjustedSets,
+                target_rep_range: exercise.default_rep_range || [8, 12],
+                target_rir: exercise.default_rir || 2,
+                target_weight_kg: targetWeight,
+                target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
+                suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
+                warmup_protocol: { sets: warmupSets },
+              });
+            }
           }
         }
+      }
 
-        if (blocks.length > 0) {
-          await supabase.from('exercise_blocks').insert(blocks);
-        }
+      if (blocks.length > 0) {
+        await supabase.from('exercise_blocks').insert(blocks);
       }
 
       router.push(`/dashboard/workout/${session.id}`);
@@ -565,9 +730,31 @@ export default function MesocyclePage() {
                         </Badge>
                       ))}
                     </div>
-                    <p className="text-sm text-surface-400 mt-3">
-                      Week {activeMesocycle.current_week} • Day {todayWorkout.dayNumber} of {activeMesocycle.days_per_week}
-                    </p>
+                    <div className="flex items-center gap-3 mt-3 text-sm">
+                      <span className="text-surface-400">
+                        Week {activeMesocycle.current_week} • Session {completedSessionsThisWeek + 1} of {activeMesocycle.days_per_week}
+                      </span>
+                      {estimatedSessionTime && (
+                        <span className={`flex items-center gap-1 ${
+                          estimatedSessionTime > (activeMesocycle.session_duration_minutes || 60) * 1.1
+                            ? 'text-warning-400'
+                            : 'text-surface-500'
+                        }`}>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          ~{estimatedSessionTime} min
+                        </span>
+                      )}
+                    </div>
+                    {estimatedSessionTime && estimatedSessionTime > (activeMesocycle.session_duration_minutes || 60) * 1.1 && (
+                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                        <p className="text-xs text-warning-400">
+                          This session may exceed your {activeMesocycle.session_duration_minutes || 60} min target by ~{Math.round(estimatedSessionTime - (activeMesocycle.session_duration_minutes || 60))} min.
+                          Consider adjusting session duration or reducing exercises.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <Button
                     size="lg"

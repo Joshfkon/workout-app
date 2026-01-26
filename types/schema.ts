@@ -1064,6 +1064,8 @@ export interface SessionTemplate {
  * Includes both builder fields and progression fields
  */
 export interface ExerciseEntry {
+  /** Database ID (optional for backward compatibility with legacy data) */
+  id?: string;
   name: string;
   primaryMuscle: string; // Can be MuscleGroup or DetailedMuscleGroup
   secondaryMuscles: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
