@@ -1,6 +1,6 @@
 # Mesocycle Feature Refactoring Plan
 
-> **Status**: Planning
+> **Status**: In Progress (Phase 1 Complete)
 > **Created**: 2026-01-26
 > **Last Updated**: 2026-01-26
 
@@ -698,14 +698,14 @@ To upgrade:
 
 ## Checklist Summary
 
-### Phase 1: Critical (Must Fix)
-- [ ] Fix day selection (`WEEKDAYS.slice` → `getDefaultWorkoutDays`)
-- [ ] Create `getSessionFromProgramData()` helper
-- [ ] Refactor `handleStartWorkout()` to use `program_data`
-- [ ] Integrate `WeightEstimationEngine` for `target_weight_kg`
+### Phase 1: Critical (Must Fix) - COMPLETED
+- [x] Fix day selection (`WEEKDAYS.slice` → `getDefaultWorkoutDays`) - **Done 2026-01-26**
+- [x] Create `getSessionFromProgramData()` helper - **Done 2026-01-26** (services/mesocycleHelpers.ts)
+- [x] Refactor `handleStartWorkout()` to use `program_data` - **Done 2026-01-26**
+- [x] Integrate `WeightEstimationEngine` for `target_weight_kg` - **Done 2026-01-26**
 
 ### Phase 2: Important (Should Fix)
-- [ ] Apply weekly progression modifiers
+- [x] Apply weekly progression modifiers - **Done 2026-01-26** (included in handleStartWorkout refactor)
 - [ ] Store exercise IDs in program_data
 - [ ] Track completed sessions per week
 
@@ -724,6 +724,7 @@ To upgrade:
 | `app/(dashboard)/dashboard/mesocycle/new/page.tsx` | Mesocycle creation wizard |
 | `services/mesocycleBuilder.ts` | Program generation framework |
 | `services/sessionBuilderWithFatigue.ts` | Session-specific details with fatigue |
+| `services/mesocycleHelpers.ts` | **NEW** - Session extraction & weekly progression helpers |
 | `services/weightEstimationEngine.ts` | Weight prediction engine |
 | `types/schema.ts` | Type definitions |
 | `components/mesocycle/WorkoutDaySelector.tsx` | Day selection UI |

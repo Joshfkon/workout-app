@@ -85,15 +85,13 @@ export default function NewMesocyclePage() {
     return patterns[days] || patterns[4];
   };
 
-  // Update preferred days when daysPerWeek changes (only if not manually customized)
+  // Update preferred days when daysPerWeek changes
+  // Uses getDefaultWorkoutDays() which provides optimal rest day patterns:
+  // - 4 days: Mon/Tue/Thu/Fri (Wednesday rest)
+  // - 6 days: Mon/Tue/Wed/Fri/Sat/Sun (Thursday rest)
   useEffect(() => {
     const defaultDays = getDefaultWorkoutDays(daysPerWeek);
-    // Auto-select weekdays if possible (user preference from the feedback)
-    if (daysPerWeek <= 5) {
-      setPreferredWorkoutDays(WEEKDAYS.slice(0, daysPerWeek));
-    } else {
-      setPreferredWorkoutDays(defaultDays);
-    }
+    setPreferredWorkoutDays(defaultDays);
   }, [daysPerWeek]);
 
   // Calculate estimated exercises based on time (proper estimation with rest periods)

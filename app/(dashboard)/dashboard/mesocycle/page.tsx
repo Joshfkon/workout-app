@@ -10,7 +10,9 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
+import { getSessionFromProgramData, getWeeklyProgressionModifiers } from '@/services/mesocycleHelpers';
+import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
 
 interface Mesocycle {
@@ -352,23 +354,30 @@ export default function MesocyclePage() {
   // Start today's workout from the mesocycle
   const handleStartWorkout = async () => {
     if (!activeMesocycle || !todayWorkout) return;
-    
+
     setIsStartingWorkout(true);
-    
+
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) throw new Error('Not logged in');
 
-      // Fetch user's goal from profile
+      // Fetch user profile for goal and weight estimation
       const { data: userProfile } = await supabase
         .from('user_profiles')
-        .select('goal')
+        .select('goal, experience')
         .eq('user_id', user.id)
         .single();
-      
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('height_cm, weight_kg, body_fat_percent, experience')
+        .eq('id', user.id)
+        .single();
+
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+      const userExperience = (userData?.experience || userProfile?.experience || 'intermediate') as Experience;
 
       // Check if there's already a workout for today
       const today = getLocalDateString();
@@ -402,86 +411,190 @@ export default function MesocyclePage() {
 
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
-      // Get exercises for the target muscles
-      const { data: exercises } = await supabase
-        .from('exercises')
-        .select('*')
-        .in('primary_muscle', todayWorkout.muscles);
+      // Try to get session from program_data first (preferred - uses pre-calculated exercises & sets)
+      const programData = activeMesocycle.program_data as FullProgramRecommendation | null;
+      const programSession = getSessionFromProgramData(
+        programData,
+        todayWorkout.dayNumber - 1, // Convert to 0-based index
+        activeMesocycle.current_week,
+        activeMesocycle.total_weeks
+      );
 
-      if (exercises && exercises.length > 0) {
-        // Group exercises by muscle and pick 1-2 per muscle
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
-        const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
-        (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
-          if (!exercisesByMuscle[ex.primary_muscle]) {
-            exercisesByMuscle[ex.primary_muscle] = [];
+      // Get weekly progression modifiers for intensity/volume adjustments
+      const progressionModifiers = getWeeklyProgressionModifiers(
+        programData,
+        activeMesocycle.current_week
+      );
+
+      const blocks = [];
+      let order = 1;
+      const seenMuscles = new Set<string>();
+
+      if (programSession && programSession.exercises.length > 0) {
+        // USE PROGRAM_DATA: Create exercise blocks from pre-calculated program
+        for (const exercise of programSession.exercises) {
+          const isCompound = exercise.primaryMuscle && ['chest', 'back', 'quads', 'hamstrings', 'glutes'].includes(exercise.primaryMuscle);
+          const isFirstForMuscle = !seenMuscles.has(exercise.primaryMuscle);
+
+          // Look up exercise_id from database by name
+          const { data: dbExercise } = await supabase
+            .from('exercises')
+            .select('id, mechanic, default_rep_range, default_rir')
+            .eq('name', exercise.exerciseName)
+            .single();
+
+          const exerciseId = exercise.exerciseId || dbExercise?.id;
+          if (!exerciseId) continue; // Skip if exercise not found
+
+          // Get weight estimate using the WeightEstimationEngine
+          let targetWeight = 0;
+          if (userData?.height_cm && userData?.weight_kg) {
+            const weightRec = quickWeightEstimate(
+              exercise.exerciseName,
+              exercise.repRange,
+              exercise.targetRir,
+              userData.weight_kg,
+              userData.height_cm,
+              userData.body_fat_percent || 20,
+              userExperience
+            );
+            targetWeight = weightRec.recommendedWeight || 0;
           }
-          exercisesByMuscle[ex.primary_muscle].push(ex);
-        });
 
-        // Create exercise blocks
-        const blocks = [];
-        let order = 1;
-        const seenMuscles = new Set<string>();
-        
-        for (const muscle of todayWorkout.muscles) {
-          const muscleExercises = exercisesByMuscle[muscle] || [];
-          // Pick up to 2 exercises per muscle
-          const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
-          
-          let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
-          
-          for (const exercise of selected) {
-            const isCompound = exercise.mechanic === 'compound';
-            
-            // Generate warmup for first exercise of each muscle group (compound or isolation)
-            let warmupSets: any[] = [];
-            if (isFirstExerciseForMuscle) {
-              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
-                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
-                : [8, 12]) as [number, number];
-
-              warmupSets = generateWarmupProtocol({
-                workingWeight: 60, // Default working weight, will be adjusted in workout
-                exercise: {
-                  id: exercise.id,
-                  name: exercise.name,
-                  primaryMuscle: exercise.primary_muscle,
-                  secondaryMuscles: [],
-                  mechanic: isCompound ? 'compound' : 'isolation',
-                  defaultRepRange: repRange,
-                  defaultRir: exercise.default_rir || 2,
-                  minWeightIncrementKg: 2.5, // Standard barbell increment
-                  formCues: [],
-                  commonMistakes: [],
-                  equipmentRequired: [],
-                  setupNote: '',
-                  movementPattern: isCompound ? 'compound' : 'isolation',
-                },
-                isFirstExercise: order === 1, // First exercise overall gets general warmup
-              });
-              seenMuscles.add(muscle);
-              isFirstExerciseForMuscle = false;
-            }
-            
-            blocks.push({
-              workout_session_id: session.id,
-              exercise_id: exercise.id,
-              order: order++,
-              target_sets: isCompound ? 4 : 3,
-              target_rep_range: exercise.default_rep_range || [8, 12],
-              target_rir: exercise.default_rir || 2,
-              target_weight_kg: 0, // Will be filled from history or user input
-              target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
-              suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}`,
-              warmup_protocol: { sets: warmupSets },
+          // Generate warmup for first exercise of each muscle group
+          let warmupSets: any[] = [];
+          if (isFirstForMuscle) {
+            warmupSets = generateWarmupProtocol({
+              workingWeight: targetWeight || 60,
+              exercise: {
+                id: exerciseId,
+                name: exercise.exerciseName,
+                primaryMuscle: exercise.primaryMuscle,
+                secondaryMuscles: [],
+                mechanic: isCompound ? 'compound' : 'isolation',
+                defaultRepRange: [exercise.repRange.min, exercise.repRange.max] as [number, number],
+                defaultRir: exercise.targetRir,
+                minWeightIncrementKg: 2.5,
+                formCues: [],
+                commonMistakes: [],
+                equipmentRequired: [],
+                setupNote: '',
+                movementPattern: isCompound ? 'compound' : 'isolation',
+              },
+              isFirstExercise: order === 1,
             });
+            seenMuscles.add(exercise.primaryMuscle);
+          }
+
+          blocks.push({
+            workout_session_id: session.id,
+            exercise_id: exerciseId,
+            order: order++,
+            target_sets: exercise.sets, // From program_data (respects session duration & fatigue budget)
+            target_rep_range: [exercise.repRange.min, exercise.repRange.max],
+            target_rir: exercise.targetRir,
+            target_weight_kg: targetWeight, // From WeightEstimationEngine
+            target_rest_seconds: exercise.restSeconds || getRestPeriod(isCompound, userGoal, exercise.primaryMuscle),
+            suggestion_reason: `${programSession.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
+            warmup_protocol: { sets: warmupSets },
+          });
+        }
+      } else {
+        // FALLBACK: Query exercises and use default logic (legacy behavior)
+        const { data: exercises } = await supabase
+          .from('exercises')
+          .select('*')
+          .in('primary_muscle', todayWorkout.muscles);
+
+        if (exercises && exercises.length > 0) {
+          type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+          const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
+          (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
+            if (!exercisesByMuscle[ex.primary_muscle]) {
+              exercisesByMuscle[ex.primary_muscle] = [];
+            }
+            exercisesByMuscle[ex.primary_muscle].push(ex);
+          });
+
+          for (const muscle of todayWorkout.muscles) {
+            const muscleExercises = exercisesByMuscle[muscle] || [];
+            const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
+
+            let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
+
+            for (const exercise of selected) {
+              const isCompound = exercise.mechanic === 'compound';
+
+              // Get weight estimate
+              let targetWeight = 0;
+              if (userData?.height_cm && userData?.weight_kg) {
+                const repRange = exercise.default_rep_range || [8, 12];
+                const weightRec = quickWeightEstimate(
+                  exercise.name,
+                  { min: repRange[0], max: repRange[1] },
+                  exercise.default_rir || 2,
+                  userData.weight_kg,
+                  userData.height_cm,
+                  userData.body_fat_percent || 20,
+                  userExperience
+                );
+                targetWeight = weightRec.recommendedWeight || 0;
+              }
+
+              let warmupSets: any[] = [];
+              if (isFirstExerciseForMuscle) {
+                const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
+                  ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
+                  : [8, 12]) as [number, number];
+
+                warmupSets = generateWarmupProtocol({
+                  workingWeight: targetWeight || 60,
+                  exercise: {
+                    id: exercise.id,
+                    name: exercise.name,
+                    primaryMuscle: exercise.primary_muscle,
+                    secondaryMuscles: [],
+                    mechanic: isCompound ? 'compound' : 'isolation',
+                    defaultRepRange: repRange,
+                    defaultRir: exercise.default_rir || 2,
+                    minWeightIncrementKg: 2.5,
+                    formCues: [],
+                    commonMistakes: [],
+                    equipmentRequired: [],
+                    setupNote: '',
+                    movementPattern: isCompound ? 'compound' : 'isolation',
+                  },
+                  isFirstExercise: order === 1,
+                });
+                seenMuscles.add(muscle);
+                isFirstExerciseForMuscle = false;
+              }
+
+              // Apply volume modifier for deload weeks (fallback uses 50% on deload)
+              const baseSets = isCompound ? 4 : 3;
+              const adjustedSets = progressionModifiers.isDeload
+                ? Math.max(2, Math.round(baseSets * 0.5))
+                : baseSets;
+
+              blocks.push({
+                workout_session_id: session.id,
+                exercise_id: exercise.id,
+                order: order++,
+                target_sets: adjustedSets,
+                target_rep_range: exercise.default_rep_range || [8, 12],
+                target_rir: exercise.default_rir || 2,
+                target_weight_kg: targetWeight,
+                target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
+                suggestion_reason: `${todayWorkout.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
+                warmup_protocol: { sets: warmupSets },
+              });
+            }
           }
         }
+      }
 
-        if (blocks.length > 0) {
-          await supabase.from('exercise_blocks').insert(blocks);
-        }
+      if (blocks.length > 0) {
+        await supabase.from('exercise_blocks').insert(blocks);
       }
 
       router.push(`/dashboard/workout/${session.id}`);
