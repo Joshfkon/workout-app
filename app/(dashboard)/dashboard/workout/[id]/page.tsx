@@ -576,7 +576,7 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
-  const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(true);
+  const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
