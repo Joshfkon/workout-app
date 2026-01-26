@@ -1,6 +1,6 @@
 # Mesocycle Feature Refactoring Plan
 
-> **Status**: In Progress (Phase 1 & 2 Complete)
+> **Status**: Complete (All Phases Done)
 > **Created**: 2026-01-26
 > **Last Updated**: 2026-01-26
 
@@ -709,10 +709,10 @@ To upgrade:
 - [x] Store exercise IDs in program_data - **Done 2026-01-26** (added `id` field to ExerciseEntry in types/schema.ts)
 - [x] Track completed sessions per week - **Done 2026-01-26** (uses completedSessionsThisWeek for session index)
 
-### Phase 3: Nice to Have
-- [ ] Time budget validation UI
-- [ ] Exercise swap persistence
-- [ ] Progressive overload integration
+### Phase 3: Nice to Have - COMPLETED
+- [x] Time budget validation UI - **Done 2026-01-26** (shows estimated time & warning if exceeds budget)
+- [x] Exercise swap persistence - **Done 2026-01-26** (saves overrides to mesocycle, applies on next workout)
+- [x] Progressive overload integration - **Done 2026-01-26** (applies intensityModifier to target weights)
 
 ---
 

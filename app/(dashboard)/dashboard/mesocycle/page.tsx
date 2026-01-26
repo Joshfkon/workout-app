@@ -10,10 +10,18 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getSessionFromProgramData, getWeeklyProgressionModifiers } from '@/services/mesocycleHelpers';
+import { getSessionFromProgramData, getWeeklyProgressionModifiers, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
+
+interface ExerciseOverride {
+  originalExerciseId?: string;
+  originalExerciseName: string;
+  replacementExerciseId: string;
+  replacementExerciseName: string;
+  createdAt: string;
+}
 
 interface Mesocycle {
   id: string;
@@ -28,6 +36,7 @@ interface Mesocycle {
   preferred_workout_days: WorkoutDay[] | null;
   session_duration_minutes: number | null;
   program_data: unknown;
+  exercise_overrides?: ExerciseOverride[];
 }
 
 interface TodayWorkout {
@@ -168,6 +177,7 @@ export default function MesocyclePage() {
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [completedSessionsThisWeek, setCompletedSessionsThisWeek] = useState<number>(0);
+  const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -363,7 +373,20 @@ export default function MesocyclePage() {
             .eq('state', 'completed')
             .gte('planned_date', weekStart);
 
-          setCompletedSessionsThisWeek(completedSessions?.length || 0);
+          const completedCount = completedSessions?.length || 0;
+          setCompletedSessionsThisWeek(completedCount);
+
+          // Get estimated time from program_data for time budget validation
+          const programData = active.program_data as FullProgramRecommendation | null;
+          const sessionFromProgram = getSessionFromProgramData(
+            programData,
+            completedCount, // Use completed count as session index
+            active.current_week,
+            active.total_weeks
+          );
+          if (sessionFromProgram) {
+            setEstimatedSessionTime(sessionFromProgram.estimatedMinutes);
+          }
         }
       }
       setIsLoading(false);
@@ -457,8 +480,12 @@ export default function MesocyclePage() {
       const seenMuscles = new Set<string>();
 
       if (programSession && programSession.exercises.length > 0) {
+        // Apply any exercise overrides (user's swapped exercises)
+        const overrides = (activeMesocycle.exercise_overrides || []) as ExerciseOverride[];
+        const exercisesWithOverrides = applyExerciseOverrides(programSession.exercises, overrides);
+
         // USE PROGRAM_DATA: Create exercise blocks from pre-calculated program
-        for (const exercise of programSession.exercises) {
+        for (const exercise of exercisesWithOverrides) {
           const isCompound = exercise.primaryMuscle && ['chest', 'back', 'quads', 'hamstrings', 'glutes'].includes(exercise.primaryMuscle);
           const isFirstForMuscle = !seenMuscles.has(exercise.primaryMuscle);
 
@@ -484,7 +511,12 @@ export default function MesocyclePage() {
               userData.body_fat_percent || 20,
               userExperience
             );
-            targetWeight = weightRec.recommendedWeight || 0;
+            const baseWeight = weightRec.recommendedWeight || 0;
+
+            // Apply progressive overload: increase weight based on weekly intensity modifier
+            // intensityModifier typically ranges from 1.0 (week 1) to 1.05-1.10 (later weeks)
+            // Deload weeks have lower modifier (0.85-0.9)
+            targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2; // Round to nearest 0.5kg
           }
 
           // Generate warmup for first exercise of each muscle group
@@ -551,7 +583,7 @@ export default function MesocyclePage() {
             for (const exercise of selected) {
               const isCompound = exercise.mechanic === 'compound';
 
-              // Get weight estimate
+              // Get weight estimate with progressive overload
               let targetWeight = 0;
               if (userData?.height_cm && userData?.weight_kg) {
                 const repRange = exercise.default_rep_range || [8, 12];
@@ -564,7 +596,9 @@ export default function MesocyclePage() {
                   userData.body_fat_percent || 20,
                   userExperience
                 );
-                targetWeight = weightRec.recommendedWeight || 0;
+                const baseWeight = weightRec.recommendedWeight || 0;
+                // Apply progressive overload intensity modifier
+                targetWeight = Math.round(baseWeight * progressionModifiers.intensityModifier * 2) / 2;
               }
 
               let warmupSets: any[] = [];
@@ -704,9 +738,31 @@ export default function MesocyclePage() {
                         </Badge>
                       ))}
                     </div>
-                    <p className="text-sm text-surface-400 mt-3">
-                      Week {activeMesocycle.current_week} • Session {completedSessionsThisWeek + 1} of {activeMesocycle.days_per_week} this week
-                    </p>
+                    <div className="flex items-center gap-3 mt-3 text-sm">
+                      <span className="text-surface-400">
+                        Week {activeMesocycle.current_week} • Session {completedSessionsThisWeek + 1} of {activeMesocycle.days_per_week}
+                      </span>
+                      {estimatedSessionTime && (
+                        <span className={`flex items-center gap-1 ${
+                          estimatedSessionTime > (activeMesocycle.session_duration_minutes || 60) * 1.1
+                            ? 'text-warning-400'
+                            : 'text-surface-500'
+                        }`}>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          ~{estimatedSessionTime} min
+                        </span>
+                      )}
+                    </div>
+                    {estimatedSessionTime && estimatedSessionTime > (activeMesocycle.session_duration_minutes || 60) * 1.1 && (
+                      <div className="mt-2 p-2 bg-warning-500/10 border border-warning-500/20 rounded-lg">
+                        <p className="text-xs text-warning-400">
+                          This session may exceed your {activeMesocycle.session_duration_minutes || 60} min target by ~{Math.round(estimatedSessionTime - (activeMesocycle.session_duration_minutes || 60))} min.
+                          Consider adjusting session duration or reducing exercises.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <Button
                     size="lg"

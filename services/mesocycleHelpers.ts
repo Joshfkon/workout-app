@@ -309,3 +309,77 @@ export function isDeloadWeek(
 export function getCompletedDaysThisWeek(completedDatesThisWeek: string[]): number {
   return completedDatesThisWeek.length;
 }
+
+// ============================================================
+// EXERCISE OVERRIDE MANAGEMENT
+// ============================================================
+
+/**
+ * Exercise override entry - tracks when a user swaps an exercise
+ */
+export interface ExerciseOverride {
+  originalExerciseId?: string;
+  originalExerciseName: string;
+  replacementExerciseId: string;
+  replacementExerciseName: string;
+  createdAt: string;
+}
+
+/**
+ * Apply exercise overrides to a session's exercises.
+ * Replaces exercises that have been swapped by the user.
+ */
+export function applyExerciseOverrides(
+  exercises: ExtractedExercise[],
+  overrides: ExerciseOverride[]
+): ExtractedExercise[] {
+  if (!overrides || overrides.length === 0) return exercises;
+
+  return exercises.map(exercise => {
+    // Find matching override by ID or name
+    const override = overrides.find(o =>
+      (o.originalExerciseId && o.originalExerciseId === exercise.exerciseId) ||
+      o.originalExerciseName.toLowerCase() === exercise.exerciseName.toLowerCase()
+    );
+
+    if (override) {
+      return {
+        ...exercise,
+        exerciseId: override.replacementExerciseId,
+        exerciseName: override.replacementExerciseName,
+      };
+    }
+
+    return exercise;
+  });
+}
+
+/**
+ * Create or update an exercise override.
+ * Returns the updated overrides array.
+ */
+export function addExerciseOverride(
+  existingOverrides: ExerciseOverride[],
+  originalExerciseId: string | undefined,
+  originalExerciseName: string,
+  replacementExerciseId: string,
+  replacementExerciseName: string
+): ExerciseOverride[] {
+  // Remove any existing override for this exercise
+  const filtered = existingOverrides.filter(o =>
+    !(o.originalExerciseId === originalExerciseId ||
+      o.originalExerciseName.toLowerCase() === originalExerciseName.toLowerCase())
+  );
+
+  // Add new override
+  return [
+    ...filtered,
+    {
+      originalExerciseId,
+      originalExerciseName,
+      replacementExerciseId,
+      replacementExerciseName,
+      createdAt: new Date().toISOString(),
+    },
+  ];
+}
