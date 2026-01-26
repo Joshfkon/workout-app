@@ -89,10 +89,12 @@ function extractMusclesFromExercises(
  * Convert DetailedExerciseWithFatigue to ExtractedExercise
  */
 function convertFatigueExercise(ex: DetailedExerciseWithFatigue): ExtractedExercise {
+  // ExerciseEntry doesn't have id - it may be stored separately or looked up by name
+  const exerciseWithId = ex.exercise as ExerciseEntry & { id?: string };
   return {
-    exerciseId: ex.exercise.id,
+    exerciseId: exerciseWithId.id,
     exerciseName: ex.exercise.name,
-    primaryMuscle: ex.exercise.primaryMuscle,
+    primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
     sets: ex.sets,
     repRange: {
       min: ex.reps.min,
@@ -109,10 +111,12 @@ function convertFatigueExercise(ex: DetailedExerciseWithFatigue): ExtractedExerc
  * Convert DetailedExercise (legacy format) to ExtractedExercise
  */
 function convertLegacyExercise(ex: DetailedExercise): ExtractedExercise {
+  // ExerciseEntry doesn't have id - it may be stored separately or looked up by name
+  const exerciseWithId = ex.exercise as ExerciseEntry & { id?: string };
   return {
-    exerciseId: ex.exercise.id,
+    exerciseId: exerciseWithId.id,
     exerciseName: ex.exercise.name,
-    primaryMuscle: ex.exercise.primaryMuscle,
+    primaryMuscle: ex.exercise.primaryMuscle as MuscleGroup,
     sets: ex.sets,
     repRange: parseRepRange(ex.repRange),
     targetRir: 2, // Default RIR for legacy format
