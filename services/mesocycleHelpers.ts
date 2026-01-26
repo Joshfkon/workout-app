@@ -69,16 +69,16 @@ function parseRepRange(range: string | { min: number; max: number }): { min: num
  * Extract muscles from a session's exercises
  */
 function extractMusclesFromExercises(
-  exercises: Array<{ exercise: ExerciseEntry | { primaryMuscle: MuscleGroup; secondaryMuscles?: MuscleGroup[] } }>
+  exercises: Array<{ exercise: { primaryMuscle: MuscleGroup | string; secondaryMuscles?: MuscleGroup[] } }>
 ): MuscleGroup[] {
   const muscles = new Set<MuscleGroup>();
   for (const ex of exercises) {
     if (ex.exercise.primaryMuscle) {
-      muscles.add(ex.exercise.primaryMuscle);
+      muscles.add(ex.exercise.primaryMuscle as MuscleGroup);
     }
     if ('secondaryMuscles' in ex.exercise && Array.isArray(ex.exercise.secondaryMuscles)) {
       for (const m of ex.exercise.secondaryMuscles) {
-        muscles.add(m);
+        muscles.add(m as MuscleGroup);
       }
     }
   }
