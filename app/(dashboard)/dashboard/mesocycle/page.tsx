@@ -15,14 +15,6 @@ import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
 
-interface ExerciseOverride {
-  originalExerciseId?: string;
-  originalExerciseName: string;
-  replacementExerciseId: string;
-  replacementExerciseName: string;
-  createdAt: string;
-}
-
 interface Mesocycle {
   id: string;
   name: string;
