@@ -135,7 +135,8 @@ describe('mesocycleBuilder', () => {
         const factors = calculateRecoveryFactors(profile);
 
         expect(factors.volumeMultiplier).toBeLessThan(1.0);
-        expect(factors.deloadFrequencyWeeks).toBe(8); // Longer between deloads
+        // Novices need more frequent deloads due to CNS inefficiency
+        expect(factors.deloadFrequencyWeeks).toBe(4);
       });
 
       it('shortens deload frequency for experienced lifters (5+ years)', () => {
@@ -147,15 +148,16 @@ describe('mesocycleBuilder', () => {
     });
 
     describe('multiplier bounds', () => {
-      it('caps volume multiplier between 0.5 and 1.3', () => {
+      it('caps volume multiplier between 0.65 and 1.3', () => {
         // Very unfavorable conditions
+        // Floor is 0.65 to prevent detraining (research shows <65% MEV causes muscle loss)
         const lowProfile = createProfile({
           age: 65,
           sleepQuality: 1 as Rating,
           stressLevel: 5 as Rating,
         });
         const lowFactors = calculateRecoveryFactors(lowProfile);
-        expect(lowFactors.volumeMultiplier).toBeGreaterThanOrEqual(0.5);
+        expect(lowFactors.volumeMultiplier).toBeGreaterThanOrEqual(0.65);
 
         // Very favorable conditions
         const highProfile = createProfile({

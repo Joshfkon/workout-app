@@ -81,13 +81,22 @@ export function calculateReadinessScore(input: ReadinessInput): number {
 
   // Sleep score (0-100)
   // Optimal: 7-9 hours
+  // Note: Oversleeping (10+ hours) can be a warning sign of:
+  // - Depression or health issues
+  // - Poor sleep quality (not restorative)
+  // - Overtraining and need for extra recovery
   let sleepScore: number;
+  let isOversleeping = false;
+
   if (sleep >= 7 && sleep <= 9) {
     sleepScore = 100;
   } else if (sleep >= 6 && sleep < 7) {
     sleepScore = 70;
   } else if (sleep > 9 && sleep <= 10) {
-    sleepScore = 85;
+    sleepScore = 80; // Slightly penalize - occasional long sleep is fine
+  } else if (sleep > 10) {
+    sleepScore = 60; // Significant penalty - oversleeping is a warning sign
+    isOversleeping = true;
   } else if (sleep >= 5 && sleep < 6) {
     sleepScore = 50;
   } else {
@@ -129,6 +138,98 @@ export function calculateReadinessScore(input: ReadinessInput): number {
 
   // Clamp to 0-100
   return Math.round(Math.max(0, Math.min(100, totalScore)));
+}
+
+/**
+ * Warning types for readiness analysis
+ */
+export type ReadinessWarningType =
+  | 'oversleeping'
+  | 'undersleeping'
+  | 'high_stress'
+  | 'poor_nutrition'
+  | 'insufficient_recovery';
+
+export interface ReadinessWarning {
+  type: ReadinessWarningType;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  recommendation: string;
+}
+
+/**
+ * Analyze readiness input and return any warnings
+ * Separate from score calculation to maintain backwards compatibility
+ */
+export function getReadinessWarnings(input: ReadinessInput): ReadinessWarning[] {
+  const warnings: ReadinessWarning[] = [];
+  const sleep = input.sleepHours ?? 7;
+  const stress = input.stressLevel ?? 3;
+  const nutrition = input.nutritionRating ?? 3;
+  const daysSinceLastSession = input.daysSinceLastSession ?? 1;
+
+  // Oversleeping warning (10+ hours)
+  if (sleep > 10) {
+    warnings.push({
+      type: 'oversleeping',
+      severity: 'warning',
+      message: `You slept ${sleep} hours, which is more than optimal.`,
+      recommendation:
+        'Regular oversleeping (10+ hours) can indicate overtraining, poor sleep quality, or health issues. ' +
+        'If this is frequent, consider: reducing training volume, checking for sleep disorders, ' +
+        'or consulting a healthcare provider.',
+    });
+  }
+
+  // Undersleeping warning (less than 6 hours)
+  if (sleep < 6) {
+    warnings.push({
+      type: 'undersleeping',
+      severity: sleep < 5 ? 'critical' : 'warning',
+      message: `You only slept ${sleep} hours.`,
+      recommendation:
+        'Sleep is critical for recovery and muscle growth. ' +
+        'Aim for 7-9 hours. Consider a lighter session today or focusing on technique.',
+    });
+  }
+
+  // High stress warning
+  if (stress >= 4) {
+    warnings.push({
+      type: 'high_stress',
+      severity: stress === 5 ? 'warning' : 'info',
+      message: 'Your stress level is elevated.',
+      recommendation:
+        'High stress impairs recovery. Consider reducing volume or intensity today, ' +
+        'or focus on exercises you enjoy.',
+    });
+  }
+
+  // Poor nutrition warning
+  if (nutrition <= 2) {
+    warnings.push({
+      type: 'poor_nutrition',
+      severity: nutrition === 1 ? 'warning' : 'info',
+      message: 'Your nutrition has been suboptimal.',
+      recommendation:
+        'Proper nutrition is essential for performance and recovery. ' +
+        'Ensure adequate protein and carbohydrates before and after training.',
+    });
+  }
+
+  // Insufficient recovery (training same day or consecutive days after hard session)
+  if (daysSinceLastSession === 0 && (input.previousSessionRpe ?? 7) >= 8) {
+    warnings.push({
+      type: 'insufficient_recovery',
+      severity: 'warning',
+      message: 'Training twice on the same day after a hard session.',
+      recommendation:
+        'Allow at least 24 hours between intense sessions for the same muscle groups. ' +
+        'Consider targeting different muscles or doing a recovery session.',
+    });
+  }
+
+  return warnings;
 }
 
 /**

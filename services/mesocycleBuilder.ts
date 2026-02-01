@@ -220,14 +220,27 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   
   // Training age adjustments
   if (profile.trainingAge < 1) {
-    volumeMultiplier *= 0.8;  // New lifters need less volume
-    baseDeloadWeeks = 8;      // But can go longer without deloads
+    volumeMultiplier *= 0.85;  // New lifters need slightly less volume to avoid overtraining
+    baseDeloadWeeks = 4;       // Novices need frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);  // Experienced lifters need more frequent deloads
   }
-  
-  // Compound adjustments - don't let it get too extreme
-  volumeMultiplier = Math.max(0.5, Math.min(1.3, volumeMultiplier));
+
+  // Compound adjustments - floor at 0.65 to prevent detraining
+  // Research shows that volume below ~65% of normal MEV may cause muscle loss.
+  // Even with poor recovery factors, we should maintain enough stimulus.
+  const volumeFloor = 0.65;
+  const volumeCeiling = 1.3;
+
+  if (volumeMultiplier < volumeFloor) {
+    warnings.push(
+      `Recovery factors are significantly limiting volume (${Math.round(volumeMultiplier * 100)}% recommended). ` +
+      `Using minimum ${Math.round(volumeFloor * 100)}% to prevent detraining. ` +
+      `Address sleep, stress, or other factors to improve recovery.`
+    );
+  }
+
+  volumeMultiplier = Math.max(volumeFloor, Math.min(volumeCeiling, volumeMultiplier));
   frequencyMultiplier = Math.max(0.7, Math.min(1.2, frequencyMultiplier));
   
   return {
