@@ -36,6 +36,42 @@ const FATIGUE_ACCUMULATION: Record<number, number> = {
   10: 14,
 };
 
+/**
+ * Fatigue multipliers based on movement pattern
+ * Heavy compound movements (squats, deadlifts) cause significantly more systemic fatigue
+ * than isolation movements (curls, lateral raises)
+ */
+const MOVEMENT_FATIGUE_MULTIPLIERS: Record<string, number> = {
+  // High systemic fatigue - heavy compound movements
+  squat: 1.4,
+  hip_hinge: 1.5,  // Deadlifts, RDLs are most taxing
+
+  // Moderate systemic fatigue - upper body compounds
+  horizontal_push: 1.1,
+  horizontal_pull: 1.1,
+  vertical_push: 1.0,
+  vertical_pull: 1.0,
+
+  // Lower fatigue - single leg and isolation
+  lunge: 0.9,
+  isolation: 0.6,  // Much less systemic fatigue
+  carry: 0.8,
+};
+
+/**
+ * Equipment fatigue multipliers
+ * Free weights require more stabilization = more CNS fatigue
+ * Machines are more controlled = less systemic fatigue
+ */
+const EQUIPMENT_FATIGUE_MULTIPLIERS: Record<string, number> = {
+  barbell: 1.3,     // Highest - heavy, requires full body stability
+  dumbbell: 1.1,    // Moderate - requires stabilization
+  kettlebell: 1.1,
+  bodyweight: 1.0,  // Baseline
+  cable: 0.8,       // Lower - guided path, less stabilization
+  machine: 0.7,     // Lowest - fully guided, minimal CNS demand
+};
+
 /** Fatigue recovery rate per day of rest */
 const FATIGUE_RECOVERY_RATE = 3;
 
@@ -278,6 +314,77 @@ export function updateMesocycleFatigue(input: FatigueUpdateInput): number {
 }
 
 /**
+ * Exercise information for fatigue calculation
+ */
+export interface ExerciseFatigueInfo {
+  movementPattern: string;
+  equipment: string;
+  mechanic: 'compound' | 'isolation';
+  sets: number;
+}
+
+/**
+ * Enhanced fatigue input with exercise type information
+ */
+export interface EnhancedFatigueUpdateInput extends FatigueUpdateInput {
+  exercises?: ExerciseFatigueInfo[];
+}
+
+/**
+ * Calculate fatigue multiplier for an exercise based on its characteristics
+ */
+export function getExerciseFatigueMultiplier(exercise: ExerciseFatigueInfo): number {
+  const movementMultiplier = MOVEMENT_FATIGUE_MULTIPLIERS[exercise.movementPattern] ?? 1.0;
+  const equipmentMultiplier = EQUIPMENT_FATIGUE_MULTIPLIERS[exercise.equipment] ?? 1.0;
+  const mechanicMultiplier = exercise.mechanic === 'compound' ? 1.0 : 0.7;
+
+  // Combine multipliers (geometric mean to avoid extreme values)
+  return Math.pow(movementMultiplier * equipmentMultiplier * mechanicMultiplier, 1 / 2);
+}
+
+/**
+ * Update mesocycle fatigue score with exercise type awareness
+ * Different exercises contribute different amounts of systemic fatigue
+ *
+ * Example: A session of heavy squats at RPE 9 causes more fatigue than
+ * a session of cable flies at RPE 9, even though the RPE is the same.
+ */
+export function updateMesocycleFatigueEnhanced(input: EnhancedFatigueUpdateInput): number {
+  const { currentFatigue, sessionRpe, daysSinceLastSession, exercises } = input;
+
+  // Recovery: subtract based on days since last session
+  const recovery = daysSinceLastSession * FATIGUE_RECOVERY_RATE;
+
+  // Base accumulation from RPE
+  const roundedRpe = Math.round(sessionRpe);
+  let baseAccumulation = FATIGUE_ACCUMULATION[roundedRpe] ?? (sessionRpe * 1.2);
+
+  // If exercise info provided, calculate weighted fatigue based on exercise types
+  if (exercises && exercises.length > 0) {
+    const totalSets = exercises.reduce((sum, ex) => sum + ex.sets, 0);
+
+    if (totalSets > 0) {
+      // Weight each exercise's fatigue contribution by its proportion of total sets
+      let weightedMultiplier = 0;
+      for (const exercise of exercises) {
+        const exerciseMultiplier = getExerciseFatigueMultiplier(exercise);
+        const proportion = exercise.sets / totalSets;
+        weightedMultiplier += exerciseMultiplier * proportion;
+      }
+
+      // Apply the weighted multiplier to base accumulation
+      baseAccumulation *= weightedMultiplier;
+    }
+  }
+
+  // New fatigue score
+  const newFatigue = currentFatigue - recovery + baseAccumulation;
+
+  // Clamp to 0-100
+  return Math.round(Math.max(0, Math.min(100, newFatigue)));
+}
+
+/**
  * Calculate fatigue recovery over a rest period
  */
 export function calculateFatigueAfterRest(
@@ -304,12 +411,60 @@ export interface DeloadCheckInput {
 }
 
 /**
+ * Calculate mesocycle-aware fatigue threshold
+ * Early in meso: lower threshold (high fatigue is unexpected)
+ * Late in meso: higher threshold (some fatigue is expected as part of planned overreach)
+ */
+function getMesocycleAwareFatigueThreshold(weekInMeso: number, totalWeeks: number): number {
+  const baseThreshold = DELOAD_THRESHOLDS.fatigueScore; // 75
+  const progressRatio = weekInMeso / totalWeeks;
+
+  // Weeks 1-2: Lower threshold (65-70) - early fatigue is concerning
+  // Weeks 3-4: Normal threshold (75) - moderate accumulation expected
+  // Week 5+: Higher threshold (80-85) - planned overreach before deload
+  if (progressRatio <= 0.33) {
+    return baseThreshold - 10; // 65 - early fatigue is a warning sign
+  } else if (progressRatio <= 0.66) {
+    return baseThreshold; // 75 - normal accumulation
+  } else {
+    return baseThreshold + 10; // 85 - tolerance for planned overreach
+  }
+}
+
+/**
+ * Get mesocycle-aware recommendation based on fatigue and timing
+ */
+function getMesocycleContextualRecommendation(
+  fatigue: number,
+  weekInMeso: number,
+  totalWeeks: number
+): string {
+  const progressRatio = weekInMeso / totalWeeks;
+
+  if (progressRatio <= 0.33) {
+    // Early in meso - high fatigue is unexpected
+    return `Unexpectedly high fatigue (${fatigue}/100) in week ${weekInMeso}. ` +
+           'Consider: reducing volume, improving recovery factors, or checking for overtraining.';
+  } else if (progressRatio <= 0.66) {
+    // Mid meso - fatigue accumulation is normal
+    return `Moderate fatigue accumulation (${fatigue}/100) in week ${weekInMeso}. ` +
+           'This is normal for mid-mesocycle. Monitor recovery and adjust if needed.';
+  } else {
+    // Late in meso - fatigue is expected, near planned deload
+    return `High fatigue (${fatigue}/100) in week ${weekInMeso} - planned overreach phase. ` +
+           'Deload is approaching. Push through if recovery supports it, or deload early if needed.';
+  }
+}
+
+/**
  * Determine if a deload should be triggered
+ * Now includes mesocycle context for smarter recommendations
  */
 export function shouldTriggerDeload(input: DeloadCheckInput): {
   shouldDeload: boolean;
   reason: string;
   urgency: 'low' | 'medium' | 'high';
+  mesocycleContext?: string;
 } {
   const { fatigue, weekInMeso, totalWeeks, deloadWeek, recentSessions } = input;
 
@@ -319,15 +474,24 @@ export function shouldTriggerDeload(input: DeloadCheckInput): {
       shouldDeload: true,
       reason: 'Scheduled deload week in mesocycle',
       urgency: 'medium',
+      mesocycleContext: `Week ${weekInMeso} of ${totalWeeks} - planned deload timing.`,
     };
   }
 
-  // High fatigue score
-  if (fatigue >= DELOAD_THRESHOLDS.fatigueScore) {
+  // Mesocycle-aware fatigue threshold
+  const fatigueThreshold = getMesocycleAwareFatigueThreshold(weekInMeso, totalWeeks);
+  const mesocycleContext = getMesocycleContextualRecommendation(fatigue, weekInMeso, totalWeeks);
+
+  // High fatigue score (adjusted for mesocycle position)
+  if (fatigue >= fatigueThreshold) {
+    const progressRatio = weekInMeso / totalWeeks;
+    const urgency = progressRatio <= 0.33 ? 'high' : progressRatio <= 0.66 ? 'medium' : 'low';
+
     return {
       shouldDeload: true,
-      reason: `High accumulated fatigue (${fatigue}/100)`,
-      urgency: 'high',
+      reason: `Fatigue (${fatigue}/100) exceeds threshold (${fatigueThreshold}) for week ${weekInMeso}`,
+      urgency,
+      mesocycleContext,
     };
   }
 
@@ -368,6 +532,7 @@ export function shouldTriggerDeload(input: DeloadCheckInput): {
     shouldDeload: false,
     reason: '',
     urgency: 'low',
+    mesocycleContext: getMesocycleContextualRecommendation(fatigue, weekInMeso, totalWeeks),
   };
 }
 

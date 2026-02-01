@@ -113,32 +113,115 @@ const DELOAD_MODIFIERS: Record<'volume' | 'intensity' | 'full', { volume: number
 };
 
 /**
+ * Exercise metadata for exercise-aware deload calculations
+ */
+export interface ExerciseDeloadInfo {
+  movementPattern?: string;
+  equipment?: string;
+  mechanic?: 'compound' | 'isolation';
+}
+
+/**
+ * Calculate exercise-specific deload modifier
+ * Heavy compound movements (squats, deadlifts) need MORE reduction during deload
+ * Isolation movements can maintain closer to normal volume/intensity
+ */
+export function getExerciseDeloadMultiplier(
+  exerciseInfo?: ExerciseDeloadInfo
+): { volumeMultiplier: number; intensityMultiplier: number } {
+  if (!exerciseInfo) {
+    return { volumeMultiplier: 1.0, intensityMultiplier: 1.0 };
+  }
+
+  let volumeMultiplier = 1.0;
+  let intensityMultiplier = 1.0;
+
+  // Movement pattern adjustments
+  // Heavy compound movements need more aggressive deload
+  const movementAdjustments: Record<string, { volume: number; intensity: number }> = {
+    squat: { volume: 0.8, intensity: 0.9 },      // More reduction for squats
+    hip_hinge: { volume: 0.75, intensity: 0.85 }, // Most reduction for deadlifts
+    horizontal_push: { volume: 0.9, intensity: 0.95 },
+    horizontal_pull: { volume: 0.9, intensity: 0.95 },
+    vertical_push: { volume: 0.95, intensity: 0.95 },
+    vertical_pull: { volume: 0.95, intensity: 0.95 },
+    lunge: { volume: 0.9, intensity: 0.95 },
+    isolation: { volume: 1.1, intensity: 1.0 },   // Less reduction for isolation
+    carry: { volume: 0.85, intensity: 0.9 },
+  };
+
+  if (exerciseInfo.movementPattern && movementAdjustments[exerciseInfo.movementPattern]) {
+    const adj = movementAdjustments[exerciseInfo.movementPattern];
+    volumeMultiplier *= adj.volume;
+    intensityMultiplier *= adj.intensity;
+  }
+
+  // Equipment adjustments
+  // Barbell movements are more taxing and need more deload
+  const equipmentAdjustments: Record<string, { volume: number; intensity: number }> = {
+    barbell: { volume: 0.9, intensity: 0.95 },
+    dumbbell: { volume: 0.95, intensity: 0.98 },
+    machine: { volume: 1.1, intensity: 1.0 },     // Machines can maintain more
+    cable: { volume: 1.05, intensity: 1.0 },
+    bodyweight: { volume: 1.0, intensity: 1.0 },
+  };
+
+  if (exerciseInfo.equipment && equipmentAdjustments[exerciseInfo.equipment]) {
+    const adj = equipmentAdjustments[exerciseInfo.equipment];
+    volumeMultiplier *= adj.volume;
+    intensityMultiplier *= adj.intensity;
+  }
+
+  // Compound vs isolation
+  if (exerciseInfo.mechanic === 'isolation') {
+    volumeMultiplier *= 1.1;  // Isolation can keep more volume
+  }
+
+  return {
+    volumeMultiplier: Math.max(0.6, Math.min(1.2, volumeMultiplier)),
+    intensityMultiplier: Math.max(0.75, Math.min(1.0, intensityMultiplier)),
+  };
+}
+
+/**
  * Generate a deload week based on a template week and deload type
+ * Now supports exercise-aware deload modifiers
  */
 export function generateDeloadWeek(
   baseWeek: MesocycleWeek,
-  deloadType: 'volume' | 'intensity' | 'full'
+  deloadType: 'volume' | 'intensity' | 'full',
+  exerciseMetadata?: Map<string, ExerciseDeloadInfo>
 ): MesocycleWeek {
   const mod = DELOAD_MODIFIERS[deloadType];
-  
+
   const deloadSessions = baseWeek.sessions.map(session => ({
     ...session,
     focus: `DELOAD (${deloadType}) - ${session.focus}`,
-    exercises: session.exercises.map(ex => ({
-      ...ex,
-      sets: Math.max(1, Math.round(ex.sets * mod.volume)),
-      reps: {
-        ...ex.reps,
-        targetRIR: Math.min(4, ex.reps.targetRIR + 2),
-        notes: getDeloadNotes(deloadType),
-      },
-      loadGuidance: deloadType === 'intensity' || deloadType === 'full'
-        ? `Reduce load to ${Math.round(mod.intensity * 100)}% of normal`
-        : ex.loadGuidance,
-    })),
+    exercises: session.exercises.map(ex => {
+      // Get exercise-specific deload multipliers if metadata available
+      const exerciseInfo = exerciseMetadata?.get(ex.exerciseId);
+      const exerciseMod = getExerciseDeloadMultiplier(exerciseInfo);
+
+      // Apply both base deload modifier and exercise-specific modifier
+      const effectiveVolumeReduction = mod.volume * exerciseMod.volumeMultiplier;
+      const effectiveIntensityReduction = mod.intensity * exerciseMod.intensityMultiplier;
+
+      return {
+        ...ex,
+        sets: Math.max(1, Math.round(ex.sets * effectiveVolumeReduction)),
+        reps: {
+          ...ex.reps,
+          targetRIR: Math.min(4, ex.reps.targetRIR + 2),
+          notes: getDeloadNotes(deloadType),
+        },
+        loadGuidance: deloadType === 'intensity' || deloadType === 'full'
+          ? `Reduce load to ${Math.round(effectiveIntensityReduction * 100)}% of normal`
+          : ex.loadGuidance,
+      };
+    }),
     totalSets: Math.round(session.totalSets * mod.volume),
   }));
-  
+
   return {
     ...baseWeek,
     focus: `DELOAD WEEK (${deloadType})`,

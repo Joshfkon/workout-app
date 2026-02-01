@@ -1201,11 +1201,35 @@ export function buildDetailedSession(
     }
   }
   
-  // Calculate time
+  // Calculate time with improved estimation
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-  const totalRestMinutes = exercises.reduce((sum, e) => 
+
+  // Calculate rest time (already done well)
+  const totalRestMinutes = exercises.reduce((sum, e) =>
     sum + (e.sets * e.restSeconds / 60), 0);
-  const estimatedMinutes = Math.round(totalRestMinutes + (totalSets * 0.75) + 10); // Sets + warmup
+
+  // Calculate set execution time based on exercise type
+  // Compound exercises take longer per set than isolation
+  const setExecutionMinutes = exercises.reduce((sum, e) => {
+    const mechanic = e.exercise.mechanic || 'compound';
+    const timePerSet = mechanic === 'compound' ? 1.0 : 0.5; // 1 min vs 30 sec per set
+    return sum + (e.sets * timePerSet);
+  }, 0);
+
+  // Equipment transition time (2-3 min per exercise change)
+  const transitionTime = Math.max(0, (exercises.length - 1)) * 2;
+
+  // Warmup time based on exercise types
+  // More warmup needed for heavy compounds
+  const hasHeavyCompounds = exercises.some(e =>
+    e.exercise.movementPattern === 'squat' ||
+    e.exercise.movementPattern === 'hip_hinge'
+  );
+  const warmupMinutes = hasHeavyCompounds ? 15 : 10;
+
+  const estimatedMinutes = Math.round(
+    totalRestMinutes + setExecutionMinutes + transitionTime + warmupMinutes
+  );
   
   return {
     day: sessionTemplate.day,
