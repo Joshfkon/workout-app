@@ -20,7 +20,7 @@ import type {
 } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
 import {
-  estimateE1RMSimple,
+  estimate1RM,
   calculateWorkingWeightSimple,
 } from './shared/strengthCalculations';
 
@@ -111,6 +111,50 @@ function getMinIncrementForEquipment(equipment: Equipment): number {
       return 0; // No external load
     default:
       return 2.5;
+  }
+}
+
+/**
+ * Get a sensible starting weight for a new exercise based on equipment type.
+ * This provides a safe starting point when no calibration data is available.
+ *
+ * Starting weights are intentionally conservative to prioritize safety and form.
+ */
+function getSuggestedStartingWeight(
+  equipment: string,
+  mechanic: 'compound' | 'isolation'
+): number {
+  // For bodyweight exercises, return 0 (actual load is bodyweight)
+  if (equipment === 'bodyweight') {
+    return 0;
+  }
+
+  // Starting weights based on equipment and exercise type
+  switch (equipment) {
+    case 'barbell':
+      // Start with empty bar or slightly loaded
+      // Compound: empty bar (20kg), Isolation: lighter bar or EZ curl bar
+      return mechanic === 'compound' ? 20 : 15;
+
+    case 'dumbbell':
+      // Conservative starting weights (total for both hands)
+      // Compound: 10kg per hand (20 total), Isolation: 5kg per hand (10 total)
+      return mechanic === 'compound' ? 10 : 5;
+
+    case 'kettlebell':
+      // Standard starting kettlebells
+      return mechanic === 'compound' ? 12 : 8;
+
+    case 'cable':
+      // Light cable weight to start
+      return mechanic === 'compound' ? 15 : 10;
+
+    case 'machine':
+      // Machine starting weight (varies widely, start light)
+      return mechanic === 'compound' ? 20 : 10;
+
+    default:
+      return 10; // Safe default
   }
 }
 
@@ -239,9 +283,15 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   const phaseRepRange = getPhaseAdjustedRepRange(exercise.defaultRepRange, currentPhase, exercise.mechanic);
   const phaseRir = getPhaseAdjustedRIR(exercise.defaultRir, currentPhase, weekInMeso, totalWeeksInMeso);
 
+  // Get suggested starting weight based on equipment type (used when no calibration data)
+  const suggestedStartingWeight = getSuggestedStartingWeight(
+    exercise.equipmentRequired?.[0] || 'barbell',
+    exercise.mechanic
+  );
+
   // Default starting targets
   const baseTargets: ProgressionTargets = {
-    weightKg: lastPerformance?.weightKg ?? 0,
+    weightKg: lastPerformance?.weightKg ?? suggestedStartingWeight,
     repRange: phaseRepRange,
     targetRir: phaseRir,
     sets: 3,
@@ -260,7 +310,7 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
         reason: 'Starting weight based on calibrated strength test',
       };
     }
-    
+
     if (estimatedFromRelated) {
       const workingWeight = calculateWorkingWeightFromE1RM(estimatedFromRelated, phaseRepRange, phaseRir);
       return {
@@ -269,10 +319,13 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
         reason: 'Starting weight estimated from related exercises - starting conservative',
       };
     }
-    
+
+    // No calibration data - use equipment-based suggested weight
+    const equipmentName = exercise.equipmentRequired?.[0] || 'equipment';
     return {
       ...baseTargets,
-      reason: 'New exercise - start light and focus on form',
+      weightKg: suggestedStartingWeight,
+      reason: `New exercise - suggested starting weight for ${equipmentName}. Focus on form and adjust as needed.`,
     };
   }
 
@@ -983,11 +1036,12 @@ function getRestSecondsForMechanic(mechanic: 'compound' | 'isolation'): number {
 }
 
 /**
- * Calculate estimated 1 rep max using Epley formula
+ * Calculate estimated 1 rep max using multi-formula average
  * Uses shared strength calculations for consistency across the codebase
+ * (Brzycki, Epley, Lombardi average for accuracy)
  */
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  return estimateE1RMSimple(weight, reps, rpe);
+  return estimate1RM(weight, reps, rpe);
 }
 
 /**

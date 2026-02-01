@@ -220,14 +220,27 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   
   // Training age adjustments
   if (profile.trainingAge < 1) {
-    volumeMultiplier *= 0.8;  // New lifters need less volume
-    baseDeloadWeeks = 8;      // But can go longer without deloads
+    volumeMultiplier *= 0.85;  // New lifters need slightly less volume to avoid overtraining
+    baseDeloadWeeks = 4;       // Novices need frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);  // Experienced lifters need more frequent deloads
   }
-  
-  // Compound adjustments - don't let it get too extreme
-  volumeMultiplier = Math.max(0.5, Math.min(1.3, volumeMultiplier));
+
+  // Compound adjustments - floor at 0.65 to prevent detraining
+  // Research shows that volume below ~65% of normal MEV may cause muscle loss.
+  // Even with poor recovery factors, we should maintain enough stimulus.
+  const volumeFloor = 0.65;
+  const volumeCeiling = 1.3;
+
+  if (volumeMultiplier < volumeFloor) {
+    warnings.push(
+      `Recovery factors are significantly limiting volume (${Math.round(volumeMultiplier * 100)}% recommended). ` +
+      `Using minimum ${Math.round(volumeFloor * 100)}% to prevent detraining. ` +
+      `Address sleep, stress, or other factors to improve recovery.`
+    );
+  }
+
+  volumeMultiplier = Math.max(volumeFloor, Math.min(volumeCeiling, volumeMultiplier));
   frequencyMultiplier = Math.max(0.7, Math.min(1.2, frequencyMultiplier));
   
   return {
@@ -1188,11 +1201,35 @@ export function buildDetailedSession(
     }
   }
   
-  // Calculate time
+  // Calculate time with improved estimation
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-  const totalRestMinutes = exercises.reduce((sum, e) => 
+
+  // Calculate rest time (already done well)
+  const totalRestMinutes = exercises.reduce((sum, e) =>
     sum + (e.sets * e.restSeconds / 60), 0);
-  const estimatedMinutes = Math.round(totalRestMinutes + (totalSets * 0.75) + 10); // Sets + warmup
+
+  // Calculate set execution time based on exercise type
+  // Compound exercises take longer per set than isolation
+  const setExecutionMinutes = exercises.reduce((sum, e) => {
+    const isIsolation = e.exercise.pattern === 'isolation';
+    const timePerSet = isIsolation ? 0.5 : 1.0; // 30 sec vs 1 min per set
+    return sum + (e.sets * timePerSet);
+  }, 0);
+
+  // Equipment transition time (2-3 min per exercise change)
+  const transitionTime = Math.max(0, (exercises.length - 1)) * 2;
+
+  // Warmup time based on exercise types
+  // More warmup needed for heavy compounds
+  const hasHeavyCompounds = exercises.some(e =>
+    e.exercise.pattern === 'squat' ||
+    e.exercise.pattern === 'hip_hinge'
+  );
+  const warmupMinutes = hasHeavyCompounds ? 15 : 10;
+
+  const estimatedMinutes = Math.round(
+    totalRestMinutes + setExecutionMinutes + transitionTime + warmupMinutes
+  );
   
   return {
     day: sessionTemplate.day,

@@ -585,7 +585,8 @@ describe('getBiasColor', () => {
 describe('repsInTankToRIR', () => {
   it('converts RepsInTank enum values correctly', () => {
     expect(repsInTankToRIR(4)).toBe(4);
-    expect(repsInTankToRIR(2)).toBe(2.5);
+    expect(repsInTankToRIR(3)).toBe(3);
+    expect(repsInTankToRIR(2)).toBe(2);
     expect(repsInTankToRIR(1)).toBe(1);
     expect(repsInTankToRIR(0)).toBe(0);
   });

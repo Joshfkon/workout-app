@@ -11,6 +11,7 @@ import type {
   ExerciseTrend,
   PlateauAlert,
 } from '@/types/schema';
+import { estimate1RM } from './shared/strengthCalculations';
 
 // ============================================
 // CONSTANTS
@@ -30,8 +31,9 @@ const WEEKS_TO_PLATEAU = 3;
 // ============================================
 
 /**
- * Calculate Estimated 1 Rep Max using Epley formula
- * Adjusted for RPE (Reps in Reserve)
+ * Calculate Estimated 1 Rep Max using multi-formula average
+ * Uses shared strength calculations for consistency across the codebase
+ * (Brzycki, Epley, Lombardi average for accuracy)
  */
 export function calculateE1RM(
   weight: number,
@@ -39,37 +41,7 @@ export function calculateE1RM(
   rpe: number = 10
 ): number {
   if (reps === 0 || weight === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Calculate RIR and add to reps for effective reps
-  const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
-}
-
-/**
- * Alternative E1RM calculation using Brzycki formula
- * weight / (1.0278 - 0.0278 * reps)
- */
-export function calculateE1RMBrzycki(
-  weight: number,
-  reps: number,
-  rpe: number = 10
-): number {
-  if (reps === 0 || weight === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Brzycki is only accurate up to ~10 reps
-  if (effectiveReps > 10) {
-    return calculateE1RM(weight, reps, rpe); // Fall back to Epley
-  }
-
-  return Math.round(weight / (1.0278 - 0.0278 * effectiveReps) * 100) / 100;
+  return estimate1RM(weight, reps, rpe);
 }
 
 // ============================================

@@ -517,7 +517,7 @@ export class ProgramEngine {
       cut: { compound: [4, 6], isolation: [8, 12] },
       bulk: { compound: [6, 10], isolation: [10, 15] },
       recomp: { compound: [5, 8], isolation: [8, 12] },
-      maintain: { compound: [5, 8], isolation: [8, 12] }
+      maintenance: { compound: [5, 8], isolation: [8, 12] }
     };
     
     const base = isCompound 

@@ -1,7 +1,13 @@
 // ============ ENUMS ============
 
-/** User's primary training goal */
-export type Goal = 'bulk' | 'cut' | 'maintenance';
+/**
+ * User's primary training goal
+ * - bulk: gaining muscle/weight (caloric surplus)
+ * - cut: losing fat (caloric deficit)
+ * - maintenance: maintaining current composition (caloric maintenance)
+ * - recomp: recomposition - gaining muscle while losing fat (at/near maintenance)
+ */
+export type Goal = 'bulk' | 'cut' | 'maintenance' | 'recomp';
 
 /** User's training experience level */
 export type Experience = 'novice' | 'intermediate' | 'advanced';
@@ -18,8 +24,15 @@ export type SetQuality = 'junk' | 'effective' | 'stimulative' | 'excessive';
 /** Form quality rating for a set */
 export type FormRating = 'clean' | 'some_breakdown' | 'ugly';
 
-/** Reps in tank (RIR) values: 4 means "4+", 2 represents "2-3" range */
-export type RepsInTank = 0 | 1 | 2 | 4;
+/**
+ * Reps in tank (RIR) values for user feedback
+ * - 0: Maxed out / failure (RPE 10)
+ * - 1: Hard, one more rep possible (RPE 9)
+ * - 2: Moderate difficulty (RPE 8)
+ * - 3: Some effort, a few reps left (RPE 7)
+ * - 4: Easy, 4+ reps in reserve (RPE 6 or below)
+ */
+export type RepsInTank = 0 | 1 | 2 | 3 | 4;
 
 /** Body parts for discomfort logging */
 export type DiscomfortBodyPart =

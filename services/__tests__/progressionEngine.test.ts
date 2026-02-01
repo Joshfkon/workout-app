@@ -130,11 +130,12 @@ describe('calculateNextTargets', () => {
   };
 
   describe('first time doing exercise', () => {
-    it('returns technique progression with no prior data', () => {
+    it('returns technique progression with equipment-based starting weight', () => {
       const result = calculateNextTargets(baseInput);
 
       expect(result.progressionType).toBe('technique');
-      expect(result.weightKg).toBe(0);
+      // Now provides suggested starting weight based on equipment type (not 0)
+      expect(result.weightKg).toBeGreaterThan(0);
       expect(result.reason).toContain('New exercise');
     });
 
@@ -377,15 +378,19 @@ describe('calculateE1RM', () => {
 
   it('calculates E1RM using Epley formula', () => {
     // 100kg x 10 reps @ RPE 10 (0 RIR)
-    // E1RM = 100 * (1 + 10/30) = 100 * 1.333 = 133.3
-    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(133.33, 1);
+    // Multi-formula average (Brzycki, Epley, Lombardi) for 100kg x 10 reps
+    // - Brzycki: 100 * 36 / (37 - 10) = 133.33
+    // - Epley: 100 * (1 + 10/30) = 133.33
+    // - Lombardi: 100 * 10^0.10 = 125.89
+    // Average ≈ 130.9
+    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(130.9, 0);
   });
 
   it('adjusts for RIR (RPE < 10)', () => {
     // 100kg x 8 reps @ RPE 8 (2 RIR) = effective 10 reps
-    // E1RM = 100 * (1 + 10/30) = 133.3
+    // Uses multi-formula average ≈ 130.9
     const result = calculateE1RM(100, 8, 8);
-    expect(result).toBeCloseTo(133.33, 1);
+    expect(result).toBeCloseTo(130.9, 0);
   });
 
   it('handles very high rep sets', () => {
@@ -421,7 +426,8 @@ describe('calculateBodyweightE1RM', () => {
     });
 
     const result = calculateBodyweightE1RM(set);
-    expect(result).toBeCloseTo(133.33, 1);
+    // Uses multi-formula average ≈ 130.9
+    expect(result).toBeCloseTo(130.9, 0);
   });
 });
 

@@ -346,8 +346,8 @@ const feedbackWithDiscomfort: SetFeedback = {
 };
 expectAssignable<SetFeedback>(feedbackWithDiscomfort);
 
-// RepsInTank must be valid (0, 1, 2, 4)
-expectNotAssignable<SetFeedback['repsInTank']>(3);
+// RepsInTank must be valid (0, 1, 2, 3, 4)
+expectAssignable<SetFeedback['repsInTank']>(3);
 expectNotAssignable<SetFeedback['repsInTank']>(5);
 
 // Form must be valid

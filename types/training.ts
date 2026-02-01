@@ -3,13 +3,14 @@
 // Comprehensive types for the program engine and coaching system
 // ============================================================
 
-import type { MuscleGroup } from './schema';
+import type { MuscleGroup, Goal, Experience } from './schema';
+
+// Re-export Goal and Experience from schema.ts for convenience
+export type { Goal, Experience };
 
 // ---- Enums & Basic Types ----
 
 export type Sex = 'male' | 'female';
-export type Experience = 'novice' | 'intermediate' | 'advanced';
-export type Goal = 'bulk' | 'cut' | 'recomp' | 'maintain';
 export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Upper/Lower/PPL' | 'Arnold' | 'Bro Split';
 export type PeriodizationModel = 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block';
 export type DeloadStrategy = 'proactive' | 'reactive' | 'none';
