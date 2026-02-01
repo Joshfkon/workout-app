@@ -199,7 +199,8 @@ export function generateDeloadWeek(
     focus: `DELOAD (${deloadType}) - ${session.focus}`,
     exercises: session.exercises.map(ex => {
       // Get exercise-specific deload multipliers if metadata available
-      const exerciseInfo = exerciseMetadata?.get(ex.exerciseId);
+      const exerciseId = ex.exercise?.id;
+      const exerciseInfo = exerciseId ? exerciseMetadata?.get(exerciseId) : undefined;
       const exerciseMod = getExerciseDeloadMultiplier(exerciseInfo);
 
       // Apply both base deload modifier and exercise-specific modifier

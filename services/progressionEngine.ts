@@ -121,7 +121,7 @@ function getMinIncrementForEquipment(equipment: Equipment): number {
  * Starting weights are intentionally conservative to prioritize safety and form.
  */
 function getSuggestedStartingWeight(
-  equipment: Equipment,
+  equipment: string,
   mechanic: 'compound' | 'isolation'
 ): number {
   // For bodyweight exercises, return 0 (actual load is bodyweight)

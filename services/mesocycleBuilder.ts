@@ -1211,8 +1211,8 @@ export function buildDetailedSession(
   // Calculate set execution time based on exercise type
   // Compound exercises take longer per set than isolation
   const setExecutionMinutes = exercises.reduce((sum, e) => {
-    const mechanic = e.exercise.mechanic || 'compound';
-    const timePerSet = mechanic === 'compound' ? 1.0 : 0.5; // 1 min vs 30 sec per set
+    const isIsolation = e.exercise.pattern === 'isolation';
+    const timePerSet = isIsolation ? 0.5 : 1.0; // 30 sec vs 1 min per set
     return sum + (e.sets * timePerSet);
   }, 0);
 
@@ -1222,8 +1222,8 @@ export function buildDetailedSession(
   // Warmup time based on exercise types
   // More warmup needed for heavy compounds
   const hasHeavyCompounds = exercises.some(e =>
-    e.exercise.movementPattern === 'squat' ||
-    e.exercise.movementPattern === 'hip_hinge'
+    e.exercise.pattern === 'squat' ||
+    e.exercise.pattern === 'hip_hinge'
   );
   const warmupMinutes = hasHeavyCompounds ? 15 : 10;
 

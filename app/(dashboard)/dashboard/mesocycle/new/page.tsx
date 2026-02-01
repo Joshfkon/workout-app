@@ -321,8 +321,13 @@ export default function NewMesocyclePage() {
 
   // Generate default name
   useEffect(() => {
-    const goalNames = { bulk: 'Hypertrophy', cut: 'Cutting', maintenance: 'Training' };
-    setName(`${goalNames[userGoal]} Block - ${splitType}`);
+    const goalNames: Record<string, string> = {
+      bulk: 'Hypertrophy',
+      cut: 'Cutting',
+      maintenance: 'Training',
+      recomp: 'Recomp'
+    };
+    setName(`${goalNames[userGoal] || 'Training'} Block - ${splitType}`);
   }, [userGoal, splitType]);
 
   const handleSubmit = async () => {
