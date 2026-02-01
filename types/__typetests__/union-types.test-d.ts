@@ -42,10 +42,12 @@ import type {
 expectAssignable<Goal>('bulk');
 expectAssignable<Goal>('cut');
 expectAssignable<Goal>('maintenance');
+expectAssignable<Goal>('recomp');
 
 // Invalid Goal values should be rejected
 expectNotAssignable<Goal>('gain');
 expectNotAssignable<Goal>('lose');
+expectNotAssignable<Goal>('maintain'); // Use 'maintenance' instead
 expectNotAssignable<Goal>('');
 
 // ============================================================================
@@ -96,14 +98,14 @@ expectNotAssignable<FormRating>('perfect');
 // RepsInTank Type Tests (Numeric Union)
 // ============================================================================
 
-// Valid RepsInTank values (0, 1, 2, 4)
+// Valid RepsInTank values (0, 1, 2, 3, 4) - full RIR scale
 expectAssignable<RepsInTank>(0);
 expectAssignable<RepsInTank>(1);
 expectAssignable<RepsInTank>(2);
+expectAssignable<RepsInTank>(3);
 expectAssignable<RepsInTank>(4);
 
 // Invalid RepsInTank values - these numbers are NOT valid
-expectNotAssignable<RepsInTank>(3);
 expectNotAssignable<RepsInTank>(5);
 expectNotAssignable<RepsInTank>(-1);
 

@@ -81,14 +81,16 @@ export function checkDeloadTriggers(
   }
   
   // === EXPERIENCE ADJUSTMENT ===
-  // Novices recover faster, require more triggers before deloading
-  if (profile.experience === 'novice' && reasons.length < 2) {
-    shouldDeload = false;
-  }
-  
-  // Advanced lifters are more attuned to fatigue, trust single triggers
-  if (profile.experience === 'advanced' && reasons.length >= 1) {
+  // Novices have less efficient CNS patterns and are more prone to overtraining.
+  // They should deload MORE readily, not less. Single trigger is sufficient.
+  if (profile.experience === 'novice' && reasons.length >= 1) {
     shouldDeload = true;
+  }
+
+  // Advanced lifters are better at self-regulating and have more efficient
+  // movement patterns. They can handle more fatigue markers before needing deload.
+  if (profile.experience === 'advanced' && reasons.length < 2) {
+    shouldDeload = false;
   }
   
   return { shouldDeload, reasons, suggestedDeloadType };
@@ -185,9 +187,9 @@ export function calculateDeloadFrequency(profile: ExtendedUserProfile): number {
   
   // Training age adjustments
   if (profile.trainingAge < 1) {
-    baseWeeks = 8;  // Novices can go longer before needing deloads
+    baseWeeks = 4;  // Novices need more frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
-    baseWeeks = Math.max(3, baseWeeks - 1);  // Experienced lifters need more frequent deloads
+    baseWeeks = Math.min(6, baseWeeks + 1);  // Experienced lifters tolerate longer blocks
   }
   
   // Sleep/stress adjustments
@@ -202,9 +204,11 @@ export function calculateDeloadFrequency(profile: ExtendedUserProfile): number {
  * Determine deload strategy based on experience
  */
 export function getDeloadStrategy(experience: Experience): 'proactive' | 'reactive' {
-  // Novices: use reactive deloads (they don't need as many scheduled deloads)
-  // Intermediate/Advanced: use proactive deloads (scheduled in advance)
-  return experience === 'novice' ? 'reactive' : 'proactive';
+  // Novices: use proactive (scheduled) deloads to prevent overtraining.
+  // They often don't recognize fatigue signals, so scheduled deloads are safer.
+  // Advanced lifters: use reactive deloads - they are better at reading their body
+  // and can respond to fatigue signals as needed.
+  return experience === 'advanced' ? 'reactive' : 'proactive';
 }
 
 // ============================================================

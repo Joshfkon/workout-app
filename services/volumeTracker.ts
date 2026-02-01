@@ -171,10 +171,12 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     }
 
     // Apply indirect credit based on accumulated credits
+    // Don't round here - accumulate fractional values and round only at the end
+    // This prevents losing volume when credit per muscle is small (e.g., 0.167)
     secondaryStandardCredits.forEach((credit, standardMuscle) => {
       if (volumeMap.has(standardMuscle)) {
         const data = volumeMap.get(standardMuscle)!;
-        const indirectCredit = Math.round(setCount * credit);
+        const indirectCredit = setCount * credit;
         data.indirectSets += indirectCredit;
         data.totalSets += indirectCredit;
       }
@@ -182,7 +184,11 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
   }
 
   // Calculate status for each muscle group
+  // Round indirect sets and totals now that all accumulation is complete
+  // This prevents losing fractional volume from small per-exercise credits
   volumeMap.forEach((data) => {
+    data.indirectSets = Math.round(data.indirectSets);
+    data.totalSets = data.directSets + data.indirectSets;
     data.status = assessVolumeStatus(data.totalSets, data.landmarks);
     // Guard against division by zero (mrv should never be 0, but protect anyway)
     data.percentOfMrv = data.landmarks.mrv > 0
@@ -294,6 +300,68 @@ export function getVolumeStatusDescription(status: VolumeStatus): {
         label: 'Exceeding MRV',
         description: 'Volume exceeds recoverable limit. Risk of overtraining.',
         color: 'text-danger-400',
+      };
+  }
+}
+
+/**
+ * MRV excess severity levels for detailed warnings
+ */
+export type MrvExcessSeverity = 'none' | 'warning' | 'critical' | 'severe';
+
+/**
+ * Get MRV excess severity based on percentage of MRV
+ * - none: <= 100% MRV (within limits)
+ * - warning: 101-120% MRV (mild excess, monitor recovery)
+ * - critical: 121-150% MRV (significant excess, reduce volume)
+ * - severe: >150% MRV (dangerous, immediate deload needed)
+ */
+export function getMrvExcessSeverity(percentOfMrv: number): MrvExcessSeverity {
+  if (percentOfMrv <= 100) return 'none';
+  if (percentOfMrv <= 120) return 'warning';
+  if (percentOfMrv <= 150) return 'critical';
+  return 'severe';
+}
+
+/**
+ * Get detailed warning for MRV excess
+ * Returns null if volume is within acceptable limits
+ */
+export function getMrvExcessWarning(
+  muscleGroup: StandardMuscleGroup,
+  percentOfMrv: number,
+  totalSets: number,
+  mrvSets: number
+): {
+  severity: MrvExcessSeverity;
+  message: string;
+  recommendation: string;
+} | null {
+  const severity = getMrvExcessSeverity(percentOfMrv);
+
+  if (severity === 'none') return null;
+
+  const excessSets = totalSets - mrvSets;
+  const muscleLabel = muscleGroup.replace(/_/g, ' ');
+
+  switch (severity) {
+    case 'warning':
+      return {
+        severity,
+        message: `${muscleLabel} is ${percentOfMrv}% of MRV (${excessSets} sets over limit)`,
+        recommendation: 'Monitor recovery closely. Consider reducing volume if fatigue increases.',
+      };
+    case 'critical':
+      return {
+        severity,
+        message: `⚠️ ${muscleLabel} is at ${percentOfMrv}% of MRV - significantly over recoverable volume`,
+        recommendation: `Reduce by ${excessSets} sets immediately. Risk of overtraining and injury.`,
+      };
+    case 'severe':
+      return {
+        severity,
+        message: `🚨 CRITICAL: ${muscleLabel} at ${percentOfMrv}% of MRV - dangerous volume level`,
+        recommendation: `Immediate action required: reduce by ${excessSets}+ sets or take a deload week.`,
       };
   }
 }
@@ -436,6 +504,17 @@ export function calculateVolumeProgression(
 }
 
 /**
+ * MRV warning info for a muscle group
+ */
+export interface MrvWarning {
+  muscle: StandardMuscleGroup;
+  percentOfMrv: number;
+  severity: MrvExcessSeverity;
+  message: string;
+  recommendation: string;
+}
+
+/**
  * Get summary statistics for volume distribution
  */
 export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolumeData>): {
@@ -444,12 +523,15 @@ export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolu
   musclesOptimal: StandardMuscleGroup[];
   musclesOverMrv: StandardMuscleGroup[];
   averagePercentMrv: number;
+  criticalWarnings: MrvWarning[];
+  hasCriticalExcess: boolean;
 } {
   let totalSets = 0;
   let totalPercentMrv = 0;
   const musclesBelowMev: StandardMuscleGroup[] = [];
   const musclesOptimal: StandardMuscleGroup[] = [];
   const musclesOverMrv: StandardMuscleGroup[] = [];
+  const criticalWarnings: MrvWarning[] = [];
 
   volumeData.forEach((data, muscle) => {
     totalSets += data.totalSets;
@@ -461,7 +543,31 @@ export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolu
       musclesOptimal.push(muscle);
     } else if (data.status === 'exceeding_mrv') {
       musclesOverMrv.push(muscle);
+
+      // Check for critical/severe MRV excess (>120%)
+      const warning = getMrvExcessWarning(
+        muscle,
+        data.percentOfMrv,
+        data.totalSets,
+        data.landmarks.mrv
+      );
+      if (warning && (warning.severity === 'critical' || warning.severity === 'severe')) {
+        criticalWarnings.push({
+          muscle,
+          percentOfMrv: data.percentOfMrv,
+          severity: warning.severity,
+          message: warning.message,
+          recommendation: warning.recommendation,
+        });
+      }
     }
+  });
+
+  // Sort critical warnings by severity (severe first) then by percentage
+  criticalWarnings.sort((a, b) => {
+    if (a.severity === 'severe' && b.severity !== 'severe') return -1;
+    if (b.severity === 'severe' && a.severity !== 'severe') return 1;
+    return b.percentOfMrv - a.percentOfMrv;
   });
 
   return {
@@ -469,6 +575,8 @@ export function getVolumeSummary(volumeData: Map<StandardMuscleGroup, MuscleVolu
     musclesBelowMev,
     musclesOptimal,
     musclesOverMrv,
+    criticalWarnings,
+    hasCriticalExcess: criticalWarnings.length > 0,
     // Guard against division by zero if volumeData is empty
     averagePercentMrv: volumeData.size > 0
       ? Math.round(totalPercentMrv / volumeData.size)
