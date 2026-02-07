@@ -23,7 +23,6 @@ export interface UserProfileFull extends UserProfileBasic {
  * @param fields - Which fields to select. 'basic' for minimal, 'full' for all fields.
  * @returns Map of user_id -> profile data
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchUserProfiles<T extends 'basic' | 'full' = 'basic'>(
   supabase: { from: (...args: any[]) => any },
   userIds: string[],

@@ -5,10 +5,14 @@
 
 import type { MuscleGroup, Goal, Experience } from './schema';
 
-// Re-export Goal, Experience, and Equipment from schema.ts for convenience
-export type { Goal, Experience, Equipment } from './schema';
+// Re-export Goal and Experience from schema.ts for convenience
+export type { Goal, Experience };
 
 // ---- Enums & Basic Types ----
+
+// Keep Equipment defined locally (identical to schema.ts) to avoid
+// TypeScript re-export resolution issues with Record indexing.
+export type Equipment = 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'kettlebell';
 
 export type Sex = 'male' | 'female';
 export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Upper/Lower/PPL' | 'Arnold' | 'Bro Split';
