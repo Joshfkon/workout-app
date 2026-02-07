@@ -1,3 +1,5 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { SharedWorkoutWithProfile, ShareType, Difficulty } from '@/types/social';

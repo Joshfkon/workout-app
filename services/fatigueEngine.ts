@@ -13,18 +13,16 @@ import type {
   WorkoutSession,
   ProgressionTargets,
 } from '@/types/schema';
+import {
+  EQUIPMENT_FATIGUE_MULTIPLIER,
+  FATIGUE_RECOVERY_RATE,
+  READINESS_WEIGHTS,
+  DELOAD_THRESHOLDS,
+} from '@/services/shared/fatigueConstants';
 
 // ============================================
-// CONSTANTS
+// CONSTANTS (local to this engine)
 // ============================================
-
-/** Weight factors for readiness calculation */
-const READINESS_WEIGHTS = {
-  sleep: 0.35,
-  stress: 0.25,
-  nutrition: 0.20,
-  recovery: 0.20,
-};
 
 /** Fatigue accumulation rates per session RPE */
 const FATIGUE_ACCUMULATION: Record<number, number> = {
@@ -42,45 +40,19 @@ const FATIGUE_ACCUMULATION: Record<number, number> = {
  * than isolation movements (curls, lateral raises)
  */
 const MOVEMENT_FATIGUE_MULTIPLIERS: Record<string, number> = {
-  // High systemic fatigue - heavy compound movements
   squat: 1.4,
-  hip_hinge: 1.5,  // Deadlifts, RDLs are most taxing
-
-  // Moderate systemic fatigue - upper body compounds
+  hip_hinge: 1.5,
   horizontal_push: 1.1,
   horizontal_pull: 1.1,
   vertical_push: 1.0,
   vertical_pull: 1.0,
-
-  // Lower fatigue - single leg and isolation
   lunge: 0.9,
-  isolation: 0.6,  // Much less systemic fatigue
+  isolation: 0.6,
   carry: 0.8,
 };
 
-/**
- * Equipment fatigue multipliers
- * Free weights require more stabilization = more CNS fatigue
- * Machines are more controlled = less systemic fatigue
- */
-const EQUIPMENT_FATIGUE_MULTIPLIERS: Record<string, number> = {
-  barbell: 1.3,     // Highest - heavy, requires full body stability
-  dumbbell: 1.1,    // Moderate - requires stabilization
-  kettlebell: 1.1,
-  bodyweight: 1.0,  // Baseline
-  cable: 0.8,       // Lower - guided path, less stabilization
-  machine: 0.7,     // Lowest - fully guided, minimal CNS demand
-};
-
-/** Fatigue recovery rate per day of rest */
-const FATIGUE_RECOVERY_RATE = 3;
-
-/** Thresholds for deload recommendation */
-const DELOAD_THRESHOLDS = {
-  fatigueScore: 75,        // Recommend deload if fatigue >= 75
-  missedTargets: 3,        // If missed targets 3+ sessions in a row
-  rpeCreep: 1.5,           // If average RPE increased by 1.5 over 2 weeks
-};
+/** Local alias for equipment multipliers (string-keyed for flexible lookup) */
+const EQUIPMENT_FATIGUE_MULTIPLIERS: Record<string, number> = EQUIPMENT_FATIGUE_MULTIPLIER;
 
 // ============================================
 // READINESS CALCULATION

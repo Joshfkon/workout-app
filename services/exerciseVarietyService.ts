@@ -4,9 +4,11 @@
  * Manages exercise variety preferences and implements smart exercise rotation.
  * When variety is enabled, exercises are rotated per muscle group across sessions
  * to provide more diverse training stimulus.
+ *
+ * Pure functions only — no database calls.
+ * Use lib/actions/exercise-variety.ts for DB operations.
  */
 
-import { createUntypedClient } from '@/lib/supabase/client';
 import type {
   ExerciseVarietyLevel,
   ExerciseVarietyPreferences,
@@ -16,6 +18,14 @@ import type {
   UpdateVarietyPreferencesInput,
 } from '@/types/user-exercise-preferences';
 import type { Exercise } from './exerciseService';
+import {
+  fetchVarietyPreferences,
+  upsertVarietyPreferences,
+  deleteVarietyPreferences,
+  insertExerciseUsage,
+  upsertMultipleExerciseUsage,
+  fetchRecentExerciseUsage,
+} from '@/lib/actions/exercise-variety';
 
 // ============================================
 // CACHE
@@ -75,15 +85,9 @@ export async function getVarietyPreferences(
   }
 
   try {
-    const supabase = createUntypedClient();
-    const { data, error } = await supabase
-      .from('exercise_variety_preferences')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+    const { data, error } = await fetchVarietyPreferences(userId);
 
     if (error) {
-      // Table doesn't exist or no record found
       if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.code === '42P01') {
         varietyPrefsCache.set(userId, null);
         varietyCacheTimestamp.set(userId, Date.now());
@@ -93,7 +97,7 @@ export async function getVarietyPreferences(
       return null;
     }
 
-    const prefs = mapRowToVarietyPrefs(data);
+    const prefs = data ? mapRowToVarietyPrefs(data) : null;
     varietyPrefsCache.set(userId, prefs);
     varietyCacheTimestamp.set(userId, Date.now());
     return prefs;
@@ -112,7 +116,6 @@ export async function getVarietyPreferencesWithDefaults(
   const prefs = await getVarietyPreferences(userId);
   if (prefs) return prefs;
 
-  // Return defaults if no preferences saved
   return {
     id: '',
     userId,
@@ -130,20 +133,7 @@ export async function saveVarietyPreferences(
   input: UpdateVarietyPreferencesInput
 ): Promise<boolean> {
   try {
-    const supabase = createUntypedClient();
-
-    const { error } = await supabase
-      .from('exercise_variety_preferences')
-      .upsert(
-        {
-          user_id: userId,
-          variety_level: input.varietyLevel ?? DEFAULT_VARIETY_PREFS.varietyLevel,
-          rotation_frequency: input.rotationFrequency ?? DEFAULT_VARIETY_PREFS.rotationFrequency,
-          min_pool_size: input.minPoolSize ?? DEFAULT_VARIETY_PREFS.minPoolSize,
-          prioritize_top_tier: input.prioritizeTopTier ?? DEFAULT_VARIETY_PREFS.prioritizeTopTier,
-        },
-        { onConflict: 'user_id' }
-      );
+    const { error } = await upsertVarietyPreferences(userId, input, DEFAULT_VARIETY_PREFS);
 
     if (error) {
       console.error('Failed to save variety preferences:', error);
@@ -163,12 +153,7 @@ export async function saveVarietyPreferences(
  */
 export async function resetVarietyPreferences(userId: string): Promise<boolean> {
   try {
-    const supabase = createUntypedClient();
-
-    const { error } = await supabase
-      .from('exercise_variety_preferences')
-      .delete()
-      .eq('user_id', userId);
+    const { error } = await deleteVarietyPreferences(userId);
 
     if (error) {
       console.error('Failed to reset variety preferences:', error);
@@ -197,16 +182,7 @@ export async function recordExerciseUsage(
   sessionId?: string
 ): Promise<boolean> {
   try {
-    const supabase = createUntypedClient();
-
-    const { error } = await supabase
-      .from('exercise_usage_history')
-      .insert({
-        user_id: userId,
-        exercise_id: exerciseId,
-        muscle_group: muscleGroup.toLowerCase(),
-        session_id: sessionId ?? null,
-      });
+    const { error } = await insertExerciseUsage(userId, exerciseId, muscleGroup, sessionId);
 
     if (error) {
       // Ignore duplicate entries (same exercise in same session)
@@ -215,7 +191,6 @@ export async function recordExerciseUsage(
       return false;
     }
 
-    // Clear usage cache
     usageHistoryCache.delete(userId);
     usageCacheTimestamp.delete(userId);
     return true;
@@ -236,18 +211,7 @@ export async function recordMultipleExerciseUsage(
   if (exercises.length === 0) return true;
 
   try {
-    const supabase = createUntypedClient();
-
-    const rows = exercises.map((ex) => ({
-      user_id: userId,
-      exercise_id: ex.exerciseId,
-      muscle_group: ex.muscleGroup.toLowerCase(),
-      session_id: sessionId ?? null,
-    }));
-
-    const { error } = await supabase
-      .from('exercise_usage_history')
-      .upsert(rows, { onConflict: 'user_id,exercise_id,session_id' });
+    const { error } = await upsertMultipleExerciseUsage(userId, exercises, sessionId);
 
     if (error) {
       console.error('Failed to record multiple exercise usage:', error);
@@ -281,16 +245,10 @@ export async function getRecentExerciseUsage(
   }
 
   try {
-    const supabase = createUntypedClient();
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - limitDays);
 
-    const { data, error } = await supabase
-      .from('exercise_usage_history')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('used_at', cutoffDate.toISOString())
-      .order('used_at', { ascending: false });
+    const { data, error } = await fetchRecentExerciseUsage(userId, cutoffDate);
 
     if (error) {
       if (error.code === 'PGRST205' || error.code === '42P01') {
@@ -346,11 +304,10 @@ export async function getRecentlyUsedExerciseIds(
     .sort((a, b) => {
       const aDate = a[1][0]?.usedAt.getTime() ?? 0;
       const bDate = b[1][0]?.usedAt.getTime() ?? 0;
-      return bDate - aDate; // Most recent first
+      return bDate - aDate;
     })
     .slice(0, sessionsBack);
 
-  // Collect exercise IDs from those sessions
   const recentIds = new Set<string>();
   sessions.forEach(([, records]) => {
     records.forEach((r) => recentIds.add(r.exerciseId));
@@ -365,7 +322,6 @@ export async function getRecentlyUsedExerciseIds(
 
 /**
  * Apply variety filtering to a list of exercise candidates
- * Returns exercises sorted by variety preference (recently used exercises pushed down)
  */
 export async function applyVarietyFilter(
   userId: string,
@@ -375,39 +331,30 @@ export async function applyVarietyFilter(
 ): Promise<Exercise[]> {
   if (candidates.length === 0) return candidates;
 
-  // Get preferences if not provided
   const varietyPrefs = prefs ?? await getVarietyPreferencesWithDefaults(userId);
 
-  // If variety is off (low level with rotation 0), just return as-is
   if (varietyPrefs.varietyLevel === 'low' && varietyPrefs.rotationFrequency === 0) {
     return candidates;
   }
 
-  // Get recently used exercises
   const recentlyUsedIds = await getRecentlyUsedExerciseIds(
     userId,
     muscleGroup,
     varietyPrefs.rotationFrequency
   );
 
-  // Split into recently used and not recently used
   const notRecentlyUsed = candidates.filter((e) => !recentlyUsedIds.has(e.id));
   const recentlyUsed = candidates.filter((e) => recentlyUsedIds.has(e.id));
 
-  // If we have enough non-recently-used exercises, prefer those
   if (notRecentlyUsed.length >= varietyPrefs.minPoolSize) {
-    // Return non-recently-used first, then recently used
     return [...notRecentlyUsed, ...recentlyUsed];
   }
 
-  // Otherwise, we need to include some recently used exercises
-  // Sort recently used by how long ago they were used (older = preferred)
   return [...notRecentlyUsed, ...recentlyUsed];
 }
 
 /**
  * Select exercises with variety applied
- * This is the main entry point for variety-aware exercise selection
  */
 export async function selectExercisesWithVariety(
   userId: string,
@@ -420,7 +367,6 @@ export async function selectExercisesWithVariety(
 
   const prefs = await getVarietyPreferencesWithDefaults(userId);
 
-  // Apply variety filtering
   const sortedCandidates = await applyVarietyFilter(
     userId,
     candidates,
@@ -428,8 +374,6 @@ export async function selectExercisesWithVariety(
     prefs
   );
 
-  // If prioritizing top tier, ensure S/A tier exercises are considered first
-  // but still respect variety within those tiers
   let finalCandidates = sortedCandidates;
   if (prefs.prioritizeTopTier) {
     const topTier = sortedCandidates.filter(
@@ -438,12 +382,9 @@ export async function selectExercisesWithVariety(
     const otherTier = sortedCandidates.filter(
       (e) => !['S', 'A'].includes(e.hypertrophyScore?.tier || '')
     );
-
-    // Interleave: prefer top tier but still include variety from other tiers
     finalCandidates = [...topTier, ...otherTier];
   }
 
-  // Select up to maxExercisesPerMuscle exercises
   const selected: Exercise[] = [];
   let remainingSets = setsNeeded;
 
@@ -452,7 +393,6 @@ export async function selectExercisesWithVariety(
     if (remainingSets <= 0) break;
 
     selected.push(exercise);
-    // Estimate 3-4 sets per exercise
     remainingSets -= exercise.pattern === 'isolation' ? 3 : 4;
   }
 
