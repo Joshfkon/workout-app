@@ -129,7 +129,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const transformedWorkouts: SharedWorkoutWithProfile[] = (workoutsData || [])
         .filter((workout: any) => profilesMap.has(workout.user_id))
         .map((workout: any) => {
-          const profile = profilesMap.get(workout.user_id);
+          const profile = profilesMap.get(workout.user_id)!;
           return {
             ...workout,
             user_profile: {

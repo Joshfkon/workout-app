@@ -1,5 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 export interface UserProfileBasic {
   id: string;
   user_id: string;
@@ -25,8 +23,9 @@ export interface UserProfileFull extends UserProfileBasic {
  * @param fields - Which fields to select. 'basic' for minimal, 'full' for all fields.
  * @returns Map of user_id -> profile data
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchUserProfiles<T extends 'basic' | 'full' = 'basic'>(
-  supabase: SupabaseClient,
+  supabase: { from: (...args: any[]) => any },
   userIds: string[],
   fields: T = 'basic' as T
 ): Promise<Map<string, T extends 'full' ? UserProfileFull : UserProfileBasic>> {
