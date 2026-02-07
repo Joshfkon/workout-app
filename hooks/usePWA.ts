@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import {
   getPWAContext,
   getInstallInstructions,
@@ -41,6 +42,7 @@ const defaultPWAPrefs: PWAInstallPreferences = {
 };
 
 export function usePWA() {
+  const { user: authUser } = useAuthUser();
   const [pwaContext, setPwaContext] = useState<PWAContext | null>(null);
   const [instructions, setInstructions] = useState<InstallInstructions | null>(null);
   const [canTriggerNativePrompt, setCanTriggerNativePrompt] = useState(false);
@@ -74,25 +76,27 @@ export function usePWA() {
   useEffect(() => {
     async function loadInstallPrefs() {
       try {
+        if (!authUser) {
+          setIsLoading(false);
+          return;
+        }
+
         const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
 
-        if (user) {
-          const { data } = await supabase
-            .from('users')
-            .select('preferences')
-            .eq('id', user.id)
-            .single();
+        const { data } = await supabase
+          .from('users')
+          .select('preferences')
+          .eq('id', authUser.id)
+          .single();
 
-          if (data?.preferences) {
-            const prefs = data.preferences as Record<string, unknown>;
-            setInstallPrefs({
-              dismissedHomescreenPrompt: (prefs.dismissedHomescreenPrompt as boolean) ?? false,
-              homescreenPromptDismissedAt: prefs.homescreenPromptDismissedAt as string | undefined,
-              homescreenInstallCompleted: (prefs.homescreenInstallCompleted as boolean) ?? false,
-              homescreenInstallCompletedAt: prefs.homescreenInstallCompletedAt as string | undefined,
-            });
-          }
+        if (data?.preferences) {
+          const prefs = data.preferences as Record<string, unknown>;
+          setInstallPrefs({
+            dismissedHomescreenPrompt: (prefs.dismissedHomescreenPrompt as boolean) ?? false,
+            homescreenPromptDismissedAt: prefs.homescreenPromptDismissedAt as string | undefined,
+            homescreenInstallCompleted: (prefs.homescreenInstallCompleted as boolean) ?? false,
+            homescreenInstallCompletedAt: prefs.homescreenInstallCompletedAt as string | undefined,
+          });
         }
       } catch (err) {
         console.error('Failed to load PWA install preferences:', err);
@@ -102,7 +106,7 @@ export function usePWA() {
     }
 
     loadInstallPrefs();
-  }, []);
+  }, [authUser]);
 
   // Listen for appinstalled event
   useEffect(() => {
@@ -123,39 +127,38 @@ export function usePWA() {
   // Save install completed preference
   const saveInstallCompleted = useCallback(async () => {
     try {
+      if (!authUser) return;
+
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
 
-      if (user) {
-        const { data: currentUser } = await supabase
-          .from('users')
-          .select('preferences')
-          .eq('id', user.id)
-          .single();
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', authUser.id)
+        .single();
 
-        const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
+      const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
 
-        await supabase
-          .from('users')
-          .update({
-            preferences: {
-              ...currentPrefs,
-              homescreenInstallCompleted: true,
-              homescreenInstallCompletedAt: new Date().toISOString(),
-            },
-          })
-          .eq('id', user.id);
+      await supabase
+        .from('users')
+        .update({
+          preferences: {
+            ...currentPrefs,
+            homescreenInstallCompleted: true,
+            homescreenInstallCompletedAt: new Date().toISOString(),
+          },
+        })
+        .eq('id', authUser.id);
 
-        setInstallPrefs((prev) => ({
-          ...prev,
-          homescreenInstallCompleted: true,
-          homescreenInstallCompletedAt: new Date().toISOString(),
-        }));
-      }
+      setInstallPrefs((prev) => ({
+        ...prev,
+        homescreenInstallCompleted: true,
+        homescreenInstallCompletedAt: new Date().toISOString(),
+      }));
     } catch (err) {
       console.error('Failed to save install completion:', err);
     }
-  }, []);
+  }, [authUser]);
 
   // Trigger native install prompt (for Chrome/Edge on Android/Desktop)
   const triggerNativeInstallPrompt = useCallback(async (): Promise<'accepted' | 'dismissed' | 'unavailable'> => {
@@ -186,39 +189,38 @@ export function usePWA() {
   // Dismiss the prompt (Maybe Later)
   const dismissPrompt = useCallback(async () => {
     try {
+      if (!authUser) return;
+
       const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
 
-      if (user) {
-        const { data: currentUser } = await supabase
-          .from('users')
-          .select('preferences')
-          .eq('id', user.id)
-          .single();
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('preferences')
+        .eq('id', authUser.id)
+        .single();
 
-        const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
+      const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
 
-        await supabase
-          .from('users')
-          .update({
-            preferences: {
-              ...currentPrefs,
-              dismissedHomescreenPrompt: true,
-              homescreenPromptDismissedAt: new Date().toISOString(),
-            },
-          })
-          .eq('id', user.id);
+      await supabase
+        .from('users')
+        .update({
+          preferences: {
+            ...currentPrefs,
+            dismissedHomescreenPrompt: true,
+            homescreenPromptDismissedAt: new Date().toISOString(),
+          },
+        })
+        .eq('id', authUser.id);
 
-        setInstallPrefs((prev) => ({
-          ...prev,
-          dismissedHomescreenPrompt: true,
-          homescreenPromptDismissedAt: new Date().toISOString(),
-        }));
-      }
+      setInstallPrefs((prev) => ({
+        ...prev,
+        dismissedHomescreenPrompt: true,
+        homescreenPromptDismissedAt: new Date().toISOString(),
+      }));
     } catch (err) {
       console.error('Failed to save dismiss preference:', err);
     }
-  }, []);
+  }, [authUser]);
 
   // Mark installation as done manually (I've Done This)
   const markInstallDone = useCallback(async () => {

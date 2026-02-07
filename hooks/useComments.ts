@@ -2,11 +2,14 @@
 
 import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
+import { fetchUserProfiles } from '@/lib/profiles';
 import type { ActivityComment } from '@/types/social';
 
 export function useComments() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user: authUser } = useAuthUser();
 
   const getComments = useCallback(async (activityId: string): Promise<{ data: ActivityComment[]; error: string | null }> => {
     try {
@@ -48,28 +51,7 @@ export function useComments() {
 
       // Fetch user profiles for all comment authors
       const userIds = Array.from(new Set(commentsData.map(c => c.user_id)));
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('user_profiles' as never)
-        .select('id, user_id, username, display_name, avatar_url')
-        .in('user_id', userIds) as { data: Array<{
-          id: string;
-          user_id: string;
-          username: string;
-          display_name: string | null;
-          avatar_url: string | null;
-        }> | null; error: any };
-
-      if (profilesError) {
-        console.error('[useComments] Profiles query error:', profilesError);
-      }
-
-      // Create profiles map
-      const profilesMap = new Map();
-      if (profilesData) {
-        profilesData.forEach(profile => {
-          profilesMap.set(profile.user_id, profile);
-        });
-      }
+      const profilesMap = await fetchUserProfiles(supabase, userIds);
 
       // Combine comments with profiles
       const data = commentsData.map((row) => ({
@@ -151,10 +133,7 @@ export function useComments() {
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         throw new Error('Must be logged in to comment');
       }
 
@@ -166,11 +145,13 @@ export function useComments() {
         throw new Error('Comment must be 1000 characters or less');
       }
 
+      const supabase = createClient();
+
       const { data, error: insertError } = (await supabase
         .from('activity_comments' as never)
         .insert({
           activity_id: activityId,
-          user_id: user.id,
+          user_id: authUser.id,
           content: content.trim(),
           parent_comment_id: parentCommentId || null,
         } as never)
@@ -187,26 +168,25 @@ export function useComments() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authUser]);
 
   const deleteComment = useCallback(async (commentId: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         throw new Error('Must be logged in');
       }
+
+      const supabase = createClient();
 
       // Soft delete by setting deleted_at
       const { error: updateError } = await (supabase
         .from('activity_comments' as never) as ReturnType<typeof supabase.from>)
         .update({ deleted_at: new Date().toISOString() } as never)
         .eq('id', commentId)
-        .eq('user_id', user.id); // Only allow deleting own comments
+        .eq('user_id', authUser.id); // Only allow deleting own comments
 
       if (updateError) throw updateError;
 
@@ -218,7 +198,7 @@ export function useComments() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authUser]);
 
   return {
     getComments,

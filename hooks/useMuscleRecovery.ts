@@ -4,13 +4,14 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import {
   STANDARD_MUSCLE_GROUPS,
   STANDARD_MUSCLE_DISPLAY_NAMES,
   type StandardMuscleGroup
 } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
-import type { ExerciseBlockFull, SetLogRow, MinimalUser } from '@/types/database-queries';
+import type { ExerciseBlockFull, SetLogRow } from '@/types/database-queries';
 
 /**
  * Recovery time recommendations in hours based on muscle group size
@@ -141,31 +142,11 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const [error, setError] = useState<string | null>(null);
 
   const { user: storeUser } = useUserStore();
-  const [user, setUser] = useState<MinimalUser | null>(storeUser ? { id: storeUser.id } : null);
-
-  // Get user from Supabase auth as fallback
-  useEffect(() => {
-    async function loadUser() {
-      if (storeUser?.id) {
-        setUser({ id: storeUser.id });
-        return;
-      }
-
-      try {
-        const supabase = createUntypedClient();
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          setUser({ id: authUser.id });
-        }
-      } catch (err: unknown) {
-        console.error('[useMuscleRecovery] Error getting user from auth:', getErrorMessage(err));
-      }
-    }
-    loadUser();
-  }, [storeUser]);
+  const { user: authUser } = useAuthUser();
+  const userId = storeUser?.id || authUser?.id || null;
 
   const fetchRecoveryData = useCallback(async () => {
-    if (!user?.id) return;
+    if (!userId) return;
 
     setIsLoading(true);
     setError(null);
@@ -199,7 +180,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
             is_warmup
           )
         `)
-        .eq('workout_sessions.user_id', user.id)
+        .eq('workout_sessions.user_id', userId)
         .eq('workout_sessions.state', 'completed')
         .gte('workout_sessions.completed_at', sevenDaysAgo.toISOString())
         .order('workout_sessions(completed_at)', { ascending: false });
@@ -281,14 +262,14 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [userId]);
 
   // Load data when user is available
   useEffect(() => {
-    if (user?.id) {
+    if (userId) {
       fetchRecoveryData();
     }
-  }, [user?.id, fetchRecoveryData]);
+  }, [userId, fetchRecoveryData]);
 
   // Calculate recovery status for all muscles
   const recoveryStatus = useMemo((): MuscleRecoveryStatus[] => {

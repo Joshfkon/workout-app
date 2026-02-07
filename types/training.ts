@@ -5,8 +5,8 @@
 
 import type { MuscleGroup, Goal, Experience } from './schema';
 
-// Re-export Goal and Experience from schema.ts for convenience
-export type { Goal, Experience };
+// Re-export Goal, Experience, and Equipment from schema.ts for convenience
+export type { Goal, Experience, Equipment } from './schema';
 
 // ---- Enums & Basic Types ----
 
@@ -14,12 +14,35 @@ export type Sex = 'male' | 'female';
 export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Upper/Lower/PPL' | 'Arnold' | 'Bro Split';
 export type PeriodizationModel = 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block';
 export type DeloadStrategy = 'proactive' | 'reactive' | 'none';
-export type Equipment = 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'kettlebell';
 export type MovementPattern = 'horizontal_push' | 'horizontal_pull' | 'vertical_push' | 'vertical_pull' 
   | 'hip_hinge' | 'squat' | 'lunge' | 'isolation' | 'carry';
 export type StrengthLevel = 'untrained' | 'beginner' | 'novice' | 'intermediate' | 'advanced' | 'elite';
 export type Confidence = 'high' | 'medium' | 'low' | 'extrapolated' | 'find_working_weight';
 export type FiberType = 'fast' | 'slow' | 'mixed';
+
+export type InjuryArea =
+  | 'lower_back'
+  | 'upper_back'
+  | 'shoulder_left'
+  | 'shoulder_right'
+  | 'shoulder'
+  | 'knee_left'
+  | 'knee_right'
+  | 'knee'
+  | 'hip_left'
+  | 'hip_right'
+  | 'hip'
+  | 'elbow_left'
+  | 'elbow_right'
+  | 'elbow'
+  | 'wrist_left'
+  | 'wrist_right'
+  | 'wrist'
+  | 'ankle_left'
+  | 'ankle_right'
+  | 'ankle'
+  | 'neck'
+  | 'chest';
 
 // ---- Database Row Types ----
 

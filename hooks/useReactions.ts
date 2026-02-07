@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import type { ReactionType } from '@/types/social';
 
 interface ReactionRow {
@@ -12,25 +13,25 @@ interface ReactionRow {
 export function useReactions() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user: authUser } = useAuthUser();
 
   const addReaction = useCallback(async (activityId: string, reactionType: ReactionType) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         throw new Error('Must be logged in to react');
       }
+
+      const supabase = createClient();
 
       // Check if already reacted
       const { data: existing } = (await supabase
         .from('activity_reactions' as never)
         .select('id')
         .eq('activity_id', activityId)
-        .eq('user_id', user.id)
+        .eq('user_id', authUser.id)
         .single()) as { data: { id: string } | null };
 
       if (existing) {
@@ -47,7 +48,7 @@ export function useReactions() {
           .from('activity_reactions' as never) as ReturnType<typeof supabase.from>)
           .insert({
             activity_id: activityId,
-            user_id: user.id,
+            user_id: authUser.id,
             reaction_type: reactionType,
           } as never);
 
@@ -62,25 +63,24 @@ export function useReactions() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authUser]);
 
   const removeReaction = useCallback(async (activityId: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         throw new Error('Must be logged in');
       }
+
+      const supabase = createClient();
 
       const { error: deleteError } = await (supabase
         .from('activity_reactions' as never) as ReturnType<typeof supabase.from>)
         .delete()
         .eq('activity_id', activityId)
-        .eq('user_id', user.id);
+        .eq('user_id', authUser.id);
 
       if (deleteError) throw deleteError;
 
@@ -92,7 +92,7 @@ export function useReactions() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authUser]);
 
   const getReactions = useCallback(async (activityId: string) => {
     try {
