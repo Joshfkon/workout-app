@@ -1,4 +1,26 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "rules": {
+    "complexity": ["warn", 20],
+    "max-lines": ["warn", 600],
+    "no-console": ["warn", { "allow": ["error", "warn"] }]
+  },
+  "overrides": [
+    {
+      "files": ["services/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "warn",
+          {
+            "patterns": [
+              {
+                "group": ["**/supabase/**"],
+                "message": "Service files must be pure functions. Move DB calls to /lib/actions."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
-

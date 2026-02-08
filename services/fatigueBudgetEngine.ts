@@ -49,18 +49,9 @@ export const SYSTEMIC_FATIGUE_BY_PATTERN: Record<MovementPattern | 'isolation' |
   carry: 12,
 };
 
-/**
- * Equipment modifiers for fatigue
- * Free weights require more stabilization = more fatigue
- */
-export const EQUIPMENT_FATIGUE_MODIFIER: Record<Equipment, number> = {
-  barbell: 1.3,        // Highest stability demand
-  dumbbell: 1.1,
-  kettlebell: 1.15,
-  cable: 0.8,          // Low stability demand
-  machine: 0.6,        // Lowest - very efficient
-  bodyweight: 1.0,
-};
+// Import and re-export the shared equipment fatigue multiplier
+import { EQUIPMENT_FATIGUE_MULTIPLIER } from '@/services/shared/fatigueConstants';
+export const EQUIPMENT_FATIGUE_MODIFIER = EQUIPMENT_FATIGUE_MULTIPLIER;
 
 /**
  * Stimulus-to-Fatigue Ratios (SFR) by exercise type

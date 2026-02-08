@@ -9,34 +9,13 @@
  */
 
 import type { Exercise } from '@/types/schema';
+import type { InjuryArea } from '@/types/training';
+
+export type { InjuryArea };
 
 // ============================================
 // TYPES
 // ============================================
-
-export type InjuryArea = 
-  | 'lower_back' 
-  | 'upper_back'
-  | 'shoulder_left'
-  | 'shoulder_right'
-  | 'shoulder'  // Generic shoulder
-  | 'knee_left'
-  | 'knee_right'
-  | 'knee'  // Generic knee
-  | 'hip_left'
-  | 'hip_right'
-  | 'hip'  // Generic hip
-  | 'elbow_left'
-  | 'elbow_right'
-  | 'elbow'  // Generic elbow
-  | 'wrist_left'
-  | 'wrist_right'
-  | 'wrist'  // Generic wrist
-  | 'ankle_left'
-  | 'ankle_right'
-  | 'ankle'  // Generic ankle
-  | 'neck'
-  | 'chest';
 
 export type InjuryRisk = 'safe' | 'caution' | 'avoid';
 

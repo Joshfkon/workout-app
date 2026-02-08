@@ -650,3 +650,5 @@ export function calculateStreaks(dates: (Date | string)[]): StreakResult {
   return { currentStreak, longestStreak };
 }
 
+// Re-export E1RM calculations for convenient use by UI components
+export { estimate1RM, estimateE1RMSimple } from '@/services/shared/strengthCalculations';

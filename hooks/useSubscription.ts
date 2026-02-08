@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import { 
   TIER_FEATURES, 
   SubscriptionTier, 
@@ -91,6 +92,7 @@ function loadFromCache(): SubscriptionState | null {
 
 export function useSubscription() {
   const [subscription, setSubscription] = useState<SubscriptionState>(globalSubscription);
+  const { user: authUser, isLoading: authLoading } = useAuthUser();
 
   // Subscribe to global updates
   useEffect(() => {
@@ -103,6 +105,8 @@ export function useSubscription() {
 
   // Load subscription data
   useEffect(() => {
+    if (authLoading) return;
+
     async function loadSubscription() {
       // Check cache first (only on first load)
       if (!cacheLoaded) {
@@ -115,26 +119,25 @@ export function useSubscription() {
       }
 
       try {
-        const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
+        if (!authUser) {
           notifyListeners({ ...defaultState, isLoading: false });
           return;
         }
+
+        const supabase = createUntypedClient();
 
         // Get user's trial start date
         const { data: userData } = await supabase
           .from('users')
           .select('trial_started_at')
-          .eq('id', user.id)
+          .eq('id', authUser.id)
           .single();
 
         // Get subscription record
         const { data: subscriptionData } = await supabase
           .from('subscriptions')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', authUser.id)
           .single();
 
         const trialStartedAt = userData?.trial_started_at;
@@ -178,7 +181,7 @@ export function useSubscription() {
     }
 
     loadSubscription();
-  }, []);
+  }, [authUser, authLoading]);
 
   // Check if user can access a feature
   const canAccess = useCallback((feature: Feature): boolean => {

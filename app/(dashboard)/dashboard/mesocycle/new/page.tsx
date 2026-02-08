@@ -25,7 +25,7 @@ import {
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getUnavailableEquipment } from '@/services/equipmentFilter';
+import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -241,7 +241,7 @@ export default function NewMesocyclePage() {
         }
         
         // Get unavailable gym equipment
-        const unavailable = await getUnavailableEquipment(user.id);
+        const unavailable = await fetchUnavailableEquipment(user.id);
         setUnavailableEquipmentIds(unavailable);
 
         // Check if this is the user's first mesocycle

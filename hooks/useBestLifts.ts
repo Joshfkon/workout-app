@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, estimateE1RMSimple } from '@/lib/utils';
 import type { UserLifts } from '@/services/measurementImbalanceEngine';
 
 interface BestLiftRecord {
@@ -24,10 +24,10 @@ interface UseBestLiftsReturn {
   updateLift: (exerciseName: string, weightKg: number, reps: number) => Promise<void>;
 }
 
-// Epley formula for E1RM calculation
+/** Use shared E1RM calculation */
 function calculateE1RM(weight: number, reps: number): number {
   if (reps === 1) return weight;
-  return weight * (1 + reps / 30);
+  return estimateE1RMSimple(weight, reps);
 }
 
 // Map common exercise names to the standard lift names used by the imbalance engine

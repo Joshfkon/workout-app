@@ -12,6 +12,7 @@ import type {
   MesocycleWeek,
   ExtendedUserProfile,
 } from '@/types/schema';
+import { DELOAD_MODIFIERS } from '@/services/shared/fatigueConstants';
 
 // ============================================================
 // REACTIVE DELOAD DETECTION
@@ -106,11 +107,7 @@ export function checkDeloadTriggers(
  * - intensity: Less weight, moderate volume (let joints/connective tissue recover)
  * - full: Light and easy (complete recovery from severe overreaching)
  */
-const DELOAD_MODIFIERS: Record<'volume' | 'intensity' | 'full', { volume: number; intensity: number }> = {
-  volume: { volume: 0.5, intensity: 1.0 },     // Same weight, half sets
-  intensity: { volume: 0.7, intensity: 0.85 }, // Less weight, moderate volume
-  full: { volume: 0.5, intensity: 0.6 },       // Light and easy
-};
+// DELOAD_MODIFIERS imported from shared/fatigueConstants.ts
 
 /**
  * Exercise metadata for exercise-aware deload calculations

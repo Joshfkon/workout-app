@@ -4,6 +4,11 @@
 > **Date:** 2026-02-07
 > **Codebase stats:** ~159 components, 36 services (22k LOC), 25 hooks (5.8k LOC), 3 stores, 76 DB migrations, 42 test files (19k LOC)
 
+### Progress Key
+- ~~Strikethrough~~ = Completed
+- **(PARTIAL)** = Partially completed, see notes
+- Unmarked = Not yet started
+
 ---
 
 ## Table of Contents
@@ -26,14 +31,14 @@
 
 The HyperTrack codebase is functionally rich but has accumulated significant technical debt across six areas:
 
-| Area | Severity | Summary |
-|------|----------|---------|
-| Architectural violations | CRITICAL | 5 services make DB calls, violating the pure-functions rule |
-| God objects | HIGH | 8 files exceed 1,000 lines; `workout/[id]/page.tsx` is 5,646 lines with 73 `useState` hooks |
-| State management | HIGH | 3 competing patterns (Zustand, custom globals, localStorage) for similar concerns |
-| Code duplication | HIGH | Auth user loading duplicated 13 times; fatigue constants defined independently in 2 files |
-| Type safety | MEDIUM | 24 `any` usages, 6 `as never` assertions, duplicated type definitions |
-| Tooling gaps | MEDIUM | Minimal ESLint config, duplicate migration timestamps, missing convenience scripts |
+| Area | Severity | Summary | Status |
+|------|----------|---------|--------|
+| Architectural violations | CRITICAL | 5 services make DB calls, violating the pure-functions rule | **Phase 1.2 not started**; 1.1/1.3/1.4 done |
+| God objects | HIGH | 8 files exceed 1,000 lines; `workout/[id]/page.tsx` is 5,646 lines with 73 `useState` hooks | **Not started** (Phase 2) |
+| State management | HIGH | 3 competing patterns (Zustand, custom globals, localStorage) for similar concerns | **Not started** (Phase 3) |
+| Code duplication | HIGH | Auth user loading duplicated 13 times; fatigue constants defined independently in 2 files | **Mostly done** (4.1-4.4 complete, 4.5 remaining) |
+| Type safety | MEDIUM | 24 `any` usages, 6 `as never` assertions, duplicated type definitions | **Partial** (5.1 partial, 5.2-5.4 remaining) |
+| Tooling gaps | MEDIUM | Minimal ESLint config, duplicate migration timestamps, missing convenience scripts | **Mostly done** (6.1-6.2 complete, 6.3-6.4 remaining) |
 
 The plan is organized into 6 phases, ordered by risk and impact. Each phase is independently shippable.
 
@@ -43,20 +48,20 @@ The plan is organized into 6 phases, ordered by risk and impact. Each phase is i
 
 These are the items that should be addressed first due to correctness or deployment risk.
 
-### 1. Database migrations have duplicate timestamps
+### ~~1. Database migrations have duplicate timestamps~~
 
-Four pairs of migration files share identical timestamps. Supabase's migration runner cannot determine execution order for files with the same timestamp, which will break fresh database deployments.
+~~Four pairs of migration files share identical timestamps. Supabase's migration runner cannot determine execution order for files with the same timestamp, which will break fresh database deployments.~~ **(PARTIAL — see note below)**
 
-**Affected files:**
+~~**Affected files:**~~
 
-| Duplicate Timestamp | File A | File B |
-|---------------------|--------|--------|
-| `20241218000001` | `add_meals_per_day.sql` | `supersets_dropsets.sql` |
-| `20241221000001` | `ai_exercise_completions.sql` | `user_exercise_preferences.sql` |
-| `20260110000002` | `preferred_workout_days.sql` | `remove_crash_the_economy_share_type.sql` |
-| `20260113000001` | `add_monthly_alltime_leaderboards.sql` | `add_session_duration_minutes.sql` |
+| Duplicate Timestamp | File A | File B | Status |
+|---------------------|--------|--------|--------|
+| `20241218000001` | `add_meals_per_day.sql` | `supersets_dropsets.sql` | ~~Fixed~~ (**Note:** new conflict — `20241218000002_supersets_dropsets.sql` now conflicts with `20241218000002_workout_templates.sql`. Needs rename to `000003`.) |
+| `20241221000001` | `ai_exercise_completions.sql` | `user_exercise_preferences.sql` | ~~Fixed~~ |
+| `20260110000002` | `preferred_workout_days.sql` | `remove_crash_the_economy_share_type.sql` | ~~Fixed~~ |
+| `20260113000001` | `add_monthly_alltime_leaderboards.sql` | `add_session_duration_minutes.sql` | ~~Fixed~~ |
 
-**Fix:** Rename the second file in each pair to use the next sequential number (e.g., `000001` → `000002`).
+~~**Fix:** Rename the second file in each pair to use the next sequential number (e.g., `000001` → `000002`).~~
 
 ### 2. Five services violate the "no DB calls" rule
 
@@ -72,9 +77,9 @@ The `CLAUDE.md` and project conventions require `/services` files to be pure fun
 
 **Fix:** Extract all Supabase calls into server actions (`lib/actions/`) or data-fetching hooks. Pass data as arguments to the pure service functions.
 
-### 3. Missing `'use client'` directives
+### ~~3. Missing `'use client'` directives~~
 
-Three hooks are missing the `'use client'` directive despite using browser-only APIs: `useSharedWorkouts`, `useFollow`, `useComments`. This can cause hydration errors in Next.js App Router.
+~~Three hooks are missing the `'use client'` directive despite using browser-only APIs: `useSharedWorkouts`, `useFollow`, `useComments`. This can cause hydration errors in Next.js App Router.~~ **Done** — all three hooks now have `'use client'` at line 1.
 
 ---
 
@@ -82,9 +87,9 @@ Three hooks are missing the `'use client'` directive despite using browser-only 
 
 **Goal:** Fix correctness issues and align code with documented architecture rules.
 
-### 1.1 Fix duplicate migration timestamps
+### ~~1.1 Fix duplicate migration timestamps~~ **(PARTIAL)**
 
-Rename files to sequential timestamps. No schema or data changes needed—only filename changes.
+~~Rename files to sequential timestamps. No schema or data changes needed—only filename changes.~~ **Done** — 3 of 4 pairs fixed. Remaining: `20241218000002_workout_templates.sql` conflicts with `20241218000002_supersets_dropsets.sql` — needs rename to `000003`.
 
 ### 1.2 Extract DB calls from services
 
@@ -121,13 +126,13 @@ Apply this pattern to all 5 files:
 | `exercisePreferencesService.ts` | `lib/actions/exercise-preferences.ts` | Preferences + caching |
 | `exerciseVarietyService.ts` | `lib/actions/exercise-variety.ts` | Variety preferences |
 
-### 1.3 Add missing `'use client'` directives
+### ~~1.3 Add missing `'use client'` directives~~
 
-Add `'use client'` to the top of `useSharedWorkouts.ts`, `useFollow.ts`, and `useComments.ts`.
+~~Add `'use client'` to the top of `useSharedWorkouts.ts`, `useFollow.ts`, and `useComments.ts`.~~ **Done.**
 
-### 1.4 Fix `workoutStore` Map serialization
+### ~~1.4 Fix `workoutStore` Map serialization~~
 
-Replace `Map<string, SetLog[]>` and `Map<string, Exercise>` with `Record<string, SetLog[]>` and `Record<string, Exercise>`. Remove the fragile custom `onRehydrateStorage` logic and `as any` type assertions.
+~~Replace `Map<string, SetLog[]>` and `Map<string, Exercise>` with `Record<string, SetLog[]>` and `Record<string, Exercise>`. Remove the fragile custom `onRehydrateStorage` logic and `as any` type assertions.~~ **Done** — store now uses `Record<string, T>` types.
 
 ---
 
@@ -218,12 +223,12 @@ Currently, hooks use inconsistent names (`refetch` vs `refresh` vs `revalidate`)
 
 ## Phase 4: Eliminate Code Duplication
 
-### 4.1 Auth user loading (duplicated 13 times)
+### ~~4.1 Auth user loading (duplicated 13 times)~~
 
-Create a shared hook:
+~~Create a shared hook:~~
 
 ```typescript
-// hooks/useAuthUser.ts
+// hooks/useAuthUser.ts — CREATED
 export function useAuthUser() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -240,37 +245,36 @@ export function useAuthUser() {
 }
 ```
 
-**Files that should consume this instead of inline auth code:**
-`useAdaptiveVolume`, `useMuscleRecovery`, `useActivityFeed`, `useSharedWorkouts`, `usePWA`, `useWeeklyVolume`, `useProgressionTargets`, `useSubscription`, `useUserPreferences`, `useBestLifts`, `useComments`, `useReactions`, `useFollow`
+**Done** — `hooks/useAuthUser.ts` created and integrated into:
+~~`useAdaptiveVolume`~~, ~~`useMuscleRecovery`~~, ~~`useActivityFeed`~~, ~~`useSharedWorkouts`~~, ~~`usePWA`~~, ~~`useSubscription`~~, ~~`useUserPreferences`~~, ~~`useComments`~~, ~~`useReactions`~~, ~~`useFollow`~~
 
-### 4.2 Profile fetching (duplicated 4 times)
+**Remaining (not yet integrated):** `useWeeklyVolume`, `useProgressionTargets`, `useBestLifts`
 
-Create a shared utility:
+### ~~4.2 Profile fetching (duplicated 4 times)~~
+
+~~Create a shared utility:~~
 
 ```typescript
-// lib/profiles.ts
-export async function fetchUserProfiles(supabase: SupabaseClient, userIds: string[]) {
-  const { data } = await supabase
-    .from('user_profiles')
-    .select('id, user_id, username, ...')
-    .in('user_id', userIds);
-  return new Map(data.map(p => [p.user_id, p]));
-}
+// lib/profiles.ts — CREATED
+export async function fetchUserProfiles(supabase, userIds, fields = 'basic') { ... }
 ```
 
-**Consumers:** `useActivityFeed`, `useSharedWorkouts`, `useComments`, `useLeaderboard`
+**Done** — `lib/profiles.ts` created with `fetchUserProfiles` (supports `'basic'` and `'full'` field modes). Integrated into:
+~~`useActivityFeed`~~, ~~`useSharedWorkouts`~~, ~~`useComments`~~
 
-### 4.3 Fatigue constants (defined independently in 2 files)
+**Remaining (not yet integrated):** `useLeaderboard`
 
-Both `fatigueEngine.ts` and `fatigueBudgetEngine.ts` define `MOVEMENT_FATIGUE_MULTIPLIERS` and `EQUIPMENT_FATIGUE_MULTIPLIERS` with slightly different values.
+### ~~4.3 Fatigue constants (defined independently in 2 files)~~
 
-**Fix:** Create `services/shared/fatigueConstants.ts` with a single canonical definition. Audit which values are correct and consolidate.
+~~Both `fatigueEngine.ts` and `fatigueBudgetEngine.ts` define `MOVEMENT_FATIGUE_MULTIPLIERS` and `EQUIPMENT_FATIGUE_MULTIPLIERS` with slightly different values.~~
 
-### 4.4 `calculateE1RM` (duplicated 3+ times)
+~~**Fix:** Create `services/shared/fatigueConstants.ts` with a single canonical definition. Audit which values are correct and consolidate.~~ **Done** — `services/shared/fatigueConstants.ts` created with canonical constants. Both engines now import from the shared file.
 
-This function is defined inline in `ExerciseCard.tsx`, `ExerciseDetailsModal.tsx`, `SessionSummary.tsx`, and `workout/[id]/page.tsx`. It already exists in `services/progressionEngine.ts`.
+### ~~4.4 `calculateE1RM` (duplicated 3+ times)~~
 
-**Fix:** Delete all inline copies. Import from the service.
+~~This function is defined inline in `ExerciseCard.tsx`, `ExerciseDetailsModal.tsx`, `SessionSummary.tsx`, and `workout/[id]/page.tsx`. It already exists in `services/progressionEngine.ts`.~~
+
+~~**Fix:** Delete all inline copies. Import from the service.~~ **Done** — `services/shared/strengthCalculations.ts` created with canonical `estimate1RM` and `estimateE1RMSimple`. Inline copies replaced with imports.
 
 ### 4.5 Caching logic (reimplemented 3 times)
 
@@ -294,14 +298,14 @@ export function createTTLCache<K, V>(ttlMs: number) {
 
 ## Phase 5: Type Safety & Consistency
 
-### 5.1 Remove duplicate type definitions
+### 5.1 Remove duplicate type definitions **(PARTIAL)**
 
-| Type | Defined In | Duplicate In | Action |
-|------|-----------|-------------|--------|
-| `Equipment` | `types/schema.ts` | `types/training.ts` | Delete from `training.ts`, re-export from `schema.ts` |
-| `MovementPattern` | `types/schema.ts` | `services/coachingEngine.ts` | Delete from service, import from types |
-| `InjuryArea` | (should be shared) | `services/injuryAwareSwapper.ts` | Move to `types/training.ts` |
-| Exercise-related types | `types/schema.ts` | `types/database-queries.ts`, `lib/exercises/types.ts` | Consolidate: keep canonical in `schema.ts`, keep DB-specific in `database-queries.ts` |
+| Type | Defined In | Duplicate In | Action | Status |
+|------|-----------|-------------|--------|--------|
+| `Equipment` | `types/schema.ts` | `types/training.ts` | ~~Delete from `training.ts`, re-export from `schema.ts`~~ | **Kept local** — re-exporting breaks `Record<Equipment, number>` indexing (TS7053 bug). Both definitions are identical. |
+| `MovementPattern` | `types/schema.ts` | `services/coachingEngine.ts` | ~~Delete from service, import from types~~ | ~~**Done**~~ |
+| `InjuryArea` | (should be shared) | `services/injuryAwareSwapper.ts` | ~~Move to `types/training.ts`~~ | ~~**Done**~~ |
+| Exercise-related types | `types/schema.ts` | `types/database-queries.ts`, `lib/exercises/types.ts` | Consolidate: keep canonical in `schema.ts`, keep DB-specific in `database-queries.ts` | **Not started** |
 
 ### 5.2 Eliminate `as never` assertions (6 occurrences)
 
@@ -337,15 +341,14 @@ These appear in hooks that query Supabase tables not yet added to the typed sche
 
 ## Phase 6: Testing & Tooling Improvements
 
-### 6.1 Expand ESLint configuration
+### ~~6.1 Expand ESLint configuration~~
 
-Current config is just `next/core-web-vitals`. Add:
+~~Current config is just `next/core-web-vitals`. Add:~~
 
 ```json
 {
   "extends": "next/core-web-vitals",
   "rules": {
-    "import/order": ["warn", { "newlines-between": "always" }],
     "complexity": ["warn", 20],
     "max-lines": ["warn", 600],
     "no-console": ["warn", { "allow": ["error", "warn"] }]
@@ -353,18 +356,21 @@ Current config is just `next/core-web-vitals`. Add:
 }
 ```
 
-The `max-lines` rule will flag future god objects before they grow.
+~~The `max-lines` rule will flag future god objects before they grow.~~ **Done** — added `complexity`, `max-lines`, `no-console` rules. Also added service-specific `no-restricted-imports` override to prevent Supabase imports in `/services`. (`import/order` rule skipped — requires additional ESLint plugin.)
 
-### 6.2 Add missing npm scripts
+### ~~6.2 Add missing npm scripts~~
 
 ```json
 {
   "lint:fix": "next lint --fix",
+  "lint:services": "next lint --dir services",
   "type-check": "tsc --noEmit",
   "db:push": "npx supabase db push",
   "db:reset": "npx supabase db reset"
 }
 ```
+
+**Done** — all scripts added to `package.json`, including bonus `lint:services` for targeted service linting.
 
 ### 6.3 Add per-route error boundaries
 
@@ -395,53 +401,53 @@ Quick reference for every file mentioned in this plan, sorted by priority.
 
 ### CRITICAL
 
-| File | Issue | Phase |
-|------|-------|-------|
-| `supabase/migrations/20241218000001_supersets_dropsets.sql` | Duplicate timestamp | 1.1 |
-| `supabase/migrations/20241221000001_user_exercise_preferences.sql` | Duplicate timestamp | 1.1 |
-| `supabase/migrations/20260110000002_remove_crash_the_economy_share_type.sql` | Duplicate timestamp | 1.1 |
-| `supabase/migrations/20260113000001_add_session_duration_minutes.sql` | Duplicate timestamp | 1.1 |
-| `services/coachingContextService.ts` | DB calls in service | 1.2 |
-| `services/exerciseService.ts` | DB calls in service | 1.2 |
-| `services/equipmentFilter.ts` | DB calls in service | 1.2 |
-| `services/exercisePreferencesService.ts` | DB calls in service | 1.2 |
-| `services/exerciseVarietyService.ts` | DB calls in service | 1.2 |
+| File | Issue | Phase | Status |
+|------|-------|-------|--------|
+| ~~`supabase/migrations/20241218000001_supersets_dropsets.sql`~~ | ~~Duplicate timestamp~~ | ~~1.1~~ | ~~Done~~ (but new conflict at `000002` — see 1.1) |
+| ~~`supabase/migrations/20241221000001_user_exercise_preferences.sql`~~ | ~~Duplicate timestamp~~ | ~~1.1~~ | ~~Done~~ |
+| ~~`supabase/migrations/20260110000002_remove_crash_the_economy_share_type.sql`~~ | ~~Duplicate timestamp~~ | ~~1.1~~ | ~~Done~~ |
+| ~~`supabase/migrations/20260113000001_add_session_duration_minutes.sql`~~ | ~~Duplicate timestamp~~ | ~~1.1~~ | ~~Done~~ |
+| `services/coachingContextService.ts` | DB calls in service | 1.2 | Not started |
+| `services/exerciseService.ts` | DB calls in service | 1.2 | Not started |
+| `services/equipmentFilter.ts` | DB calls in service | 1.2 | Not started |
+| `services/exercisePreferencesService.ts` | DB calls in service | 1.2 | Not started |
+| `services/exerciseVarietyService.ts` | DB calls in service | 1.2 | Not started |
 
 ### HIGH
 
-| File | Issue | Phase |
-|------|-------|-------|
-| `app/(dashboard)/dashboard/workout/[id]/page.tsx` | 5,646 lines, 73 useState | 2.1 |
-| `app/(dashboard)/dashboard/workout/page.tsx` | 3,285 lines | 2.1 |
-| `components/workout/ExerciseCard.tsx` | 2,908 lines, 38 useState | 2.3 |
-| `app/(dashboard)/dashboard/analytics/page.tsx` | 2,593 lines | 2.1 |
-| `app/(dashboard)/dashboard/workout/new/page.tsx` | 2,400 lines | 2.1 |
-| `components/workout/DashboardClient.tsx` | 2,021 lines | 2.1 |
-| `app/(dashboard)/dashboard/nutrition/page.tsx` | 1,722 lines | 2.1 |
-| `app/(dashboard)/dashboard/exercises/page.tsx` | 1,680 lines | 2.1 |
-| `services/mesocycleBuilder.ts` | 1,615 lines | 2.2 |
-| `services/weightEstimationEngine.ts` | 1,554 lines | 2.2 |
-| `services/progressionEngine.ts` | 1,494 lines | 2.2 |
-| `components/workout/ExerciseDetailsModal.tsx` | 1,621 lines | 2.3 |
-| `components/nutrition/AddFoodModal.tsx` | 1,348 lines | 2.3 |
-| `services/sessionBuilderWithFatigue.ts` | 1,297 lines | 2.2 |
-| `hooks/useSubscription.ts` | Custom global pattern (299 lines) | 3.2 |
-| `hooks/useExercisePreferences.ts` | Custom global pattern (287 lines) | 3.2 |
-| `services/fatigueEngine.ts` + `fatigueBudgetEngine.ts` | Duplicated constants | 4.3 |
+| File | Issue | Phase | Status |
+|------|-------|-------|--------|
+| `app/(dashboard)/dashboard/workout/[id]/page.tsx` | 5,646 lines, 73 useState | 2.1 | Not started |
+| `app/(dashboard)/dashboard/workout/page.tsx` | 3,285 lines | 2.1 | Not started |
+| `components/workout/ExerciseCard.tsx` | 2,908 lines, 38 useState | 2.3 | Not started |
+| `app/(dashboard)/dashboard/analytics/page.tsx` | 2,593 lines | 2.1 | Not started |
+| `app/(dashboard)/dashboard/workout/new/page.tsx` | 2,400 lines | 2.1 | Not started |
+| `components/workout/DashboardClient.tsx` | 2,021 lines | 2.1 | Not started |
+| `app/(dashboard)/dashboard/nutrition/page.tsx` | 1,722 lines | 2.1 | Not started |
+| `app/(dashboard)/dashboard/exercises/page.tsx` | 1,680 lines | 2.1 | Not started |
+| `services/mesocycleBuilder.ts` | 1,615 lines | 2.2 | Not started |
+| `services/weightEstimationEngine.ts` | 1,554 lines | 2.2 | Not started |
+| `services/progressionEngine.ts` | 1,494 lines | 2.2 | Not started |
+| `components/workout/ExerciseDetailsModal.tsx` | 1,621 lines | 2.3 | Not started |
+| `components/nutrition/AddFoodModal.tsx` | 1,348 lines | 2.3 | Not started |
+| `services/sessionBuilderWithFatigue.ts` | 1,297 lines | 2.2 | Not started |
+| `hooks/useSubscription.ts` | Custom global pattern (299 lines) | 3.2 | Not started |
+| `hooks/useExercisePreferences.ts` | Custom global pattern (287 lines) | 3.2 | Not started |
+| ~~`services/fatigueEngine.ts` + `fatigueBudgetEngine.ts`~~ | ~~Duplicated constants~~ | ~~4.3~~ | ~~Done~~ |
 
 ### MEDIUM
 
-| File | Issue | Phase |
-|------|-------|-------|
-| `stores/workoutStore.ts` | Map serialization, `as any` | 1.4 |
-| `hooks/useSharedWorkouts.ts` | Missing `'use client'` | 1.3 |
-| `hooks/useFollow.ts` | Missing `'use client'` | 1.3 |
-| `hooks/useComments.ts` | Missing `'use client'` | 1.3 |
-| `types/training.ts` | Duplicate `Equipment` type | 5.1 |
-| `types/database.ts` | Missing table definitions (causes `as never`) | 5.2 |
-| `lib/utils.ts` | God file (652 lines, 38 exports) | 4 |
-| `services/coachingEngine.ts` | 1,105 lines, inline benchmark data | 2.2 |
-| `lib/training/programEngine.ts` | Overlaps with `services/progressionEngine.ts` | 5 |
+| File | Issue | Phase | Status |
+|------|-------|-------|--------|
+| ~~`stores/workoutStore.ts`~~ | ~~Map serialization, `as any`~~ | ~~1.4~~ | ~~Done~~ |
+| ~~`hooks/useSharedWorkouts.ts`~~ | ~~Missing `'use client'`~~ | ~~1.3~~ | ~~Done~~ |
+| ~~`hooks/useFollow.ts`~~ | ~~Missing `'use client'`~~ | ~~1.3~~ | ~~Done~~ |
+| ~~`hooks/useComments.ts`~~ | ~~Missing `'use client'`~~ | ~~1.3~~ | ~~Done~~ |
+| `types/training.ts` | Duplicate `Equipment` type | 5.1 | **Kept local** (re-export breaks TS) |
+| `types/database.ts` | Missing table definitions (causes `as never`) | 5.2 | Not started |
+| `lib/utils.ts` | God file (652 lines, 38 exports) | 4 | Not started |
+| `services/coachingEngine.ts` | 1,105 lines, inline benchmark data | 2.2 | Not started |
+| `lib/training/programEngine.ts` | Overlaps with `services/progressionEngine.ts` | 5 | Not started |
 
 ---
 
