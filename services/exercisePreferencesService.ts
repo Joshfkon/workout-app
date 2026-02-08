@@ -25,25 +25,22 @@ import {
   bulkUpsertExercisePreferences,
   deleteAllExercisePreferences,
 } from '@/lib/actions/exercise-preferences';
+import { createTTLCache } from '@/lib/cache';
 
 // ============================================
 // CACHE
 // ============================================
 
-let preferencesCache: Map<string, Map<string, UserExercisePreference>> = new Map();
-let cacheTimestamp: Map<string, number> = new Map();
-const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
+const preferencesCache = createTTLCache<string, Map<string, UserExercisePreference>>(2 * 60 * 1000); // 2 minutes
 
 /**
  * Clear the preferences cache for a user (useful after updates)
  */
 export function clearPreferencesCache(userId?: string): void {
   if (userId) {
-    preferencesCache.delete(userId);
-    cacheTimestamp.delete(userId);
+    preferencesCache.invalidate(userId);
   } else {
     preferencesCache.clear();
-    cacheTimestamp.clear();
   }
 }
 
@@ -58,9 +55,8 @@ export async function getUserExercisePreferences(
   userId: string
 ): Promise<Map<string, UserExercisePreference>> {
   // Check cache
-  const cachedTs = cacheTimestamp.get(userId);
   const cached = preferencesCache.get(userId);
-  if (cached && cachedTs && Date.now() - cachedTs < CACHE_TTL) {
+  if (cached) {
     return cached;
   }
 
@@ -71,7 +67,6 @@ export async function getUserExercisePreferences(
       if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.code === '42P01') {
         console.warn('Exercise preferences table not found - returning empty preferences.');
         preferencesCache.set(userId, new Map());
-        cacheTimestamp.set(userId, Date.now());
         return new Map();
       }
       console.warn('Failed to load exercise preferences:', error);
@@ -84,7 +79,6 @@ export async function getUserExercisePreferences(
     });
 
     preferencesCache.set(userId, prefs);
-    cacheTimestamp.set(userId, Date.now());
 
     return prefs;
   } catch (err) {

@@ -45,7 +45,7 @@ export default function SharedWorkoutDetailPage() {
 
         // Fetch workout with user profile
         const { data, error: fetchError } = await supabase
-          .from('shared_workouts' as never)
+          .from('shared_workouts')
           .select(`
             *,
             user_profiles (
@@ -82,7 +82,7 @@ export default function SharedWorkoutDetailPage() {
         }
 
         // Increment view count
-        await supabase.rpc('increment_shared_workout_views' as never, { workout_id: workoutId } as never);
+        await supabase.rpc('increment_shared_workout_views', { workout_id: workoutId });
 
         // Check if saved by current user
         let isSaved = false;
@@ -193,8 +193,8 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: saveError } = await supabase
-      .from('saved_workouts' as never)
-      .insert({ user_id: user.id, shared_workout_id: id } as never);
+      .from('saved_workouts')
+      .insert({ user_id: user.id, shared_workout_id: id });
 
     if (saveError) {
       return { success: false, error: saveError.message };
@@ -213,7 +213,7 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: deleteError } = await supabase
-      .from('saved_workouts' as never)
+      .from('saved_workouts')
       .delete()
       .eq('user_id', user.id)
       .eq('shared_workout_id', id);

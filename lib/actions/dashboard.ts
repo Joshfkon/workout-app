@@ -28,7 +28,49 @@ export interface TodaysWorkoutData {
 
 export interface NutritionData {
   totals: { calories: number; protein: number; carbs: number; fat: number };
-  targets: { calories: number; protein: number; carbs: number; fat: number; cardio_prescription?: any } | null;
+  targets: { calories: number; protein: number; carbs: number; fat: number; cardio_prescription?: Json } | null;
+}
+
+import type { Json } from '@/types/database';
+
+// Internal types for untyped Supabase query results
+interface MesocycleRow {
+  id: string;
+  name: string;
+  start_date: string;
+  total_weeks: number;
+  split_type: string;
+  days_per_week: number;
+  preferred_workout_days: WorkoutDay[] | null;
+  state: string;
+  is_active: boolean;
+  workout_sessions: SessionRow[];
+}
+
+interface SessionRow {
+  id: string;
+  planned_date: string;
+  state: 'planned' | 'in_progress' | 'completed';
+  completed_at: string | null;
+}
+
+interface BlockRow {
+  id: string;
+  target_sets: number;
+  set_logs: { id: string; is_warmup: boolean }[];
+}
+
+interface NutritionEntry {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+interface WeightEntry {
+  logged_at: string;
+  weight: number;
+  unit: string;
 }
 
 export interface WeightData {
@@ -55,9 +97,9 @@ export async function fetchMesocycleData(userId: string): Promise<{
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
-  let mesocycle = mesocycles?.find((m: any) => m.is_active === true || m.state === 'active') || null;
+  let mesocycle = mesocycles?.find((m: MesocycleRow) => m.is_active === true || m.state === 'active') || null;
   if (!mesocycle && mesocycles && mesocycles.length > 0) {
-    mesocycle = mesocycles.find((m: any) => m.state !== 'completed') || null;
+    mesocycle = mesocycles.find((m: MesocycleRow) => m.state !== 'completed') || null;
   }
 
   if (!mesocycle) {
@@ -67,7 +109,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
   const startDate = new Date(mesocycle.start_date);
   const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
   const sessions = mesocycle.workout_sessions || [];
-  const completed = sessions.filter((s: any) => s.state === 'completed').length;
+  const completed = sessions.filter((s: SessionRow) => s.state === 'completed').length;
 
   const dashboardMesocycle: DashboardMesocycle = {
     id: mesocycle.id,
@@ -83,7 +125,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
   };
 
   // Check for today's workout
-  const todaySession = sessions.find((s: any) =>
+  const todaySession = sessions.find((s: SessionRow) =>
     s.planned_date === todayStr || s.state === 'in_progress'
   );
 
@@ -95,8 +137,8 @@ export async function fetchMesocycleData(userId: string): Promise<{
       .eq('workout_session_id', todaySession.id);
 
     const blocks = blocksWithSets || [];
-    const completedSets = blocks.reduce((sum: number, b: any) => {
-      const workingSets = (b.set_logs || []).filter((s: any) => !s.is_warmup);
+    const completedSets = blocks.reduce((sum: number, b: BlockRow) => {
+      const workingSets = (b.set_logs || []).filter((s: { is_warmup: boolean }) => !s.is_warmup);
       return sum + workingSets.length;
     }, 0);
 
@@ -106,7 +148,7 @@ export async function fetchMesocycleData(userId: string): Promise<{
       state: todaySession.state,
       exercises: blocks.length,
       completedSets,
-      totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
+      totalSets: blocks.reduce((sum: number, b: BlockRow) => sum + (b.target_sets || 3), 0),
     };
   }
 
@@ -134,7 +176,7 @@ export async function fetchNutritionData(userId: string): Promise<NutritionData>
   ]);
 
   const totals = nutritionResult.data?.reduce(
-    (acc: any, entry: any) => ({
+    (acc: NutritionEntry, entry: NutritionEntry) => ({
       calories: acc.calories + (entry.calories || 0),
       protein: acc.protein + (entry.protein || 0),
       carbs: acc.carbs + (entry.carbs || 0),
@@ -185,7 +227,7 @@ export async function fetchWeightData(userId: string): Promise<WeightData> {
     todaysWeight: weightResult.data
       ? { weight: weightResult.data.weight, unit: weightResult.data.unit || preferredUnit }
       : null,
-    weightHistory: (weightHistoryResult.data || []).map((w: any) => ({
+    weightHistory: (weightHistoryResult.data || []).map((w: WeightEntry) => ({
       date: w.logged_at,
       weight: w.weight,
       unit: w.unit || preferredUnit,

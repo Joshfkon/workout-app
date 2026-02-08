@@ -86,7 +86,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
       const targetMuscleGroups = extractMuscleGroups(workoutData);
 
       const { error: insertError } = await supabase
-        .from('shared_workouts' as never)
+        .from('shared_workouts')
         .insert({
           user_id: user.id,
           source_workout_id: workoutSessionId,
@@ -97,7 +97,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
           difficulty: difficulty || null,
           target_muscle_groups: targetMuscleGroups,
           is_public: isPublic,
-        } as never);
+        });
 
       if (insertError) throw insertError;
 

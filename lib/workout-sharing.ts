@@ -1,4 +1,21 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/database';
 import type { SharedWorkoutContent, SharedExercise } from '@/types/social';
+
+type SupabaseClientAny = SupabaseClient<Database> | SupabaseClient;
+
+interface ExerciseBlockRow {
+  id: string;
+  exercise_id: string;
+  target_sets: number;
+  target_rep_range: number[];
+  target_rir: number;
+  target_weight_kg: number;
+  target_rest_seconds: number;
+  note: string | null;
+  superset_group_id: string | null;
+  exercises: { name: string } | null;
+}
 
 /**
  * Serialize a workout session for sharing
@@ -6,7 +23,7 @@ import type { SharedWorkoutContent, SharedExercise } from '@/types/social';
  */
 export async function serializeWorkoutForSharing(
   workoutSessionId: string,
-  supabase: any
+  supabase: SupabaseClientAny
 ): Promise<SharedWorkoutContent | null> {
   try {
     // Fetch workout session
@@ -46,12 +63,12 @@ export async function serializeWorkoutForSharing(
     }
 
     // Calculate total sets and estimated duration
-    const totalSets = blocks.reduce((sum: number, block: any) => sum + (block.target_sets || 0), 0);
+    const totalSets = blocks.reduce((sum: number, block: ExerciseBlockRow) => sum + (block.target_sets || 0), 0);
     // Estimate: 2 minutes per set + 2 minutes rest between exercises
     const estimatedDurationMinutes = totalSets * 2 + blocks.length * 2;
 
     // Convert blocks to shared exercises
-    const exercises: SharedExercise[] = blocks.map((block: any) => {
+    const exercises: SharedExercise[] = blocks.map((block: ExerciseBlockRow) => {
       // target_rep_range is stored as an array like [8, 12]
       const repRange = block.target_rep_range || [0, 0];
       return {
@@ -91,7 +108,7 @@ export function extractMuscleGroups(workoutData: SharedWorkoutContent): string[]
  */
 export async function copySharedWorkout(
   sharedWorkoutId: string,
-  supabase: any,
+  supabase: SupabaseClientAny,
   targetMesocycleId?: string
 ): Promise<{ success: boolean; workoutId?: string; error?: string }> {
   try {

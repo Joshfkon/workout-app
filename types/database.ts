@@ -413,12 +413,354 @@ export interface Database {
           dismissed?: boolean;
         };
       };
+      user_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          username: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          bio: string | null;
+          profile_visibility: 'public' | 'followers_only' | 'private';
+          show_workouts: boolean;
+          show_stats: boolean;
+          show_progress_photos: boolean;
+          follower_count: number;
+          following_count: number;
+          workout_count: number;
+          total_volume_kg: number;
+          badges: Json;
+          featured_achievement: string | null;
+          training_experience: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal: string | null;
+          gym_name: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          username: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          profile_visibility?: 'public' | 'followers_only' | 'private';
+          show_workouts?: boolean;
+          show_stats?: boolean;
+          show_progress_photos?: boolean;
+          follower_count?: number;
+          following_count?: number;
+          workout_count?: number;
+          total_volume_kg?: number;
+          badges?: Json;
+          featured_achievement?: string | null;
+          training_experience?: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal?: string | null;
+          gym_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          username?: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          profile_visibility?: 'public' | 'followers_only' | 'private';
+          show_workouts?: boolean;
+          show_stats?: boolean;
+          show_progress_photos?: boolean;
+          follower_count?: number;
+          following_count?: number;
+          workout_count?: number;
+          total_volume_kg?: number;
+          badges?: Json;
+          featured_achievement?: string | null;
+          training_experience?: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal?: string | null;
+          gym_name?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      follows: {
+        Row: {
+          id: string;
+          follower_id: string;
+          following_id: string;
+          status: 'pending' | 'accepted' | 'rejected';
+          created_at: string;
+          accepted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          follower_id: string;
+          following_id: string;
+          status?: 'pending' | 'accepted' | 'rejected';
+          created_at?: string;
+          accepted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          follower_id?: string;
+          following_id?: string;
+          status?: 'pending' | 'accepted' | 'rejected';
+          created_at?: string;
+          accepted_at?: string | null;
+        };
+      };
+      activities: {
+        Row: {
+          id: string;
+          user_id: string;
+          activity_type: 'workout_completed' | 'personal_record' | 'streak_milestone' | 'badge_earned' | 'mesocycle_completed' | 'followed_user' | 'shared_workout';
+          reference_type: string | null;
+          reference_id: string | null;
+          activity_data: Json;
+          visibility: 'public' | 'followers' | 'private';
+          reaction_count: number;
+          comment_count: number;
+          created_at: string;
+          hidden_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          activity_type: 'workout_completed' | 'personal_record' | 'streak_milestone' | 'badge_earned' | 'mesocycle_completed' | 'followed_user' | 'shared_workout';
+          reference_type?: string | null;
+          reference_id?: string | null;
+          activity_data?: Json;
+          visibility?: 'public' | 'followers' | 'private';
+          reaction_count?: number;
+          comment_count?: number;
+          created_at?: string;
+          hidden_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          activity_type?: 'workout_completed' | 'personal_record' | 'streak_milestone' | 'badge_earned' | 'mesocycle_completed' | 'followed_user' | 'shared_workout';
+          reference_type?: string | null;
+          reference_id?: string | null;
+          activity_data?: Json;
+          visibility?: 'public' | 'followers' | 'private';
+          reaction_count?: number;
+          comment_count?: number;
+          created_at?: string;
+          hidden_at?: string | null;
+        };
+      };
+      activity_reactions: {
+        Row: {
+          id: string;
+          activity_id: string;
+          user_id: string;
+          reaction_type: 'like' | 'fire' | 'muscle' | 'clap';
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          activity_id: string;
+          user_id: string;
+          reaction_type?: 'like' | 'fire' | 'muscle' | 'clap';
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          activity_id?: string;
+          user_id?: string;
+          reaction_type?: 'like' | 'fire' | 'muscle' | 'clap';
+          created_at?: string;
+        };
+      };
+      activity_comments: {
+        Row: {
+          id: string;
+          activity_id: string;
+          user_id: string;
+          content: string;
+          parent_comment_id: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          activity_id: string;
+          user_id: string;
+          content: string;
+          parent_comment_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          activity_id?: string;
+          user_id?: string;
+          content?: string;
+          parent_comment_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+          deleted_at?: string | null;
+        };
+      };
+      shared_workouts: {
+        Row: {
+          id: string;
+          user_id: string;
+          source_workout_id: string | null;
+          source_mesocycle_id: string | null;
+          title: string;
+          description: string | null;
+          workout_data: Json;
+          share_type: 'single_workout' | 'program' | 'template';
+          difficulty: 'beginner' | 'intermediate' | 'advanced' | null;
+          duration_weeks: number | null;
+          target_muscle_groups: string[] | null;
+          save_count: number;
+          copy_count: number;
+          view_count: number;
+          is_public: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          source_workout_id?: string | null;
+          source_mesocycle_id?: string | null;
+          title: string;
+          description?: string | null;
+          workout_data: Json;
+          share_type: 'single_workout' | 'program' | 'template';
+          difficulty?: 'beginner' | 'intermediate' | 'advanced' | null;
+          duration_weeks?: number | null;
+          target_muscle_groups?: string[] | null;
+          save_count?: number;
+          copy_count?: number;
+          view_count?: number;
+          is_public?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          source_workout_id?: string | null;
+          source_mesocycle_id?: string | null;
+          title?: string;
+          description?: string | null;
+          workout_data?: Json;
+          share_type?: 'single_workout' | 'program' | 'template';
+          difficulty?: 'beginner' | 'intermediate' | 'advanced' | null;
+          duration_weeks?: number | null;
+          target_muscle_groups?: string[] | null;
+          save_count?: number;
+          copy_count?: number;
+          view_count?: number;
+          is_public?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      saved_workouts: {
+        Row: {
+          id: string;
+          user_id: string;
+          shared_workout_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          shared_workout_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          shared_workout_id?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
-      [_ in never]: never;
+      calculate_weekly_volume_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      calculate_weekly_workouts_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      calculate_monthly_volume_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      calculate_monthly_workouts_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      calculate_alltime_volume_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      calculate_alltime_workouts_leaderboard: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      get_leaderboard: {
+        Args: {
+          p_type: string;
+          p_exercise_id?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+        };
+        Returns: {
+          id: string;
+          user_id: string;
+          score: number;
+          rank: number;
+          previous_rank: number | null;
+          rank_change: number;
+          period_start: string;
+          period_end: string;
+          username: string;
+          display_name: string | null;
+          avatar_url: string | null;
+        }[];
+      };
+      get_user_rank: {
+        Args: {
+          p_user_id: string;
+          p_type: string;
+          p_exercise_id?: string | null;
+        };
+        Returns: {
+          rank: number;
+          score: number;
+          previous_rank: number | null;
+          rank_change: number;
+          total_participants: number;
+        }[];
+      };
+      increment_shared_workout_views: {
+        Args: {
+          workout_id: string;
+        };
+        Returns: undefined;
+      };
+      increment_shared_workout_copies: {
+        Args: {
+          workout_id: string;
+        };
+        Returns: undefined;
+      };
     };
     Enums: {
       goal: 'bulk' | 'cut' | 'maintenance';
@@ -429,6 +771,11 @@ export interface Database {
       progression_type: 'load' | 'reps' | 'sets' | 'technique';
       volume_status: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
       exercise_type: 'rep_based' | 'duration_based';
+      activity_type: 'workout_completed' | 'personal_record' | 'streak_milestone' | 'badge_earned' | 'mesocycle_completed' | 'followed_user' | 'shared_workout';
+      reaction_type: 'like' | 'fire' | 'muscle' | 'clap';
+      follow_status: 'pending' | 'accepted' | 'rejected';
+      profile_visibility: 'public' | 'followers_only' | 'private';
+      share_type: 'single_workout' | 'program' | 'template';
     };
   };
 }

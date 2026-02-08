@@ -26,33 +26,25 @@ import {
   upsertMultipleExerciseUsage,
   fetchRecentExerciseUsage,
 } from '@/lib/actions/exercise-variety';
+import { createTTLCache } from '@/lib/cache';
 
 // ============================================
 // CACHE
 // ============================================
 
-let varietyPrefsCache: Map<string, ExerciseVarietyPreferences | null> = new Map();
-let varietyCacheTimestamp: Map<string, number> = new Map();
-const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
-
-let usageHistoryCache: Map<string, Map<string, ExerciseUsageRecord[]>> = new Map();
-let usageCacheTimestamp: Map<string, number> = new Map();
-const USAGE_CACHE_TTL = 30 * 1000; // 30 seconds (shorter for usage data)
+const varietyPrefsCache = createTTLCache<string, ExerciseVarietyPreferences | null>(2 * 60 * 1000); // 2 minutes
+const usageHistoryCache = createTTLCache<string, Map<string, ExerciseUsageRecord[]>>(30 * 1000); // 30 seconds
 
 /**
  * Clear the variety preferences cache
  */
 export function clearVarietyCache(userId?: string): void {
   if (userId) {
-    varietyPrefsCache.delete(userId);
-    varietyCacheTimestamp.delete(userId);
-    usageHistoryCache.delete(userId);
-    usageCacheTimestamp.delete(userId);
+    varietyPrefsCache.invalidate(userId);
+    usageHistoryCache.invalidate(userId);
   } else {
     varietyPrefsCache.clear();
-    varietyCacheTimestamp.clear();
     usageHistoryCache.clear();
-    usageCacheTimestamp.clear();
   }
 }
 
@@ -77,11 +69,9 @@ const DEFAULT_VARIETY_PREFS: Omit<ExerciseVarietyPreferences, 'id' | 'userId' | 
 export async function getVarietyPreferences(
   userId: string
 ): Promise<ExerciseVarietyPreferences | null> {
-  // Check cache
-  const cachedTs = varietyCacheTimestamp.get(userId);
-  const cached = varietyPrefsCache.get(userId);
-  if (cached !== undefined && cachedTs && Date.now() - cachedTs < CACHE_TTL) {
-    return cached;
+  // Check cache — use has() since null is a valid cached value
+  if (varietyPrefsCache.has(userId)) {
+    return varietyPrefsCache.get(userId) ?? null;
   }
 
   try {
@@ -90,7 +80,6 @@ export async function getVarietyPreferences(
     if (error) {
       if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.code === '42P01') {
         varietyPrefsCache.set(userId, null);
-        varietyCacheTimestamp.set(userId, Date.now());
         return null;
       }
       console.warn('Failed to load variety preferences:', error);
@@ -99,7 +88,6 @@ export async function getVarietyPreferences(
 
     const prefs = data ? mapRowToVarietyPrefs(data) : null;
     varietyPrefsCache.set(userId, prefs);
-    varietyCacheTimestamp.set(userId, Date.now());
     return prefs;
   } catch (err) {
     console.warn('Error fetching variety preferences:', err);
@@ -191,8 +179,7 @@ export async function recordExerciseUsage(
       return false;
     }
 
-    usageHistoryCache.delete(userId);
-    usageCacheTimestamp.delete(userId);
+    usageHistoryCache.invalidate(userId);
     return true;
   } catch (err) {
     console.error('Error recording exercise usage:', err);
@@ -218,8 +205,7 @@ export async function recordMultipleExerciseUsage(
       return false;
     }
 
-    usageHistoryCache.delete(userId);
-    usageCacheTimestamp.delete(userId);
+    usageHistoryCache.invalidate(userId);
     return true;
   } catch (err) {
     console.error('Error recording multiple exercise usage:', err);
@@ -235,13 +221,9 @@ export async function getRecentExerciseUsage(
   muscleGroup: string,
   limitDays: number = 14
 ): Promise<ExerciseUsageRecord[]> {
-  const cacheKey = userId;
-  const cachedTs = usageCacheTimestamp.get(cacheKey);
-  const cached = usageHistoryCache.get(cacheKey);
-
-  if (cached && cachedTs && Date.now() - cachedTs < USAGE_CACHE_TTL) {
-    const muscleUsage = cached.get(muscleGroup.toLowerCase()) ?? [];
-    return muscleUsage;
+  const cached = usageHistoryCache.get(userId);
+  if (cached) {
+    return cached.get(muscleGroup.toLowerCase()) ?? [];
   }
 
   try {
@@ -269,8 +251,7 @@ export async function getRecentExerciseUsage(
       usageByMuscle.get(muscle)!.push(record);
     });
 
-    usageHistoryCache.set(cacheKey, usageByMuscle);
-    usageCacheTimestamp.set(cacheKey, Date.now());
+    usageHistoryCache.set(userId, usageByMuscle);
 
     return usageByMuscle.get(muscleGroup.toLowerCase()) ?? [];
   } catch (err) {

@@ -37,7 +37,7 @@ export async function fetchUserProfiles<T extends 'basic' | 'full' = 'basic'>(
     : 'id, user_id, username, display_name, avatar_url';
 
   const { data, error } = await supabase
-    .from('user_profiles' as never)
+    .from('user_profiles')
     .select(selectFields)
     .in('user_id', userIds) as { data: any[] | null; error: any };
 

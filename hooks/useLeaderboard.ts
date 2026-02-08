@@ -1,6 +1,9 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import type { LeaderboardType, LeaderboardEntryWithProfile } from '@/types/social';
 
 interface UseLeaderboardOptions {
@@ -38,6 +41,7 @@ export function useLeaderboard({
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const { user: authUser } = useAuthUser();
 
   const fetchLeaderboard = useCallback(async (loadMore = false) => {
     setIsLoading(true);
@@ -45,33 +49,32 @@ export function useLeaderboard({
 
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
       const currentOffset = loadMore ? offset : 0;
 
       // Calculate leaderboard data before fetching (only on initial load/refresh)
       if (!loadMore) {
         if (type === 'total_volume_week') {
-          await supabase.rpc('calculate_weekly_volume_leaderboard' as never);
+          await supabase.rpc('calculate_weekly_volume_leaderboard');
         } else if (type === 'workouts_completed_week') {
-          await supabase.rpc('calculate_weekly_workouts_leaderboard' as never);
+          await supabase.rpc('calculate_weekly_workouts_leaderboard');
         } else if (type === 'total_volume_month') {
-          await supabase.rpc('calculate_monthly_volume_leaderboard' as never);
+          await supabase.rpc('calculate_monthly_volume_leaderboard');
         } else if (type === 'workouts_completed_month') {
-          await supabase.rpc('calculate_monthly_workouts_leaderboard' as never);
+          await supabase.rpc('calculate_monthly_workouts_leaderboard');
         } else if (type === 'total_volume_alltime') {
-          await supabase.rpc('calculate_alltime_volume_leaderboard' as never);
+          await supabase.rpc('calculate_alltime_volume_leaderboard');
         } else if (type === 'workouts_completed_alltime') {
-          await supabase.rpc('calculate_alltime_workouts_leaderboard' as never);
+          await supabase.rpc('calculate_alltime_workouts_leaderboard');
         }
       }
 
       // Fetch leaderboard entries
-      const { data, error: fetchError } = await supabase.rpc('get_leaderboard' as never, {
+      const { data, error: fetchError } = await supabase.rpc('get_leaderboard', {
         p_type: type,
         p_exercise_id: exerciseId || null,
         p_limit: limit,
         p_offset: currentOffset,
-      } as never);
+      });
 
       if (fetchError) throw fetchError;
 
@@ -135,12 +138,12 @@ export function useLeaderboard({
       setOffset(currentOffset + transformedEntries.length);
 
       // Fetch user's own rank if logged in
-      if (user && !loadMore) {
-        const { data: rankData } = await supabase.rpc('get_user_rank' as never, {
-          p_user_id: user.id,
+      if (authUser && !loadMore) {
+        const { data: rankData } = await supabase.rpc('get_user_rank', {
+          p_user_id: authUser.id,
           p_type: type,
           p_exercise_id: exerciseId || null,
-        } as never);
+        });
 
         const userRankData = rankData as UserRank[] | null;
         if (userRankData && userRankData.length > 0) {
@@ -154,7 +157,7 @@ export function useLeaderboard({
     } finally {
       setIsLoading(false);
     }
-  }, [type, exerciseId, limit, offset]);
+  }, [type, exerciseId, limit, offset, authUser]);
 
   const refresh = useCallback(async () => {
     setOffset(0);

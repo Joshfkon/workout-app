@@ -31,7 +31,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
 
       // Fetch user's shared workouts
       const { data: workoutsData, error } = await supabase
-        .from('shared_workouts' as never)
+        .from('shared_workouts')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
@@ -47,7 +47,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
 
       // Calculate aggregate stats
       const { data: allWorkouts } = await supabase
-        .from('shared_workouts' as never)
+        .from('shared_workouts')
         .select('view_count, save_count, copy_count')
         .eq('user_id', userId);
 

@@ -17,7 +17,7 @@ export function useComments() {
 
       // First fetch comments
       const { data: commentsData, error: commentsError } = (await supabase
-        .from('activity_comments' as never)
+        .from('activity_comments')
         .select(`
           id,
           activity_id,
@@ -148,13 +148,13 @@ export function useComments() {
       const supabase = createClient();
 
       const { data, error: insertError } = (await supabase
-        .from('activity_comments' as never)
+        .from('activity_comments')
         .insert({
           activity_id: activityId,
           user_id: authUser.id,
           content: content.trim(),
           parent_comment_id: parentCommentId || null,
-        } as never)
+        })
         .select()
         .single()) as { data: any; error: Error | null };
 
@@ -182,9 +182,9 @@ export function useComments() {
       const supabase = createClient();
 
       // Soft delete by setting deleted_at
-      const { error: updateError } = await (supabase
-        .from('activity_comments' as never) as ReturnType<typeof supabase.from>)
-        .update({ deleted_at: new Date().toISOString() } as never)
+      const { error: updateError } = await supabase
+        .from('activity_comments')
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', commentId)
         .eq('user_id', authUser.id); // Only allow deleting own comments
 

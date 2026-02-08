@@ -61,22 +61,20 @@ export default function UserProfilePage() {
 
       // Check follow relationship if logged in
       if (authUser) {
-        type FollowRow = { status: string };
-
-        const { data: followData } = (await supabase
-          .from('follows' as never)
+        const { data: followData } = await supabase
+          .from('follows')
           .select('status')
           .eq('follower_id', authUser.id)
           .eq('following_id', profileData.user_id)
-          .single()) as { data: FollowRow | null };
+          .single();
 
-        const { data: followedByData } = (await supabase
-          .from('follows' as never)
+        const { data: followedByData } = await supabase
+          .from('follows')
           .select('status')
           .eq('follower_id', profileData.user_id)
           .eq('following_id', authUser.id)
           .eq('status', 'accepted')
-          .single()) as { data: FollowRow | null };
+          .single();
 
         setFollowRelationship({
           is_following: followData?.status === 'accepted',
@@ -107,14 +105,14 @@ export default function UserProfilePage() {
     // Determine if we need to send a request or direct follow
     const status = profile.profile_visibility === 'private' ? 'pending' : 'accepted';
 
-    const { error } = await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    const { error } = await supabase
+      .from('follows')
       .insert({
         follower_id: authUser.id,
         following_id: profile.user_id,
         status,
         accepted_at: status === 'accepted' ? new Date().toISOString() : null,
-      } as never);
+      });
 
     if (!error) {
       setFollowRelationship((prev) => ({
@@ -143,8 +141,8 @@ export default function UserProfilePage() {
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (!authUser) return;
 
-    const { error } = await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    const { error } = await supabase
+      .from('follows')
       .delete()
       .eq('follower_id', authUser.id)
       .eq('following_id', profile.user_id);

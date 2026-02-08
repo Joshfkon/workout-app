@@ -27,30 +27,30 @@ export function useReactions() {
       const supabase = createClient();
 
       // Check if already reacted
-      const { data: existing } = (await supabase
-        .from('activity_reactions' as never)
+      const { data: existing } = await supabase
+        .from('activity_reactions')
         .select('id')
         .eq('activity_id', activityId)
         .eq('user_id', authUser.id)
-        .single()) as { data: { id: string } | null };
+        .single();
 
       if (existing) {
         // Update existing reaction
-        const { error: updateError } = await (supabase
-          .from('activity_reactions' as never) as ReturnType<typeof supabase.from>)
-          .update({ reaction_type: reactionType } as never)
+        const { error: updateError } = await supabase
+          .from('activity_reactions')
+          .update({ reaction_type: reactionType })
           .eq('id', existing.id);
 
         if (updateError) throw updateError;
       } else {
         // Insert new reaction
-        const { error: insertError } = await (supabase
-          .from('activity_reactions' as never) as ReturnType<typeof supabase.from>)
+        const { error: insertError } = await supabase
+          .from('activity_reactions')
           .insert({
             activity_id: activityId,
             user_id: authUser.id,
             reaction_type: reactionType,
-          } as never);
+          });
 
         if (insertError) throw insertError;
       }
@@ -76,8 +76,8 @@ export function useReactions() {
 
       const supabase = createClient();
 
-      const { error: deleteError } = await (supabase
-        .from('activity_reactions' as never) as ReturnType<typeof supabase.from>)
+      const { error: deleteError } = await supabase
+        .from('activity_reactions')
         .delete()
         .eq('activity_id', activityId)
         .eq('user_id', authUser.id);
@@ -98,10 +98,10 @@ export function useReactions() {
     try {
       const supabase = createClient();
 
-      const { data, error: fetchError } = (await supabase
-        .from('activity_reactions' as never)
+      const { data, error: fetchError } = await supabase
+        .from('activity_reactions')
         .select('id, reaction_type, user_id')
-        .eq('activity_id', activityId)) as { data: ReactionRow[] | null; error: Error | null };
+        .eq('activity_id', activityId);
 
       if (fetchError) throw fetchError;
 

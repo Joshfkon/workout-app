@@ -23,6 +23,7 @@ import {
   insertCustomExercise,
   removeCustomExercise,
 } from '@/lib/actions/exercises';
+import { createTTLCache } from '@/lib/cache';
 
 // ============================================
 // TYPES
@@ -147,16 +148,14 @@ export type { MuscleGroup, Equipment, MovementPattern };
 // CACHE
 // ============================================
 
-let exerciseCache: Exercise[] | null = null;
-let cacheTimestamp: number = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const exerciseTTLCache = createTTLCache<string, Exercise[]>(5 * 60 * 1000); // 5 minutes
+const EXERCISE_CACHE_KEY = 'all';
 
 /**
  * Clear the exercise cache (useful after creating custom exercises)
  */
 export function clearExerciseCache(): void {
-  exerciseCache = null;
-  cacheTimestamp = 0;
+  exerciseTTLCache.clear();
 }
 
 // ============================================
@@ -168,12 +167,13 @@ export function clearExerciseCache(): void {
  */
 export async function getExercises(includeCustom: boolean = true): Promise<Exercise[]> {
   // Return cache if fresh
-  if (exerciseCache && Date.now() - cacheTimestamp < CACHE_TTL) {
-    return includeCustom 
-      ? exerciseCache 
-      : exerciseCache.filter(e => !e.isCustom);
+  const cached = exerciseTTLCache.get(EXERCISE_CACHE_KEY);
+  if (cached) {
+    return includeCustom
+      ? cached
+      : cached.filter(e => !e.isCustom);
   }
-  
+
   try {
     const { data, error } = await fetchAllExercises();
 
@@ -183,8 +183,7 @@ export async function getExercises(includeCustom: boolean = true): Promise<Exerc
     }
 
     const exercises = data.map(mapDbExercise);
-    exerciseCache = exercises;
-    cacheTimestamp = Date.now();
+    exerciseTTLCache.set(EXERCISE_CACHE_KEY, exercises);
 
     return includeCustom
       ? exercises
@@ -723,8 +722,9 @@ export { FALLBACK_EXERCISES };
  * Prefer getExercises() when async is possible
  */
 export function getExercisesSync(): Exercise[] {
-  if (exerciseCache && Date.now() - cacheTimestamp < CACHE_TTL) {
-    return exerciseCache;
+  const cached = exerciseTTLCache.get(EXERCISE_CACHE_KEY);
+  if (cached) {
+    return cached;
   }
   return FALLBACK_EXERCISES;
 }

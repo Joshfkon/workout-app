@@ -53,7 +53,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
 
       // Query shared workouts first (without user_profiles join)
       let query = supabase
-        .from('shared_workouts' as never)
+        .from('shared_workouts')
         .select('*')
         .eq('is_public', true);
 
@@ -115,7 +115,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         // Fetch saved workouts for current user (only if authenticated)
         user
           ? supabase
-              .from('saved_workouts' as never)
+              .from('saved_workouts')
               .select('shared_workout_id')
               .eq('user_id', user.id)
           : Promise.resolve({ data: null, error: null }),
@@ -195,11 +195,11 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const supabase = createClient();
 
       const { error: saveError } = await supabase
-        .from('saved_workouts' as never)
+        .from('saved_workouts')
         .insert({
           user_id: authUser.id,
           shared_workout_id: workoutId,
-        } as never);
+        });
 
       if (saveError) {
         if (saveError.code === '23505') {
@@ -232,7 +232,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const supabase = createClient();
 
       const { error: deleteError } = await supabase
-        .from('saved_workouts' as never)
+        .from('saved_workouts')
         .delete()
         .eq('user_id', authUser.id)
         .eq('shared_workout_id', workoutId);
