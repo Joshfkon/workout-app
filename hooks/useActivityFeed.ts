@@ -78,7 +78,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
           .from('follows')
           .select('following_id')
           .eq('follower_id', user.id)
-          .eq('status', 'accepted');
+          .eq('status', 'accepted') as { data: any[] | null };
 
         if (following && following.length > 0) {
           const followingIds = following.map(f => f.following_id);
@@ -99,7 +99,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         query = query.lt('created_at', cursor);
       }
 
-      const { data: activitiesData, error: fetchError } = await query;
+      const { data: activitiesData, error: fetchError } = await query as { data: any[] | null; error: any };
 
       if (fetchError) {
         console.error('[useActivityFeed] Query error:', fetchError);
@@ -140,7 +140,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
             .from('activity_reactions')
             .select('activity_id, reaction_type')
             .eq('user_id', user.id)
-            .in('activity_id', activityIds);
+            .in('activity_id', activityIds) as { data: any[] | null };
 
           if (reactions) {
             userReactions = reactions.reduce((acc, r) => {

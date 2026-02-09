@@ -49,7 +49,7 @@ export function useFollow({
         .select('status')
         .eq('follower_id', currentUserId)
         .eq('following_id', targetUserId)
-        .single();
+        .single() as { data: any };
 
       // Check if target follows current user
       const { data: followedByData } = await supabase
@@ -58,7 +58,7 @@ export function useFollow({
         .eq('follower_id', targetUserId)
         .eq('following_id', currentUserId)
         .eq('status', 'accepted')
-        .single();
+        .single() as { data: any };
 
       setRelationship({
         is_following: followData?.status === 'accepted',
@@ -86,7 +86,7 @@ export function useFollow({
         following_id: targetUserId,
         status,
         accepted_at: status === 'accepted' ? new Date().toISOString() : null,
-      });
+      } as never);
 
     if (!error) {
       setRelationship((prev) => ({
@@ -141,7 +141,7 @@ export function useFollow({
     // This is for when someone sent US a request
     const { error } = await supabase
       .from('follows')
-      .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+      .update({ status: 'accepted', accepted_at: new Date().toISOString() } as never)
       .eq('follower_id', targetUserId)
       .eq('following_id', currentUserId)
       .eq('status', 'pending');

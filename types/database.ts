@@ -691,35 +691,35 @@ export interface Database {
     };
     Functions: {
       calculate_weekly_volume_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       calculate_weekly_workouts_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       calculate_monthly_volume_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       calculate_monthly_workouts_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       calculate_alltime_volume_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       calculate_alltime_workouts_leaderboard: {
-        Args: Record<string, never>;
+        Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
       get_leaderboard: {
         Args: {
           p_type: string;
-          p_exercise_id?: string | null;
-          p_limit?: number;
-          p_offset?: number;
+          p_exercise_id: string | null;
+          p_limit: number;
+          p_offset: number;
         };
         Returns: {
           id: string;
@@ -727,9 +727,9 @@ export interface Database {
           score: number;
           rank: number;
           previous_rank: number | null;
-          rank_change: number;
           period_start: string;
           period_end: string;
+          rank_change: number;
           username: string;
           display_name: string | null;
           avatar_url: string | null;
@@ -739,7 +739,7 @@ export interface Database {
         Args: {
           p_user_id: string;
           p_type: string;
-          p_exercise_id?: string | null;
+          p_exercise_id: string | null;
         };
         Returns: {
           rank: number;
@@ -755,11 +755,12 @@ export interface Database {
         };
         Returns: undefined;
       };
-      increment_shared_workout_copies: {
+      copy_shared_workout: {
         Args: {
-          workout_id: string;
+          p_shared_workout_id: string;
+          p_target_mesocycle_id: string | null;
         };
-        Returns: undefined;
+        Returns: string;
       };
     };
     Enums: {
@@ -779,4 +780,3 @@ export interface Database {
     };
   };
 }
-

@@ -32,13 +32,13 @@ export function useReactions() {
         .select('id')
         .eq('activity_id', activityId)
         .eq('user_id', authUser.id)
-        .single();
+        .single() as { data: any };
 
       if (existing) {
         // Update existing reaction
         const { error: updateError } = await supabase
           .from('activity_reactions')
-          .update({ reaction_type: reactionType })
+          .update({ reaction_type: reactionType } as never)
           .eq('id', existing.id);
 
         if (updateError) throw updateError;
@@ -50,7 +50,7 @@ export function useReactions() {
             activity_id: activityId,
             user_id: authUser.id,
             reaction_type: reactionType,
-          });
+          } as never);
 
         if (insertError) throw insertError;
       }
@@ -101,7 +101,7 @@ export function useReactions() {
       const { data, error: fetchError } = await supabase
         .from('activity_reactions')
         .select('id, reaction_type, user_id')
-        .eq('activity_id', activityId);
+        .eq('activity_id', activityId) as { data: any[] | null; error: any };
 
       if (fetchError) throw fetchError;
 

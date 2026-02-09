@@ -10,6 +10,12 @@ let untypedClientInstance: ReturnType<typeof createBrowserClient> | null = null;
  * Create a fully typed Supabase client for browser use.
  * Uses a singleton pattern to reuse the same client instance.
  * Use this for read operations where type safety is desired.
+ *
+ * NOTE: Due to a type incompatibility between @supabase/ssr@0.5.x and
+ * @supabase/supabase-js@2.87.x, Schema generics don't fully resolve.
+ * This means .rpc() and .from().insert/update() calls need 'as never' casts.
+ * Fix: Upgrade @supabase/ssr to a version compatible with supabase-js 2.87+,
+ * then cast the return to SupabaseClient<Database> to enable full type safety.
  */
 export function createClient() {
   if (!typedClientInstance) {

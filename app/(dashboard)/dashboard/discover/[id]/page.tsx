@@ -82,7 +82,7 @@ export default function SharedWorkoutDetailPage() {
         }
 
         // Increment view count
-        await supabase.rpc('increment_shared_workout_views', { workout_id: workoutId });
+        await supabase.rpc('increment_shared_workout_views' as never, { workout_id: workoutId } as never);
 
         // Check if saved by current user
         let isSaved = false;
@@ -194,7 +194,7 @@ export default function SharedWorkoutDetailPage() {
 
     const { error: saveError } = await supabase
       .from('saved_workouts')
-      .insert({ user_id: user.id, shared_workout_id: id });
+      .insert({ user_id: user.id, shared_workout_id: id } as never);
 
     if (saveError) {
       return { success: false, error: saveError.message };

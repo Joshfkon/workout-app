@@ -35,7 +35,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(limit);
+        .limit(limit) as { data: any[]; error: any };
 
       if (error) {
         console.error('Error fetching shared workouts:', error);
@@ -49,7 +49,7 @@ export function MySharedWorkouts({ userId, limit = 3 }: MySharedWorkoutsProps) {
       const { data: allWorkouts } = await supabase
         .from('shared_workouts')
         .select('view_count, save_count, copy_count')
-        .eq('user_id', userId);
+        .eq('user_id', userId) as { data: any[]; error: any };
 
       if (allWorkouts) {
         const workoutStats = allWorkouts as Array<{ view_count: number; save_count: number; copy_count: number }>;

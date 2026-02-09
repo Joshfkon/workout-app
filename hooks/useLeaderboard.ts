@@ -54,27 +54,27 @@ export function useLeaderboard({
       // Calculate leaderboard data before fetching (only on initial load/refresh)
       if (!loadMore) {
         if (type === 'total_volume_week') {
-          await supabase.rpc('calculate_weekly_volume_leaderboard');
+          await supabase.rpc('calculate_weekly_volume_leaderboard' as never);
         } else if (type === 'workouts_completed_week') {
-          await supabase.rpc('calculate_weekly_workouts_leaderboard');
+          await supabase.rpc('calculate_weekly_workouts_leaderboard' as never);
         } else if (type === 'total_volume_month') {
-          await supabase.rpc('calculate_monthly_volume_leaderboard');
+          await supabase.rpc('calculate_monthly_volume_leaderboard' as never);
         } else if (type === 'workouts_completed_month') {
-          await supabase.rpc('calculate_monthly_workouts_leaderboard');
+          await supabase.rpc('calculate_monthly_workouts_leaderboard' as never);
         } else if (type === 'total_volume_alltime') {
-          await supabase.rpc('calculate_alltime_volume_leaderboard');
+          await supabase.rpc('calculate_alltime_volume_leaderboard' as never);
         } else if (type === 'workouts_completed_alltime') {
-          await supabase.rpc('calculate_alltime_workouts_leaderboard');
+          await supabase.rpc('calculate_alltime_workouts_leaderboard' as never);
         }
       }
 
       // Fetch leaderboard entries
-      const { data, error: fetchError } = await supabase.rpc('get_leaderboard', {
+      const { data, error: fetchError } = await supabase.rpc('get_leaderboard' as never, {
         p_type: type,
         p_exercise_id: exerciseId || null,
         p_limit: limit,
         p_offset: currentOffset,
-      });
+      } as never);
 
       if (fetchError) throw fetchError;
 
@@ -139,11 +139,11 @@ export function useLeaderboard({
 
       // Fetch user's own rank if logged in
       if (authUser && !loadMore) {
-        const { data: rankData } = await supabase.rpc('get_user_rank', {
+        const { data: rankData } = await supabase.rpc('get_user_rank' as never, {
           p_user_id: authUser.id,
           p_type: type,
           p_exercise_id: exerciseId || null,
-        });
+        } as never);
 
         const userRankData = rankData as UserRank[] | null;
         if (userRankData && userRankData.length > 0) {

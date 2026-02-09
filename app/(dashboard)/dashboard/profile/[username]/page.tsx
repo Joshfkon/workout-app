@@ -42,7 +42,7 @@ export default function UserProfilePage() {
         .from('user_profiles')
         .select('*')
         .ilike('username', username)
-        .single<UserProfile>();
+        .single() as { data: any; error: any };
 
       if (error || !profileData) {
         setNotFoundError(true);
@@ -66,7 +66,7 @@ export default function UserProfilePage() {
           .select('status')
           .eq('follower_id', authUser.id)
           .eq('following_id', profileData.user_id)
-          .single();
+          .single() as { data: any; error: any };
 
         const { data: followedByData } = await supabase
           .from('follows')
@@ -74,7 +74,7 @@ export default function UserProfilePage() {
           .eq('follower_id', profileData.user_id)
           .eq('following_id', authUser.id)
           .eq('status', 'accepted')
-          .single();
+          .single() as { data: any; error: any };
 
         setFollowRelationship({
           is_following: followData?.status === 'accepted',
@@ -112,7 +112,7 @@ export default function UserProfilePage() {
         following_id: profile.user_id,
         status,
         accepted_at: status === 'accepted' ? new Date().toISOString() : null,
-      });
+      } as never);
 
     if (!error) {
       setFollowRelationship((prev) => ({

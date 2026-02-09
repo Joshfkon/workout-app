@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/database';
 import type { SharedWorkoutContent, SharedExercise } from '@/types/social';
 
-type SupabaseClientAny = SupabaseClient<Database> | SupabaseClient;
+type SupabaseClientAny = SupabaseClient<any, any, any>;
 
 interface ExerciseBlockRow {
   id: string;
@@ -10,11 +10,9 @@ interface ExerciseBlockRow {
   target_sets: number;
   target_rep_range: number[];
   target_rir: number;
-  target_weight_kg: number;
-  target_rest_seconds: number;
   note: string | null;
   superset_group_id: string | null;
-  exercises: { name: string } | null;
+  exercises: { id: string; name: string } | null;
 }
 
 /**
@@ -62,13 +60,15 @@ export async function serializeWorkoutForSharing(
       return null;
     }
 
+    const typedBlocks = blocks as unknown as ExerciseBlockRow[];
+
     // Calculate total sets and estimated duration
-    const totalSets = blocks.reduce((sum: number, block: ExerciseBlockRow) => sum + (block.target_sets || 0), 0);
+    const totalSets = typedBlocks.reduce((sum, block) => sum + (block.target_sets || 0), 0);
     // Estimate: 2 minutes per set + 2 minutes rest between exercises
-    const estimatedDurationMinutes = totalSets * 2 + blocks.length * 2;
+    const estimatedDurationMinutes = totalSets * 2 + typedBlocks.length * 2;
 
     // Convert blocks to shared exercises
-    const exercises: SharedExercise[] = blocks.map((block: ExerciseBlockRow) => {
+    const exercises = typedBlocks.map((block) => {
       // target_rep_range is stored as an array like [8, 12]
       const repRange = block.target_rep_range || [0, 0];
       return {

@@ -173,7 +173,7 @@ export default function FeedPage() {
         .from('user_profiles')
         .select('*')
         .eq('user_id', authUser.id)
-        .single();
+        .single() as { data: any; error: any };
 
       if (error || !profileData) {
         setNeedsProfile(true);

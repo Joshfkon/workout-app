@@ -38,7 +38,7 @@ export default function ProfileEditPage() {
         .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .single() as { data: any; error: any };
 
       if (fetchError || !profile) {
         setError('Failed to load profile');
@@ -83,7 +83,7 @@ export default function ProfileEditPage() {
           show_stats: showStats,
           training_experience: trainingExperience || null,
           gym_name: gymName.trim() || null,
-        })
+        } as never)
         .eq('user_id', user.id);
 
       if (updateError) throw updateError;

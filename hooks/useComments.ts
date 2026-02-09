@@ -154,7 +154,7 @@ export function useComments() {
           user_id: authUser.id,
           content: content.trim(),
           parent_comment_id: parentCommentId || null,
-        })
+        } as never)
         .select()
         .single()) as { data: any; error: Error | null };
 
@@ -184,7 +184,7 @@ export function useComments() {
       // Soft delete by setting deleted_at
       const { error: updateError } = await supabase
         .from('activity_comments')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: new Date().toISOString() } as never)
         .eq('id', commentId)
         .eq('user_id', authUser.id); // Only allow deleting own comments
 

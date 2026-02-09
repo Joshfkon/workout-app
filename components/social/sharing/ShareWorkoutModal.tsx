@@ -97,7 +97,7 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
           difficulty: difficulty || null,
           target_muscle_groups: targetMuscleGroups,
           is_public: isPublic,
-        });
+        } as never);
 
       if (insertError) throw insertError;
 

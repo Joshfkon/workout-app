@@ -199,7 +199,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
         .insert({
           user_id: authUser.id,
           shared_workout_id: workoutId,
-        });
+        } as never);
 
       if (saveError) {
         if (saveError.code === '23505') {
