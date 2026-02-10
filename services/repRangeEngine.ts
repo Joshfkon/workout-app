@@ -158,7 +158,7 @@ export function calculateRepRange(factors: RepRangeFactors): RepRangeConfig {
   
   // === FINAL BOUNDS CHECK ===
   minReps = Math.max(1, Math.min(20, minReps));
-  maxReps = Math.max(minReps + 2, Math.min(30, maxReps));
+  maxReps = Math.max(minReps + 2, Math.min(25, maxReps));
   
   // === CALCULATE TARGET RIR ===
   let targetRIR: number;
