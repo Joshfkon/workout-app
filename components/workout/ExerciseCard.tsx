@@ -6,6 +6,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality, calculateE1RM } from '@/services/progressionEngine';
+import { suggestReps, suggestWeight, estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -403,21 +404,10 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     if (!lastCompleted) return;
 
-    // Calculate smart defaults based on the last completed set
-    let smartWeight: number;
-    let smartReps: number;
-
-    const lastRpe = lastCompleted.rpe || targetRpe;
-    // Adjust weight and reps based on RPE difference or rep range overshoot
-    const exceedsRepRange = lastCompleted.reps > block.targetRepRange[1] + 1;
-    if (lastRpe && (Math.abs(lastRpe - targetRpe) > 0.3 || exceedsRepRange)) {
-      smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg, lastCompleted.reps, block.targetRepRange);
-      smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-    } else {
-      // Close to target - keep same weight and reps
-      smartWeight = lastCompleted.weightKg;
-      smartReps = lastCompleted.reps;
-    }
+    // Calculate smart defaults using the shared suggestion engine
+    const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+    const smartWeight = suggestWeight(lastSetData, suggestionCtx);
+    const smartReps = suggestReps(lastSetData, suggestionCtx);
 
     // Update all pending inputs
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
@@ -426,13 +416,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       // If this is the last set and AMRAP is suggested, use 9.5 for RPE
       const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
-      // For AMRAP sets, predict max reps at failure based on last set's RPE
-      // Formula: predicted max reps = lastReps + (10 - lastRpe)
+      // For AMRAP sets, use bounded prediction instead of uncapped formula
       let setReps = smartReps;
       if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-        const repsInReserve = 10 - lastCompleted.rpe;
-        const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-        setReps = Math.max(predictedMaxReps, smartReps); // Use higher of predicted or smart
+        setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
       }
 
       updatedInputs.push({
@@ -458,27 +445,19 @@ export const ExerciseCard = memo(function ExerciseCard({
       const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
       
-      // Calculate smart defaults based on the just-completed set
+      // Calculate smart defaults using the shared suggestion engine
       let smartWeight: number;
       let smartReps: number;
-      
+
       if (lastCompleted) {
-        const lastRpe = lastCompleted.rpe || targetRpe;
-        // Adjust weight and reps based on RPE difference or rep range overshoot
-        const exceedsRepRange = lastCompleted.reps > block.targetRepRange[1] + 1;
-        if (lastRpe && (Math.abs(lastRpe - targetRpe) > 0.3 || exceedsRepRange)) {
-          smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg, lastCompleted.reps, block.targetRepRange);
-          smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-        } else {
-          // Close to target - keep same weight and reps
-          smartWeight = lastCompleted.weightKg;
-          smartReps = lastCompleted.reps;
-        }
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        smartWeight = suggestWeight(lastSetData, suggestionCtx);
+        smartReps = suggestReps(lastSetData, suggestionCtx);
       } else {
         smartWeight = suggestedWeight;
         smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
       }
-      
+
       // Create updated pending inputs - all based on the last completed set
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
@@ -486,12 +465,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         // If this is the last set and AMRAP is suggested, use 9.5 for RPE
         const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
-        // For AMRAP sets, predict max reps at failure based on last set's RPE
+        // For AMRAP sets, use bounded prediction
         let setReps = smartReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-          const repsInReserve = 10 - lastCompleted.rpe;
-          const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-          setReps = Math.max(predictedMaxReps, smartReps);
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
         }
 
         updatedInputs.push({
@@ -535,33 +513,24 @@ export const ExerciseCard = memo(function ExerciseCard({
         let defaultRpe: number;
         
         if (lastCompleted) {
-          const lastRpe = lastCompleted.rpe || targetRpe;
-          // Adjust weight and reps based on RPE difference or rep range overshoot
-          const exceedsRepRange = lastCompleted.reps > block.targetRepRange[1] + 1;
-          if (lastRpe && (Math.abs(lastRpe - targetRpe) > 0.3 || exceedsRepRange)) {
-            defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg, lastCompleted.reps, block.targetRepRange);
-            defaultReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-          } else {
-            // Close to target - keep same weight and reps
-            defaultWeight = lastCompleted.weightKg;
-            defaultReps = lastCompleted.reps;
-          }
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          defaultWeight = suggestWeight(lastSetData, suggestionCtx);
+          defaultReps = suggestReps(lastSetData, suggestionCtx);
         } else if (prevSet) {
           defaultWeight = prevSet.weightKg;
-          defaultReps = prevSet.reps;
+          defaultReps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
         }
-        
+
         // If this is the last set and AMRAP is suggested, pre-fill RPE with 9.5
         if (isLastSet && isAmrapSuggested) {
           defaultRpe = 9.5;
-          // For AMRAP sets, predict max reps at failure based on last set's RPE
+          // For AMRAP sets, use bounded prediction
           if (lastCompleted?.rpe) {
-            const repsInReserve = 10 - lastCompleted.rpe;
-            const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-            defaultReps = Math.max(predictedMaxReps, defaultReps);
+            const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+            defaultReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), defaultReps);
           }
         } else {
           defaultRpe = targetRpe;
@@ -602,11 +571,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       const currentRpe = parseFloat(lastInput?.rpe || '0');
       const needsRpeUpdate = lastInput && currentRpe !== 9.5;
 
-      // Calculate predicted max reps for AMRAP
+      // Calculate predicted max reps for AMRAP using bounded prediction
       let predictedReps: number | null = null;
       if (lastCompleted?.rpe) {
-        const repsInReserve = 10 - lastCompleted.rpe;
-        predictedReps = Math.round(lastCompleted.reps + repsInReserve);
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        predictedReps = predictAmrapReps(lastSetData, suggestionCtx);
       }
 
       // Only prefill reps if we have a prediction (don't check current value - this is initial prefill)
@@ -709,95 +678,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     };
   };
 
-  // Calculate reps based on weight change using percentage of 1RM
-  // Uses Epley formula with RPE adjustment: 1RM = weight × (1 + effectiveReps/30)
-  // where effectiveReps = reps + RIR (reps in reserve)
-  const calculateRepsFromWeight = (
-    newWeightKg: number,
-    referenceWeightKg: number,
-    referenceReps: number,
-    referenceRpe: number = 8
-  ): number => {
-    if (referenceWeightKg <= 0 || newWeightKg <= 0 || referenceReps <= 0) return referenceReps;
-
-    // Estimate 1RM from reference, accounting for RPE (reps in reserve)
-    const rir = 10 - referenceRpe;
-    const effectiveReps = referenceReps + rir;
-    const e1rm = referenceWeightKg * (1 + effectiveReps / 30);
-
-    // Calculate what reps we can do at new weight at same RPE
-    // Reverse: effectiveReps = 30 × (1RM/weight - 1), then subtract RIR
-    const effectiveRepsAtNewWeight = 30 * (e1rm / newWeightKg - 1);
-    const estimatedReps = Math.round(effectiveRepsAtNewWeight - rir);
-
-    // Clamp to reasonable range
-    return Math.max(1, Math.min(30, estimatedReps));
-  };
-
-  // Get RPE adjustment for next set based on last set's RPE and rep range
-  const getRpeAdjustedWeight = (
-    lastRpe: number,
-    targetRpe: number,
-    lastWeightKg: number,
-    lastReps?: number,
-    targetRepRange?: [number, number]
-  ): number => {
-    // If reps significantly exceed target range, calculate weight to bring back to mid-range
-    if (lastReps && targetRepRange && lastReps > targetRepRange[1] + 1) {
-      // User exceeded rep range - calculate weight for mid-range reps at target RPE
-      const e1rm = calculateE1RM(lastWeightKg, lastReps, lastRpe);
-      const targetReps = Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
-      const targetRir = 10 - targetRpe;
-      const effectiveTargetReps = targetReps + targetRir;
-      // Reverse Epley: weight = E1RM / (1 + effectiveReps/30)
-      const newWeight = e1rm / (1 + effectiveTargetReps / 30);
-      return newWeight;
-    }
-
-    // Standard RPE-based adjustment for normal cases
-    const rpeDiff = targetRpe - lastRpe;
-
-    // More aggressive adjustment: 3-5% per RPE point
-    let adjustmentPercent: number;
-    if (rpeDiff > 0) {
-      // Set was easier than target - increase weight more aggressively
-      adjustmentPercent = rpeDiff * 0.04; // 4% per RPE point for easy sets
-    } else {
-      // Set was harder than target - decrease weight more conservatively
-      adjustmentPercent = rpeDiff * 0.03; // 3% per RPE point for hard sets
-    }
-
-    return lastWeightKg * (1 + adjustmentPercent);
-  };
-  
-  // Get RPE-adjusted reps for next set
-  const getRpeAdjustedReps = (lastRpe: number, targetRpe: number, lastReps: number, targetRepRange: [number, number]): number => {
-    // If user significantly exceeded rep range, we're bumping weight - suggest mid-range reps
-    if (lastReps > targetRepRange[1] + 1) {
-      return Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
-    }
-
-    const rpeDiff = targetRpe - lastRpe;
-
-    // If RPE is significantly low (weight too light) AND at/near top of range,
-    // weight will be increased, so suggest mid-range reps for the heavier weight
-    if (rpeDiff > 1 && lastReps >= targetRepRange[1]) {
-      return Math.round((targetRepRange[0] + targetRepRange[1]) / 2);
-    }
-
-    // If set was slightly easy (low RPE) but not at top of range, add reps
-    if (rpeDiff > 0.3 && lastReps < targetRepRange[1]) {
-      const repIncrease = Math.min(2, Math.floor(rpeDiff));
-      return Math.min(targetRepRange[1], lastReps + repIncrease);
-    } else if (rpeDiff < -0.3) {
-      // Hard set - decrease reps slightly
-      const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
-      return Math.max(targetRepRange[0], lastReps - repDecrease);
-    }
-
-    // On target or slightly easy at top of range - keep same reps
-    return lastReps;
-  };
+  // Shared suggestion context for the setSuggestionEngine
+  const suggestionCtx = { targetRepRange: block.targetRepRange, targetRir: effectiveTargetRir };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
     // If user manually edits reps, cancel any pending debounced reps calculation
@@ -862,7 +744,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const newInputs = [...prevInputs];
                   // Only update reps if user hasn't manually changed it since we scheduled
                   if (newInputs[index] && newInputs[index].reps === currentReps) {
-                    const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps, refRpe);
+                    const newReps = estimateRepsForWeight(newWeightKg, { weightKg: refWeight, reps: refReps, rpe: refRpe }, suggestionCtx);
                     newInputs[index] = { ...newInputs[index], reps: String(newReps) };
                   }
                   return newInputs;
