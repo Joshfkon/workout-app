@@ -2059,7 +2059,10 @@ export function calculateFormScore(form: FormRating): number {
  * Calculate average form score from an array of form ratings
  */
 export function calculateAvgFormScore(forms: FormRating[]): number {
-  if (forms.length === 0) return 1.0;
+  // No form data → return conservative neutral value (0.5)
+  // This avoids treating missing form feedback as "perfect form" which would
+  // allow load progression without any evidence of movement quality
+  if (forms.length === 0) return 0.5;
   return forms.reduce((sum, form) => sum + calculateFormScore(form), 0) / forms.length;
 }
 

@@ -223,35 +223,40 @@ describe('calculateNextTargets', () => {
   });
 
   describe('set progression', () => {
-    it('suggests set progression when in rep range with appropriate RPE', () => {
-      // Week 2 of 6 is hypertrophy phase with rep range [6, 12] for compounds
-      // At 8 reps with appropriate RPE, system should suggest reps or sets
+    it('suggests set progression when RPE is low and reps below phase range', () => {
+      // weekInMeso=2, total=6 → hypertrophy phase → compound range adjusts to [6, 12]
+      // reps=5 is below phase min (6), so neither load nor rep progression triggers,
+      // but completedAllSets + low RPE qualifies for set progression
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance({
-          reps: 8, // Middle of phase-adjusted [6, 12] range
-          rpe: 7.5,
-          averageRpe: 7.5,
+          reps: 5, // Below phase-adjusted min of 6
+          rpe: 7,
+          averageRpe: 7,
           allSetsCompleted: true,
         }),
         weekInMeso: 2,
       });
 
-      // When in the rep range but not at top, rep progression is suggested
-      // Set progression happens when RPE is appropriate but not making load/rep progress
+      // Low RPE with all sets completed but below rep range → set progression
       expect(['sets', 'reps', 'technique']).toContain(result.progressionType);
     });
   });
 
   describe('fatigue adjustment', () => {
     it('adjusts targets for high systemic fatigue', () => {
+      // weekInMeso=2, total=6 → hypertrophy phase → RIR adjusts down from default 2
+      // Phase-adjusted RIR = max(1, min(4, round(2 - (2/6)*2))) = max(1, round(1.33)) = 1
+      // High systemic fatigue adds +1 → final RIR = 2
+      // Verify the fatigue adjustment actually increased RIR above the phase-adjusted value
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance(),
         systemicFatiguePercent: 85,
       });
 
-      expect(result.targetRir).toBeGreaterThan(baseInput.exercise.defaultRir);
+      // Phase-adjusted RIR is 1 for hypertrophy at week 2/6; fatigue bumps it to 2
+      expect(result.targetRir).toBeGreaterThanOrEqual(2);
       expect(result.reason).toContain('fatigue');
     });
 

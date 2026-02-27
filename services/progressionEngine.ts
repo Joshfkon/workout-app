@@ -18,6 +18,7 @@ import type {
   MovementPattern,
   Equipment,
 } from '@/types/schema';
+import { rirToRpe, calculateAvgFormScore } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
 import {
   estimate1RM,
@@ -349,11 +350,11 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   if (currentPhase === 'hypertrophy') {
     // Hypertrophy phase: prioritize rep and volume progression over load
     if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
+      targets = calculateRepProgression(lastPerformance, exercise, phaseRepRange, phaseRir);
     } else if (analysis.readyForSetProgression && weekInMeso > 1) {
-      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
+      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso, phaseRepRange, phaseRir);
     } else if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso, phaseRepRange, phaseRir);
     } else {
       targets = {
         weightKg: lastPerformance.weightKg,
@@ -368,9 +369,9 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   } else if (currentPhase === 'strength' || currentPhase === 'peaking') {
     // Strength/Peaking phase: prioritize load progression
     if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso, phaseRepRange, phaseRir);
     } else if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
+      targets = calculateRepProgression(lastPerformance, exercise, phaseRepRange, phaseRir);
     } else {
       targets = {
         weightKg: lastPerformance.weightKg,
@@ -385,11 +386,11 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   } else {
     // Default progression logic
     if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
+      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso, phaseRepRange, phaseRir);
     } else if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
+      targets = calculateRepProgression(lastPerformance, exercise, phaseRepRange, phaseRir);
     } else if (analysis.readyForSetProgression && weekInMeso > 1) {
-      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
+      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso, phaseRepRange, phaseRir);
     } else {
       targets = {
         weightKg: lastPerformance.weightKg,
@@ -647,7 +648,9 @@ function calculateLoadProgression(
   lastPerformance: LastSessionPerformance,
   exercise: Exercise,
   experience: Experience,
-  weekInMeso: number
+  weekInMeso: number,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   const incrementFactor = WEIGHT_INCREMENT_FACTOR[experience];
   const baseIncrement = exercise.minWeightIncrementKg || 2.5; // Default to 2.5kg if not set
@@ -669,8 +672,8 @@ function calculateLoadProgression(
 
   return {
     weightKg: newWeight,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: lastPerformance.sets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'load',
@@ -680,12 +683,14 @@ function calculateLoadProgression(
 
 function calculateRepProgression(
   lastPerformance: LastSessionPerformance,
-  exercise: Exercise
+  exercise: Exercise,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   return {
     weightKg: lastPerformance.weightKg,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: lastPerformance.sets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'reps',
@@ -696,7 +701,9 @@ function calculateRepProgression(
 function calculateSetProgression(
   lastPerformance: LastSessionPerformance,
   exercise: Exercise,
-  weekInMeso: number
+  weekInMeso: number,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   // Add one set per week in the mesocycle (up to a maximum)
   const maxSets = exercise.mechanic === 'compound' ? 5 : 4;
@@ -704,8 +711,8 @@ function calculateSetProgression(
 
   return {
     weightKg: lastPerformance.weightKg,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: newSets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'sets',
@@ -1180,7 +1187,7 @@ export function checkForPR(
   const currentE1RM = calculateE1RM(
     current.weight,
     current.reps,
-    current.repsInTank === 4 ? 6 : current.repsInTank === 2 ? 7.5 : current.repsInTank === 1 ? 9 : 10
+    rirToRpe(current.repsInTank)
   );
 
   // First time doing this exercise
@@ -1204,7 +1211,7 @@ export function checkForPR(
   const previousE1RM = calculateE1RM(
     previousPR.weight,
     previousPR.reps,
-    previousPR.repsInTank === 4 ? 6 : previousPR.repsInTank === 2 ? 7.5 : previousPR.repsInTank === 1 ? 9 : 10
+    rirToRpe(previousPR.repsInTank)
   );
 
   // NO PR if form was ugly
@@ -1326,20 +1333,7 @@ export function calculateSuggestedWeight(
     };
   }
 
-  // Import form score calculation
-  const formScoreHelper = (form: FormRating): number => {
-    switch (form) {
-      case 'clean':
-        return 1.0;
-      case 'some_breakdown':
-        return 0.5;
-      case 'ugly':
-        return 0;
-    }
-  };
-
-  const avgForm =
-    lastSession.form.reduce((sum, f) => sum + formScoreHelper(f), 0) / lastSession.form.length;
+  const avgForm = calculateAvgFormScore(lastSession.form);
   const avgRIR =
     lastSession.repsInTank.reduce((sum: number, r: number) => sum + r, 0) / lastSession.repsInTank.length;
   const avgReps = lastSession.reps.reduce((sum, r) => sum + r, 0) / lastSession.reps.length;
@@ -1418,20 +1412,9 @@ export function checkFormTrend(
   const recentSessions = exerciseHistory.slice(0, 5);
 
   // Calculate average form score per session
-  const formScoreHelper = (form: FormRating): number => {
-    switch (form) {
-      case 'clean':
-        return 1.0;
-      case 'some_breakdown':
-        return 0.5;
-      case 'ugly':
-        return 0;
-    }
-  };
-
   const formScores = recentSessions.map((session) => {
     const forms = session.sets.map((s) => s.form);
-    return forms.reduce((sum, f) => sum + formScoreHelper(f), 0) / forms.length;
+    return calculateAvgFormScore(forms);
   });
 
   // Declining form trend (each session worse than 2 sessions ago)
