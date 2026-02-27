@@ -18,10 +18,13 @@ import {
   calculateSuggestedWeight,
   checkFormTrend,
   exerciseEntryToExercise,
+  PHASE_CONFIGS,
   type CalculateNextTargetsInput,
   type CalculateSetQualityInput,
   type GenerateWarmupInput,
   type FormAwareProgressionInput,
+  type PhaseConfig,
+  type PeriodizationPhase,
 } from '../progressionEngine';
 
 import type {
@@ -895,5 +898,251 @@ describe('exerciseEntryToExercise', () => {
     expect(result.defaultRepRange).toEqual([12, 15]);
     expect(result.defaultRir).toBe(1);
     expect(result.minWeightIncrementKg).toBe(5);
+  });
+});
+
+// ============================================
+// PHASE CONFIG TESTS
+// ============================================
+
+describe('PHASE_CONFIGS', () => {
+  it('has configs for all four phases', () => {
+    const phases: PeriodizationPhase[] = ['hypertrophy', 'strength', 'peaking', 'deload'];
+    for (const phase of phases) {
+      expect(PHASE_CONFIGS[phase]).toBeDefined();
+      expect(PHASE_CONFIGS[phase].name).toBeTruthy();
+    }
+  });
+
+  it('hypertrophy prioritizes reps → sets → load', () => {
+    expect(PHASE_CONFIGS.hypertrophy.progressionPriority).toEqual(['reps', 'sets', 'load']);
+  });
+
+  it('strength prioritizes load → reps', () => {
+    expect(PHASE_CONFIGS.strength.progressionPriority).toEqual(['load', 'reps']);
+  });
+
+  it('peaking prioritizes load → reps', () => {
+    expect(PHASE_CONFIGS.peaking.progressionPriority).toEqual(['load', 'reps']);
+  });
+
+  it('deload has no progression priorities (exits early)', () => {
+    expect(PHASE_CONFIGS.deload.progressionPriority).toEqual([]);
+  });
+
+  it('only hypertrophy allows set progression', () => {
+    expect(PHASE_CONFIGS.hypertrophy.allowSetProgression).toBe(true);
+    expect(PHASE_CONFIGS.strength.allowSetProgression).toBe(false);
+    expect(PHASE_CONFIGS.peaking.allowSetProgression).toBe(false);
+    expect(PHASE_CONFIGS.deload.allowSetProgression).toBe(false);
+  });
+
+  it('strength and peaking add rest bonus in technique fallback', () => {
+    expect(PHASE_CONFIGS.strength.restBonusSeconds).toBe(30);
+    expect(PHASE_CONFIGS.peaking.restBonusSeconds).toBe(30);
+    expect(PHASE_CONFIGS.hypertrophy.restBonusSeconds).toBe(0);
+  });
+
+  it('strength and peaking reduce sets in technique fallback', () => {
+    expect(PHASE_CONFIGS.strength.techniqueSetDelta).toBe(-1);
+    expect(PHASE_CONFIGS.peaking.techniqueSetDelta).toBe(-1);
+    expect(PHASE_CONFIGS.hypertrophy.techniqueSetDelta).toBe(0);
+  });
+
+  it('peaking compound bounds are [1, 5]', () => {
+    expect(PHASE_CONFIGS.peaking.compoundRepBounds).toEqual([1, 5]);
+  });
+
+  it('hypertrophy compound bounds are [6, 12]', () => {
+    expect(PHASE_CONFIGS.hypertrophy.compoundRepBounds).toEqual([6, 12]);
+  });
+
+  it('only hypertrophy has a progress taper factor', () => {
+    expect(PHASE_CONFIGS.hypertrophy.progressTaperFactor).toBe(2);
+    expect(PHASE_CONFIGS.strength.progressTaperFactor).toBe(0);
+    expect(PHASE_CONFIGS.peaking.progressTaperFactor).toBe(0);
+    expect(PHASE_CONFIGS.deload.progressTaperFactor).toBe(0);
+  });
+
+  it('high-rep exercises in peaking produce a valid (non-inverted) rep range', () => {
+    // Farmer's Carry has defaultRepRange [30, 60].  Peaking compound bounds
+    // are [1, 5] with adjust [-10, 0].  Without the inversion clamp the
+    // formula would yield [20, 5].
+    const farmersCarry = createMockExercise({
+      id: 'farmers-carry',
+      name: "Farmer's Carry",
+      defaultRepRange: [30, 60] as [number, number],
+    });
+    const result = calculateNextTargets({
+      exercise: farmersCarry,
+      lastPerformance: createMockPerformance({
+        exerciseId: 'farmers-carry',
+        reps: 5,
+        rpe: 8,
+        weightKg: 60,
+      }),
+      experience: 'intermediate',
+      weekInMeso: 3,
+      totalWeeksInMeso: 6,
+      isDeloadWeek: false,
+      periodizationPhase: 'peaking',
+    });
+
+    // The returned repRange must be valid: min <= max
+    expect(result.repRange[0]).toBeLessThanOrEqual(result.repRange[1]);
+    // And must stay within the peaking compound bounds ceiling
+    expect(result.repRange[1]).toBeLessThanOrEqual(
+      PHASE_CONFIGS.peaking.compoundRepBounds[1]
+    );
+  });
+});
+
+// ============================================
+// FORM QUALITY GATE TESTS
+// ============================================
+
+describe('form quality gate', () => {
+  const exercise = createMockExercise();
+
+  const baseInput: CalculateNextTargetsInput = {
+    exercise,
+    lastPerformance: createMockPerformance({
+      reps: 12,   // top of hypertrophy range
+      rpe: 8,
+      averageRpe: 8,
+      allSetsCompleted: true,
+    }),
+    experience: 'intermediate',
+    weekInMeso: 2,
+    totalWeeksInMeso: 6,
+    isDeloadWeek: false,
+    readinessScore: 80,
+  };
+
+  it('normal analysis when formScore is undefined (backward compat)', () => {
+    const result = calculateNextTargets(baseInput);
+    // Without form score, should progress normally (load progression at top of range + good RPE)
+    expect(result.progressionType).toBe('load');
+  });
+
+  it('normal analysis when formScore >= 0.7', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.85,
+    });
+    // Clean form → normal load progression
+    expect(result.progressionType).toBe('load');
+  });
+
+  it('blocks load progression when 0.3 <= formScore < 0.7', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.55,
+    });
+    // Moderate form breakdown blocks load progression
+    // Should fall through to next priority (reps or technique)
+    expect(result.progressionType).not.toBe('load');
+    expect(result.weightKg).toBe(100); // Same weight maintained
+  });
+
+  it('reduces weight when formScore < 0.3', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.2,
+    });
+    // Severe form breakdown → 90% weight reduction
+    expect(result.progressionType).toBe('technique');
+    expect(result.weightKg).toBeLessThan(100);
+    expect(result.weightKg).toBeCloseTo(90, 0); // ~90% of 100
+    expect(result.reason).toContain('Form breakdown');
+  });
+
+  it('form gate at 0.3 boundary blocks all progression', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.29,
+    });
+    expect(result.weightKg).toBeLessThan(100);
+    expect(result.reason).toContain('Form breakdown');
+  });
+
+  it('form gate at 0.7 boundary still blocks load', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.69,
+    });
+    expect(result.progressionType).not.toBe('load');
+    expect(result.weightKg).toBe(100);
+  });
+
+  it('form gate at exactly 0.7 allows normal analysis', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      lastSessionFormScore: 0.7,
+    });
+    // 0.7 is >= 0.7, so normal analysis applies
+    expect(result.progressionType).toBe('load');
+  });
+});
+
+// ============================================
+// PERFORMANCE SIGNALS ANNOTATION TESTS
+// ============================================
+
+describe('calculateNextTargets with performance signals', () => {
+  const exercise = createMockExercise();
+
+  const baseInput: CalculateNextTargetsInput = {
+    exercise,
+    lastPerformance: createMockPerformance({
+      reps: 8,
+      rpe: 8,
+      averageRpe: 8,
+    }),
+    experience: 'intermediate',
+    weekInMeso: 2,
+    totalWeeksInMeso: 6,
+    isDeloadWeek: false,
+    readinessScore: 80,
+  };
+
+  it('appends signal notes to reason when signals are provided', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      performanceSignals: [
+        { signal: 'stagnation_detected', reason: 'No progress in 5 weeks' },
+      ],
+    });
+    expect(result.reason).toContain('No progress in 5 weeks');
+    expect(result.reason).toContain('[Note:');
+  });
+
+  it('does not modify reason when no signals provided', () => {
+    const result = calculateNextTargets(baseInput);
+    expect(result.reason).not.toContain('[Note:');
+  });
+
+  it('does not modify reason when signals array is empty', () => {
+    const result = calculateNextTargets({
+      ...baseInput,
+      performanceSignals: [],
+    });
+    expect(result.reason).not.toContain('[Note:');
+  });
+
+  it('signals never override progression type or targets', () => {
+    const resultWithSignals = calculateNextTargets({
+      ...baseInput,
+      performanceSignals: [
+        { signal: 'consistent_underperformance', reason: 'Missing targets 3 sessions' },
+      ],
+    });
+    const resultWithout = calculateNextTargets(baseInput);
+
+    // Same targets regardless of signals
+    expect(resultWithSignals.weightKg).toBe(resultWithout.weightKg);
+    expect(resultWithSignals.progressionType).toBe(resultWithout.progressionType);
+    expect(resultWithSignals.sets).toBe(resultWithout.sets);
+    expect(resultWithSignals.targetRir).toBe(resultWithout.targetRir);
   });
 });
