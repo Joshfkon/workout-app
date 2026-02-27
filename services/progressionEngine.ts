@@ -570,8 +570,11 @@ function calculateWorkingWeightFromE1RM(
  * Adjust rep range based on periodization phase.
  * Reads from PHASE_CONFIGS to apply per-phase deltas and bounds.
  *
- * Formula: adjustedMin = max(bounds[0], base[0] + adjust[0])
- *          adjustedMax = min(bounds[1], base[1] + adjust[1])
+ * Formula: rawMin = max(bounds[0], base[0] + adjust[0])
+ *          rawMax = min(bounds[1], base[1] + adjust[1])
+ *          then clamp so min <= max (guards against inverted ranges
+ *          when baseRange sits far outside the phase bounds,
+ *          e.g. Farmer's Carry [30,60] in peaking [1,5]).
  */
 function getPhaseAdjustedRepRange(
   baseRange: [number, number],
@@ -584,10 +587,17 @@ function getPhaseAdjustedRepRange(
   const adjust = isCompound ? config.compoundRepAdjust : config.isolationRepAdjust;
   const bounds = isCompound ? config.compoundRepBounds : config.isolationRepBounds;
 
-  const adjustedMin = Math.max(bounds[0], baseRange[0] + adjust[0]);
-  const adjustedMax = Math.min(bounds[1], baseRange[1] + adjust[1]);
+  const rawMin = Math.max(bounds[0], baseRange[0] + adjust[0]);
+  const rawMax = Math.min(bounds[1], baseRange[1] + adjust[1]);
 
-  return [adjustedMin, adjustedMax];
+  // When the base range is far outside phase bounds the two values can
+  // invert (rawMin > rawMax).  Collapse to the bounds ceiling so the
+  // exercise still gets a valid, phase-appropriate range.
+  if (rawMin > rawMax) {
+    return [rawMax, rawMax];
+  }
+
+  return [rawMin, rawMax];
 }
 
 /**

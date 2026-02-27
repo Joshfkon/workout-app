@@ -963,6 +963,38 @@ describe('PHASE_CONFIGS', () => {
     expect(PHASE_CONFIGS.peaking.progressTaperFactor).toBe(0);
     expect(PHASE_CONFIGS.deload.progressTaperFactor).toBe(0);
   });
+
+  it('high-rep exercises in peaking produce a valid (non-inverted) rep range', () => {
+    // Farmer's Carry has defaultRepRange [30, 60].  Peaking compound bounds
+    // are [1, 5] with adjust [-10, 0].  Without the inversion clamp the
+    // formula would yield [20, 5].
+    const farmersCarry = createMockExercise({
+      id: 'farmers-carry',
+      name: "Farmer's Carry",
+      defaultRepRange: [30, 60] as [number, number],
+    });
+    const result = calculateNextTargets({
+      exercise: farmersCarry,
+      lastPerformance: createMockPerformance({
+        exerciseId: 'farmers-carry',
+        reps: 5,
+        rpe: 8,
+        weightKg: 60,
+      }),
+      experience: 'intermediate',
+      weekInMeso: 3,
+      totalWeeksInMeso: 6,
+      isDeloadWeek: false,
+      periodizationPhase: 'peaking',
+    });
+
+    // The returned repRange must be valid: min <= max
+    expect(result.repRange[0]).toBeLessThanOrEqual(result.repRange[1]);
+    // And must stay within the peaking compound bounds ceiling
+    expect(result.repRange[1]).toBeLessThanOrEqual(
+      PHASE_CONFIGS.peaking.compoundRepBounds[1]
+    );
+  });
 });
 
 // ============================================
