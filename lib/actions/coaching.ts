@@ -373,7 +373,6 @@ export async function generateWorkoutCoachNotes(
     // Check for API key first
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      console.log('[Workout Coach] No API key, returning fallback');
       return {
         notes: generateFallbackNotes(input),
         generated: false,

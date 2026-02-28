@@ -539,6 +539,82 @@ export function heightCmToInches(heightCm: number): number {
   return cmToIn(heightCm);
 }
 
+// ============ STREAK CALCULATION ============
+
+/**
+ * Calculate current and longest workout streaks from completed workout dates.
+ * A streak is defined as consecutive days where at least one workout was completed.
+ * @param completedDates - Array of date strings (ISO or YYYY-MM-DD) when workouts were completed
+ * @returns Object with current_streak and longest_streak (in days)
+ */
+export function calculateStreaks(completedDates: (string | null)[]): { current_streak: number; longest_streak: number } {
+  if (!completedDates || completedDates.length === 0) {
+    return { current_streak: 0, longest_streak: 0 };
+  }
+
+  // Extract unique dates in YYYY-MM-DD format, sorted descending (most recent first)
+  const uniqueDates = Array.from(
+    new Set(
+      completedDates
+        .filter((d): d is string => d !== null)
+        .map((d) => {
+          // Handle both ISO datetime and YYYY-MM-DD
+          const date = new Date(d);
+          return getLocalDateString(date);
+        })
+    )
+  ).sort((a, b) => b.localeCompare(a));
+
+  if (uniqueDates.length === 0) {
+    return { current_streak: 0, longest_streak: 0 };
+  }
+
+  // Helper: difference in calendar days between two YYYY-MM-DD strings
+  const dayDiff = (dateA: string, dateB: string): number => {
+    const [aY, aM, aD] = dateA.split('-').map(Number);
+    const [bY, bM, bD] = dateB.split('-').map(Number);
+    const a = new Date(aY, aM - 1, aD);
+    const b = new Date(bY, bM - 1, bD);
+    return Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
+  const today = getLocalDateString();
+
+  // Calculate current streak (from today or yesterday backwards)
+  let currentStreak = 0;
+  const mostRecent = uniqueDates[0];
+  const daysSinceLast = dayDiff(today, mostRecent);
+
+  if (daysSinceLast <= 1) {
+    // Streak is active (worked out today or yesterday)
+    currentStreak = 1;
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const diff = dayDiff(uniqueDates[i - 1], uniqueDates[i]);
+      if (diff === 1) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Calculate longest streak
+  let longestStreak = 1;
+  let streak = 1;
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const diff = dayDiff(uniqueDates[i - 1], uniqueDates[i]);
+    if (diff === 1) {
+      streak++;
+      longestStreak = Math.max(longestStreak, streak);
+    } else {
+      streak = 1;
+    }
+  }
+  longestStreak = Math.max(longestStreak, currentStreak);
+
+  return { current_streak: currentStreak, longest_streak: longestStreak };
+}
+
 /**
  * Get color for a plate based on its weight (follows standard Olympic color coding)
  */

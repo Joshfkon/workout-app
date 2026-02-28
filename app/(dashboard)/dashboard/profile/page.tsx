@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/social/profile';
 import { MySharedWorkouts } from '@/components/social/sharing/MySharedWorkouts';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, calculateStreaks } from '@/lib/utils';
 import { useUserStore } from '@/stores/userStore';
 import type { UserProfile, ProfileStats } from '@/types/social';
 
@@ -67,12 +67,16 @@ export default function MyProfilePage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
+      // Calculate streaks from completed workout dates
+      const completedDates = workoutStats?.map((w: { completed_at: string | null }) => w.completed_at) ?? [];
+      const streaks = calculateStreaks(completedDates);
+
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: 0, // TODO: Calculate
-        longest_streak: 0, // TODO: Calculate
+        current_streak: streaks.current_streak,
+        longest_streak: streaks.longest_streak,
         favorite_exercise: null,
         strongest_lift: null,
       });

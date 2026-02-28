@@ -14,7 +14,7 @@ import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
 import { copySharedWorkout } from '@/lib/workout-sharing';
 import { useUserStore } from '@/stores';
 import { createClient } from '@/lib/supabase/client';
-import { cn, formatWeight } from '@/lib/utils';
+import { cn, formatWeight, calculateStreaks } from '@/lib/utils';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
 import type { ReactionType, LeaderboardType, ShareType, Difficulty, SharedWorkoutWithProfile } from '@/types/social';
 import type { UserProfile, ProfileStats } from '@/types/social';
@@ -193,12 +193,16 @@ export default function FeedPage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
+      // Calculate streaks from completed workout dates
+      const completedDates = workoutStats?.map((w: { completed_at: string | null }) => w.completed_at) ?? [];
+      const streaks = calculateStreaks(completedDates);
+
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: 0,
-        longest_streak: 0,
+        current_streak: streaks.current_streak,
+        longest_streak: streaks.longest_streak,
         favorite_exercise: null,
         strongest_lift: null,
       });
@@ -652,7 +656,7 @@ export default function FeedPage() {
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-2">Type</label>
               <div className="flex flex-wrap gap-2">
-                {(['all', 'single_workout', 'template', 'program', 'crash_the_economy'] as const).map((type) => (
+                {(['all', 'single_workout', 'template', 'program'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setShareType(type)}
@@ -663,7 +667,7 @@ export default function FeedPage() {
                         : 'bg-surface-800 text-surface-400 hover:text-surface-200'
                     )}
                   >
-                    {type === 'all' ? 'All Types' : type === 'crash_the_economy' ? 'Crash The Economy' : type.replace('_', ' ')}
+                    {type === 'all' ? 'All Types' : type.replace('_', ' ')}
                   </button>
                 ))}
               </div>

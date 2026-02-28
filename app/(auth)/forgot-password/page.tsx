@@ -28,8 +28,6 @@ export default function ForgotPasswordPage() {
         (typeof window !== 'undefined' ? window.location.origin : 'https://www.hypertrack.app');
       const redirectUrl = `${baseUrl}/auth/callback?next=/reset-password`;
       
-      console.log('[PASSWORD RESET] Sending reset email with redirect URL:', redirectUrl);
-      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });

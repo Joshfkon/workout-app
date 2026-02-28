@@ -115,7 +115,6 @@ export async function completeExerciseWithAI(
     // Check for API key
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      console.log('[Exercise AI] No API key, returning defaults');
       return {
         success: true,
         data: getDefaultsByEquipment(input),

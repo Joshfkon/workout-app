@@ -49,15 +49,9 @@ export async function updateSession(request: NextRequest) {
   
   // Onboarding requires auth but is separate from dashboard
   const isOnboardingRoute = request.nextUrl.pathname.startsWith('/onboarding');
-  
-  if (!user && !isPublicRoute && !isOnboardingRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
-  }
-  
-  // Require auth for onboarding
-  if (!user && isOnboardingRoute) {
+
+  // Redirect unauthenticated users to login for all protected routes (including onboarding)
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);

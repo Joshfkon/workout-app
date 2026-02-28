@@ -217,25 +217,19 @@ export default function NutritionPage() {
   // Track when component is mounted on client
   useEffect(() => {
     setIsMounted(true);
-    console.log('[Nutrition] Component mounted on client');
   }, []);
 
   // Initialize date on client side only (after mount)
   useEffect(() => {
     if (isMounted && selectedDate === null) {
-      const initialDate = getLocalDateString();
-      console.log('[Nutrition] Initializing date on client:', initialDate);
-      setSelectedDate(initialDate);
+      setSelectedDate(getLocalDateString());
     }
   }, [isMounted, selectedDate]);
 
   // Guard data loading until date is available
   useEffect(() => {
     if (selectedDate) {
-      console.log('[Nutrition] Date available, loading data:', selectedDate);
       loadData();
-    } else {
-      console.log('[Nutrition] Date not yet initialized, waiting...');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
@@ -243,17 +237,14 @@ export default function NutritionPage() {
   async function loadData() {
     // Guard: don't load data if date is not available
     if (!selectedDate) {
-      console.warn('[Nutrition] loadData called but selectedDate is null');
       setIsLoading(false);
       return;
     }
 
-    console.log('[Nutrition] Starting loadData for date:', selectedDate);
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.warn('[Nutrition] No user found, aborting loadData');
         setIsLoading(false);
         return;
       }
@@ -557,42 +548,6 @@ export default function NutritionPage() {
       console.log('[Nutrition] Starting TDEE calculation...');
       try {
         const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
-        console.log('[Nutrition] TDEE calculation completed:', {
-          hasData: !!tdee,
-          hasAdaptiveEstimate: !!tdee?.adaptiveEstimate,
-          hasRegressionAnalysis: !!tdee?.regressionAnalysis,
-          dataPoints: tdee?.regressionAnalysis?.dataPoints?.length || 0,
-          isEnhanced: tdee?.isEnhanced || false,
-        });
-        
-        // Log regression analysis details client-side
-        if (tdee?.regressionAnalysis) {
-          const ra = tdee.regressionAnalysis;
-          console.log('[TDEE Regression Analysis] Summary:', {
-            totalDataPoints: ra.dataPoints.length,
-            burnRatePerLb: ra.burnRatePerLb.toFixed(2),
-            estimatedTDEE: ra.estimatedTDEE,
-            rSquared: ra.rSquared.toFixed(3),
-            standardError: ra.standardError.toFixed(3),
-            currentWeight: ra.currentWeight.toFixed(1),
-          });
-          console.log('[TDEE Regression Analysis] Data points:', ra.dataPoints.map(dp => ({
-            date: dp.date,
-            weight: `${dp.weight.toFixed(1)} lbs`,
-            calories: `${dp.calories.toFixed(0)} cal`,
-            actualChange: `${dp.actualChange > 0 ? '+' : ''}${dp.actualChange.toFixed(2)} lbs/day`,
-            predictedChange: `${dp.predictedChange > 0 ? '+' : ''}${dp.predictedChange.toFixed(2)} lbs/day`,
-            residual: `${dp.residual > 0 ? '+' : ''}${dp.residual.toFixed(2)} lbs`,
-          })));
-        } else {
-          console.warn('[TDEE Regression Analysis] No regression analysis available - check server logs for details');
-        }
-        
-        // Log debug data if available
-        if (tdee?.debugData) {
-          console.log('[TDEE Debug Data]', tdee.debugData);
-        }
-        
         setTdeeData(tdee);
       } catch (tdeeError) {
         console.error('[Nutrition] Error loading TDEE data:', tdeeError);
@@ -1133,8 +1088,6 @@ export default function NutritionPage() {
         day: 'numeric',
       });
   
-  console.log('[Nutrition] Rendering with date:', selectedDate, 'isToday:', isToday);
-
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">

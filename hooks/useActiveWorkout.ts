@@ -143,7 +143,9 @@ export function useActiveWorkout() {
 
     if (error) {
       console.error('Failed to save set:', error);
-      // Could rollback optimistic update here
+      // Rollback optimistic update - remove the set we just added
+      useWorkoutStore.getState().deleteSet(blockId, newSet.id);
+      return null;
     }
 
     return newSet;

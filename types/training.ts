@@ -9,7 +9,7 @@ import type { MuscleGroup } from './schema';
 
 export type Sex = 'male' | 'female';
 export type Experience = 'novice' | 'intermediate' | 'advanced';
-export type Goal = 'bulk' | 'cut' | 'recomp' | 'maintain';
+export type Goal = 'bulk' | 'cut' | 'recomp' | 'maintenance';
 export type Split = 'Full Body' | 'Upper/Lower' | 'PPL' | 'Upper/Lower/PPL' | 'Arnold' | 'Bro Split';
 export type PeriodizationModel = 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block';
 export type DeloadStrategy = 'proactive' | 'reactive' | 'none';

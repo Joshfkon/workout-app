@@ -199,8 +199,6 @@ export default function AddDexaScanPage() {
         throw new Error('Bone mass seems too high. Please enter in kg (not grams).');
       }
 
-      console.log('Saving DEXA scan with regional data:', regionalResult.data);
-
       // Round numbers to match database precision (DECIMAL(5,2) and DECIMAL(4,1))
       const roundedWeight = Math.round(weight * 100) / 100;  // 2 decimal places
       const roundedLean = Math.round(lean * 100) / 100;
@@ -230,23 +228,13 @@ export default function AddDexaScanPage() {
         .insert(insertData)
         .select();
 
-      console.log('Insert result:', { error: insertError, data: insertedData });
-
       if (insertError) {
-        console.error('Insert error details:', {
-          message: insertError.message,
-          code: insertError.code,
-          details: insertError.details,
-          hint: insertError.hint,
-        });
-        
         // Show more specific error messages
         if (insertError.message?.includes('duplicate') || insertError.code === '23505') {
           throw new Error(`A scan already exists for ${scanDate}. Please choose a different date.`);
         }
         if (insertError.message?.includes('regional_data') || insertError.code === '42703') {
           // Column doesn't exist - try again without regional_data
-          console.log('Retrying without regional_data...');
           const { error: retryError } = await supabase.from('dexa_scans').insert({
             user_id: user.id,
             scan_date: scanDate,
