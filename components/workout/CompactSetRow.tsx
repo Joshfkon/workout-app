@@ -3,6 +3,7 @@
 import { useState, memo } from 'react';
 import { Button } from '@/components/ui';
 import { SetFeedbackCard } from './SetFeedbackCard';
+import { DurationTimerInput } from './DurationTimerInput';
 import type {
   SetLog,
   WeightUnit,
@@ -12,6 +13,7 @@ import type {
 } from '@/types/schema';
 import { formatWeightValue, convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 import { calculateEffectiveLoad } from '@/types/schema';
+import { suggestReps, suggestWeight } from '@/services/setSuggestionEngine';
 
 interface CompactSetRowProps {
   setNumber: number;
@@ -56,6 +58,10 @@ interface CompactSetRowProps {
   unit?: WeightUnit;
   /** Whether input is disabled */
   disabled?: boolean;
+  /** If true, this is a duration-based exercise (plank, hold) - show seconds instead of reps */
+  isDurationBased?: boolean;
+  /** Exercise ID for timer persistence */
+  exerciseId?: string;
 }
 
 type InputPhase = 'input' | 'feedback';
@@ -82,13 +88,41 @@ export const CompactSetRow = memo(function CompactSetRow({
   onEdit,
   unit = 'kg',
   disabled = false,
+  isDurationBased = false,
+  exerciseId,
 }: CompactSetRowProps) {
-  const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
-  const [weight, setWeight] = useState(
-    previousSet?.weightKg 
-      ? formatWeightValue(previousSet.weightKg, unit).toString()
-      : (suggestedWeight > 0 ? formatWeightValue(suggestedWeight, unit).toString() : '')
-  );
+  // Use RPE-aware logic when previous set exists
+  const suggestionContext = { targetRepRange, targetRir };
+
+  const getInitialReps = (): string => {
+    if (!previousSet) {
+      return String(Math.round((targetRepRange[0] + targetRepRange[1]) / 2));
+    }
+    // Use RPE-adjusted reps if we have RPE data
+    if (previousSet.rpe !== undefined) {
+      return String(suggestReps(previousSet, suggestionContext));
+    }
+    // Fallback to previous reps, clamped to target range
+    return String(Math.max(targetRepRange[0], Math.min(targetRepRange[1], previousSet.reps)));
+  };
+
+  const getInitialWeight = (): string => {
+    if (previousSet?.weightKg) {
+      // Use RPE-adjusted weight if we have RPE data
+      if (previousSet.rpe !== undefined) {
+        const adjustedWeightKg = suggestWeight(previousSet, suggestionContext);
+        return formatWeightValue(adjustedWeightKg, unit).toString();
+      }
+      return formatWeightValue(previousSet.weightKg, unit).toString();
+    }
+    if (suggestedWeight > 0) {
+      return formatWeightValue(suggestedWeight, unit).toString();
+    }
+    return '';
+  };
+
+  const [reps, setReps] = useState(getInitialReps);
+  const [weight, setWeight] = useState(getInitialWeight);
   const [phase, setPhase] = useState<InputPhase>('input');
   const [bodyweightData, setBodyweightData] = useState<BodyweightData | undefined>(
     previousSet?.bodyweightData
@@ -121,7 +155,7 @@ export const CompactSetRow = memo(function CompactSetRow({
           {completedDisplayWeight} {unit}
         </div>
         <div className="w-20 text-center text-sm font-semibold text-surface-300">
-          {completedSet.reps}
+          {completedSet.reps}{isDurationBased ? 's' : ''}
         </div>
         <div className="w-10 flex justify-center">
           <svg className="w-5 h-5 text-primary-400" fill="currentColor" viewBox="0 0 20 20">
@@ -134,13 +168,20 @@ export const CompactSetRow = memo(function CompactSetRow({
 
   // Show feedback phase
   if (phase === 'feedback') {
+    // For bodyweight exercises, use bodyweightData if available, otherwise calculate from user's bodyweight
+    const feedbackWeightKg = isBodyweight
+      ? (bodyweightData?.effectiveLoadKg ?? userBodyweightKg ?? 0)
+      : inputWeightToKg(parseFloat(weight) || 0, unit);
+
     return (
       <SetFeedbackCard
         setNumber={setNumber}
-        weightKg={isBodyweight && bodyweightData ? bodyweightData.effectiveLoadKg : parseFloat(weight) || 0}
+        weightKg={feedbackWeightKg}
         reps={parseInt(reps) || 0}
         unit={unit}
         defaultFeedback={previousSet?.feedback}
+        isBodyweight={isBodyweight}
+        userBodyweightKg={userBodyweightKg}
         onSave={async (feedback) => {
           if (onSubmit) {
             const weightKg = isBodyweight && bodyweightData
@@ -149,12 +190,21 @@ export const CompactSetRow = memo(function CompactSetRow({
 
             const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
 
+            // For bodyweight exercises without explicit bodyweightData, create it from user's bodyweight
+            const submitBodyweightData = isBodyweight && !bodyweightData && userBodyweightKg
+              ? {
+                  userBodyweightKg,
+                  modification: 'none' as const,
+                  effectiveLoadKg: userBodyweightKg,
+                }
+              : bodyweightData;
+
             await onSubmit({
-              weightKg,
+              weightKg: isBodyweight ? (submitBodyweightData?.effectiveLoadKg ?? userBodyweightKg ?? 0) : weightKg,
               reps: parseInt(reps) || 0,
               rpe,
               feedback,
-              bodyweightData,
+              bodyweightData: submitBodyweightData,
             });
             setPhase('input');
             setReps(String(targetRepRange[1]));
@@ -272,17 +322,27 @@ export const CompactSetRow = memo(function CompactSetRow({
         )}
       </div>
 
-      {/* Reps input - prominent */}
-      <div className="w-20">
-        <input
-          type="number"
-          value={reps}
-          onChange={(e) => setReps(e.target.value)}
-          disabled={disabled}
-          min="0"
-          max="100"
-          className="w-full px-2 py-2 bg-surface-900 border border-surface-700 rounded text-center font-mono text-base font-semibold text-surface-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
-        />
+      {/* Reps/seconds input - prominent */}
+      <div className={isDurationBased ? 'w-32' : 'w-20'}>
+        {isDurationBased ? (
+          <DurationTimerInput
+            value={parseInt(reps) || 0}
+            onChange={(seconds) => setReps(String(seconds))}
+            targetSeconds={targetRepRange[1]}
+            disabled={disabled}
+            exerciseId={exerciseId ? `${exerciseId}-set-${setNumber}` : undefined}
+          />
+        ) : (
+          <input
+            type="number"
+            value={reps}
+            onChange={(e) => setReps(e.target.value)}
+            disabled={disabled}
+            min="0"
+            max={100}
+            className="w-full px-2 py-2 bg-surface-900 border border-surface-700 rounded text-center font-mono text-base font-semibold text-surface-100 focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
+          />
+        )}
       </div>
 
       {/* Check button */}

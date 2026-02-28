@@ -26,7 +26,7 @@ import type {
 } from '@/types/nutrition';
 import type { FoodSearchResult } from '@/services/usdaService';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
-import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
+import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { StepTracking } from '@/components/nutrition/StepTracking';
 import { getLocalDateString, formatDate } from '@/lib/utils';
@@ -1585,6 +1585,7 @@ export default function NutritionPage() {
           targetCalories={nutritionTargets?.calories}
           onRefresh={loadData}
           onSetTarget={() => setShowMacroCalculator(true)}
+          onReset={resetAndRecalculateTDEE}
         />
       )}
 

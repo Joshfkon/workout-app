@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
+import { getLocalDateString, estimateE1RMSimple } from '@/lib/utils';
 import type { UserLifts } from '@/services/measurementImbalanceEngine';
 
 interface BestLiftRecord {
@@ -17,15 +19,15 @@ interface UseBestLiftsReturn {
   lifts: UserLifts;
   bestLiftRecords: BestLiftRecord[];
   isLoading: boolean;
-  error: Error | null;
+  error: string | null;
   refreshLifts: () => Promise<void>;
   updateLift: (exerciseName: string, weightKg: number, reps: number) => Promise<void>;
 }
 
-// Epley formula for E1RM calculation
+/** Use shared E1RM calculation */
 function calculateE1RM(weight: number, reps: number): number {
   if (reps === 1) return weight;
-  return weight * (1 + reps / 30);
+  return estimateE1RMSimple(weight, reps);
 }
 
 // Map common exercise names to the standard lift names used by the imbalance engine
@@ -71,7 +73,7 @@ const EXERCISE_NAME_MAPPING: Record<string, keyof UserLifts> = {
 export function useBestLifts(userId: string): UseBestLiftsReturn {
   const [bestLiftRecords, setBestLiftRecords] = useState<BestLiftRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadLifts = useCallback(async () => {
     if (!userId) {
@@ -201,8 +203,8 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
       }
 
       setBestLiftRecords(records);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to load lifts'));
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
@@ -228,7 +230,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         weight_kg: weightKg,
         reps,
         estimated_1rm_kg: e1rm,
-        achieved_at: new Date().toISOString().split('T')[0],
+        achieved_at: getLocalDateString(),
         source: 'manual',
       }, {
         onConflict: 'user_id,exercise_name',

@@ -10,15 +10,23 @@
  * - This utility validates and corrects unit errors when reading from the database
  */
 
-const LBS_TO_KG = 2.20462;
-const KG_TO_LBS = 1 / LBS_TO_KG;
+// Correct naming: 1 kg = 2.20462 lbs, so KG_TO_LBS = 2.20462
+const KG_TO_LBS = 2.20462;
+// 1 lb = ~0.453592 kg, so LBS_TO_KG = 1 / 2.20462
+const LBS_TO_KG = 1 / KG_TO_LBS;
 
 /**
  * Weight validation and correction rules:
- * - Weights 30-85 lbs labeled as 'lb' are likely in kg (common human weight range)
- * - Weights > 300 lbs labeled as 'lb' are suspicious (check if dividing by 2.20462 gives reasonable kg)
- * - Weights 30-150 kg labeled as 'kg' are likely in lbs (common human weight range)
- * - Weights > 200 kg labeled as 'kg' are suspicious
+ *
+ * IMPORTANT: This utility now TRUSTS the stored unit by default. Previous heuristics
+ * were too aggressive and caused incorrect conversions (e.g., 75 kg → 75 lb).
+ *
+ * Current approach:
+ * - If unit is provided (lb or kg), trust it unless clearly impossible
+ * - If unit is null/undefined, default to 'lb' (most common in US-based apps)
+ * - Only apply corrections for clearly erroneous values:
+ *   - lb > 500: likely a kg value mislabeled (500+ lbs is extremely rare)
+ *   - kg > 300: likely a lb value mislabeled (300+ kg is extremely rare)
  */
 
 interface ValidatedWeight {
@@ -36,8 +44,8 @@ interface ValidatedWeight {
 
 /**
  * Validates and corrects a weight entry from the database.
- * This function detects common unit errors and corrects them.
- * 
+ * This function trusts the stored unit and only infers unit when missing.
+ *
  * @param weight - The weight value from the database
  * @param unit - The unit from the database ('lb', 'kg', or null)
  * @returns Validated weight with corrected value and unit
@@ -47,75 +55,42 @@ export function validateWeightEntry(
   unit: 'lb' | 'kg' | null | undefined
 ): ValidatedWeight {
   const originalWeight = weight;
-  const originalUnit = (unit || 'lb') as 'lb' | 'kg';
+  const originalUnit = unit || null;
   let correctedWeight = weight;
-  let correctedUnit = originalUnit;
+  let correctedUnit: 'lb' | 'kg' = unit || 'lb';
   let wasCorrected = false;
 
-  // Handle null/undefined unit
+  // Handle null/undefined unit - infer default but do not mark as corrected
   if (!unit) {
-    // If no unit specified, try to infer from weight value
-    if (weight >= 30 && weight <= 200) {
-      // Likely in lbs (common human weight range)
-      correctedUnit = 'lb';
-    } else if (weight > 200 && weight < 500) {
-      // Could be either - check if dividing by 2.20462 gives reasonable kg
-      const asKg = weight / LBS_TO_KG;
-      if (asKg >= 100 && asKg <= 200) {
-        // Treating as kg gives reasonable value, so it's probably in kg
-        correctedUnit = 'kg';
-        wasCorrected = true;
-      } else {
-        correctedUnit = 'lb';
-      }
-    } else {
-      correctedUnit = 'lb';
-    }
+    correctedUnit = 'lb';
   }
 
-  // Validate weights labeled as 'lb'
+  // Trust the stored unit for normal human weight ranges
+  // Only apply corrections for clearly impossible values
+
   if (correctedUnit === 'lb') {
-    if (weight > 400) {
-      // Weight > 400 lbs is probably in kg, convert
-      correctedWeight = weight * LBS_TO_KG;
-      correctedUnit = 'lb'; // Keep as lb after conversion
+    // Only correct if weight > 500 lbs (extremely rare, likely kg mislabeled as lb)
+    // In this case, the value is probably actually in kg, so convert to lbs
+    if (weight > 500) {
+      // e.g., 150 stored as 'lb' but meant 150 kg → convert to 330 lbs
+      correctedWeight = weight * KG_TO_LBS;
       wasCorrected = true;
-    } else if (weight > 300) {
-      // Weight 300-400 lbs is suspicious - check if treating as kg makes sense
-      const asKg = weight / LBS_TO_KG;
-      if (asKg >= 100 && asKg <= 200) {
-        // If treating as kg gives reasonable human weight, it's probably in kg
-        correctedWeight = weight * LBS_TO_KG;
-        correctedUnit = 'lb'; // Keep as lb after conversion
-        wasCorrected = true;
-      }
-    } else if (weight <= 85 && weight >= 30) {
-      // Weight 30-85 lbs when labeled as 'lb' is suspicious - likely in kg
-      correctedWeight = weight * LBS_TO_KG;
-      correctedUnit = 'lb'; // Keep as lb after conversion
-      wasCorrected = true;
+      console.warn(`[Weight] Corrected likely mislabeled weight: ${weight} lb → ${correctedWeight.toFixed(1)} lb (interpreted ${weight} as kg)`);
     }
+    // Note: We no longer auto-convert 30-85 lbs to kg - these could be legitimate light weights
   }
 
-  // Validate weights labeled as 'kg'
   if (correctedUnit === 'kg') {
-    if (weight >= 30 && weight <= 200) {
-      // Common weights 30-200 kg are likely human weights in lbs, mislabeled as kg
-      // Most people weigh 100-400 lbs (45-181 kg), so values in this range
-      // labeled as 'kg' are very suspicious - likely lb values with wrong unit
-      correctedWeight = weight; // Already in lbs, just mislabeled
-      correctedUnit = 'lb'; // Correct the unit
+    // Only correct if weight > 300 kg (extremely rare, likely lb mislabeled as kg)
+    // In this case, the value is probably actually in lbs, so just change the unit
+    if (weight > 300) {
+      // e.g., 350 stored as 'kg' but meant 350 lbs → keep value, change unit
+      correctedUnit = 'lb';
       wasCorrected = true;
-    } else if (weight > 200) {
-      // Weight > 200 kg is suspicious - check if it's actually in lbs
-      const asLbs = weight * LBS_TO_KG;
-      if (asLbs > 500) {
-        // If converting to lbs gives > 500, it's probably already in lbs
-        correctedWeight = weight;
-        correctedUnit = 'lb';
-        wasCorrected = true;
-      }
+      console.warn(`[Weight] Corrected likely mislabeled weight: ${weight} kg → ${weight} lb (interpreted as lbs)`);
     }
+    // Note: We no longer auto-convert 30-200 kg to lb - these ARE valid kg weights!
+    // A 75 kg person should stay 75 kg, not become 75 lb
   }
 
   return {
@@ -143,11 +118,11 @@ export function convertToDisplayUnit(
   }
 
   if (validatedWeight.unit === 'lb' && preferredUnit === 'kg') {
-    return validatedWeight.weight / LBS_TO_KG;
+    return validatedWeight.weight * LBS_TO_KG;
   }
 
   if (validatedWeight.unit === 'kg' && preferredUnit === 'lb') {
-    return validatedWeight.weight * LBS_TO_KG;
+    return validatedWeight.weight * KG_TO_LBS;
   }
 
   return validatedWeight.weight;
@@ -206,11 +181,11 @@ export function prepareWeightForStorage(
   }
 
   if (inputUnit === 'lb' && storageUnit === 'kg') {
-    return { weight: weight / LBS_TO_KG, unit: 'kg' };
+    return { weight: weight * LBS_TO_KG, unit: 'kg' };
   }
 
   if (inputUnit === 'kg' && storageUnit === 'lb') {
-    return { weight: weight * LBS_TO_KG, unit: 'lb' };
+    return { weight: weight * KG_TO_LBS, unit: 'lb' };
   }
 
   return { weight, unit: storageUnit };
@@ -273,4 +248,3 @@ export function calculateWeightChange(
   const previousDisplay = getDisplayWeight(previousWeight, previousUnit, preferredUnit);
   return currentDisplay - previousDisplay;
 }
-

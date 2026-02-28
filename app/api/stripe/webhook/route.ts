@@ -19,18 +19,18 @@ async function getSupabaseAdmin() {
 
 async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   const supabase = await getSupabaseAdmin();
-  
+
   const customerId = subscription.customer as string;
   const priceId = subscription.items.data[0]?.price.id;
   const tier = getTierFromPriceId(priceId);
-  
+
   // Find user by customer ID
   const { data: existingSub } = await supabase
     .from('subscriptions')
-    .select('user_id')
+    .select('user_id, is_lifetime, promo_code_id')
     .eq('stripe_customer_id', customerId)
     .single();
-  
+
   if (!existingSub) {
     // Try to find by metadata
     const userId = subscription.metadata.supabase_user_id;
@@ -38,12 +38,30 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
       console.error('No user found for customer:', customerId);
       return;
     }
-    
+
+    // Check if user has an existing subscription (e.g., from promo code)
+    const { data: userExistingSub } = await supabase
+      .from('subscriptions')
+      .select('is_lifetime, promo_code_id, tier')
+      .eq('user_id', userId)
+      .single();
+
+    // Don't overwrite lifetime promo code subscriptions
+    if (userExistingSub?.is_lifetime && userExistingSub?.promo_code_id) {
+      console.log('Skipping subscription update - user has lifetime promo code subscription:', userId);
+      // Only update the stripe_customer_id so we can track it, but keep their tier/status
+      await supabase
+        .from('subscriptions')
+        .update({ stripe_customer_id: customerId })
+        .eq('user_id', userId);
+      return;
+    }
+
     // Get period dates from the subscription (handle different Stripe API versions)
     const subAny = subscription as unknown as Record<string, unknown>;
     const periodStart = subAny.current_period_start as number | undefined;
     const periodEnd = subAny.current_period_end as number | undefined;
-    
+
     // Create subscription record
     await supabase
       .from('subscriptions')
@@ -54,8 +72,8 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         stripe_price_id: priceId,
         tier,
         status: subscription.status,
-        trial_ends_at: subscription.trial_end 
-          ? new Date(subscription.trial_end * 1000).toISOString() 
+        trial_ends_at: subscription.trial_end
+          ? new Date(subscription.trial_end * 1000).toISOString()
           : null,
         current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
         current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
@@ -64,11 +82,17 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         onConflict: 'user_id',
       });
   } else {
+    // Don't overwrite lifetime promo code subscriptions
+    if (existingSub.is_lifetime && existingSub.promo_code_id) {
+      console.log('Skipping subscription update - user has lifetime promo code subscription:', existingSub.user_id);
+      return;
+    }
+
     // Get period dates from the subscription (handle different Stripe API versions)
     const subAny = subscription as unknown as Record<string, unknown>;
     const periodStart = subAny.current_period_start as number | undefined;
     const periodEnd = subAny.current_period_end as number | undefined;
-    
+
     // Update existing subscription
     await supabase
       .from('subscriptions')
@@ -77,8 +101,8 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
         stripe_price_id: priceId,
         tier,
         status: subscription.status,
-        trial_ends_at: subscription.trial_end 
-          ? new Date(subscription.trial_end * 1000).toISOString() 
+        trial_ends_at: subscription.trial_end
+          ? new Date(subscription.trial_end * 1000).toISOString()
           : null,
         current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
         current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
@@ -91,7 +115,19 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const supabase = await getSupabaseAdmin();
   const customerId = subscription.customer as string;
-  
+
+  // Check if this is a lifetime promo code subscription - don't downgrade those
+  const { data: existingSub } = await supabase
+    .from('subscriptions')
+    .select('is_lifetime, promo_code_id')
+    .eq('stripe_customer_id', customerId)
+    .single();
+
+  if (existingSub?.is_lifetime && existingSub?.promo_code_id) {
+    console.log('Skipping subscription deletion - user has lifetime promo code subscription');
+    return;
+  }
+
   // Update to canceled status but keep the record
   await supabase
     .from('subscriptions')

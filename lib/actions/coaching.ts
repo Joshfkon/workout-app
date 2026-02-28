@@ -10,6 +10,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import { buildCoachingContext, formatCoachingContext } from '@/services/coachingContextService';
+import {
+  AuthenticationError,
+  ServerError,
+  NotFoundError,
+  getErrorMessage,
+} from '@/lib/errors';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
 
 // System prompt for AI coaching
@@ -65,14 +71,14 @@ export async function sendCoachingMessage(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       console.error('[AI Coach] No authenticated user');
-      throw new Error('Unauthorized');
+      throw new AuthenticationError('Please sign in to use AI coaching.');
     }
 
     // Check for API key
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       console.error('[AI Coach] ANTHROPIC_API_KEY is not set');
-      throw new Error('AI coaching is not configured. Please contact support.');
+      throw new ServerError('AI coaching is not configured. Please contact support.', 500);
     }
 
     // Build coaching context
@@ -102,7 +108,7 @@ export async function sendCoachingMessage(
       .single();
 
     if (error || !data) {
-      throw new Error('Conversation not found');
+      throw new NotFoundError('Conversation');
     }
 
     conversation = data as any;
@@ -155,9 +161,10 @@ export async function sendCoachingMessage(
       system: SYSTEM_PROMPT,
       messages: apiMessages,
     });
-  } catch (apiError: any) {
-    console.error('[AI Coach] Anthropic API error:', apiError?.message || apiError);
-    throw new Error(`AI service error: ${apiError?.message || 'Unknown error'}`);
+  } catch (apiError: unknown) {
+    const message = getErrorMessage(apiError);
+    console.error('[AI Coach] Anthropic API error:', message);
+    throw new ServerError(`AI service error: ${message}`, 500);
   }
 
   // Extract assistant's response
@@ -199,7 +206,7 @@ export async function sendCoachingMessage(
       .single();
 
     if (error) {
-      throw new Error('Failed to save conversation');
+      throw new ServerError('Failed to save conversation', 500);
     }
 
     conversation = data as any;
@@ -211,8 +218,8 @@ export async function sendCoachingMessage(
     message: assistantContent,
     timestamp: assistantMessage.timestamp,
   };
-  } catch (error: any) {
-    console.error('[AI Coach] Error in sendCoachingMessage:', error?.message || error);
+  } catch (error: unknown) {
+    console.error('[AI Coach] Error in sendCoachingMessage:', getErrorMessage(error));
     throw error;
   }
 }
@@ -225,7 +232,7 @@ export async function getCoachingConversations() {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('Unauthorized');
+    throw new AuthenticationError();
   }
 
   const { data, error } = await supabase
@@ -235,7 +242,7 @@ export async function getCoachingConversations() {
     .order('last_message_at', { ascending: false });
 
   if (error) {
-    throw new Error('Failed to fetch conversations');
+    throw new ServerError('Failed to fetch conversations', 500);
   }
 
   return data;
@@ -249,7 +256,7 @@ export async function getCoachingConversation(conversationId: string) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('Unauthorized');
+    throw new AuthenticationError();
   }
 
   const { data, error } = await supabase
@@ -260,7 +267,7 @@ export async function getCoachingConversation(conversationId: string) {
     .single();
 
   if (error) {
-    throw new Error('Conversation not found');
+    throw new NotFoundError('Conversation', conversationId);
   }
 
   return data;
@@ -274,7 +281,7 @@ export async function deleteCoachingConversation(conversationId: string) {
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    throw new Error('Unauthorized');
+    throw new AuthenticationError();
   }
 
   const { error } = await supabase
@@ -284,7 +291,7 @@ export async function deleteCoachingConversation(conversationId: string) {
     .eq('user_id', user.id);
 
   if (error) {
-    throw new Error('Failed to delete conversation');
+    throw new ServerError('Failed to delete conversation', 500);
   }
 }
 

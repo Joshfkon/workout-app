@@ -1,5 +1,9 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
+import { fetchUserProfiles } from '@/lib/profiles';
 import type { SharedWorkoutWithProfile, ShareType, Difficulty } from '@/types/social';
 
 interface UseSharedWorkoutsOptions {
@@ -37,6 +41,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [cursor, setCursor] = useState<string | null>(null);
+  const { user: authUser } = useAuthUser();
 
   const fetchWorkouts = useCallback(async (isLoadMore = false) => {
     setIsLoading(true);
@@ -44,7 +49,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
 
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = authUser;
 
       // Query shared workouts first (without user_profiles join)
       let query = supabase
@@ -104,12 +109,9 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const userIds = Array.from(new Set(workoutsData.map((w: any) => w.user_id)));
 
       // Fetch user profiles and saved workouts in parallel (not sequentially)
-      const [profilesResult, savedResult] = await Promise.all([
+      const [profilesMap, savedResult] = await Promise.all([
         // Fetch user profiles
-        supabase
-          .from('user_profiles' as never)
-          .select('id, user_id, username, display_name, avatar_url, training_experience')
-          .in('user_id', userIds),
+        fetchUserProfiles(supabase, userIds, 'full'),
         // Fetch saved workouts for current user (only if authenticated)
         user
           ? supabase
@@ -119,20 +121,6 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
           : Promise.resolve({ data: null, error: null }),
       ]);
 
-      const { data: profilesData, error: profilesError } = profilesResult;
-      if (profilesError) {
-        console.error('Error fetching user profiles:', profilesError);
-        // Continue without profiles rather than failing completely
-      }
-
-      // Create a map of user_id -> profile
-      const profilesMap = new Map();
-      if (profilesData) {
-        profilesData.forEach((profile: any) => {
-          profilesMap.set(profile.user_id, profile);
-        });
-      }
-
       // Extract saved workout IDs
       const savedWorkouts = savedResult.data as Array<{ shared_workout_id: string }> | null;
       const savedIds: string[] = savedWorkouts?.map((s) => s.shared_workout_id) || [];
@@ -141,7 +129,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
       const transformedWorkouts: SharedWorkoutWithProfile[] = (workoutsData || [])
         .filter((workout: any) => profilesMap.has(workout.user_id))
         .map((workout: any) => {
-          const profile = profilesMap.get(workout.user_id);
+          const profile = profilesMap.get(workout.user_id)!;
           return {
             ...workout,
             user_profile: {
@@ -186,7 +174,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
     } finally {
       setIsLoading(false);
     }
-  }, [shareType, difficulty, muscleGroups, searchQuery, sortBy, limit, cursor]);
+  }, [shareType, difficulty, muscleGroups, searchQuery, sortBy, limit, cursor, authUser]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || isLoading) return;
@@ -200,17 +188,16 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
 
   const saveWorkout = useCallback(async (workoutId: string) => {
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         return { success: false, error: 'Must be logged in to save workouts' };
       }
+
+      const supabase = createClient();
 
       const { error: saveError } = await supabase
         .from('saved_workouts' as never)
         .insert({
-          user_id: user.id,
+          user_id: authUser.id,
           shared_workout_id: workoutId,
         } as never);
 
@@ -234,21 +221,20 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to save' };
     }
-  }, []);
+  }, [authUser]);
 
   const unsaveWorkout = useCallback(async (workoutId: string) => {
     try {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         return { success: false, error: 'Must be logged in' };
       }
+
+      const supabase = createClient();
 
       const { error: deleteError } = await supabase
         .from('saved_workouts' as never)
         .delete()
-        .eq('user_id', user.id)
+        .eq('user_id', authUser.id)
         .eq('shared_workout_id', workoutId);
 
       if (deleteError) throw deleteError;
@@ -266,7 +252,7 @@ export function useSharedWorkouts(options: UseSharedWorkoutsOptions = {}): UseSh
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to unsave' };
     }
-  }, []);
+  }, [authUser]);
 
   useEffect(() => {
     setCursor(null);

@@ -1,9 +1,16 @@
 /**
  * FatSecret API Service
- * 
+ *
  * Handles OAuth 2.0 authentication and food search using FatSecret Platform API.
  * Uses Client Credentials Grant for server-to-server authentication.
  */
+
+import {
+  NetworkError,
+  ServerError,
+  ValidationError,
+  getErrorMessage
+} from '@/lib/errors';
 
 interface FatSecretTokenResponse {
   access_token: string;
@@ -87,7 +94,7 @@ async function getAccessToken(): Promise<string> {
   const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error('FatSecret API credentials not configured');
+    throw new ServerError('FatSecret API credentials not configured', 500);
   }
 
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
@@ -104,7 +111,7 @@ async function getAccessToken(): Promise<string> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error('FatSecret token error:', response.status, errorText);
-    throw new Error('Failed to authenticate with FatSecret');
+    throw new NetworkError('Failed to authenticate with FatSecret');
   }
 
   const data: FatSecretTokenResponse = await response.json();
@@ -145,7 +152,7 @@ async function fatSecretRequest<T>(
   if (!response.ok) {
     const errorText = await response.text();
     console.error('FatSecret API error:', response.status, errorText);
-    throw new Error(`FatSecret API error: ${response.status}`);
+    throw new ServerError(`FatSecret API error: ${response.status}`, response.status);
   }
 
   return response.json();
@@ -231,12 +238,12 @@ export async function searchFoods(
       foods,
       totalResults: parseInt(data.foods.total_results || '0', 10),
     };
-  } catch (error) {
-    console.error('Error searching foods:', error);
+  } catch (error: unknown) {
+    console.error('Error searching foods:', getErrorMessage(error));
     return {
       foods: [],
       totalResults: 0,
-      error: error instanceof Error ? error.message : 'Search failed',
+      error: getErrorMessage(error),
     };
   }
 }
@@ -298,10 +305,10 @@ export async function getFoodDetails(
         servings: parsedServings,
       },
     };
-  } catch (error) {
-    console.error('Error getting food details:', error);
+  } catch (error: unknown) {
+    console.error('Error getting food details:', getErrorMessage(error));
     return {
-      error: error instanceof Error ? error.message : 'Failed to get food details',
+      error: getErrorMessage(error),
     };
   }
 }
@@ -330,10 +337,10 @@ export async function lookupBarcode(
 
     // Get full food details
     return getFoodDetails(data.food.food_id);
-  } catch (error) {
-    console.error('Error looking up barcode:', error);
+  } catch (error: unknown) {
+    console.error('Error looking up barcode:', getErrorMessage(error));
     return {
-      error: error instanceof Error ? error.message : 'Barcode lookup failed',
+      error: getErrorMessage(error),
     };
   }
 }
@@ -361,11 +368,11 @@ export async function getAutocompleteSuggestions(
     return {
       suggestions: data.suggestions?.suggestion || [],
     };
-  } catch (error) {
-    console.error('Error getting autocomplete suggestions:', error);
+  } catch (error: unknown) {
+    console.error('Error getting autocomplete suggestions:', getErrorMessage(error));
     return {
       suggestions: [],
-      error: error instanceof Error ? error.message : 'Autocomplete failed',
+      error: getErrorMessage(error),
     };
   }
 }

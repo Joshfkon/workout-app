@@ -27,11 +27,14 @@ const config: CapacitorConfig = {
   // Plugin configuration
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      // Reduced from 2000ms - web splash provides the branded experience
+      launchShowDuration: 500,
       backgroundColor: '#0a0a0a',
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
+      // Auto-hide once web view is ready
+      launchAutoHide: true,
     },
     StatusBar: {
       style: 'DARK',

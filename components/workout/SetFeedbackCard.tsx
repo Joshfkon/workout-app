@@ -31,6 +31,10 @@ interface SetFeedbackCardProps {
   onCancel?: () => void;
   /** Whether the card is disabled */
   disabled?: boolean;
+  /** Whether this is a bodyweight exercise */
+  isBodyweight?: boolean;
+  /** User's body weight in kg (for bodyweight exercises) */
+  userBodyweightKg?: number;
 }
 
 /**
@@ -47,6 +51,8 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
   onSave,
   onCancel,
   disabled = false,
+  isBodyweight = false,
+  userBodyweightKg,
 }: SetFeedbackCardProps) {
   const [repsInTank, setRepsInTank] = useState<RepsInTank | null>(
     defaultFeedback?.repsInTank ?? null
@@ -84,6 +90,9 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
   const displayWeight = formatWeightValue(weightKg, unit);
   const unitLabel = unit === 'lb' ? 'lbs' : 'kg';
 
+  // For bodyweight exercises, show "BW" prefix with user's bodyweight
+  const displayBwWeight = userBodyweightKg ? formatWeightValue(userBodyweightKg, unit) : null;
+
   return (
     <div className="bg-surface-800/80 border border-surface-700 rounded-xl p-4 space-y-4">
       {/* Header with set info */}
@@ -91,7 +100,17 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
         <div>
           <p className="text-sm text-surface-400">Set {setNumber}</p>
           <p className="text-xl font-bold text-surface-100">
-            {displayWeight} {unitLabel} <span className="text-surface-400">x</span> {reps}
+            {isBodyweight ? (
+              <>
+                <span className="text-surface-400">BW</span>{' '}
+                {displayBwWeight ? `(${displayBwWeight})` : ''} {unitLabel}{' '}
+                <span className="text-surface-400">x</span> {reps}
+              </>
+            ) : (
+              <>
+                {displayWeight} {unitLabel} <span className="text-surface-400">x</span> {reps}
+              </>
+            )}
           </p>
         </div>
         {usingDefaults && (

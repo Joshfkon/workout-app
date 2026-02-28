@@ -444,7 +444,8 @@ export function getBiasColor(bias: number): 'green' | 'yellow' | 'red' {
 export function repsInTankToRIR(rit: RepsInTank): number {
   switch (rit) {
     case 4: return 4;
-    case 2: return 2.5; // Represents 2-3 range
+    case 3: return 3;
+    case 2: return 2;
     case 1: return 1;
     case 0: return 0;
   }

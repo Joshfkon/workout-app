@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SetInputRow } from '../workout/SetInputRow';
 import { formatWeight, formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
@@ -10,6 +10,12 @@ jest.mock('@/services/progressionEngine', () => ({
     quality: 'effective',
     reason: 'Good set within target range',
   })),
+}));
+
+// Mock InfoTooltip to prevent rendering issues
+jest.mock('@/components/ui', () => ({
+  ...jest.requireActual('@/components/ui'),
+  InfoTooltip: () => null,
 }));
 
 describe('Unit Preference Integration', () => {
@@ -67,43 +73,45 @@ describe('Unit Preference Integration', () => {
 
       fireEvent.change(weightInput, { target: { value: '100' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
+
       // Click proceed to go to feedback phase
       expect(proceedButton).toBeTruthy();
       fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for feedback phase to render - use waitFor for more reliable waiting
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
 
       // Now we're in feedback phase - find RIR selector buttons
       // RIRSelector shows buttons with labels like "2-3", "1", "4+", "Maxed"
       const allButtons = screen.getAllByRole('button');
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
         btn.textContent?.includes('Good')
       );
-      
+
       expect(rirButton).toBeTruthy();
       if (rirButton) {
         fireEvent.click(rirButton);
       }
 
       // Find form selector button (Clean, Some Breakdown, Ugly)
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
-        btn.textContent?.includes('Textbook')
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') &&
+        !btn.textContent?.includes('Save')
       );
-      
+
       expect(formButton).toBeTruthy();
       if (formButton) {
         fireEvent.click(formButton);
       }
 
       // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
+      const saveButton = allButtons.find(btn =>
         btn.textContent?.includes('Save Set')
       );
-      
+
       expect(saveButton).toBeTruthy();
       expect(saveButton).not.toBeDisabled();
       if (saveButton) {
@@ -123,7 +131,7 @@ describe('Unit Preference Integration', () => {
           }),
         })
       );
-      
+
       // Verify weightKg is a number, not a string
       const submittedData = onSubmit.mock.calls[0][0];
       expect(typeof submittedData.weightKg).toBe('number');
@@ -142,34 +150,36 @@ describe('Unit Preference Integration', () => {
 
       fireEvent.change(weightInput, { target: { value: '225' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
+
       // Click proceed to go to feedback phase
       expect(proceedButton).toBeTruthy();
       fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for feedback phase to render - use waitFor for more reliable waiting
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
 
       // Now we're in feedback phase - find RIR and Form selectors
       const allButtons = screen.getAllByRole('button');
-      
+
       // Find RIR selector button (shows "2-3" or "Good")
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
         btn.textContent?.includes('Good')
       );
-      
+
       expect(rirButton).toBeTruthy();
       if (rirButton) {
         fireEvent.click(rirButton);
       }
 
       // Find form selector button (shows "Clean")
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
-        btn.textContent?.includes('Textbook')
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') &&
+        !btn.textContent?.includes('Save')
       );
-      
+
       expect(formButton).toBeTruthy();
       if (formButton) {
         fireEvent.click(formButton);

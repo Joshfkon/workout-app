@@ -265,7 +265,9 @@ describe('checkDeloadTriggers', () => {
   });
 
   describe('experience adjustment', () => {
-    it('requires more triggers for novices', () => {
+    it('novices deload more readily (single trigger sufficient)', () => {
+      // Novices have less efficient CNS patterns and are more prone to overtraining
+      // They should deload more readily, not less
       const performance = [
         createMockPerformanceData({ perceivedFatigue: 3 }),
         createMockPerformanceData({ perceivedFatigue: 4 }),
@@ -277,11 +279,13 @@ describe('checkDeloadTriggers', () => {
         createMockPeriodization()
       );
 
-      // Single trigger insufficient for novice
-      expect(result.shouldDeload).toBe(false);
+      // Single trigger IS sufficient for novice
+      expect(result.shouldDeload).toBe(true);
     });
 
-    it('trusts single trigger for advanced lifters', () => {
+    it('advanced lifters require more triggers before deloading', () => {
+      // Advanced lifters are better at self-regulating and have more efficient
+      // movement patterns - they can handle more fatigue before needing deload
       const performance = [
         createMockPerformanceData({ perceivedFatigue: 3 }),
         createMockPerformanceData({ perceivedFatigue: 4 }),
@@ -293,7 +297,8 @@ describe('checkDeloadTriggers', () => {
         createMockPeriodization()
       );
 
-      expect(result.shouldDeload).toBe(true);
+      // Advanced needs more evidence of fatigue
+      expect(result.shouldDeload).toBe(false);
     });
   });
 });
@@ -362,11 +367,12 @@ describe('calculateDeloadFrequency', () => {
     expect(young).toBeGreaterThan(older);
   });
 
-  it('returns longer intervals for novices', () => {
+  it('returns shorter intervals for novices (more frequent deloads)', () => {
+    // Novices need more frequent deloads due to CNS inefficiency
     const novice = calculateDeloadFrequency(createMockProfile({ trainingAge: 0.5 }));
     const experienced = calculateDeloadFrequency(createMockProfile({ trainingAge: 6 }));
 
-    expect(novice).toBeGreaterThan(experienced);
+    expect(novice).toBeLessThan(experienced);
   });
 
   it('shortens interval for poor sleep/high stress', () => {
@@ -398,13 +404,15 @@ describe('calculateDeloadFrequency', () => {
 // ============================================
 
 describe('getDeloadStrategy', () => {
-  it('returns reactive for novices', () => {
-    expect(getDeloadStrategy('novice')).toBe('reactive');
+  it('returns proactive for novices/intermediate (scheduled deloads for safety)', () => {
+    // Novices often don't recognize fatigue signals, so scheduled deloads are safer
+    expect(getDeloadStrategy('novice')).toBe('proactive');
+    expect(getDeloadStrategy('intermediate')).toBe('proactive');
   });
 
-  it('returns proactive for intermediate/advanced', () => {
-    expect(getDeloadStrategy('intermediate')).toBe('proactive');
-    expect(getDeloadStrategy('advanced')).toBe('proactive');
+  it('returns reactive for advanced lifters (they can read their body)', () => {
+    // Advanced lifters are better at recognizing fatigue and can respond as needed
+    expect(getDeloadStrategy('advanced')).toBe('reactive');
   });
 });
 

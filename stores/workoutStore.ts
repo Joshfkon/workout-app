@@ -12,7 +12,7 @@ interface WorkoutState {
   // Current session
   activeSession: WorkoutSession | null;
   exerciseBlocks: ExerciseBlock[];
-  setLogs: Map<string, SetLog[]>; // blockId -> sets
+  setLogs: Record<string, SetLog[]>; // blockId -> sets
   currentBlockIndex: number;
 
   // Pause state
@@ -20,7 +20,7 @@ interface WorkoutState {
   pausedAt: number | null; // Timestamp when paused
 
   // Cached exercise data
-  exercises: Map<string, Exercise>;
+  exercises: Record<string, Exercise>;
 
   // Timer state
   restTimerEnd: number | null;
@@ -31,22 +31,22 @@ interface WorkoutState {
   pauseSession: () => void;
   resumeSession: () => void;
   setCheckIn: (checkIn: PreWorkoutCheckIn) => void;
-  
+
   // Exercise navigation
   setCurrentBlock: (index: number) => void;
   nextBlock: () => void;
   previousBlock: () => void;
-  
+
   // Set logging
   logSet: (blockId: string, set: SetLog) => void;
   updateSet: (blockId: string, setId: string, data: Partial<SetLog>) => void;
   deleteSet: (blockId: string, setId: string) => void;
   getSetsForBlock: (blockId: string) => SetLog[];
-  
+
   // Timer
   startRestTimer: (seconds: number) => void;
   clearRestTimer: () => void;
-  
+
   // Session summary
   getSessionStats: () => {
     totalSets: number;
@@ -61,25 +61,25 @@ export const useWorkoutStore = create<WorkoutState>()(
     (set, get) => ({
       activeSession: null,
       exerciseBlocks: [],
-      setLogs: new Map(),
+      setLogs: {},
       currentBlockIndex: 0,
       isPaused: false,
       pausedAt: null,
-      exercises: new Map(),
+      exercises: {},
       restTimerEnd: null,
 
       startSession: (session, blocks, exercises) => {
-        const exerciseMap = new Map<string, Exercise>();
-        exercises.forEach((ex) => exerciseMap.set(ex.id, ex));
+        const exerciseRecord: Record<string, Exercise> = {};
+        exercises.forEach((ex) => { exerciseRecord[ex.id] = ex; });
 
         set({
           activeSession: session,
           exerciseBlocks: blocks,
-          setLogs: new Map(),
+          setLogs: {},
           currentBlockIndex: 0,
           isPaused: false,
           pausedAt: null,
-          exercises: exerciseMap,
+          exercises: exerciseRecord,
           restTimerEnd: null,
         });
       },
@@ -88,11 +88,11 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({
           activeSession: null,
           exerciseBlocks: [],
-          setLogs: new Map(),
+          setLogs: {},
           currentBlockIndex: 0,
           isPaused: false,
           pausedAt: null,
-          exercises: new Map(),
+          exercises: {},
           restTimerEnd: null,
         });
       },
@@ -117,7 +117,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       setCheckIn: (checkIn) => {
         const { activeSession } = get();
         if (!activeSession) return;
-        
+
         set({
           activeSession: {
             ...activeSession,
@@ -149,34 +149,28 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       logSet: (blockId, setData) => {
         const { setLogs } = get();
-        const newMap = new Map(setLogs);
-        const blockSets = newMap.get(blockId) || [];
-        newMap.set(blockId, [...blockSets, setData]);
-        set({ setLogs: newMap });
+        const blockSets = setLogs[blockId] || [];
+        set({ setLogs: { ...setLogs, [blockId]: [...blockSets, setData] } });
       },
 
       updateSet: (blockId, setId, data) => {
         const { setLogs } = get();
-        const newMap = new Map(setLogs);
-        const blockSets = newMap.get(blockId) || [];
+        const blockSets = setLogs[blockId] || [];
         const updatedSets = blockSets.map((s) =>
           s.id === setId ? { ...s, ...data } : s
         );
-        newMap.set(blockId, updatedSets);
-        set({ setLogs: newMap });
+        set({ setLogs: { ...setLogs, [blockId]: updatedSets } });
       },
 
       deleteSet: (blockId, setId) => {
         const { setLogs } = get();
-        const newMap = new Map(setLogs);
-        const blockSets = newMap.get(blockId) || [];
-        newMap.set(blockId, blockSets.filter((s) => s.id !== setId));
-        set({ setLogs: newMap });
+        const blockSets = setLogs[blockId] || [];
+        set({ setLogs: { ...setLogs, [blockId]: blockSets.filter((s) => s.id !== setId) } });
       },
 
       getSetsForBlock: (blockId) => {
         const { setLogs } = get();
-        return setLogs.get(blockId) || [];
+        return setLogs[blockId] || [];
       },
 
       startRestTimer: (seconds) => {
@@ -194,7 +188,7 @@ export const useWorkoutStore = create<WorkoutState>()(
         let totalVolume = 0;
         let totalRpe = 0;
 
-        setLogs.forEach((sets) => {
+        Object.values(setLogs).forEach((sets) => {
           const workingSets = sets.filter((s) => !s.isWarmup);
           totalSets += workingSets.length;
           workingSets.forEach((s) => {
@@ -214,25 +208,6 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'workout-storage',
-      partialize: (state) => ({
-        activeSession: state.activeSession,
-        exerciseBlocks: state.exerciseBlocks,
-        setLogs: Array.from(state.setLogs.entries()),
-        currentBlockIndex: state.currentBlockIndex,
-        isPaused: state.isPaused,
-        pausedAt: state.pausedAt,
-        exercises: Array.from(state.exercises.entries()),
-      }),
-      onRehydrateStorage: () => (state) => {
-        // Convert Maps back after rehydration
-        if (state && Array.isArray(state.setLogs)) {
-          state.setLogs = new Map(state.setLogs as any);
-        }
-        if (state && Array.isArray(state.exercises)) {
-          state.exercises = new Map(state.exercises as any);
-        }
-      },
     }
   )
 );
-

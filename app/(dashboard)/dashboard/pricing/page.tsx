@@ -21,14 +21,15 @@ function PricingContent() {
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoResult, setPromoResult] = useState<{ success: boolean; message: string } | null>(null);
   
-  const { 
-    tier: currentTier, 
-    status, 
-    isTrialing, 
+  const {
+    tier: currentTier,
+    status,
+    isTrialing,
     trialDaysRemaining,
     effectiveTier,
     createCheckout,
-    isLoading 
+    isLoading,
+    refresh: refreshSubscription
   } = useSubscription();
 
   // Check for checkout result
@@ -73,9 +74,10 @@ function PricingContent() {
       
       if (result.success) {
         setPromoCode('');
-        // Refresh the page after a short delay to show updated subscription
-        setTimeout(() => {
-          router.refresh();
+        // Clear subscription cache and refresh to show updated subscription
+        setTimeout(async () => {
+          await refreshSubscription();
+          window.location.reload();
         }, 2000);
       }
     } catch {

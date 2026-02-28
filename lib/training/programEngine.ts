@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   UserProfile,
   BodyComposition,
@@ -516,7 +517,7 @@ export class ProgramEngine {
       cut: { compound: [4, 6], isolation: [8, 12] },
       bulk: { compound: [6, 10], isolation: [10, 15] },
       recomp: { compound: [5, 8], isolation: [8, 12] },
-      maintain: { compound: [5, 8], isolation: [8, 12] }
+      maintenance: { compound: [5, 8], isolation: [8, 12] }
     };
     
     const base = isCompound 
@@ -942,7 +943,7 @@ export class ProgramEngine {
         volume_per_muscle: volumePerMuscle,
         recovery_multiplier: recoveryFactors.volumeMultiplier,
         is_active: true,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: getLocalDateString(),
       })
       .select('id')
       .single();

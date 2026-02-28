@@ -232,13 +232,15 @@ describe('WeightEstimationEngine', () => {
       expect(result.weightRange.high).toBeGreaterThan(result.recommendedWeight);
     });
 
-    it('returns find_working_weight for completely unknown exercise', () => {
+    it('returns low confidence with finding protocol for completely unknown exercise', () => {
       const profile = createTestProfile();
 
       const engine = new WeightEstimationEngine(profile);
       const result = engine.getWorkingWeight('Some Obscure Exercise', { min: 8, max: 12 }, 2);
 
-      expect(result.confidence).toBe('find_working_weight');
+      // Unknown exercises now fall back to bodyweight-based estimation with 'low' confidence
+      // rather than 'find_working_weight', but still include the finding protocol
+      expect(result.confidence).toBe('low');
       expect(result.findingWeightProtocol).toBeDefined();
       expect(result.findingWeightProtocol?.startingWeight).toBeGreaterThan(0);
       expect(result.findingWeightProtocol?.instructions).toContain('Start');
@@ -891,7 +893,8 @@ describe('edge cases', () => {
     const result = engine.getWorkingWeight('Completely Unknown Exercise XYZ', { min: 8, max: 12 }, 2);
 
     expect(result).toBeDefined();
-    expect(result.confidence).toBe('find_working_weight');
+    // Unknown exercises now fall back to bodyweight-based estimation with 'low' confidence
+    expect(result.confidence).toBe('low');
     expect(result.findingWeightProtocol).toBeDefined();
   });
 

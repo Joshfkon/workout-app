@@ -17,6 +17,7 @@ import {
   type AIResponse,
 } from '@/lib/exercises/exercise-ai-completion';
 import { getExerciseById, getExercises } from '@/services/exerciseService';
+import { getLocalDateString } from '@/lib/utils';
 
 // ============================================
 // USAGE TRACKING
@@ -30,10 +31,10 @@ interface UsageRecord {
 async function getAIUsage(userId: string): Promise<UsageRecord> {
   const supabase = await createClient();
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const monthStart = new Date();
   monthStart.setDate(1);
-  const monthStartStr = monthStart.toISOString().split('T')[0];
+  const monthStartStr = getLocalDateString(monthStart);
 
   // Check for existing usage record
   const { data } = await (supabase
@@ -226,7 +227,8 @@ export async function checkAIUsageAllowed(): Promise<{
         thisMonth: Math.max(0, MONTHLY_LIMIT - usage.thisMonth),
       },
     };
-  } catch {
+  } catch (error) {
+    console.error('[checkAIUsageAllowed] Failed to check AI usage:', error);
     return { allowed: false, remaining: { today: 0, thisMonth: 0 } };
   }
 }
@@ -284,7 +286,8 @@ export async function getIncompleteExercises(): Promise<
         };
       })
       .filter((e: any): e is { id: string; name: string; missingFields: string[] } => e !== null);
-  } catch {
+  } catch (error) {
+    console.error('[getIncompleteExercises] Failed to fetch incomplete exercises:', error);
     return [];
   }
 }

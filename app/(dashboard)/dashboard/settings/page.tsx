@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle, LoadingAnimation, Modal } from '@/components/ui';
-import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
-import type { Goal, Experience, WeightUnit, Equipment, MuscleGroup, Rating } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, DEFAULT_VOLUME_LANDMARKS, MUSCLE_GROUPS } from '@/types/schema';
+import type { Goal, Experience, WeightUnit, Equipment, StandardMuscleGroup, MuscleGroup, Rating } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { convertWeight } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
@@ -17,6 +17,7 @@ import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
+import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -321,19 +322,20 @@ export default function SettingsPage() {
 
   const handleRedeemPromo = async () => {
     if (!promoCode.trim()) return;
-    
+
     setPromoLoading(true);
     setPromoResult(null);
-    
+
     try {
       const result = await redeemPromoCode(promoCode);
       setPromoResult(result);
-      
+
       if (result.success) {
         setPromoCode('');
-        // Refresh the page after a short delay to show updated subscription
+        // Clear subscription cache and refresh to show updated subscription
         setTimeout(() => {
-          router.refresh();
+          sessionStorage.removeItem('subscription_data');
+          window.location.reload();
         }, 2000);
       }
     } catch {
@@ -635,6 +637,27 @@ export default function SettingsPage() {
 
       {/* Detailed Gym Equipment */}
       <GymEquipmentSettings />
+
+      {/* Exercise Variety Settings */}
+      {userId && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Exercise Variety
+            </CardTitle>
+            <p className="text-sm text-surface-400 mt-1">
+              Control how much the AI rotates between different exercises for each muscle group.
+              Higher variety means different exercises each session for the same muscle.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ExerciseVarietySettings userId={userId} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Muscle Priorities */}
       {userId && (
@@ -1434,12 +1457,12 @@ function VolumeLandmarksCard({ experience, volumeLandmarks, setVolumeLandmarks }
             </div>
           </div>
 
-          {MUSCLE_GROUPS.map((muscle) => {
+          {STANDARD_MUSCLE_GROUPS.map((muscle) => {
             const defaultLandmark = DEFAULT_VOLUME_LANDMARKS[experience][muscle] || { mev: 6, mav: 12, mrv: 20 };
             const landmarks = volumeLandmarks[muscle] || defaultLandmark;
             return (
               <div key={muscle} className="flex items-center gap-4">
-                <span className="w-24 text-sm text-surface-300 capitalize">{muscle}</span>
+                <span className="w-24 text-sm text-surface-300">{STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}</span>
                 <div className="flex-1 grid grid-cols-3 gap-2">
                   <Input
                     type="number"

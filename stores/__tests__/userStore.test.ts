@@ -231,8 +231,9 @@ describe('userStore', () => {
       const mockUser = createMockUser();
       useUserStore.getState().setUser(mockUser);
 
-      const landmarks = useUserStore.getState().getVolumeLandmarks('chest');
-      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest);
+      // Use standard muscle group (chest_upper instead of legacy 'chest')
+      const landmarks = useUserStore.getState().getVolumeLandmarks('chest_upper');
+      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper);
     });
 
     it('returns default landmarks when muscle not found', () => {
@@ -241,13 +242,15 @@ describe('userStore', () => {
       });
       useUserStore.getState().setUser(mockUser);
 
-      const landmarks = useUserStore.getState().getVolumeLandmarks('chest');
-      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest);
+      // Use standard muscle group
+      const landmarks = useUserStore.getState().getVolumeLandmarks('chest_upper');
+      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper);
     });
 
     it('returns intermediate defaults when user is null', () => {
-      const landmarks = useUserStore.getState().getVolumeLandmarks('chest');
-      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest);
+      // Use standard muscle group
+      const landmarks = useUserStore.getState().getVolumeLandmarks('chest_upper');
+      expect(landmarks).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper);
     });
 
     it('returns fallback landmarks for unknown muscle when user is null', () => {

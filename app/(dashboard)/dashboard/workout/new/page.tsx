@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
+import { MUSCLE_GROUPS, type MuscleGroup, legacyToStandardMuscles, type StandardMuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
+import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString } from '@/lib/utils';
 import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
+import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
+import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
+import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
@@ -66,6 +72,7 @@ interface Exercise {
   primary_muscle: string;
   mechanic: 'compound' | 'isolation';
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
+  equipment_required?: string[];
 }
 
 interface CustomExerciseForm {
@@ -231,6 +238,93 @@ function NewWorkoutContent() {
   const [customExerciseError, setCustomExerciseError] = useState<string | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Exercise variety state
+  const [varietyLevel, setVarietyLevel] = useState<ExerciseVarietyLevel>('medium');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // Location filter dropdown state
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+
+  // Recovery and volume tracking for muscle selection guidance
+  const { recoveryStatus, isLoading: isLoadingRecovery } = useMuscleRecovery();
+  const { volumeData, isLoading: isLoadingVolume } = useWeeklyVolume();
+
+  // Aggregate recovery and volume data for UI muscle groups (legacy 13)
+  // Since UI groups map to multiple standard groups, we take the worst-case for recovery
+  // and sum the volume data
+  const muscleIndicators = useMemo(() => {
+    const indicators = new Map<MuscleGroup, {
+      recoveryPercent: number;
+      isReady: boolean;
+      statusText: string;
+      totalSets: number;
+      targetSets: number; // MAV midpoint
+      volumeStatus: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
+    }>();
+
+    MUSCLE_GROUPS.forEach((muscle) => {
+      const standardMuscles = legacyToStandardMuscles(muscle);
+
+      // Get recovery data - use the worst (lowest) recovery percentage
+      let worstRecoveryPercent = 100;
+      let isReady = true;
+      let statusText = 'Ready';
+
+      standardMuscles.forEach((sm) => {
+        const recovery = recoveryStatus.find((r) => r.muscle === sm);
+        if (recovery) {
+          if (recovery.recoveryPercent < worstRecoveryPercent) {
+            worstRecoveryPercent = recovery.recoveryPercent;
+            statusText = recovery.statusText;
+          }
+          if (!recovery.isReady) {
+            isReady = false;
+          }
+        }
+      });
+
+      // Get volume data - sum across all mapped standard muscles
+      let totalSets = 0;
+      let targetSets = 0;
+      let worstVolumeStatus: MuscleVolumeData['status'] = 'below_mev';
+      const statusPriority: Record<MuscleVolumeData['status'], number> = {
+        'exceeding_mrv': 0,
+        'approaching_mrv': 1,
+        'optimal': 2,
+        'effective': 3,
+        'below_mev': 4,
+      };
+      let currentPriority = 4;
+
+      standardMuscles.forEach((sm) => {
+        const vol = volumeData.find((v) => v.muscleGroup === sm);
+        if (vol) {
+          totalSets += vol.totalSets;
+          // Use midpoint of MEV-MAV as target for display
+          targetSets += Math.round((vol.landmarks.mev + vol.landmarks.mav) / 2);
+
+          // Track worst volume status
+          const priority = statusPriority[vol.status];
+          if (priority < currentPriority) {
+            currentPriority = priority;
+            worstVolumeStatus = vol.status;
+          }
+        }
+      });
+
+      indicators.set(muscle, {
+        recoveryPercent: worstRecoveryPercent,
+        isReady,
+        statusText,
+        totalSets,
+        targetSets,
+        volumeStatus: worstVolumeStatus,
+      });
+    });
+
+    return indicators;
+  }, [recoveryStatus, volumeData]);
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
@@ -967,6 +1061,22 @@ function NewWorkoutContent() {
     loadGymLocations();
   }, []);
 
+  // Load variety preferences on mount
+  useEffect(() => {
+    const loadVarietyPrefs = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      setCurrentUserId(user.id);
+      const prefs = await getVarietyPreferences(user.id);
+      if (prefs) {
+        setVarietyLevel(prefs.varietyLevel);
+      }
+    };
+    loadVarietyPrefs();
+  }, []);
+
   // Fetch frequently used exercises on mount
   useEffect(() => {
     const fetchFrequentExercises = async () => {
@@ -1185,9 +1295,9 @@ function NewWorkoutContent() {
   };
 
   const openCustomExerciseModal = (muscle: string) => {
-    setCustomExerciseForm({ 
-      name: '', 
-      muscle, 
+    setCustomExerciseForm({
+      name: exerciseSearch,
+      muscle,
       mechanic: 'compound',
       equipmentRequired: [],
       secondaryMuscles: [],
@@ -1331,7 +1441,7 @@ function NewWorkoutContent() {
             commonMistakes: [],
             setupNote: '',
             movementPattern: '',
-            equipmentRequired: [],
+            equipmentRequired: exercise?.equipment_required || [],
           },
           isFirstExercise: index === 0, // First exercise overall gets general warmup
         }) : [];
@@ -1560,19 +1670,74 @@ function NewWorkoutContent() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {MUSCLE_GROUPS.map((muscle) => (
-                  <button
-                    key={muscle}
-                    onClick={() => toggleMuscle(muscle)}
-                    className={`p-4 rounded-lg text-left transition-all capitalize ${
-                      selectedMuscles.includes(muscle)
-                        ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
-                        : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
-                    }`}
-                  >
-                    {muscle}
-                  </button>
-                ))}
+                {MUSCLE_GROUPS.map((muscle) => {
+                  const indicator = muscleIndicators.get(muscle);
+                  const isSelected = selectedMuscles.includes(muscle);
+
+                  // Determine recovery color
+                  const getRecoveryColor = () => {
+                    if (!indicator) return 'bg-surface-600';
+                    if (indicator.recoveryPercent >= 100) return 'bg-success-500';
+                    if (indicator.recoveryPercent >= 70) return 'bg-warning-500';
+                    return 'bg-error-500';
+                  };
+
+                  // Determine volume indicator style
+                  const getVolumeStyle = () => {
+                    if (!indicator) return 'text-surface-500';
+                    switch (indicator.volumeStatus) {
+                      case 'below_mev': return 'text-primary-400'; // Needs more volume
+                      case 'effective': return 'text-surface-400';
+                      case 'optimal': return 'text-success-400';
+                      case 'approaching_mrv': return 'text-warning-400';
+                      case 'exceeding_mrv': return 'text-error-400';
+                      default: return 'text-surface-500';
+                    }
+                  };
+
+                  return (
+                    <button
+                      key={muscle}
+                      onClick={() => toggleMuscle(muscle)}
+                      className={`p-4 rounded-lg text-left transition-all capitalize relative ${
+                        isSelected
+                          ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                          : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{muscle}</span>
+                        {indicator && !isLoadingRecovery && (
+                          <div
+                            className={`w-2 h-2 rounded-full ${getRecoveryColor()}`}
+                            title={`Recovery: ${indicator.statusText}`}
+                          />
+                        )}
+                      </div>
+                      {indicator && !isLoadingVolume && (
+                        <div className={`text-xs mt-1 ${getVolumeStyle()}`}>
+                          {indicator.totalSets}/{indicator.targetSets} sets
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Subtle legend */}
+              <div className="flex items-center gap-4 mt-4 text-xs text-surface-500">
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-success-500" />
+                  <span>Recovered</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-warning-500" />
+                  <span>Recovering</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-2 h-2 rounded-full bg-error-500" />
+                  <span>Fatigued</span>
+                </div>
               </div>
 
               <div className="flex justify-between mt-6 pt-4 border-t border-surface-800">
@@ -1687,7 +1852,102 @@ function NewWorkoutContent() {
               </div>
             </div>
           )}
-          
+
+          {/* Exercise Variety Quick Selector */}
+          <div className="p-3 bg-surface-800/50 border border-surface-700 rounded-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-sm text-surface-300">Exercise Variety</span>
+              </div>
+              <div className="flex gap-1">
+                {(['low', 'medium', 'high'] as ExerciseVarietyLevel[]).map((level) => (
+                  <button
+                    key={level}
+                    onClick={async () => {
+                      setVarietyLevel(level);
+                      if (currentUserId) {
+                        await saveVarietyPreferences(currentUserId, { varietyLevel: level });
+                      }
+                    }}
+                    className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                      varietyLevel === level
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-200'
+                    }`}
+                  >
+                    {level === 'low' ? 'Consistent' : level === 'medium' ? 'Balanced' : 'High'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="text-xs text-surface-500 mt-2">
+              {VARIETY_LEVEL_DEFAULTS[varietyLevel].description}
+            </p>
+          </div>
+
+          {/* Location Filter */}
+          {gymLocations.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>
+                    {selectedLocationId && selectedLocationId !== 'fallback'
+                      ? gymLocations.find(l => l.id === selectedLocationId)?.name || 'Any Location'
+                      : 'Any Location'}
+                  </span>
+                </div>
+                <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {/* Location Dropdown Menu */}
+              {showLocationDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                  <button
+                    onClick={() => { setSelectedLocationId(null); setShowLocationDropdown(false); }}
+                    className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                      !selectedLocationId || selectedLocationId === 'fallback' ? 'text-primary-400' : 'text-surface-200'
+                    }`}
+                  >
+                    <span>Any Location</span>
+                    {(!selectedLocationId || selectedLocationId === 'fallback') && (
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  {gymLocations.filter(l => l.id !== 'fallback').map(location => (
+                    <button
+                      key={location.id}
+                      onClick={() => { setSelectedLocationId(location.id); setShowLocationDropdown(false); }}
+                      className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                        selectedLocationId === location.id ? 'text-primary-400' : 'text-surface-200'
+                      }`}
+                    >
+                      <span>{location.name}</span>
+                      {selectedLocationId === location.id && (
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Search bar */}
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

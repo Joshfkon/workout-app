@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import { useUserStore } from '@/stores';
+import { useAuthUser } from '@/hooks/useAuthUser';
+import { getLocalDateString } from '@/lib/utils';
 import {
   type UserVolumeProfile,
   type MuscleVolumeData,
@@ -22,7 +25,6 @@ import type {
   ExerciseBlockFull,
   WeeklyMuscleVolumeRow,
   SetLogRow,
-  MinimalUser,
 } from '@/types/database-queries';
 
 interface UseAdaptiveVolumeResult {
@@ -57,33 +59,13 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
   const [error, setError] = useState<string | null>(null);
 
   const { user: storeUser } = useUserStore();
-  const [user, setUser] = useState<MinimalUser | null>(storeUser ? { id: storeUser.id, experience: storeUser.experience, goal: storeUser.goal } : null);
-
-  // Also try to get user directly from Supabase auth as fallback
-  useEffect(() => {
-    async function loadUser() {
-      if (storeUser?.id) {
-        setUser({ id: storeUser.id, experience: storeUser.experience, goal: storeUser.goal });
-        return;
-      }
-
-      // Fallback: get user directly from Supabase
-      try {
-        const supabase = createUntypedClient();
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          setUser({ id: authUser.id });
-        }
-      } catch (err) {
-        // Silently handle auth errors - user may not be logged in
-      }
-    }
-    loadUser();
-  }, [storeUser]);
+  const { user: authUser } = useAuthUser();
+  const userId = storeUser?.id || authUser?.id || null;
+  const userExperience = storeUser?.experience;
 
   // Fetch volume data for current and previous week
   const fetchVolumeData = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       return;
     }
 
@@ -95,11 +77,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const weekStart = new Date(now);
       weekStart.setDate(weekStart.getDate() - 6); // 7 days ago (including today = 6 days back)
       weekStart.setHours(0, 0, 0, 0);
-      const weekStartStr = weekStart.toISOString().split('T')[0];
+      const weekStartStr = getLocalDateString(weekStart);
 
       const prevWeekStart = new Date(weekStart);
       prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-      const prevWeekStartStr = prevWeekStart.toISOString().split('T')[0];
+      const prevWeekStartStr = getLocalDateString(prevWeekStart);
       
       const weekEnd = new Date(now);
       weekEnd.setHours(23, 59, 59, 999);
@@ -109,14 +91,14 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const { data: currentData } = await supabase
         .from('weekly_muscle_volume')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId!)
         .eq('week_start', weekStartStr);
 
       // Fetch previous week volume
       const { data: prevData } = await supabase
         .from('weekly_muscle_volume')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId!)
         .eq('week_start', prevWeekStartStr);
 
       // If no pre-computed data, calculate from set logs
@@ -148,7 +130,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
               feedback
             )
           `)
-          .eq('workout_sessions.user_id', user.id)
+          .eq('workout_sessions.user_id', userId!)
           .gte('workout_sessions.completed_at', weekStartStr)
           .lte('workout_sessions.completed_at', weekEndStr)
           .eq('workout_sessions.state', 'completed');
@@ -257,14 +239,14 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         }));
         setPreviousWeekData(mapped);
       }
-    } catch (err) {
-      console.error('Failed to fetch volume data:', err);
+    } catch (err: unknown) {
+      console.error('Failed to fetch volume data:', getErrorMessage(err));
     }
-  }, [user?.id]);
+  }, [userId]);
 
   // Fetch latest mesocycle analysis
   const fetchLatestAnalysis = useCallback(async () => {
-    if (!user?.id) return;
+    if (!userId) return;
 
     try {
       const supabase = createUntypedClient();
@@ -272,7 +254,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const { data } = await supabase
         .from('mesocycle_analyses')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId!)
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
@@ -292,11 +274,11 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
     } catch {
       // Analysis might not exist yet - expected for new users
     }
-  }, [user?.id]);
+  }, [userId]);
 
   // Fetch or create volume profile
   const fetchProfile = useCallback(async () => {
-    if (!user?.id) {
+    if (!userId) {
       return;
     }
 
@@ -310,7 +292,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       const { data: profileData, error: profileError } = await supabase
         .from('user_volume_profiles')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId!)
         .single();
 
       if (profileError && profileError.code !== 'PGRST116') {
@@ -331,8 +313,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         setVolumeProfile(profile);
       } else {
         // Create initial profile based on user's experience level
-        const trainingAge = (user.experience || 'intermediate') as 'novice' | 'intermediate' | 'advanced';
-        const initialProfile = createInitialVolumeProfile(user.id, trainingAge, false);
+        const trainingAge = (userExperience || 'intermediate') as 'novice' | 'intermediate' | 'advanced';
+        const initialProfile = createInitialVolumeProfile(userId!, trainingAge, false);
         setVolumeProfile(initialProfile);
 
         // Optionally save to database
@@ -345,12 +327,12 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
       // Fetch latest mesocycle analysis
       await fetchLatestAnalysis();
 
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load volume profile');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, user?.experience, fetchVolumeData, fetchLatestAnalysis]);
+  }, [userId, userExperience, fetchVolumeData, fetchLatestAnalysis]);
 
   // Save profile to database
   const saveProfile = async (profile: UserVolumeProfile) => {
@@ -367,8 +349,8 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
           training_age: profile.trainingAge,
           updated_at: new Date().toISOString(),
         });
-    } catch (err) {
-      console.error('Failed to save volume profile:', err);
+    } catch (err: unknown) {
+      console.error('Failed to save volume profile:', getErrorMessage(err));
     }
   };
 
@@ -410,10 +392,10 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 
   // Load data on mount - only when user is available
   useEffect(() => {
-    if (user?.id) {
+    if (userId) {
       fetchProfile();
     }
-  }, [user, fetchProfile]);
+  }, [userId, fetchProfile]);
 
   return {
     volumeProfile,

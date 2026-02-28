@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Select, Slider, Badge, Toggle } from '@/components/ui';
 import { FirstTimeHint, InlineHint } from '@/components/ui/FirstTimeHint';
@@ -10,19 +10,22 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
-import { formatWeight } from '@/lib/utils';
-import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData } from '@/types/schema';
+import { formatWeight, getLocalDateString } from '@/lib/utils';
+import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
+import { WEEKDAYS } from '@/types/schema';
+import { WorkoutDaySelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
   generateMesocycleRecommendation,
   generateWorkoutTemplates,
   recommendSplit,
   calculateRecoveryFactors,
+  evaluateMesocycleLength,
   type MesocycleRecommendation,
   type WorkoutTemplate,
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getUnavailableEquipment } from '@/services/equipmentFilter';
+import { fetchUnavailableEquipment } from '@/lib/actions/equipment';
 
 export default function NewMesocyclePage() {
   const router = useRouter();
@@ -64,6 +67,32 @@ export default function NewMesocyclePage() {
   // Manual overrides
   const [splitType, setSplitType] = useState('Upper/Lower');
   const [totalWeeks, setTotalWeeks] = useState(6);
+
+  // Preferred workout days
+  const [preferredWorkoutDays, setPreferredWorkoutDays] = useState<WorkoutDay[]>([
+    'Monday', 'Tuesday', 'Thursday', 'Friday'
+  ]);
+
+  // Get default workout days based on frequency
+  const getDefaultWorkoutDays = (days: number): WorkoutDay[] => {
+    const patterns: Record<number, WorkoutDay[]> = {
+      2: ['Monday', 'Thursday'],
+      3: ['Monday', 'Wednesday', 'Friday'],
+      4: ['Monday', 'Tuesday', 'Thursday', 'Friday'],
+      5: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+      6: ['Monday', 'Tuesday', 'Wednesday', 'Friday', 'Saturday', 'Sunday'],
+    };
+    return patterns[days] || patterns[4];
+  };
+
+  // Update preferred days when daysPerWeek changes
+  // Uses getDefaultWorkoutDays() which provides optimal rest day patterns:
+  // - 4 days: Mon/Tue/Thu/Fri (Wednesday rest)
+  // - 6 days: Mon/Tue/Wed/Fri/Sat/Sun (Thursday rest)
+  useEffect(() => {
+    const defaultDays = getDefaultWorkoutDays(daysPerWeek);
+    setPreferredWorkoutDays(defaultDays);
+  }, [daysPerWeek]);
 
   // Calculate estimated exercises based on time (proper estimation with rest periods)
   const getExerciseEstimate = (minutes: number) => {
@@ -212,7 +241,7 @@ export default function NewMesocyclePage() {
         }
         
         // Get unavailable gym equipment
-        const unavailable = await getUnavailableEquipment(user.id);
+        const unavailable = await fetchUnavailableEquipment(user.id);
         setUnavailableEquipmentIds(unavailable);
 
         // Check if this is the user's first mesocycle
@@ -244,6 +273,11 @@ export default function NewMesocyclePage() {
 
   // Calculate recovery factors for display
   const recoveryFactors = calculateRecoveryFactors(extendedProfile);
+
+  // Evaluate mesocycle length selection and provide guidance
+  const mesocycleLengthGuidance = useMemo(() => {
+    return evaluateMesocycleLength(totalWeeks, userGoal, userExperience, recoveryFactors);
+  }, [totalWeeks, userGoal, userExperience, recoveryFactors]);
 
   // Generate recommendations when days change
   useEffect(() => {
@@ -287,8 +321,13 @@ export default function NewMesocyclePage() {
 
   // Generate default name
   useEffect(() => {
-    const goalNames = { bulk: 'Hypertrophy', cut: 'Cutting', maintenance: 'Training' };
-    setName(`${goalNames[userGoal]} Block - ${splitType}`);
+    const goalNames: Record<string, string> = {
+      bulk: 'Hypertrophy',
+      cut: 'Cutting',
+      maintenance: 'Training',
+      recomp: 'Recomp'
+    };
+    setName(`${goalNames[userGoal] || 'Training'} Block - ${splitType}`);
   }, [userGoal, splitType]);
 
   const handleSubmit = async () => {
@@ -337,7 +376,11 @@ export default function NewMesocyclePage() {
           state: 'active',
           fatigue_score: 0,
           is_active: true,
-          start_date: new Date().toISOString().split('T')[0],
+          start_date: getLocalDateString(),
+          // Preferred workout days (user-selected)
+          preferred_workout_days: preferredWorkoutDays,
+          // Session duration for time-based workout planning
+          session_duration_minutes: sessionDurationMinutes,
           // New fields for training science integration
           periodization_model: fullProgram?.periodization?.model || 'linear',
           program_data: fullProgram,
@@ -558,6 +601,22 @@ export default function NewMesocyclePage() {
                 { value: 6, label: '6' },
               ]}
             />
+
+            {/* Preferred workout days selector */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-surface-200">
+                Which days do you want to train?
+              </label>
+              <p className="text-xs text-surface-500">
+                Pick {daysPerWeek} days that work best for your schedule
+              </p>
+              <WorkoutDaySelector
+                daysPerWeek={daysPerWeek}
+                selectedDays={preferredWorkoutDays}
+                onChange={setPreferredWorkoutDays}
+                showPresets={true}
+              />
+            </div>
 
             <Slider
               label="Time per Session"
@@ -807,6 +866,12 @@ export default function NewMesocyclePage() {
               ]}
             />
 
+            {/* Mesocycle length guidance */}
+            <MesocycleLengthGuidance
+              guidance={mesocycleLengthGuidance}
+              onAcceptRecommendation={(weeks) => setTotalWeeks(weeks)}
+            />
+
             <div className="p-4 bg-surface-800/50 rounded-lg">
               <p className="text-sm text-surface-400">
                 <span className="text-surface-300 font-medium">Week {totalWeeks}</span> will automatically be a deload week with 50% reduced volume.
@@ -870,12 +935,21 @@ export default function NewMesocyclePage() {
                 <span className="text-surface-400">Duration</span>
                 <span className="text-surface-200 font-medium">{totalWeeks} weeks</span>
               </div>
-              <div className="flex justify-between py-2">
+              <div className="flex justify-between py-2 border-b border-surface-800">
                 <span className="text-surface-400">Deload</span>
                 <span className="text-surface-200 font-medium">Week {totalWeeks}</span>
               </div>
+              <div className="flex justify-between py-2">
+                <span className="text-surface-400">Workout Days</span>
+                <span className="text-surface-200 font-medium text-right">
+                  {preferredWorkoutDays
+                    .sort((a, b) => ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(a) - ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].indexOf(b))
+                    .map(d => d.slice(0, 3))
+                    .join(', ')}
+                </span>
+              </div>
             </div>
-            
+
             {/* Weekly time commitment with status */}
             <div className={`p-3 rounded-lg border ${
               volumeAssessment.status === 'optimal'

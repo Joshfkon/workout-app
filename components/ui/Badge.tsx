@@ -51,17 +51,18 @@ export const SetQualityBadge = memo(function SetQualityBadge({
   quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
 }) {
   const configs = {
-    junk: { variant: 'default' as const, label: 'Junk' },
-    effective: { variant: 'info' as const, label: 'Effective' },
-    stimulative: { variant: 'success' as const, label: 'Stimulative' },
-    excessive: { variant: 'danger' as const, label: 'Excessive' },
+    junk: { variant: 'default' as const, label: 'Junk', shortLabel: 'Junk' },
+    effective: { variant: 'info' as const, label: 'Effective', shortLabel: 'Eff' },
+    stimulative: { variant: 'success' as const, label: 'Stimulative', shortLabel: 'Stim' },
+    excessive: { variant: 'danger' as const, label: 'Excessive', shortLabel: 'Exc' },
   };
 
   const config = configs[quality];
 
   return (
     <Badge variant={config.variant} size="sm">
-      {config.label}
+      <span className="sm:hidden">{config.shortLabel}</span>
+      <span className="hidden sm:inline">{config.label}</span>
     </Badge>
   );
 });

@@ -28,6 +28,7 @@ import type {
 } from '@/types/schema';
 
 import { filterExercisesByEquipment } from './equipmentFilter';
+import type { ExerciseVarietyPreferences } from '@/types/user-exercise-preferences';
 
 import {
   calculateRepRange,
@@ -47,6 +48,7 @@ import {
   WeeklyFatigueTracker,
   BASE_SFR,
 } from './fatigueBudgetEngine';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup } from './mesocycleBuilder';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
@@ -155,10 +157,12 @@ const HYPERTROPHY_TIER_RANK: Record<string, number> = {
 
 /**
  * Select exercises for a muscle group considering equipment, experience, injury, SFR,
- * and hypertrophy effectiveness (Nippard methodology)
- * 
+ * hypertrophy effectiveness (Nippard methodology), and exercise variety preferences.
+ *
  * @param quickWorkoutMode - When true, only S and A tier exercises are selected (for time-constrained workouts)
  * @param unavailableEquipmentIds - Equipment IDs the user doesn't have access to (from gym equipment settings)
+ * @param varietyPrefs - Optional variety preferences to apply exercise rotation
+ * @param recentlyUsedExerciseIds - Set of exercise IDs recently used (for variety filtering)
  */
 function selectExercisesWithFatigue(
   muscle: MuscleGroup,
@@ -168,11 +172,13 @@ function selectExercisesWithFatigue(
   startingPosition: number,
   prioritizeHypertrophy: boolean = true,
   quickWorkoutMode: boolean = false,
-  unavailableEquipmentIds: string[] = []
+  unavailableEquipmentIds: string[] = [],
+  varietyPrefs?: ExerciseVarietyPreferences | null,
+  recentlyUsedExerciseIds?: Set<string>
 ): { exercise: ExerciseEntry; sets: number }[] {
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
-  
+
   // Filter available exercises
   let candidates = allExercises.filter(
     (e) =>
@@ -180,7 +186,7 @@ function selectExercisesWithFatigue(
       profile.availableEquipment.includes(e.equipment) &&
       !profile.injuryHistory.includes(muscle)
   );
-  
+
   // Filter by gym equipment preferences (machine-level filtering)
   if (unavailableEquipmentIds.length > 0) {
     candidates = filterExercisesByEquipment(candidates, unavailableEquipmentIds);
@@ -188,7 +194,7 @@ function selectExercisesWithFatigue(
 
   // QUICK WORKOUT MODE: Only S and A tier exercises (maximum efficiency)
   if (quickWorkoutMode) {
-    const topTierCandidates = candidates.filter((e) => 
+    const topTierCandidates = candidates.filter((e) =>
       ['S', 'A'].includes(e.hypertrophyScore?.tier || '')
     );
     // Use top tier if available, otherwise fall back to all
@@ -200,12 +206,12 @@ function selectExercisesWithFatigue(
   // Filter by difficulty - but always allow S-tier and A-tier exercises regardless of difficulty
   // (these are the best exercises and should be available to everyone with proper coaching)
   if (profile.experience === 'novice') {
-    candidates = candidates.filter((e) => 
-      e.difficulty === 'beginner' || 
+    candidates = candidates.filter((e) =>
+      e.difficulty === 'beginner' ||
       (prioritizeHypertrophy && ['S', 'A'].includes(e.hypertrophyScore?.tier || ''))
     );
   } else if (profile.experience === 'intermediate') {
-    candidates = candidates.filter((e) => 
+    candidates = candidates.filter((e) =>
       e.difficulty !== 'advanced' ||
       (prioritizeHypertrophy && ['S', 'A'].includes(e.hypertrophyScore?.tier || ''))
     );
@@ -227,7 +233,7 @@ function selectExercisesWithFatigue(
     const aTier = HYPERTROPHY_TIER_RANK[a.hypertrophyScore?.tier || 'C'] ?? 3;
     const bTier = HYPERTROPHY_TIER_RANK[b.hypertrophyScore?.tier || 'C'] ?? 3;
     if (aTier !== bTier) return aTier - bTier;
-    
+
     // Second: Compounds first for early positions (when fresher)
     if (startingPosition <= 2) {
       const aCompound = a.pattern !== 'isolation' ? 0 : 1;
@@ -240,6 +246,44 @@ function selectExercisesWithFatigue(
     const sfrB = BASE_SFR[b.pattern]?.[b.equipment] ?? 1.0;
     return sfrB - sfrA;
   });
+
+  // Apply variety filtering if preferences are provided
+  if (varietyPrefs && recentlyUsedExerciseIds && recentlyUsedExerciseIds.size > 0) {
+    // Only apply variety if not on 'low' with no rotation
+    if (!(varietyPrefs.varietyLevel === 'low' && varietyPrefs.rotationFrequency === 0)) {
+      // Separate recently used from not recently used
+      const notRecentlyUsed = candidates.filter((e) => !recentlyUsedExerciseIds.has(e.id));
+      const recentlyUsed = candidates.filter((e) => recentlyUsedExerciseIds.has(e.id));
+
+      // If prioritizing top tier within variety, ensure S/A tier exercises still come first
+      // but within each tier group, prefer non-recently-used
+      if (varietyPrefs.prioritizeTopTier) {
+        const topTierNotRecent = notRecentlyUsed.filter(
+          (e) => ['S', 'A'].includes(e.hypertrophyScore?.tier || '')
+        );
+        const topTierRecent = recentlyUsed.filter(
+          (e) => ['S', 'A'].includes(e.hypertrophyScore?.tier || '')
+        );
+        const otherTierNotRecent = notRecentlyUsed.filter(
+          (e) => !['S', 'A'].includes(e.hypertrophyScore?.tier || '')
+        );
+        const otherTierRecent = recentlyUsed.filter(
+          (e) => !['S', 'A'].includes(e.hypertrophyScore?.tier || '')
+        );
+
+        // Order: Top tier non-recent -> Top tier recent -> Other non-recent -> Other recent
+        candidates = [
+          ...topTierNotRecent,
+          ...topTierRecent,
+          ...otherTierNotRecent,
+          ...otherTierRecent,
+        ];
+      } else {
+        // Simple variety: non-recently-used first
+        candidates = [...notRecentlyUsed, ...recentlyUsed];
+      }
+    }
+  }
 
   const selected: { exercise: ExerciseEntry; sets: number }[] = [];
   let remainingSets = setsNeeded;
@@ -337,7 +381,9 @@ export function buildDetailedSessionWithFatigue(
   weeklyProgression: WeeklyProgression,
   quickWorkoutMode: boolean = false,
   unavailableEquipmentIds: string[] = [],
-  sessionMinutes: number = 60
+  sessionMinutes: number = 60,
+  varietyPrefs?: ExerciseVarietyPreferences | null,
+  recentlyUsedByMuscle?: Map<string, Set<string>>
 ): DetailedSessionWithFatigue {
   const fatigueManager = new SessionFatigueManager(fatigueBudgetConfig);
   const exercises: DetailedExerciseWithFatigue[] = [];
@@ -406,7 +452,20 @@ export function buildDetailedSessionWithFatigue(
     }
 
     // Select exercises with fatigue awareness (prioritize S-tier in quick workout mode)
-    const selectedExercises = selectExercisesWithFatigue(muscle, setsThisSession, profile, fatigueManager, exercisePosition, true, quickWorkoutMode, unavailableEquipmentIds);
+    // Also apply variety preferences if provided
+    const recentlyUsedIds = recentlyUsedByMuscle?.get(muscle.toLowerCase());
+    const selectedExercises = selectExercisesWithFatigue(
+      muscle,
+      setsThisSession,
+      profile,
+      fatigueManager,
+      exercisePosition,
+      true,
+      quickWorkoutMode,
+      unavailableEquipmentIds,
+      varietyPrefs,
+      recentlyUsedIds
+    );
 
     for (const selection of selectedExercises) {
       // Check if we've hit limits
@@ -510,8 +569,9 @@ export function buildDetailedSessionWithFatigue(
         );
       }
 
-      // Track weekly fatigue
-      const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
+      // Track weekly fatigue (normalize muscle key to match localCost map keys)
+      const normalizedMuscle = toStandardMuscleForVolume(muscle) ?? muscle;
+      const localCost = exerciseFatigue.localCost.get(normalizedMuscle) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
       // Track time and exercise count (reuse isCompound and needsWarmup from above)
@@ -693,7 +753,9 @@ export function buildDUPSession(
         },
       });
 
-      const localCost = exerciseFatigue.localCost.get(muscle) ?? 0;
+      // Normalize muscle key to match localCost map keys
+      const normalizedMuscleKey = toStandardMuscleForVolume(muscle) ?? muscle;
+      const localCost = exerciseFatigue.localCost.get(normalizedMuscleKey) ?? 0;
       weeklyTracker.recordTraining(muscle, currentDay, localCost, selection.sets);
 
       // Track time and exercise count

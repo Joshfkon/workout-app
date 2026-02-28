@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
+import { Card, Badge, SetQualityBadge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
-import { calculateSetQuality } from '@/services/progressionEngine';
+import { calculateSetQuality, calculateE1RM } from '@/services/progressionEngine';
+import { suggestReps, suggestWeight, estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -239,6 +240,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [isWarmupExpanded, setIsWarmupExpanded] = useState(true);
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
@@ -339,7 +341,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     rpe: string;
   }[]>([]);
 
-  const completedSets = sets.filter((s) => !s.isWarmup);
+  const completedSets = sets.filter((s) => !s.isWarmup && s.setType !== 'warmup');
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
 
@@ -347,9 +349,16 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Use type assertion to access bodyweight properties that may exist on the exercise
   const exerciseWithBodyweight = exercise as any;
   const isBodyweightExercise = exerciseWithBodyweight.isBodyweight || exerciseWithBodyweight.equipment === 'bodyweight' || (exerciseWithBodyweight.equipmentRequired && exerciseWithBodyweight.equipmentRequired.includes('bodyweight'));
-  const canAddWeight = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'weighted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
-  const canUseAssistance = isBodyweightExercise && (exerciseWithBodyweight.bodyweightType === 'assisted_possible' || exerciseWithBodyweight.bodyweightType === 'both');
-  const isPureBodyweight = isBodyweightExercise && exerciseWithBodyweight.bodyweightType === 'pure';
+  // For bodyweight exercises without a specific bodyweightType set, default to allowing both weighted and assisted
+  // This handles exercises like pull-ups, dips that can be done weighted or with assistance
+  const bodyweightType = exerciseWithBodyweight.bodyweightType;
+  const canAddWeight = isBodyweightExercise && (bodyweightType === 'weighted_possible' || bodyweightType === 'both' || !bodyweightType);
+  const canUseAssistance = isBodyweightExercise && (bodyweightType === 'assisted_possible' || bodyweightType === 'both' || !bodyweightType);
+  const isPureBodyweight = isBodyweightExercise && bodyweightType === 'pure';
+
+  // Check if this is a duration-based exercise (plank, hold, etc.)
+  // These exercises track seconds instead of reps
+  const isDurationBased = exercise.exerciseType === 'duration_based';
 
   // Weight mode state for bodyweight exercises (header-level selection)
   const [weightMode, setWeightMode] = useState<'bodyweight' | 'weighted' | 'assisted'>(
@@ -370,7 +379,22 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
-  
+
+  // Track whether AMRAP prefill has already occurred to avoid overwriting user edits
+  const amrapPrefillDoneRef = useRef(false);
+
+  // Track pending reps auto-calculation timeouts per set index
+  // This allows canceling the debounced calculation if user manually edits reps
+  const repsCalcTimeoutsRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
+
+  // Cleanup pending reps calculation timeouts on unmount
+  useEffect(() => {
+    return () => {
+      repsCalcTimeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
+      repsCalcTimeoutsRef.current.clear();
+    };
+  }, []);
+
   // Recalculate pending inputs based on the last completed set
   const recalculatePendingInputs = useCallback(() => {
     if (pendingSetsCount === 0) return;
@@ -380,20 +404,10 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     if (!lastCompleted) return;
 
-    // Calculate smart defaults based on the last completed set
-    let smartWeight: number;
-    let smartReps: number;
-
-    const lastRpe = lastCompleted.rpe || targetRpe;
-    // Adjust weight and reps based on RPE difference
-    if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-      smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-      smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-    } else {
-      // Close to target - keep same weight and reps
-      smartWeight = lastCompleted.weightKg;
-      smartReps = lastCompleted.reps;
-    }
+    // Calculate smart defaults using the shared suggestion engine
+    const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+    const smartWeight = suggestWeight(lastSetData, suggestionCtx);
+    const smartReps = suggestReps(lastSetData, suggestionCtx);
 
     // Update all pending inputs
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
@@ -402,13 +416,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       // If this is the last set and AMRAP is suggested, use 9.5 for RPE
       const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
-      // For AMRAP sets, predict max reps at failure based on last set's RPE
-      // Formula: predicted max reps = lastReps + (10 - lastRpe)
+      // For AMRAP sets, use bounded prediction instead of uncapped formula
       let setReps = smartReps;
       if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-        const repsInReserve = 10 - lastCompleted.rpe;
-        const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-        setReps = Math.max(predictedMaxReps, smartReps); // Use higher of predicted or smart
+        setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
       }
 
       updatedInputs.push({
@@ -434,26 +445,19 @@ export const ExerciseCard = memo(function ExerciseCard({
       const targetRpe = 10 - effectiveTargetRir;
       const lastCompleted = completedSets[completedSets.length - 1];
       
-      // Calculate smart defaults based on the just-completed set
+      // Calculate smart defaults using the shared suggestion engine
       let smartWeight: number;
       let smartReps: number;
-      
+
       if (lastCompleted) {
-        const lastRpe = lastCompleted.rpe || targetRpe;
-        // Adjust weight and reps based on RPE difference (lower threshold: 0.3 instead of 0.5)
-        if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-          smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-          smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-        } else {
-          // Close to target - keep same weight and reps
-          smartWeight = lastCompleted.weightKg;
-          smartReps = lastCompleted.reps;
-        }
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        smartWeight = suggestWeight(lastSetData, suggestionCtx);
+        smartReps = suggestReps(lastSetData, suggestionCtx);
       } else {
         smartWeight = suggestedWeight;
         smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
       }
-      
+
       // Create updated pending inputs - all based on the last completed set
       const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
       for (let i = 0; i < pendingSetsCount; i++) {
@@ -461,12 +465,11 @@ export const ExerciseCard = memo(function ExerciseCard({
         // If this is the last set and AMRAP is suggested, use 9.5 for RPE
         const setRpe = (isLastSet && isAmrapSuggested) ? 9.5 : targetRpe;
 
-        // For AMRAP sets, predict max reps at failure based on last set's RPE
+        // For AMRAP sets, use bounded prediction
         let setReps = smartReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-          const repsInReserve = 10 - lastCompleted.rpe;
-          const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-          setReps = Math.max(predictedMaxReps, smartReps);
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
         }
 
         updatedInputs.push({
@@ -510,32 +513,24 @@ export const ExerciseCard = memo(function ExerciseCard({
         let defaultRpe: number;
         
         if (lastCompleted) {
-          const lastRpe = lastCompleted.rpe || targetRpe;
-          // Adjust weight and reps based on RPE difference (lower threshold: 0.3 instead of 0.5)
-          if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-            defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-            defaultReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-          } else {
-            // Close to target - keep same weight and reps
-            defaultWeight = lastCompleted.weightKg;
-            defaultReps = lastCompleted.reps;
-          }
+          const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+          defaultWeight = suggestWeight(lastSetData, suggestionCtx);
+          defaultReps = suggestReps(lastSetData, suggestionCtx);
         } else if (prevSet) {
           defaultWeight = prevSet.weightKg;
-          defaultReps = prevSet.reps;
+          defaultReps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
         }
-        
+
         // If this is the last set and AMRAP is suggested, pre-fill RPE with 9.5
         if (isLastSet && isAmrapSuggested) {
           defaultRpe = 9.5;
-          // For AMRAP sets, predict max reps at failure based on last set's RPE
+          // For AMRAP sets, use bounded prediction
           if (lastCompleted?.rpe) {
-            const repsInReserve = 10 - lastCompleted.rpe;
-            const predictedMaxReps = Math.round(lastCompleted.reps + repsInReserve);
-            defaultReps = Math.max(predictedMaxReps, defaultReps);
+            const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+            defaultReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), defaultReps);
           }
         } else {
           defaultRpe = targetRpe;
@@ -553,26 +548,38 @@ export const ExerciseCard = memo(function ExerciseCard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedSets.length, pendingSetsCount, isAmrapSuggested]);
   
-  // Update RPE to 9.5 and predicted reps when AMRAP suggestion appears for the last pending set
+  // Update RPE to 9.5 and predicted reps when AMRAP suggestion first appears
+  // Only prefill once to avoid overwriting user edits
   useEffect(() => {
+    // Reset prefill flag when AMRAP mode is turned off
+    if (!isAmrapSuggested) {
+      amrapPrefillDoneRef.current = false;
+      return;
+    }
+
+    // Only prefill once when AMRAP first appears
+    if (amrapPrefillDoneRef.current) {
+      return;
+    }
+
     if (isAmrapSuggested && pendingInputs.length > 0) {
       const lastIndex = pendingInputs.length - 1;
       const lastInput = pendingInputs[lastIndex];
       const lastCompleted = completedSets[completedSets.length - 1];
 
-      // Check if we need to update RPE or reps
+      // Check if we need to update RPE
       const currentRpe = parseFloat(lastInput?.rpe || '0');
       const needsRpeUpdate = lastInput && currentRpe !== 9.5;
 
-      // Calculate predicted max reps for AMRAP
+      // Calculate predicted max reps for AMRAP using bounded prediction
       let predictedReps: number | null = null;
       if (lastCompleted?.rpe) {
-        const repsInReserve = 10 - lastCompleted.rpe;
-        predictedReps = Math.round(lastCompleted.reps + repsInReserve);
+        const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+        predictedReps = predictAmrapReps(lastSetData, suggestionCtx);
       }
 
-      const currentReps = parseInt(lastInput?.reps || '0', 10);
-      const needsRepsUpdate = predictedReps !== null && currentReps < predictedReps;
+      // Only prefill reps if we have a prediction (don't check current value - this is initial prefill)
+      const needsRepsUpdate = predictedReps !== null;
 
       if (needsRpeUpdate || needsRepsUpdate) {
         setPendingInputs(prev => {
@@ -584,6 +591,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           return updated;
         });
       }
+
+      // Mark prefill as done so we don't overwrite user edits
+      amrapPrefillDoneRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAmrapSuggested, pendingInputs.length, completedSets]);
@@ -668,100 +678,80 @@ export const ExerciseCard = memo(function ExerciseCard({
     };
   };
 
-  // Calculate reps based on weight change using percentage of 1RM
-  // Uses Epley formula: 1RM = weight × (1 + reps/30)
-  const calculateRepsFromWeight = (newWeightKg: number, referenceWeightKg: number, referenceReps: number): number => {
-    if (referenceWeightKg <= 0 || newWeightKg <= 0 || referenceReps <= 0) return referenceReps;
-    
-    // Estimate 1RM from reference
-    const e1rm = referenceWeightKg * (1 + referenceReps / 30);
-    
-    // Calculate what reps we can do at new weight
-    // reps = 30 × (1RM/weight - 1)
-    const estimatedReps = Math.round(30 * (e1rm / newWeightKg - 1));
-    
-    // Clamp to reasonable range
-    return Math.max(1, Math.min(30, estimatedReps));
-  };
-
-  // Get RPE adjustment for next set based on last set's RPE
-  const getRpeAdjustedWeight = (lastRpe: number, targetRpe: number, lastWeightKg: number): number => {
-    // If last RPE was higher than target, suggest slightly lower weight
-    // If last RPE was lower than target, suggest slightly higher weight
-    const rpeDiff = targetRpe - lastRpe;
-    
-    // More aggressive adjustment: 3-5% per RPE point
-    // For easy sets (negative rpeDiff), increase weight more aggressively
-    let adjustmentPercent: number;
-    if (rpeDiff > 0) {
-      // Set was easier than target - increase weight more aggressively
-      adjustmentPercent = rpeDiff * 0.04; // 4% per RPE point for easy sets
-    } else {
-      // Set was harder than target - decrease weight more conservatively
-      adjustmentPercent = rpeDiff * 0.03; // 3% per RPE point for hard sets
-    }
-    
-    return lastWeightKg * (1 + adjustmentPercent);
-  };
-  
-  // Get RPE-adjusted reps for next set
-  const getRpeAdjustedReps = (lastRpe: number, targetRpe: number, lastReps: number, targetRepRange: [number, number]): number => {
-    const rpeDiff = targetRpe - lastRpe;
-    
-    // If set was easy (low RPE), suggest more reps
-    if (rpeDiff > 0.3) {
-      // Easy set - increase reps by 1-2 depending on how easy
-      const repIncrease = Math.min(2, Math.floor(rpeDiff));
-      return Math.min(targetRepRange[1], lastReps + repIncrease);
-    } else if (rpeDiff < -0.3) {
-      // Hard set - decrease reps slightly
-      const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
-      return Math.max(targetRepRange[0], lastReps - repDecrease);
-    }
-    
-    // On target - keep same reps
-    return lastReps;
-  };
+  // Shared suggestion context for the setSuggestionEngine
+  const suggestionCtx = { targetRepRange: block.targetRepRange, targetRir: effectiveTargetRir };
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
+    // If user manually edits reps, cancel any pending debounced reps calculation
+    // This prevents overwriting the user's manual input
+    if (field === 'reps') {
+      const existingTimeout = repsCalcTimeoutsRef.current.get(index);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        repsCalcTimeoutsRef.current.delete(index);
+      }
+    }
+
     setPendingInputs(prev => {
       const updated = [...prev];
       if (updated[index]) {
         updated[index] = { ...updated[index], [field]: value };
-        
-        // If weight changed, auto-adjust recommended reps
+
+        // If weight changed, schedule debounced auto-adjust of reps
         if (field === 'weight' && value) {
           const newWeightDisplay = parseFloat(value);
           if (!isNaN(newWeightDisplay) && newWeightDisplay > 0) {
             const newWeightKg = inputWeightToKg(newWeightDisplay, unit);
-            
+
             // Get reference data
             const lastCompleted = completedSets[completedSets.length - 1];
             const prevSet = previousSets[completedSets.length + index];
-            
+
             let refWeight = 0;
             let refReps = 0;
-            
+            let refRpe = 8; // Default RPE if not available
+
             if (lastCompleted) {
               refWeight = lastCompleted.weightKg;
               refReps = lastCompleted.reps;
+              refRpe = lastCompleted.rpe;
             } else if (prevSet) {
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
+              // previousSets doesn't include RPE, use target RPE from block
+              refRpe = 10 - effectiveTargetRir;
             } else if (suggestedWeight > 0) {
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+              refRpe = 10 - effectiveTargetRir;
             }
-            
+
             if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
-              // Weight changed significantly, recalculate reps
-              const newReps = calculateRepsFromWeight(newWeightKg, refWeight, refReps);
-              // Clamp to target rep range
-              const clampedReps = Math.max(
-                block.targetRepRange[0],
-                Math.min(block.targetRepRange[1], newReps)
-              );
-              updated[index].reps = String(clampedReps);
+              // Weight changed significantly - schedule debounced reps recalculation
+              // Clear any existing timeout for this index
+              const existingTimeout = repsCalcTimeoutsRef.current.get(index);
+              if (existingTimeout) {
+                clearTimeout(existingTimeout);
+              }
+
+              // Store current reps value to check if user changes it before timeout fires
+              const currentReps = updated[index].reps;
+
+              // Schedule debounced reps update (400ms delay)
+              const timeout = setTimeout(() => {
+                repsCalcTimeoutsRef.current.delete(index);
+                setPendingInputs(prevInputs => {
+                  const newInputs = [...prevInputs];
+                  // Only update reps if user hasn't manually changed it since we scheduled
+                  if (newInputs[index] && newInputs[index].reps === currentReps) {
+                    const newReps = estimateRepsForWeight(newWeightKg, { weightKg: refWeight, reps: refReps, rpe: refRpe }, suggestionCtx);
+                    newInputs[index] = { ...newInputs[index], reps: String(newReps) };
+                  }
+                  return newInputs;
+                });
+              }, 400);
+
+              repsCalcTimeoutsRef.current.set(index, timeout);
             }
           }
         }
@@ -794,33 +784,40 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Use target RPE as default (will be updated if user provides feedback)
     const targetRpe = 10 - effectiveTargetRir;
 
-    // Complete the set immediately (rest timer starts in parent)
-    const result = await onSetComplete({
-      weightKg,
-      reps: repsNum,
-      rpe: targetRpe,
-      setType: asDropset && dropsetMode ? 'dropset' : 'normal',
-      parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
-      // No feedback yet - user can add it optionally
-    });
-
-    // Clear dropset mode after completing
-    if (asDropset) {
-      setDropsetMode(null);
-    }
-
-    // Show feedback overlay if we got a set ID back
-    if (result && typeof result === 'string') {
-      setPendingFeedbackSet({
-        setId: result,
+    try {
+      // Complete the set immediately (rest timer starts in parent)
+      const result = await onSetComplete({
         weightKg,
         reps: repsNum,
-        setNumber,
+        rpe: targetRpe,
+        setType: asDropset && dropsetMode ? 'dropset' : 'normal',
+        parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
+        // No feedback yet - user can add it optionally
       });
-    }
 
-    // Unlock after a short delay
-    setTimeout(() => setIsCompletingSet(false), 500);
+      // Clear dropset mode after completing
+      if (asDropset) {
+        setDropsetMode(null);
+      }
+
+      // Show feedback overlay if we got a set ID back (submission succeeded)
+      if (result && typeof result === 'string') {
+        setPendingFeedbackSet({
+          setId: result,
+          weightKg,
+          reps: repsNum,
+          setNumber,
+        });
+      }
+      // If result is null/undefined, submission failed - lock will be released below
+    } catch (error) {
+      console.error('Set submission failed:', error);
+      // Lock will be released in finally block
+    } finally {
+      // Always unlock after async operation completes (success or failure)
+      // Small delay to prevent accidental double-taps on fast networks
+      setTimeout(() => setIsCompletingSet(false), 100);
+    }
   };
 
   // Submit feedback for the pending set
@@ -1071,11 +1068,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {/* Delete exercise button */}
             {onExerciseDelete && isActive && (
               <button
-                onClick={() => {
-                  if (confirm(`Remove "${exercise.name}" from this workout?`)) {
-                    onExerciseDelete();
-                  }
-                }}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
                 title="Remove exercise"
               >
@@ -1142,7 +1135,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-surface-500">PR:</span>
                     <span className="text-sm font-medium text-success-400">
-                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}
+                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}
                     </span>
                   </div>
                 )}
@@ -1180,11 +1173,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {exerciseHistory.lastWorkoutSets.map((set, idx) => (
-                        <span 
+                        <span
                           key={idx}
                           className="px-2 py-1 bg-surface-700 rounded text-xs text-surface-300"
                         >
-                          {displayWeight(set.weightKg, true)} × {set.reps}
+                          {displayWeight(set.weightKg, true)} × {set.reps}{isDurationBased ? 's' : ''}
                           {set.rpe && <span className="text-surface-500"> @{set.rpe}</span>}
                         </span>
                       ))}
@@ -1259,7 +1252,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <tr>
                     <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                    <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
+                    <th className="px-1 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
                     <th className="px-1 py-2 text-center text-surface-400 font-medium">Purpose</th>
                     <th className="px-1 py-2 w-10"></th>
@@ -1278,7 +1271,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const warmupWeightForDisplay = parseFloat(
                     convertWeight(warmupWeightForDisplayKg, 'kg', unit).toFixed(1)
                   );
-                  const displayWarmupWeight = warmupWeightForDisplayKg === 0 ? 'Empty' : warmupWeightForDisplay;
+                  // For bodyweight exercises with no added weight, show "BW"
+                  // For weighted/assisted bodyweight exercises, show the actual warmup weight
+                  const displayWarmupWeight = warmupWeightForDisplayKg === 0
+                    ? (isBodyweightExercise ? 'BW' : 'Empty')
+                    : warmupWeightForDisplay;
                   const isWarmupCompleted = completedWarmups.has(warmup.setNumber);
                   const isEditingThis = editingWarmupId === warmup.setNumber;
                   
@@ -1450,6 +1447,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   completedSet={set}
                   onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
                   unit={unit}
+                  isDurationBased={isDurationBased}
+                  exerciseId={exercise.id}
                 />
               );
             }
@@ -1530,6 +1529,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 }}
                 unit={unit}
                 disabled={isCompletingSet}
+                isDurationBased={isDurationBased}
+                exerciseId={exercise.id}
               />
             );
           })}
@@ -1553,16 +1554,16 @@ export const ExerciseCard = memo(function ExerciseCard({
       ) : (
         // Table design for non-bodyweight exercises
         <div className="overflow-hidden">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm table-fixed">
             <thead className="bg-surface-800/50">
               <tr>
-                <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
+                <th className="w-8 px-1 py-2 text-left text-surface-400 font-medium">Set</th>
+                <th className="w-[72px] px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
+                <th className="w-11 px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
+                <th className="w-12 px-1 py-2 text-center text-surface-400 font-medium">Form</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
-                <th className="px-1 py-2 w-10"></th>
+                <th className="w-10 px-1 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -1665,7 +1666,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        {set.reps}
+                        {set.reps}{isDurationBased ? 's' : ''}
                       </td>
                       <td
                         className="px-1 py-2.5 text-center"
@@ -2017,15 +2018,33 @@ export const ExerciseCard = memo(function ExerciseCard({
                       />
                     </td>
                     <td className="px-1 py-1.5">
-                      <input
-                        type="number"
-                        value={input.reps}
-                        onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        min="0"
-                        max="100"
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
+                      {(() => {
+                        const repsValue = parseInt(input.reps) || 0;
+                        const isOutsideRange = repsValue > 0 && (
+                          repsValue < block.targetRepRange[0] || repsValue > block.targetRepRange[1]
+                        );
+                        return (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={input.reps}
+                              onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
+                              onFocus={(e) => e.target.select()}
+                              min="0"
+                              max={isDurationBased ? 600 : 100}
+                              title={isOutsideRange ? `Estimated ${isDurationBased ? 'seconds' : 'reps'} outside target range (${block.targetRepRange[0]}-${block.targetRepRange[1]})` : undefined}
+                              className={`w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                                isOutsideRange
+                                  ? 'border-danger-500 text-danger-400'
+                                  : 'border-surface-700 text-surface-100'
+                              }`}
+                            />
+                            {isOutsideRange && (
+                              <span className="absolute -top-1 -right-1 w-2 h-2 bg-danger-500 rounded-full" title={`Outside target ${isDurationBased ? 'duration' : 'rep'} range`} />
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-1 py-1.5 text-center">
                       {(() => {
@@ -2634,7 +2653,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div>
                 <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
                 <p className="text-xs text-surface-400">
-                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} reps
+                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} {isDurationBased ? 'sec' : 'reps'}
                 </p>
               </div>
               <button
@@ -2717,6 +2736,23 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          if (onExerciseDelete) {
+            onExerciseDelete();
+          }
+        }}
+        title="Remove Exercise"
+        message={`Remove "${exercise.name}" from this workout? This will delete any logged sets for this exercise.`}
+        confirmText="Remove"
+        cancelText="Keep"
+        variant="danger"
+      />
     </Card>
   );
 }, (prevProps, nextProps) => {
@@ -2728,6 +2764,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.targetSets === nextProps.block.targetSets &&
     prevProps.block.targetWeightKg === nextProps.block.targetWeightKg &&
     prevProps.sets.length === nextProps.sets.length &&
+    // Compare set content (RPE, form, weight, reps) to detect feedback updates
+    prevProps.sets.every((s, i) =>
+      s.id === nextProps.sets[i]?.id &&
+      s.rpe === nextProps.sets[i]?.rpe &&
+      s.feedback?.form === nextProps.sets[i]?.feedback?.form &&
+      s.weightKg === nextProps.sets[i]?.weightKg &&
+      s.reps === nextProps.sets[i]?.reps
+    ) &&
     prevProps.isActive === nextProps.isActive &&
     prevProps.unit === nextProps.unit &&
     prevProps.recommendedWeight === nextProps.recommendedWeight &&

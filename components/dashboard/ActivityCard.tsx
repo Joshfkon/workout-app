@@ -11,6 +11,7 @@ import {
   getActiveWearableConnections,
   getDailyActivityData,
 } from '@/lib/actions/wearable';
+import { getLocalDateString } from '@/lib/utils';
 import type { WearableConnection, DailyActivityData } from '@/types/wearable';
 
 interface ActivityCardProps {
@@ -37,7 +38,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   const [showManualInput, setShowManualInput] = useState(false);
 
   const loadData = useCallback(async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     // Check sessionStorage cache first
     try {
@@ -55,8 +56,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
           return;
         }
       }
-    } catch {
+    } catch (error) {
       // Cache read failed, proceed with fetch
+      console.debug('[ActivityCard] Cache read failed:', error);
     }
 
     try {
@@ -76,8 +78,9 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
           date: today,
         };
         sessionStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(cacheData));
-      } catch {
+      } catch (error) {
         // Cache write failed, non-critical
+        console.debug('[ActivityCard] Cache write failed:', error);
       }
     } catch (error) {
       console.error('Failed to load activity data:', error);

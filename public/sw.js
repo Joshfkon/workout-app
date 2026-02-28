@@ -5,18 +5,41 @@
  * especially important for Capacitor native app deployment.
  *
  * Cache Strategy:
- * - Static assets (JS, CSS, images): Cache-first
+ * - Critical app shell: Precached on install
+ * - Static assets (JS, CSS, images): Stale-while-revalidate for fast loads
  * - API responses: Network-first with fallback to cache
  * - HTML pages: Network-first with offline fallback
+ *
+ * Performance optimizations:
+ * - Precaches critical routes for instant navigation
+ * - Uses stale-while-revalidate for assets (show cached, update in background)
+ * - Aggressive caching of Next.js static chunks
  */
 
-const CACHE_NAME = 'hypertrack-v1';
+const CACHE_NAME = 'hypertrack-v3';
 
-// Assets to cache on install (app shell)
+// Critical assets to cache on install (app shell + key routes)
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
   '/favicon.svg',
+  '/dashboard',
+];
+
+// Routes to prefetch after initial load (background caching)
+const PREFETCH_ROUTES = [
+  '/dashboard/workout',
+  '/dashboard/nutrition',
+  '/dashboard/analytics',
+  '/dashboard/mesocycle',
+  '/dashboard/history',
+];
+
+// Routes that should use stale-while-revalidate for instant loads
+const INSTANT_LOAD_ROUTES = [
+  '/dashboard',
+  '/dashboard/workout',
+  '/dashboard/nutrition',
 ];
 
 // Install event - cache app shell
@@ -30,16 +53,34 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// Activate event - clean up old caches and prefetch routes
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name))
+        );
+      }),
+      // Prefetch additional routes in background (low priority)
+      caches.open(CACHE_NAME).then((cache) => {
+        // Use requestIdleCallback pattern - don't block activation
+        setTimeout(() => {
+          PREFETCH_ROUTES.forEach((route) => {
+            fetch(route, { priority: 'low' })
+              .then((response) => {
+                if (response.ok) {
+                  cache.put(route, response);
+                }
+              })
+              .catch(() => {}); // Ignore errors for prefetch
+          });
+        }, 2000); // Delay prefetch to not compete with initial load
+      }),
+    ])
   );
   // Take control of all pages immediately
   self.clients.claim();
@@ -123,7 +164,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For HTML pages - network-first with cache fallback
+  // For instant-load routes - stale-while-revalidate (show cached immediately, update in background)
+  const isInstantLoadRoute = INSTANT_LOAD_ROUTES.some(route =>
+    url.pathname === route || url.pathname === route + '/'
+  );
+
+  if (isInstantLoadRoute) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(request, responseToCache);
+              });
+            }
+            return response;
+          })
+          .catch(() => cached || new Response('Offline', { status: 503 }));
+
+        // Return cached immediately if available, otherwise wait for network
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // For other HTML pages - network-first with cache fallback
   event.respondWith(
     fetch(request)
       .then((response) => {

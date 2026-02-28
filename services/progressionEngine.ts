@@ -18,7 +18,12 @@ import type {
   MovementPattern,
   Equipment,
 } from '@/types/schema';
+import { rirToRpe, calculateAvgFormScore } from '@/types/schema';
 import { roundToIncrement } from '@/lib/utils';
+import {
+  estimate1RM,
+  calculateWorkingWeightSimple,
+} from './shared/strengthCalculations';
 
 // ============================================
 // TYPE ADAPTERS
@@ -110,6 +115,50 @@ function getMinIncrementForEquipment(equipment: Equipment): number {
   }
 }
 
+/**
+ * Get a sensible starting weight for a new exercise based on equipment type.
+ * This provides a safe starting point when no calibration data is available.
+ *
+ * Starting weights are intentionally conservative to prioritize safety and form.
+ */
+function getSuggestedStartingWeight(
+  equipment: string,
+  mechanic: 'compound' | 'isolation'
+): number {
+  // For bodyweight exercises, return 0 (actual load is bodyweight)
+  if (equipment === 'bodyweight') {
+    return 0;
+  }
+
+  // Starting weights based on equipment and exercise type
+  switch (equipment) {
+    case 'barbell':
+      // Start with empty bar or slightly loaded
+      // Compound: empty bar (20kg), Isolation: lighter bar or EZ curl bar
+      return mechanic === 'compound' ? 20 : 15;
+
+    case 'dumbbell':
+      // Conservative starting weights (total for both hands)
+      // Compound: 10kg per hand (20 total), Isolation: 5kg per hand (10 total)
+      return mechanic === 'compound' ? 10 : 5;
+
+    case 'kettlebell':
+      // Standard starting kettlebells
+      return mechanic === 'compound' ? 12 : 8;
+
+    case 'cable':
+      // Light cable weight to start
+      return mechanic === 'compound' ? 15 : 10;
+
+    case 'machine':
+      // Machine starting weight (varies widely, start light)
+      return mechanic === 'compound' ? 20 : 10;
+
+    default:
+      return 10; // Safe default
+  }
+}
+
 // ============================================
 // CONSTANTS
 // ============================================
@@ -149,6 +198,10 @@ export function getPeriodizationPhase(
   totalWeeks: number,
   model: 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block' = 'linear'
 ): PeriodizationPhase {
+  // Guard against division by zero
+  if (totalWeeks <= 0) {
+    return 'hypertrophy'; // Default to hypertrophy phase
+  }
   const progress = weekInMeso / totalWeeks;
   
   // Deload is always the last week
@@ -165,6 +218,118 @@ export function getPeriodizationPhase(
   if (progress < 0.8) return 'strength';
   return 'peaking';
 }
+
+// ============================================
+// DECLARATIVE PHASE CONFIG
+// ============================================
+
+/**
+ * Declarative configuration for each periodization phase.
+ * Single source of truth for rep ranges, RIR adjustments, progression
+ * priorities, and technique fallback behavior per phase.
+ */
+export interface PhaseConfig {
+  name: string;
+  /** Ordered progression types to attempt (engine tries each in sequence) */
+  progressionPriority: ProgressionType[];
+  /** [minDelta, maxDelta] applied to compound defaultRepRange */
+  compoundRepAdjust: [number, number];
+  /** [minDelta, maxDelta] applied to isolation defaultRepRange */
+  isolationRepAdjust: [number, number];
+  /** Hard [floor, ceiling] clamp after compound adjustment */
+  compoundRepBounds: [number, number];
+  /** Hard [floor, ceiling] clamp after isolation adjustment */
+  isolationRepBounds: [number, number];
+  /** Added to base RIR before progress taper */
+  rirModifier: number;
+  /** Multiplier for week-progress-dependent RIR taper (0 = no taper) */
+  progressTaperFactor: number;
+  rirFloor: number;
+  rirCeiling: number;
+  /** Extra rest seconds added in technique fallback */
+  restBonusSeconds: number;
+  /** Set count delta in technique fallback (0 = keep, -1 = reduce by 1) */
+  techniqueSetDelta: number;
+  /** Minimum sets floor in technique fallback */
+  techniqueMinSets: number;
+  techniqueReason: string;
+  allowSetProgression: boolean;
+}
+
+/**
+ * Phase configurations derived from the original if/else cascade.
+ * Each entry produces identical output to the switch/if-else logic it replaces.
+ */
+export const PHASE_CONFIGS: Record<PeriodizationPhase, PhaseConfig> = {
+  hypertrophy: {
+    name: 'Hypertrophy',
+    progressionPriority: ['reps', 'sets', 'load'],
+    compoundRepAdjust: [0, 2],
+    isolationRepAdjust: [2, 3],
+    compoundRepBounds: [6, 12],
+    isolationRepBounds: [10, 15],
+    rirModifier: 0,
+    progressTaperFactor: 2,
+    rirFloor: 1,
+    rirCeiling: 4,
+    restBonusSeconds: 0,
+    techniqueSetDelta: 0,
+    techniqueMinSets: 1,
+    techniqueReason: 'Hypertrophy phase - accumulate quality volume',
+    allowSetProgression: true,
+  },
+  strength: {
+    name: 'Strength',
+    progressionPriority: ['load', 'reps'],
+    compoundRepAdjust: [-2, -2],
+    isolationRepAdjust: [0, 0],
+    compoundRepBounds: [3, 6],
+    isolationRepBounds: [6, 10],
+    rirModifier: -1,
+    progressTaperFactor: 0,
+    rirFloor: 1,
+    rirCeiling: 4,
+    restBonusSeconds: 30,
+    techniqueSetDelta: -1,
+    techniqueMinSets: 2,
+    techniqueReason: 'Strength phase - focus on quality over quantity',
+    allowSetProgression: false,
+  },
+  peaking: {
+    name: 'Peaking',
+    progressionPriority: ['load', 'reps'],
+    compoundRepAdjust: [-10, 0],
+    isolationRepAdjust: [-2, -2],
+    compoundRepBounds: [1, 5],
+    isolationRepBounds: [4, 8],
+    rirModifier: -2,
+    progressTaperFactor: 0,
+    rirFloor: 0,
+    rirCeiling: 4,
+    restBonusSeconds: 30,
+    techniqueSetDelta: -1,
+    techniqueMinSets: 2,
+    techniqueReason: 'Peaking phase - focus on quality over quantity',
+    allowSetProgression: false,
+  },
+  deload: {
+    name: 'Deload',
+    progressionPriority: [],  // Deload exits early; config used only for rep range / RIR
+    compoundRepAdjust: [0, 0],
+    isolationRepAdjust: [0, 0],
+    compoundRepBounds: [1, 30],
+    isolationRepBounds: [1, 30],
+    rirModifier: 2,
+    progressTaperFactor: 0,
+    rirFloor: 0,
+    rirCeiling: 5,
+    restBonusSeconds: 0,
+    techniqueSetDelta: 0,
+    techniqueMinSets: 1,
+    techniqueReason: 'Deload - reduced intensity for recovery',
+    allowSetProgression: false,
+  },
+};
 
 // ============================================
 // MAIN PROGRESSION LOGIC
@@ -195,6 +360,16 @@ export interface CalculateNextTargetsInput {
   // Fatigue tracking
   systemicFatiguePercent?: number;  // Current systemic fatigue level (0-100)
   weeklyFatigueScore?: number;  // Accumulated weekly fatigue (1-10)
+
+  // Form quality (0-1 scale from calculateAvgFormScore)
+  // When provided, gates progression based on movement quality:
+  // < 0.3 → reduce weight, < 0.7 → block load progression, >= 0.7 → normal
+  lastSessionFormScore?: number;
+
+  // Advisory performance signals from PerformanceTracker
+  // These are informational only and never override targets.
+  // When provided, relevant signals are appended to the reason string.
+  performanceSignals?: Array<{ signal: string; reason: string }>;
 }
 
 /**
@@ -222,6 +397,7 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
     estimatedFromRelated,
     systemicFatiguePercent = 0,
     weeklyFatigueScore = 0,
+    lastSessionFormScore,
   } = input;
 
   // Determine current phase if not provided
@@ -231,9 +407,15 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
   const phaseRepRange = getPhaseAdjustedRepRange(exercise.defaultRepRange, currentPhase, exercise.mechanic);
   const phaseRir = getPhaseAdjustedRIR(exercise.defaultRir, currentPhase, weekInMeso, totalWeeksInMeso);
 
+  // Get suggested starting weight based on equipment type (used when no calibration data)
+  const suggestedStartingWeight = getSuggestedStartingWeight(
+    exercise.equipmentRequired?.[0] || 'barbell',
+    exercise.mechanic
+  );
+
   // Default starting targets
   const baseTargets: ProgressionTargets = {
-    weightKg: lastPerformance?.weightKg ?? 0,
+    weightKg: lastPerformance?.weightKg ?? suggestedStartingWeight,
     repRange: phaseRepRange,
     targetRir: phaseRir,
     sets: 3,
@@ -252,7 +434,7 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
         reason: 'Starting weight based on calibrated strength test',
       };
     }
-    
+
     if (estimatedFromRelated) {
       const workingWeight = calculateWorkingWeightFromE1RM(estimatedFromRelated, phaseRepRange, phaseRir);
       return {
@@ -261,10 +443,13 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
         reason: 'Starting weight estimated from related exercises - starting conservative',
       };
     }
-    
+
+    // No calibration data - use equipment-based suggested weight
+    const equipmentName = exercise.equipmentRequired?.[0] || 'equipment';
     return {
       ...baseTargets,
-      reason: 'New exercise - start light and focus on form',
+      weightKg: suggestedStartingWeight,
+      reason: `New exercise - suggested starting weight for ${equipmentName}. Focus on form and adjust as needed.`,
     };
   }
 
@@ -280,83 +465,95 @@ export function calculateNextTargets(input: CalculateNextTargetsInput): Progress
 
   // Analyze last performance to determine progression type
   // Pass phase-adjusted rep range so analysis uses the correct range for the current phase
-  const analysis = analyzePerformance(lastPerformance, exercise, phaseRepRange);
-  
-  // Phase-specific progression logic
-  let targets: ProgressionTargets;
-  
-  if (currentPhase === 'hypertrophy') {
-    // Hypertrophy phase: prioritize rep and volume progression over load
-    if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
-    } else if (analysis.readyForSetProgression && weekInMeso > 1) {
-      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
-    } else if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
-    } else {
-      targets = {
-        weightKg: lastPerformance.weightKg,
-        repRange: phaseRepRange,
-        targetRir: phaseRir,
-        sets: lastPerformance.sets,
-        restSeconds: getRestSecondsForMechanic(exercise.mechanic),
-        progressionType: 'technique',
-        reason: 'Hypertrophy phase - accumulate quality volume',
-      };
+  // Pass form score to gate progression when movement quality is poor
+  const analysis = analyzePerformance(lastPerformance, exercise, phaseRepRange, lastSessionFormScore);
+
+  // Form gate: severe breakdown → short-circuit to 90% weight reduction
+  if (analysis.formGate === 'reduce_weight') {
+    return {
+      weightKg: roundToIncrement(lastPerformance.weightKg * 0.9, exercise.minWeightIncrementKg),
+      repRange: phaseRepRange,
+      targetRir: phaseRir,
+      sets: lastPerformance.sets,
+      restSeconds: getRestSecondsForMechanic(exercise.mechanic),
+      progressionType: 'technique',
+      reason: 'Form breakdown detected - reducing weight by 10% to rebuild technique',
+    };
+  }
+
+  // Phase-specific progression logic (config-driven)
+  const phaseConfig = PHASE_CONFIGS[currentPhase];
+
+  const analysisReady: Record<string, boolean> = {
+    load: analysis.readyForLoadProgression,
+    reps: analysis.readyForRepProgression,
+    sets: analysis.readyForSetProgression && phaseConfig.allowSetProgression && weekInMeso > 1,
+  };
+
+  let targets: ProgressionTargets | null = null;
+
+  for (const type of phaseConfig.progressionPriority) {
+    if (!analysisReady[type]) continue;
+
+    switch (type) {
+      case 'load':
+        targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso, phaseRepRange, phaseRir);
+        break;
+      case 'reps':
+        targets = calculateRepProgression(lastPerformance, exercise, phaseRepRange, phaseRir);
+        break;
+      case 'sets':
+        targets = calculateSetProgression(lastPerformance, exercise, weekInMeso, phaseRepRange, phaseRir);
+        break;
     }
-  } else if (currentPhase === 'strength' || currentPhase === 'peaking') {
-    // Strength/Peaking phase: prioritize load progression
-    if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
-    } else if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
-    } else {
-      targets = {
-        weightKg: lastPerformance.weightKg,
-        repRange: phaseRepRange,
-        targetRir: phaseRir,
-        sets: Math.max(2, lastPerformance.sets - 1), // Slightly lower volume in strength phase
-        restSeconds: getRestSecondsForMechanic(exercise.mechanic) + 30, // More rest
-        progressionType: 'technique',
-        reason: `${currentPhase === 'peaking' ? 'Peaking' : 'Strength'} phase - focus on quality over quantity`,
-      };
-    }
-  } else {
-    // Default progression logic
-    if (analysis.readyForLoadProgression) {
-      targets = calculateLoadProgression(lastPerformance, exercise, experience, weekInMeso);
-    } else if (analysis.readyForRepProgression) {
-      targets = calculateRepProgression(lastPerformance, exercise);
-    } else if (analysis.readyForSetProgression && weekInMeso > 1) {
-      targets = calculateSetProgression(lastPerformance, exercise, weekInMeso);
-    } else {
-      targets = {
-        weightKg: lastPerformance.weightKg,
-        repRange: phaseRepRange,
-        targetRir: phaseRir,
-        sets: lastPerformance.sets,
-        restSeconds: getRestSecondsForMechanic(exercise.mechanic),
-        progressionType: 'technique',
-        reason: analysis.reason || 'Consolidate technique at current weight',
-      };
-    }
+    if (targets) break;
+  }
+
+  // Technique fallback if no progression triggered
+  if (!targets) {
+    const adjustedSets = Math.max(
+      phaseConfig.techniqueMinSets,
+      lastPerformance.sets + phaseConfig.techniqueSetDelta
+    );
+    targets = {
+      weightKg: lastPerformance.weightKg,
+      repRange: phaseRepRange,
+      targetRir: phaseRir,
+      sets: adjustedSets,
+      restSeconds: getRestSecondsForMechanic(exercise.mechanic) + phaseConfig.restBonusSeconds,
+      progressionType: 'technique',
+      reason: phaseConfig.techniqueReason,
+    };
   }
   
   // Apply weekly modifiers if provided
   if (weeklyModifiers) {
     targets.weightKg = Math.round(targets.weightKg * weeklyModifiers.intensityModifier * 10) / 10;
-    targets.sets = Math.round(targets.sets * weeklyModifiers.volumeModifier);
-    targets.targetRir = Math.max(0, Math.min(4, 10 - weeklyModifiers.rpeTarget.max));
+    // Ensure sets never goes below 1
+    targets.sets = Math.max(1, Math.round(targets.sets * weeklyModifiers.volumeModifier));
+    // Safely access rpeTarget with null check
+    if (weeklyModifiers.rpeTarget?.max != null) {
+      targets.targetRir = Math.max(0, Math.min(4, 10 - weeklyModifiers.rpeTarget.max));
+    }
   }
   
   // Adjust for accumulated fatigue
   targets = adjustForFatigue(targets, weeklyFatigueScore, systemicFatiguePercent);
-  
+
+  // Annotate with advisory performance signals (never overrides targets)
+  if (input.performanceSignals?.length) {
+    const signalNotes = input.performanceSignals
+      .map(s => s.reason)
+      .join('; ');
+    targets.reason = `${targets.reason} [Note: ${signalNotes}]`;
+  }
+
   return targets;
 }
 
 /**
  * Calculate working weight from estimated 1RM
+ * Uses shared strength calculations with local rounding
  */
 function calculateWorkingWeightFromE1RM(
   e1rm: number,
@@ -364,54 +561,52 @@ function calculateWorkingWeightFromE1RM(
   targetRir: number
 ): number {
   const avgReps = Math.round((repRange[0] + repRange[1]) / 2);
-  const effectiveReps = avgReps + targetRir;
-  // Exact inverse of Epley formula: E1RM = weight * (1 + reps/30)
-  // Therefore: weight = E1RM / (1 + reps/30) = E1RM * 30 / (30 + reps)
-  const percentage = 30 / (30 + effectiveReps);
-  const safetyMargin = 0.95;
-  return roundToIncrement(e1rm * percentage * safetyMargin, 2.5);
+  // Use shared calculation for consistency across the codebase
+  const workingWeight = calculateWorkingWeightSimple(e1rm, avgReps, targetRir);
+  return roundToIncrement(workingWeight, 2.5);
 }
 
 /**
- * Adjust rep range based on periodization phase
+ * Adjust rep range based on periodization phase.
+ * Reads from PHASE_CONFIGS to apply per-phase deltas and bounds.
+ *
+ * Formula: rawMin = max(bounds[0], base[0] + adjust[0])
+ *          rawMax = min(bounds[1], base[1] + adjust[1])
+ *          then clamp so min <= max (guards against inverted ranges
+ *          when baseRange sits far outside the phase bounds,
+ *          e.g. Farmer's Carry [30,60] in peaking [1,5]).
  */
 function getPhaseAdjustedRepRange(
   baseRange: [number, number],
   phase: PeriodizationPhase,
   mechanic: 'compound' | 'isolation'
 ): [number, number] {
+  const config = PHASE_CONFIGS[phase];
   const isCompound = mechanic === 'compound';
-  
-  switch (phase) {
-    case 'hypertrophy':
-      // Higher reps for hypertrophy
-      return isCompound 
-        ? [Math.max(6, baseRange[0]), Math.min(12, baseRange[1] + 2)]
-        : [Math.max(10, baseRange[0] + 2), Math.min(15, baseRange[1] + 3)];
-        
-    case 'strength':
-      // Lower reps for strength
-      return isCompound
-        ? [Math.max(3, baseRange[0] - 2), Math.min(6, baseRange[1] - 2)]
-        : [Math.max(6, baseRange[0]), Math.min(10, baseRange[1])];
-        
-    case 'peaking':
-      // Very low reps for peaking
-      return isCompound
-        ? [1, 5]
-        : [Math.max(4, baseRange[0] - 2), Math.min(8, baseRange[1] - 2)];
-        
-    case 'deload':
-      // Moderate reps, reduced intensity
-      return baseRange;
-      
-    default:
-      return baseRange;
+
+  const adjust = isCompound ? config.compoundRepAdjust : config.isolationRepAdjust;
+  const bounds = isCompound ? config.compoundRepBounds : config.isolationRepBounds;
+
+  const rawMin = Math.max(bounds[0], baseRange[0] + adjust[0]);
+  const rawMax = Math.min(bounds[1], baseRange[1] + adjust[1]);
+
+  // When the base range is far outside phase bounds the two values can
+  // invert (rawMin > rawMax).  Collapse to the bounds ceiling so the
+  // exercise still gets a valid, phase-appropriate range.
+  if (rawMin > rawMax) {
+    return [rawMax, rawMax];
   }
+
+  return [rawMin, rawMax];
 }
 
 /**
- * Adjust RIR based on periodization phase and week
+ * Adjust RIR based on periodization phase and week.
+ * Reads from PHASE_CONFIGS: applies a fixed modifier plus an optional
+ * progress-dependent taper (used in hypertrophy to ramp intensity).
+ *
+ * Formula: tapered = baseRir + rirModifier - (progress × progressTaperFactor)
+ *          result  = clamp(round(tapered), rirFloor, rirCeiling)
  */
 function getPhaseAdjustedRIR(
   baseRir: number,
@@ -419,28 +614,16 @@ function getPhaseAdjustedRIR(
   weekInMeso: number,
   totalWeeks: number
 ): number {
-  const progress = weekInMeso / totalWeeks;
-  
-  switch (phase) {
-    case 'hypertrophy':
-      // Start conservative, gradually decrease RIR
-      return Math.max(1, Math.min(4, Math.round(baseRir - progress * 2)));
-      
-    case 'strength':
-      // Lower RIR for strength
-      return Math.max(1, baseRir - 1);
-      
-    case 'peaking':
-      // Very low RIR for peaking
-      return Math.max(0, baseRir - 2);
-      
-    case 'deload':
-      // Higher RIR for deload
-      return Math.min(5, baseRir + 2);
-      
-    default:
-      return baseRir;
+  // Guard against division by zero
+  if (totalWeeks <= 0) {
+    return baseRir;
   }
+
+  const config = PHASE_CONFIGS[phase];
+  const progress = weekInMeso / totalWeeks;
+  const tapered = baseRir + config.rirModifier - (progress * config.progressTaperFactor);
+
+  return Math.max(config.rirFloor, Math.min(config.rirCeiling, Math.round(tapered)));
 }
 
 /**
@@ -489,20 +672,81 @@ interface PerformanceAnalysis {
   readyForRepProgression: boolean;
   readyForSetProgression: boolean;
   reason: string;
+  /** Set when form quality gates override normal analysis */
+  formGate?: 'reduce_weight' | 'block_load';
 }
 
+/**
+ * Analyze last session performance with optional form quality gating.
+ *
+ * Form gate thresholds:
+ * - formScore < 0.3 → block ALL progression (reduce_weight)
+ * - formScore < 0.7 → block load progression only (block_load)
+ * - formScore >= 0.7 or undefined → normal analysis
+ *
+ * When formScore is undefined, behavior is identical to pre-form-gate code.
+ */
 function analyzePerformance(
   performance: LastSessionPerformance,
   exercise: Exercise,
-  phaseRepRange?: [number, number] // Optional phase-adjusted rep range
+  phaseRepRange?: [number, number],
+  formScore?: number
+): PerformanceAnalysis {
+  // Form quality gate: severely bad form blocks ALL progression
+  if (formScore !== undefined && formScore < 0.3) {
+    return {
+      readyForLoadProgression: false,
+      readyForRepProgression: false,
+      readyForSetProgression: false,
+      reason: 'Form breakdown detected - reduce weight to rebuild technique',
+      formGate: 'reduce_weight',
+    };
+  }
+
+  // Run normal RPE/rep-based analysis
+  const analysis = analyzePerformanceCore(performance, exercise, phaseRepRange);
+
+  // Form quality gate: moderate breakdown blocks load progression only
+  if (formScore !== undefined && formScore < 0.7 && analysis.readyForLoadProgression) {
+    return {
+      ...analysis,
+      readyForLoadProgression: false,
+      reason: 'Form not clean enough for weight increase - focus on technique',
+      formGate: 'block_load',
+    };
+  }
+
+  return analysis;
+}
+
+/**
+ * Core RPE/rep-based performance analysis (no form gating).
+ * Separated from analyzePerformance() to keep form gate logic clean.
+ */
+function analyzePerformanceCore(
+  performance: LastSessionPerformance,
+  exercise: Exercise,
+  phaseRepRange?: [number, number]
 ): PerformanceAnalysis {
   // Use phase-adjusted range if provided, otherwise fall back to default
   const [minReps, maxReps] = phaseRepRange || exercise.defaultRepRange;
   const hitTopOfRange = performance.reps >= maxReps;
   const completedAllSets = performance.allSetsCompleted;
   const averageRpeAppropriate = performance.averageRpe >= 7 && performance.averageRpe <= 9;
+  const rpeTooLow = performance.averageRpe < 7; // Weight is too light
 
-  // Ready for load progression: hit top of rep range with good RPE
+  // PRIORITY 1: RPE too low (weight too light) + at/above top of rep range = needs MORE weight
+  // This is the clearest signal for load progression - the weight is definitely too light
+  if (hitTopOfRange && completedAllSets && rpeTooLow) {
+    return {
+      readyForLoadProgression: true,
+      readyForRepProgression: false,
+      readyForSetProgression: false,
+      reason: 'Weight too light - RPE indicates significant capacity for heavier load',
+    };
+  }
+
+  // PRIORITY 2: Standard load progression - hit top of rep range with appropriate RPE (7-9)
   if (hitTopOfRange && completedAllSets && averageRpeAppropriate) {
     return {
       readyForLoadProgression: true,
@@ -512,7 +756,17 @@ function analyzePerformance(
     };
   }
 
-  // Ready for rep progression: in rep range but not at top
+  // PRIORITY 3: RPE too low but not at top of range - add reps first, then weight
+  if (performance.reps >= minReps && performance.reps < maxReps && completedAllSets && rpeTooLow) {
+    return {
+      readyForLoadProgression: false,
+      readyForRepProgression: true,
+      readyForSetProgression: false,
+      reason: 'Weight may be light - add reps to reach top of range, then increase weight',
+    };
+  }
+
+  // PRIORITY 4: Rep progression - in rep range but not at top, normal RPE
   if (performance.reps >= minReps && performance.reps < maxReps && completedAllSets) {
     return {
       readyForLoadProgression: false,
@@ -522,8 +776,8 @@ function analyzePerformance(
     };
   }
 
-  // Ready for set progression: maintaining well, can add volume
-  if (completedAllSets && performance.averageRpe < 8) {
+  // PRIORITY 5: Set progression - only when at appropriate RPE, not when weight is too light
+  if (completedAllSets && averageRpeAppropriate) {
     return {
       readyForLoadProgression: false,
       readyForRepProgression: false,
@@ -558,28 +812,32 @@ function calculateLoadProgression(
   lastPerformance: LastSessionPerformance,
   exercise: Exercise,
   experience: Experience,
-  weekInMeso: number
+  weekInMeso: number,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   const incrementFactor = WEIGHT_INCREMENT_FACTOR[experience];
-  const baseIncrement = exercise.minWeightIncrementKg;
-  
+  const baseIncrement = exercise.minWeightIncrementKg || 2.5; // Default to 2.5kg if not set
+
   // Calculate weight increase
   let weightIncrease = baseIncrement * incrementFactor;
-  
-  // Cap at max weekly increase
+
+  // Cap at max weekly increase, but ensure at least the minimum increment for very light weights
   const maxIncrease = lastPerformance.weightKg * MAX_WEEKLY_WEIGHT_INCREASE;
-  weightIncrease = Math.min(weightIncrease, maxIncrease);
-  
-  // Round to exercise increment
+  // Ensure weight increase is at least the minimum increment when max is very small
+  weightIncrease = Math.max(baseIncrement * 0.5, Math.min(weightIncrease, maxIncrease));
+
+  // Round to exercise increment (guard against zero increment)
+  const increment = exercise.minWeightIncrementKg || 2.5;
   const newWeight = roundToIncrement(
     lastPerformance.weightKg + weightIncrease,
-    exercise.minWeightIncrementKg
+    increment
   );
 
   return {
     weightKg: newWeight,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: lastPerformance.sets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'load',
@@ -589,12 +847,14 @@ function calculateLoadProgression(
 
 function calculateRepProgression(
   lastPerformance: LastSessionPerformance,
-  exercise: Exercise
+  exercise: Exercise,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   return {
     weightKg: lastPerformance.weightKg,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: lastPerformance.sets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'reps',
@@ -605,7 +865,9 @@ function calculateRepProgression(
 function calculateSetProgression(
   lastPerformance: LastSessionPerformance,
   exercise: Exercise,
-  weekInMeso: number
+  weekInMeso: number,
+  phaseRepRange: [number, number],
+  phaseRir: number
 ): ProgressionTargets {
   // Add one set per week in the mesocycle (up to a maximum)
   const maxSets = exercise.mechanic === 'compound' ? 5 : 4;
@@ -613,8 +875,8 @@ function calculateSetProgression(
 
   return {
     weightKg: lastPerformance.weightKg,
-    repRange: exercise.defaultRepRange,
-    targetRir: exercise.defaultRir,
+    repRange: phaseRepRange,
+    targetRir: phaseRir,
     sets: newSets,
     restSeconds: getRestSecondsForMechanic(exercise.mechanic),
     progressionType: 'sets',
@@ -854,15 +1116,29 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
   // Standard warmup protocol
   const protocol: WarmupSet[] = [];
 
-  // Set 1: Empty bar or very light (if first exercise, add general warmup)
+  // Set 1: Empty bar or light warmup (if first exercise, add general warmup)
+  // Only barbell exercises can use "empty bar" (0%); other equipment uses a light percentage
   if (isFirstExercise) {
-    protocol.push({
-      setNumber: 1,
-      percentOfWorking: 0,
-      targetReps: 10,
-      purpose: 'General warmup',
-      restSeconds: 30,
-    });
+    if (isBarbell) {
+      // Barbell exercises: empty bar for general warmup makes sense
+      protocol.push({
+        setNumber: 1,
+        percentOfWorking: 0,
+        targetReps: 10,
+        purpose: 'General warmup',
+        restSeconds: 30,
+      });
+    } else {
+      // Non-barbell exercises (dumbbells, cables, etc.): use light weight, not 0
+      // Use 30% of working weight as a minimum meaningful warmup
+      protocol.push({
+        setNumber: 1,
+        percentOfWorking: 30,
+        targetReps: 10,
+        purpose: 'General warmup',
+        restSeconds: 30,
+      });
+    }
   }
 
   // For barbell exercises with sufficient working weight, add a bar-only warmup set
@@ -931,18 +1207,12 @@ function getRestSecondsForMechanic(mechanic: 'compound' | 'isolation'): number {
 }
 
 /**
- * Calculate estimated 1 rep max using Epley formula
+ * Calculate estimated 1 rep max using multi-formula average
+ * Uses shared strength calculations for consistency across the codebase
+ * (Brzycki, Epley, Lombardi average for accuracy)
  */
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Adjust reps for RIR
-  const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
+  return estimate1RM(weight, reps, rpe);
 }
 
 /**
@@ -1081,7 +1351,7 @@ export function checkForPR(
   const currentE1RM = calculateE1RM(
     current.weight,
     current.reps,
-    current.repsInTank === 4 ? 6 : current.repsInTank === 2 ? 7.5 : current.repsInTank === 1 ? 9 : 10
+    rirToRpe(current.repsInTank)
   );
 
   // First time doing this exercise
@@ -1105,7 +1375,7 @@ export function checkForPR(
   const previousE1RM = calculateE1RM(
     previousPR.weight,
     previousPR.reps,
-    previousPR.repsInTank === 4 ? 6 : previousPR.repsInTank === 2 ? 7.5 : previousPR.repsInTank === 1 ? 9 : 10
+    rirToRpe(previousPR.repsInTank)
   );
 
   // NO PR if form was ugly
@@ -1210,27 +1480,29 @@ export interface FormAwareProgressionInput {
 }
 
 /**
- * Calculate suggested weight factoring in form quality
+ * Calculate suggested weight factoring in form quality.
+ *
+ * @deprecated Use `calculateNextTargets` with `lastSessionFormScore` instead.
+ * Form quality gating is now integrated into the main progression pipeline
+ * via `analyzePerformance`. This function remains for backward compatibility
+ * but its behavior is subsumed by the form gate in the unified pipeline.
  */
 export function calculateSuggestedWeight(
   input: FormAwareProgressionInput
 ): WeightSuggestion {
   const { lastSession, targetRepRange, targetRIR, exerciseMinIncrement } = input;
 
-  // Import form score calculation
-  const formScoreHelper = (form: FormRating): number => {
-    switch (form) {
-      case 'clean':
-        return 1.0;
-      case 'some_breakdown':
-        return 0.5;
-      case 'ugly':
-        return 0;
-    }
-  };
+  // Guard against empty arrays
+  if (lastSession.form.length === 0 || lastSession.repsInTank.length === 0 || lastSession.reps.length === 0) {
+    return {
+      weight: lastSession.weight,
+      reason: 'on_target',
+      message: 'Not enough data to calculate suggestion - maintain current weight',
+      confidence: 'low',
+    };
+  }
 
-  const avgForm =
-    lastSession.form.reduce((sum, f) => sum + formScoreHelper(f), 0) / lastSession.form.length;
+  const avgForm = calculateAvgFormScore(lastSession.form);
   const avgRIR =
     lastSession.repsInTank.reduce((sum: number, r: number) => sum + r, 0) / lastSession.repsInTank.length;
   const avgReps = lastSession.reps.reduce((sum, r) => sum + r, 0) / lastSession.reps.length;
@@ -1309,20 +1581,9 @@ export function checkFormTrend(
   const recentSessions = exerciseHistory.slice(0, 5);
 
   // Calculate average form score per session
-  const formScoreHelper = (form: FormRating): number => {
-    switch (form) {
-      case 'clean':
-        return 1.0;
-      case 'some_breakdown':
-        return 0.5;
-      case 'ugly':
-        return 0;
-    }
-  };
-
   const formScores = recentSessions.map((session) => {
     const forms = session.sets.map((s) => s.form);
-    return forms.reduce((sum, f) => sum + formScoreHelper(f), 0) / forms.length;
+    return calculateAvgFormScore(forms);
   });
 
   // Declining form trend (each session worse than 2 sessions ago)

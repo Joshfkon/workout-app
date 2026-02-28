@@ -1,7 +1,13 @@
 // ============ ENUMS ============
 
-/** User's primary training goal */
-export type Goal = 'bulk' | 'cut' | 'maintenance';
+/**
+ * User's primary training goal
+ * - bulk: gaining muscle/weight (caloric surplus)
+ * - cut: losing fat (caloric deficit)
+ * - maintenance: maintaining current composition (caloric maintenance)
+ * - recomp: recomposition - gaining muscle while losing fat (at/near maintenance)
+ */
+export type Goal = 'bulk' | 'cut' | 'maintenance' | 'recomp';
 
 /** User's training experience level */
 export type Experience = 'novice' | 'intermediate' | 'advanced';
@@ -18,8 +24,15 @@ export type SetQuality = 'junk' | 'effective' | 'stimulative' | 'excessive';
 /** Form quality rating for a set */
 export type FormRating = 'clean' | 'some_breakdown' | 'ugly';
 
-/** Reps in tank (RIR) values: 4 means "4+", 2 represents "2-3" range */
-export type RepsInTank = 0 | 1 | 2 | 4;
+/**
+ * Reps in tank (RIR) values for user feedback
+ * - 0: Maxed out / failure (RPE 10)
+ * - 1: Hard, one more rep possible (RPE 9)
+ * - 2: Moderate difficulty (RPE 8)
+ * - 3: Some effort, a few reps left (RPE 7)
+ * - 4: Easy, 4+ reps in reserve (RPE 6 or below)
+ */
+export type RepsInTank = 0 | 1 | 2 | 3 | 4;
 
 /** Body parts for discomfort logging */
 export type DiscomfortBodyPart =
@@ -104,6 +117,9 @@ export type DeloadStrategy = 'proactive' | 'reactive' | 'none';
 
 /** Exercise difficulty levels */
 export type ExerciseDifficulty = 'beginner' | 'intermediate' | 'advanced';
+
+/** Exercise type - determines if reps or duration is tracked */
+export type ExerciseType = 'rep_based' | 'duration_based';
 
 /** Fatigue rating (1 = low CNS demand, 3 = high) */
 export type FatigueRating = 1 | 2 | 3;
@@ -290,9 +306,24 @@ export interface Exercise {
 
   /** YouTube video ID for form tutorials (e.g., "dQw4w9WgXcQ") */
   youtubeVideoId?: string;
+
+  /**
+   * Exercise type: rep_based (default) or duration_based (for holds/planks)
+   * Duration-based exercises store seconds in the reps field
+   */
+  exerciseType?: ExerciseType;
 }
 
 // ============ MESOCYCLE ============
+
+/** Day of the week for workout scheduling */
+export type WorkoutDay = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+/** All days of the week */
+export const DAYS_OF_WEEK: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Weekdays only */
+export const WEEKDAYS: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
 /**
  * Training mesocycle (typically 4-8 weeks) with progressive overload structure
@@ -302,25 +333,34 @@ export interface Mesocycle {
   userId: string;
   name: string;
   state: MesocycleState;
-  
+
   /** Total planned weeks in the mesocycle */
   totalWeeks: number;
-  
+
   /** Current week (1-indexed) */
   currentWeek: number;
-  
+
   /** Week number designated as deload (usually last week) */
   deloadWeek: number;
-  
+
   /** Training days per week */
   daysPerWeek: number;
-  
+
   /** Split type (e.g., 'PPL', 'Upper/Lower', 'Full Body', 'Bro Split') */
   splitType: string;
-  
+
   /** Accumulated fatigue score (0-100), triggers deload recommendations */
   fatigueScore: number;
-  
+
+  /**
+   * User's preferred workout days (e.g., ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'] for weekdays only)
+   * If null, uses default schedule patterns based on daysPerWeek
+   */
+  preferredWorkoutDays: WorkoutDay[] | null;
+
+  /** Target workout duration in minutes (15-120), used for exercise planning */
+  sessionDurationMinutes: number | null;
+
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -832,43 +872,81 @@ export interface SwapSuggestion {
 
 /**
  * Default volume landmarks by muscle group for different experience levels
+ * Uses the Standard 20 muscle groups for granular volume tracking
+ *
+ * Notes on values:
+ * - Front delts get significant indirect work from pressing, so direct MEV is low
+ * - Lateral/rear delts need more direct work - they don't get hit well by compounds
+ * - Glute_med and obliques have MEV of 0 because they're often hit indirectly
+ * - Erectors get hit by hip hinges and squats, so direct work MEV is low
+ * - Based on Renaissance Periodization guidelines adapted to split muscle groups
  */
-export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<string, VolumeLandmarks>> = {
+export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<StandardMuscleGroup, VolumeLandmarks>> = {
   novice: {
-    chest: { mev: 6, mav: 12, mrv: 16 },
-    back: { mev: 8, mav: 14, mrv: 20 },
-    shoulders: { mev: 6, mav: 12, mrv: 18 },
+    chest_upper: { mev: 4, mav: 8, mrv: 12 },
+    chest_lower: { mev: 3, mav: 6, mrv: 10 },
+    front_delts: { mev: 2, mav: 6, mrv: 10 },
+    lateral_delts: { mev: 4, mav: 10, mrv: 16 },
+    rear_delts: { mev: 4, mav: 10, mrv: 16 },
+    lats: { mev: 6, mav: 10, mrv: 16 },
+    upper_back: { mev: 4, mav: 8, mrv: 14 },
+    traps: { mev: 3, mav: 8, mrv: 14 },
     biceps: { mev: 4, mav: 10, mrv: 14 },
     triceps: { mev: 4, mav: 10, mrv: 14 },
+    forearms: { mev: 2, mav: 6, mrv: 12 },
     quads: { mev: 6, mav: 12, mrv: 18 },
     hamstrings: { mev: 4, mav: 10, mrv: 14 },
     glutes: { mev: 4, mav: 10, mrv: 16 },
+    glute_med: { mev: 0, mav: 4, mrv: 8 },
+    adductors: { mev: 2, mav: 6, mrv: 10 },
     calves: { mev: 6, mav: 12, mrv: 18 },
-    abs: { mev: 4, mav: 10, mrv: 16 },
+    abs: { mev: 3, mav: 8, mrv: 14 },
+    obliques: { mev: 0, mav: 4, mrv: 8 },
+    erectors: { mev: 2, mav: 6, mrv: 10 },
   },
   intermediate: {
-    chest: { mev: 8, mav: 14, mrv: 20 },
-    back: { mev: 10, mav: 16, mrv: 24 },
-    shoulders: { mev: 8, mav: 14, mrv: 22 },
+    chest_upper: { mev: 6, mav: 10, mrv: 16 },
+    chest_lower: { mev: 4, mav: 8, mrv: 12 },
+    front_delts: { mev: 3, mav: 8, mrv: 12 },
+    lateral_delts: { mev: 6, mav: 14, mrv: 20 },
+    rear_delts: { mev: 6, mav: 12, mrv: 18 },
+    lats: { mev: 8, mav: 14, mrv: 20 },
+    upper_back: { mev: 6, mav: 10, mrv: 16 },
+    traps: { mev: 4, mav: 10, mrv: 16 },
     biceps: { mev: 6, mav: 12, mrv: 18 },
     triceps: { mev: 6, mav: 12, mrv: 18 },
+    forearms: { mev: 3, mav: 8, mrv: 14 },
     quads: { mev: 8, mav: 14, mrv: 22 },
     hamstrings: { mev: 6, mav: 12, mrv: 18 },
     glutes: { mev: 6, mav: 12, mrv: 20 },
+    glute_med: { mev: 0, mav: 6, mrv: 10 },
+    adductors: { mev: 3, mav: 8, mrv: 12 },
     calves: { mev: 8, mav: 14, mrv: 22 },
-    abs: { mev: 6, mav: 12, mrv: 20 },
+    abs: { mev: 4, mav: 10, mrv: 18 },
+    obliques: { mev: 0, mav: 6, mrv: 10 },
+    erectors: { mev: 3, mav: 8, mrv: 12 },
   },
   advanced: {
-    chest: { mev: 10, mav: 18, mrv: 26 },
-    back: { mev: 12, mav: 20, mrv: 30 },
-    shoulders: { mev: 10, mav: 18, mrv: 26 },
+    chest_upper: { mev: 8, mav: 14, mrv: 20 },
+    chest_lower: { mev: 5, mav: 10, mrv: 14 },
+    front_delts: { mev: 4, mav: 10, mrv: 14 },
+    lateral_delts: { mev: 8, mav: 18, mrv: 26 },
+    rear_delts: { mev: 8, mav: 16, mrv: 22 },
+    lats: { mev: 10, mav: 18, mrv: 26 },
+    upper_back: { mev: 8, mav: 14, mrv: 20 },
+    traps: { mev: 6, mav: 12, mrv: 20 },
     biceps: { mev: 8, mav: 16, mrv: 22 },
     triceps: { mev: 8, mav: 16, mrv: 22 },
+    forearms: { mev: 4, mav: 10, mrv: 16 },
     quads: { mev: 10, mav: 18, mrv: 26 },
     hamstrings: { mev: 8, mav: 14, mrv: 22 },
     glutes: { mev: 8, mav: 16, mrv: 24 },
+    glute_med: { mev: 0, mav: 8, mrv: 12 },
+    adductors: { mev: 4, mav: 10, mrv: 14 },
     calves: { mev: 10, mav: 18, mrv: 26 },
-    abs: { mev: 8, mav: 16, mrv: 24 },
+    abs: { mev: 6, mav: 14, mrv: 22 },
+    obliques: { mev: 0, mav: 8, mrv: 12 },
+    erectors: { mev: 4, mav: 10, mrv: 14 },
   },
 };
 
@@ -999,15 +1077,17 @@ export interface SessionTemplate {
  * Includes both builder fields and progression fields
  */
 export interface ExerciseEntry {
+  /** Database ID (optional for backward compatibility with legacy data) */
+  id?: string;
   name: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: MuscleGroup[];
+  primaryMuscle: string; // Can be MuscleGroup or DetailedMuscleGroup
+  secondaryMuscles: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
   pattern: MovementPattern | 'isolation' | 'carry';
   equipment: Equipment;
   difficulty: ExerciseDifficulty;
   fatigueRating: FatigueRating;
   notes?: string;
-  
+
   // Progression-related fields (optional for backwards compatibility)
   /** Default rep range [min, max] - derived from pattern if not set */
   defaultRepRange?: [number, number];
@@ -1017,7 +1097,7 @@ export interface ExerciseEntry {
   minWeightIncrementKg?: number;
   /** Mechanic type for progression engine */
   mechanic?: Mechanic;
-  
+
   // Hypertrophy scoring (Nippard methodology)
   /** Hypertrophy effectiveness score for exercise selection prioritization */
   hypertrophyScore?: HypertrophyScore;
@@ -1146,8 +1226,8 @@ export interface ExerciseFatigueProfile {
   /** Systemic/CNS fatigue cost (0-50 typically) */
   systemicCost: number;
   
-  /** Local fatigue per muscle hit */
-  localCost: Map<MuscleGroup, number>;
+  /** Local fatigue per muscle hit (string key for flexibility with muscle group types) */
+  localCost: Map<string, number>;
   
   /** Stimulus-to-Fatigue Ratio (higher = more efficient, 1.0+ is good) */
   stimulusPerFatigue: number;
@@ -1291,8 +1371,315 @@ export interface DeloadTriggers {
   suggestedDeloadType: 'volume' | 'intensity' | 'full';
 }
 
+// ============ TWO-TIER MUSCLE GROUP SYSTEM ============
+
 /**
- * Muscle groups list
+ * Standard Muscle Groups (20) - UI Display & Volume Tracking
+ * These are what users see in the interface and what volume landmarks are defined against.
+ */
+export const STANDARD_MUSCLE_GROUPS = [
+  'chest_upper',
+  'chest_lower',
+  'front_delts',
+  'lateral_delts',
+  'rear_delts',
+  'lats',
+  'upper_back',
+  'traps',
+  'biceps',
+  'triceps',
+  'forearms',
+  'quads',
+  'hamstrings',
+  'glutes',
+  'glute_med',
+  'adductors',
+  'calves',
+  'abs',
+  'obliques',
+  'erectors',
+] as const;
+
+export type StandardMuscleGroup = (typeof STANDARD_MUSCLE_GROUPS)[number];
+
+/**
+ * Detailed Muscle Groups (33) - AI Exercise Metadata & Programming Logic
+ * Used internally by the AI when completing exercise metadata, enabling smarter
+ * exercise selection and muscle coverage analysis.
+ */
+export const DETAILED_MUSCLE_GROUPS = [
+  // Chest (3)
+  'chest_upper',
+  'chest_lower',
+  'chest_mid',
+  // Delts (3)
+  'front_delts',
+  'lateral_delts',
+  'rear_delts',
+  // Back (5)
+  'lats',
+  'upper_back',
+  'rhomboids',
+  'lower_traps',
+  'upper_traps',
+  // Spine (1)
+  'erectors',
+  // Triceps (3)
+  'triceps_long',
+  'triceps_lateral',
+  'triceps_medial',
+  // Biceps (4)
+  'biceps_long',
+  'biceps_short',
+  'brachialis',
+  'brachioradialis',
+  // Forearms (2)
+  'forearm_flexors',
+  'forearm_extensors',
+  // Quads (2)
+  'quads_rectus_femoris',
+  'quads_vastus',
+  // Hamstrings (2)
+  'hamstrings_biceps_femoris',
+  'hamstrings_semis',
+  // Glutes (2)
+  'glute_max',
+  'glute_med',
+  // Hip (2)
+  'adductors',
+  'abductors',
+  // Calves (2)
+  'calves_gastrocnemius',
+  'calves_soleus',
+  // Core (2)
+  'abs_rectus',
+  'abs_obliques',
+] as const;
+
+export type DetailedMuscleGroup = (typeof DETAILED_MUSCLE_GROUPS)[number];
+
+/**
+ * Mapping from Detailed (33) to Standard (20) muscle groups
+ */
+export const DETAILED_TO_STANDARD_MAP: Record<DetailedMuscleGroup, StandardMuscleGroup> = {
+  // Chest
+  chest_upper: 'chest_upper',
+  chest_lower: 'chest_lower',
+  chest_mid: 'chest_lower',
+  // Delts
+  front_delts: 'front_delts',
+  lateral_delts: 'lateral_delts',
+  rear_delts: 'rear_delts',
+  // Back
+  lats: 'lats',
+  upper_back: 'upper_back',
+  rhomboids: 'upper_back',
+  lower_traps: 'traps',
+  upper_traps: 'traps',
+  // Spine
+  erectors: 'erectors',
+  // Triceps
+  triceps_long: 'triceps',
+  triceps_lateral: 'triceps',
+  triceps_medial: 'triceps',
+  // Biceps
+  biceps_long: 'biceps',
+  biceps_short: 'biceps',
+  brachialis: 'biceps',
+  brachioradialis: 'forearms',
+  // Forearms
+  forearm_flexors: 'forearms',
+  forearm_extensors: 'forearms',
+  // Quads
+  quads_rectus_femoris: 'quads',
+  quads_vastus: 'quads',
+  // Hamstrings
+  hamstrings_biceps_femoris: 'hamstrings',
+  hamstrings_semis: 'hamstrings',
+  // Glutes
+  glute_max: 'glutes',
+  glute_med: 'glute_med',
+  // Hip
+  adductors: 'adductors',
+  abductors: 'glute_med', // Abductors perform hip abduction, same as glute_med
+  // Calves
+  calves_gastrocnemius: 'calves',
+  calves_soleus: 'calves',
+  // Core
+  abs_rectus: 'abs',
+  abs_obliques: 'obliques',
+};
+
+/**
+ * Legacy muscle group to Standard mapping (for migrating old data)
+ */
+export const LEGACY_TO_STANDARD_MAP: Record<string, StandardMuscleGroup[]> = {
+  'chest': ['chest_upper', 'chest_lower'],
+  'back': ['lats', 'upper_back'],
+  'shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
+  'biceps': ['biceps'],
+  'triceps': ['triceps'],
+  'quads': ['quads'],
+  'hamstrings': ['hamstrings'],
+  'glutes': ['glutes', 'glute_med'],
+  'calves': ['calves'],
+  'abs': ['abs', 'obliques'],
+  'adductors': ['adductors'],
+  'forearms': ['forearms'],
+  'traps': ['traps'],
+};
+
+/**
+ * Legacy muscle group to detailed mapping (for migrating exercise data)
+ */
+export const LEGACY_TO_DETAILED_MAP: Record<string, DetailedMuscleGroup> = {
+  'chest': 'chest_lower',
+  'back': 'lats',
+  'shoulders': 'lateral_delts',
+  'biceps': 'biceps_short',
+  'triceps': 'triceps_long',
+  'quads': 'quads_vastus',
+  'hamstrings': 'hamstrings_biceps_femoris',
+  'glutes': 'glute_max',
+  'calves': 'calves_gastrocnemius',
+  'abs': 'abs_rectus',
+  'adductors': 'adductors',
+  'forearms': 'forearm_flexors',
+  'traps': 'upper_traps',
+};
+
+// ============ MUSCLE GROUP UTILITY FUNCTIONS ============
+
+/**
+ * Convert a detailed muscle group to its standard equivalent
+ */
+export function toStandardMuscle(detailed: DetailedMuscleGroup): StandardMuscleGroup {
+  return DETAILED_TO_STANDARD_MAP[detailed];
+}
+
+/**
+ * Convert an array of detailed muscle groups to unique standard equivalents
+ */
+export function toStandardMuscles(detailed: DetailedMuscleGroup[]): StandardMuscleGroup[] {
+  const standardSet = new Set<StandardMuscleGroup>();
+  for (const d of detailed) {
+    standardSet.add(DETAILED_TO_STANDARD_MAP[d]);
+  }
+  return Array.from(standardSet);
+}
+
+/**
+ * Get all detailed muscles that map to a given standard muscle
+ */
+export function getDetailedMusclesFor(standard: StandardMuscleGroup): DetailedMuscleGroup[] {
+  return DETAILED_MUSCLE_GROUPS.filter(
+    (detailed) => DETAILED_TO_STANDARD_MAP[detailed] === standard
+  );
+}
+
+/**
+ * Type guard to check if a string is a valid DetailedMuscleGroup
+ */
+export function isDetailedMuscle(value: string): value is DetailedMuscleGroup {
+  return (DETAILED_MUSCLE_GROUPS as readonly string[]).includes(value);
+}
+
+/**
+ * Type guard to check if a string is a valid StandardMuscleGroup
+ */
+export function isStandardMuscle(value: string): value is StandardMuscleGroup {
+  return (STANDARD_MUSCLE_GROUPS as readonly string[]).includes(value);
+}
+
+/**
+ * Check if a string is a legacy muscle group
+ */
+export function isLegacyMuscle(value: string): boolean {
+  return Object.keys(LEGACY_TO_STANDARD_MAP).includes(value.toLowerCase());
+}
+
+/**
+ * Convert a legacy muscle to the best-guess detailed equivalent
+ */
+export function legacyToDetailedMuscle(legacy: string): DetailedMuscleGroup | undefined {
+  return LEGACY_TO_DETAILED_MAP[legacy.toLowerCase()];
+}
+
+/**
+ * Convert a legacy muscle to all matching standard equivalents
+ */
+export function legacyToStandardMuscles(legacy: string): StandardMuscleGroup[] {
+  return LEGACY_TO_STANDARD_MAP[legacy.toLowerCase()] ?? [];
+}
+
+/**
+ * Display names for Standard muscle groups (user-facing)
+ */
+export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> = {
+  chest_upper: 'Upper Chest',
+  chest_lower: 'Lower Chest',
+  front_delts: 'Front Delts',
+  lateral_delts: 'Side Delts',
+  rear_delts: 'Rear Delts',
+  lats: 'Lats',
+  upper_back: 'Upper Back',
+  traps: 'Traps',
+  biceps: 'Biceps',
+  triceps: 'Triceps',
+  forearms: 'Forearms',
+  quads: 'Quads',
+  hamstrings: 'Hamstrings',
+  glutes: 'Glutes',
+  glute_med: 'Glute Med',
+  adductors: 'Adductors',
+  calves: 'Calves',
+  abs: 'Abs',
+  obliques: 'Obliques',
+  erectors: 'Erectors',
+};
+
+/**
+ * Display names for Detailed muscle groups (for advanced UI or tooltips)
+ */
+export const DETAILED_MUSCLE_DISPLAY_NAMES: Record<DetailedMuscleGroup, string> = {
+  chest_upper: 'Upper Chest (Clavicular)',
+  chest_lower: 'Lower Chest (Sternal)',
+  chest_mid: 'Mid Chest (Inner)',
+  front_delts: 'Front Deltoids',
+  lateral_delts: 'Lateral Deltoids',
+  rear_delts: 'Rear Deltoids',
+  lats: 'Latissimus Dorsi',
+  upper_back: 'Upper Back',
+  rhomboids: 'Rhomboids',
+  lower_traps: 'Lower Traps',
+  upper_traps: 'Upper Traps',
+  erectors: 'Spinal Erectors',
+  triceps_long: 'Triceps (Long Head)',
+  triceps_lateral: 'Triceps (Lateral Head)',
+  triceps_medial: 'Triceps (Medial Head)',
+  biceps_long: 'Biceps (Long Head)',
+  biceps_short: 'Biceps (Short Head)',
+  brachialis: 'Brachialis',
+  brachioradialis: 'Brachioradialis',
+  forearm_flexors: 'Forearm Flexors',
+  forearm_extensors: 'Forearm Extensors',
+  quads_rectus_femoris: 'Rectus Femoris',
+  quads_vastus: 'Vastus Group',
+  hamstrings_biceps_femoris: 'Biceps Femoris',
+  hamstrings_semis: 'Semis (Semi-T & Semi-M)',
+  glute_max: 'Gluteus Maximus',
+  glute_med: 'Gluteus Medius',
+  adductors: 'Adductors',
+  abductors: 'Abductors',
+  calves_gastrocnemius: 'Gastrocnemius',
+  calves_soleus: 'Soleus',
+  abs_rectus: 'Rectus Abdominis',
+  abs_obliques: 'Obliques',
+};
+
+/**
+ * Legacy muscle groups list (backwards compatibility)
+ * @deprecated Use STANDARD_MUSCLE_GROUPS or DETAILED_MUSCLE_GROUPS instead
  */
 export const MUSCLE_GROUPS = [
   'chest',
@@ -1310,6 +1697,10 @@ export const MUSCLE_GROUPS = [
   'traps',
 ] as const;
 
+/**
+ * Legacy MuscleGroup type (backwards compatibility)
+ * @deprecated Use StandardMuscleGroup or DetailedMuscleGroup instead
+ */
 export type MuscleGroup = (typeof MUSCLE_GROUPS)[number];
 
 /**
@@ -1668,7 +2059,10 @@ export function calculateFormScore(form: FormRating): number {
  * Calculate average form score from an array of form ratings
  */
 export function calculateAvgFormScore(forms: FormRating[]): number {
-  if (forms.length === 0) return 1.0;
+  // No form data → return conservative neutral value (0.5)
+  // This avoids treating missing form feedback as "perfect form" which would
+  // allow load progression without any evidence of movement quality
+  if (forms.length === 0) return 0.5;
   return forms.reduce((sum, form) => sum + calculateFormScore(form), 0) / forms.length;
 }
 

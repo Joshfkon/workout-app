@@ -54,7 +54,7 @@ export default function MyProfilePage() {
         .from('workout_sessions')
         .select('id, completed_at')
         .eq('user_id', authUser.id)
-        .eq('state', 'completed');
+        .eq('state', 'completed') as { data: Array<{ id: string; completed_at: string | null }> | null };
 
       const { data: setLogs } = await supabase
         .from('set_logs')
@@ -67,16 +67,18 @@ export default function MyProfilePage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
-      // Calculate streaks from completed workout dates
-      const completedDates = workoutStats?.map((w: { completed_at: string | null }) => w.completed_at) ?? [];
-      const streaks = calculateStreaks(completedDates);
+      // Calculate workout streaks from completed workout dates
+      const workoutDates = workoutStats
+        ?.filter((w) => w.completed_at)
+        .map((w) => w.completed_at as string) ?? [];
+      const { currentStreak, longestStreak } = calculateStreaks(workoutDates);
 
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: streaks.current_streak,
-        longest_streak: streaks.longest_streak,
+        current_streak: currentStreak,
+        longest_streak: longestStreak,
         favorite_exercise: null,
         strongest_lift: null,
       });

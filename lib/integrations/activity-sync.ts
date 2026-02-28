@@ -27,6 +27,7 @@ import { googleFitService, fetchGoogleFitHourlySteps } from './google-fit';
 import { fitbitService, fetchFitbitHourlySteps } from './fitbit';
 import { estimateWorkoutExpenditure } from './workout-calories';
 import { normalizeSteps } from './step-normalization';
+import { getLocalDateString } from '@/lib/utils';
 
 // === TYPES ===
 
@@ -430,7 +431,7 @@ class ActivitySyncService {
 // === HELPER FUNCTIONS ===
 
 function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  return getLocalDateString(date);
 }
 
 // Export singleton instance

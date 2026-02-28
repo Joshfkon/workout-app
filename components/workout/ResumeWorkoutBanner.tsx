@@ -33,7 +33,7 @@ export function ResumeWorkoutBanner() {
 
   // Calculate completed sets count
   let completedSetsCount = 0;
-  setLogs.forEach((sets) => {
+  Object.values(setLogs).forEach((sets) => {
     completedSetsCount += sets.length;
   });
 
@@ -62,9 +62,9 @@ export function ResumeWorkoutBanner() {
     setShowDiscardConfirm(false);
   };
 
-  // Get first exercise name for context (lookup from exercises Map)
+  // Get first exercise name for context
   const firstBlock = exerciseBlocks[0];
-  const firstExercise = firstBlock ? exercises.get(firstBlock.exerciseId)?.name : undefined;
+  const firstExercise = firstBlock ? exercises[firstBlock.exerciseId]?.name : undefined;
   const exerciseCount = exerciseBlocks.length;
 
   return (

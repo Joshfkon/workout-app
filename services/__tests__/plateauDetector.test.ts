@@ -5,7 +5,6 @@
 
 import {
   calculateE1RM,
-  calculateE1RMBrzycki,
   analyzeExerciseTrend,
   detectPlateau,
   generatePlateauSuggestions,
@@ -22,7 +21,7 @@ import type { ExercisePerformanceSnapshot, ExerciseTrend } from '@/types/schema'
 // E1RM CALCULATION TESTS
 // ============================================
 
-describe('calculateE1RM (Epley formula)', () => {
+describe('calculateE1RM (multi-formula average)', () => {
   it('returns weight for 1 rep at RPE 10', () => {
     expect(calculateE1RM(100, 1, 10)).toBe(100);
   });
@@ -32,53 +31,36 @@ describe('calculateE1RM (Epley formula)', () => {
     expect(calculateE1RM(100, 0, 10)).toBe(0);
   });
 
-  it('calculates E1RM correctly with Epley formula', () => {
-    // weight * (1 + reps/30)
-    // 100 * (1 + 10/30) = 100 * 1.333 = 133.33
-    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(133.33, 1);
+  it('calculates E1RM using multi-formula average', () => {
+    // Uses average of Brzycki, Epley, and Lombardi for accuracy
+    // 100kg x 10 reps @ RPE 10:
+    // - Brzycki: 100 * 36 / (37 - 10) = 133.33
+    // - Epley: 100 * (1 + 10/30) = 133.33
+    // - Lombardi: 100 * 10^0.10 = 125.89
+    // Average ≈ 130.9
+    expect(calculateE1RM(100, 10, 10)).toBeCloseTo(130.9, 0);
   });
 
   it('adjusts for RPE (reps in reserve)', () => {
     // 100kg x 8 reps @ RPE 8 = 2 RIR = effective 10 reps
-    // 100 * (1 + 10/30) = 133.33
-    expect(calculateE1RM(100, 8, 8)).toBeCloseTo(133.33, 1);
+    // Uses multi-formula average ≈ 130.9
+    expect(calculateE1RM(100, 8, 8)).toBeCloseTo(130.9, 0);
   });
 
   it('handles low rep sets', () => {
     // 100kg x 3 reps @ RPE 10
-    // 100 * (1 + 3/30) = 100 * 1.1 = 110
-    expect(calculateE1RM(100, 3, 10)).toBeCloseTo(110, 1);
+    // Multi-formula average for 3 reps
+    const result = calculateE1RM(100, 3, 10);
+    expect(result).toBeGreaterThan(105);
+    expect(result).toBeLessThan(115);
   });
 
-  it('handles high rep sets', () => {
+  it('handles high rep sets with conservative estimate', () => {
+    // For >12 reps, uses conservative linear estimate
     // 50kg x 20 reps @ RPE 10
-    // 50 * (1 + 20/30) = 50 * 1.667 = 83.33
-    expect(calculateE1RM(50, 20, 10)).toBeCloseTo(83.33, 1);
-  });
-});
-
-describe('calculateE1RMBrzycki', () => {
-  it('returns weight for 1 rep at RPE 10', () => {
-    expect(calculateE1RMBrzycki(100, 1, 10)).toBe(100);
-  });
-
-  it('returns 0 for 0 reps or 0 weight', () => {
-    expect(calculateE1RMBrzycki(0, 10, 10)).toBe(0);
-    expect(calculateE1RMBrzycki(100, 0, 10)).toBe(0);
-  });
-
-  it('calculates E1RM using Brzycki formula for low reps', () => {
-    // weight / (1.0278 - 0.0278 * reps)
-    // For 5 reps: 100 / (1.0278 - 0.0278*5) = 100 / 0.8888 ≈ 112.5
-    const result = calculateE1RMBrzycki(100, 5, 10);
-    expect(result).toBeGreaterThan(110);
-    expect(result).toBeLessThan(120);
-  });
-
-  it('falls back to Epley for high rep sets (>10)', () => {
-    const brzycki = calculateE1RMBrzycki(50, 15, 10);
-    const epley = calculateE1RM(50, 15, 10);
-    expect(brzycki).toBeCloseTo(epley, 0);
+    const result = calculateE1RM(50, 20, 10);
+    expect(result).toBeGreaterThan(70);
+    expect(result).toBeLessThan(90);
   });
 });
 

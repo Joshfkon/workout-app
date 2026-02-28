@@ -13,9 +13,11 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 - **Database**: Supabase (PostgreSQL + Auth)
 - **State Management**: Zustand (with persist middleware)
 - **Charts**: Recharts
+- **Animations**: Framer Motion
 - **AI Coaching**: Anthropic Claude API
 - **Payments**: Stripe
-- **Testing**: Jest + React Testing Library
+- **Mobile**: Capacitor (iOS & Android)
+- **Testing**: Jest 30 + React Testing Library
 
 ## Project Structure
 
@@ -23,60 +25,151 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
 /app                    # Next.js App Router pages
   /(auth)              # Auth routes (login, register, forgot/reset password)
   /(dashboard)         # Protected dashboard routes (main app)
+    /dashboard
+      /analytics       # Analytics and progress charts
+      /body-composition # Body comp tracking (DEXA, measurements)
+      /discover        # Discover shared workouts
+      /feed            # Social activity feed
+      /glossary        # Training terminology
+      /history         # Workout history
+      /learn           # Educational content (exercise science, RPE, etc.)
+      /mesocycle       # Mesocycle planning
+      /nutrition       # Nutrition tracking
+      /pricing         # Subscription plans
+      /settings        # User settings
+      /templates       # Workout templates
+      /workout         # Active workout sessions
   /(onboarding)        # User onboarding flow
-  /api                 # API routes (Stripe, Fitbit integration)
+  /api                 # API routes
+    /integrations      # Wearable integrations (Fitbit)
+    /stripe            # Payment webhooks and checkout
 
 /components            # React components
-  /analytics           # Charts and analytics (E1RMGraph, VolumeChart, FFMIGauge)
-  /coaching            # AI coaching UI (ImbalanceAlert, PercentileChart)
-  /dashboard           # Dashboard cards (ActivityCard, CardioTracker)
+  /analytics           # Charts (E1RMGraph, VolumeChart, FFMIGauge, WeightGraph)
+  /coaching            # AI coaching UI (ImbalanceAlert, PercentileChart, StrengthLevelBadge)
+  /dashboard           # Dashboard cards (ActivityCard, CardioTracker, MuscleRecoveryCard)
   /exercises           # Exercise management (CreateCustomExercise, FormCuesEditor)
-  /nutrition           # Nutrition tracking (MacroCalculator, BarcodeScanner)
-  /ui                  # Base UI components (Button, Card, Modal, Input)
+  /nutrition           # Nutrition (MacroCalculator, BarcodeScanner, TDEEDashboard)
+  /providers           # React providers (ServiceWorker, NativeAppBehavior, SplashProvider)
+  /settings            # Settings components (ImportExport, GymEquipment, MusclePriority)
+  /social              # Social features
+    /feed              # Activity feed (ReactionBar, CommentSection)
+    /follow            # Follow system
+    /leaderboards      # Leaderboard tables and rankings
+    /profile           # User profiles and avatars
+    /sharing           # Workout sharing
+  /subscription        # Subscription UI (UpgradePrompt, PricingCard)
+  /ui                  # Base UI (Button, Card, Modal, Input, Toggle, Accordion)
   /wearables           # Wearable integration (WearableConnectionsScreen)
-  /workout             # Workout-specific (SetInputRow, RestTimer, ExerciseCard)
+  /workout             # Workout components (SetInputRow, RestTimer, ExerciseCard, PlateCalculator)
 
 /hooks                 # Custom React hooks
   useActiveWorkout.ts  # Active workout session state
+  useActivityFeed.ts   # Social activity feed
+  useAdaptiveVolume.ts # Adaptive volume tracking
+  useBestLifts.ts      # Personal records
+  useComments.ts       # Social comments
+  useEducationPreferences.ts # Learning preferences
   useExerciseHistory.ts # Historical exercise data
+  useExercisePreferences.ts # User exercise preferences
+  useFollow.ts         # Social follow system
+  useLeaderboard.ts    # Leaderboard data
+  useMuscleRecovery.ts # Muscle recovery status
   useProgressionTargets.ts # Progression engine integration
+  usePWA.ts            # PWA detection and features
+  useReactions.ts      # Social reactions
   useRestTimer.ts      # Rest timer functionality
+  useSharedWorkouts.ts # Shared workout discovery
+  useSubscription.ts   # Subscription status
+  useSupabase.ts       # Supabase client hook
   useUserPreferences.ts # User preferences with unit conversion
   useWeeklyVolume.ts   # Volume tracking per muscle group
+  useWorkoutTimer.ts   # Workout duration timer
 
 /lib                   # Utilities and integrations
-  /actions             # Server actions (coaching, nutrition, tdee)
+  /actions             # Server actions (coaching, nutrition, tdee, wearable)
+  /body-composition    # P-ratio calculations
+  /content             # Static content (learnContent)
   /exercises           # Exercise AI completion
   /integrations        # Wearable integrations (Fitbit, HealthKit, Google Fit)
-  /nutrition           # TDEE and macro calculations
+  /migrations          # Data migrations (bodyweight sets, set feedback)
+  /nutrition           # TDEE and macro calculations (adaptive, dynamic targets)
   /supabase            # Supabase client (server.ts, client.ts, middleware.ts)
-  /training            # Training logic (coachingService, exercise-safety)
+  /training            # Training logic (coachingService, exercise-safety, programEngine)
+  /utils               # Utility modules (pwa-detection)
+  errors.ts            # Error handling utilities
+  social.ts            # Social features utilities
+  stripe.ts            # Stripe integration
+  subscription.ts      # Subscription utilities
   utils.ts             # Common utilities (weight conversion, date formatting)
+  validation.ts        # Input validation
+  weightUtils.ts       # Weight-specific utilities
+  workout-sharing.ts   # Workout sharing utilities
 
 /services              # Pure business logic (NO database calls)
-  progressionEngine.ts # Auto-progression calculations
-  fatigueEngine.ts     # Readiness and fatigue tracking
-  volumeTracker.ts     # Weekly volume calculations
-  plateauDetector.ts   # Plateau detection algorithms
-  exerciseSwapper.ts   # Exercise swap suggestions
-  deloadEngine.ts      # Deload recommendations
   bodyCompEngine.ts    # Body composition analysis (FFMI)
+  bodyProportionsAnalytics.ts # Body proportions analysis
+  bodyweightService.ts # Bodyweight exercise handling
+  coachingContextService.ts # AI coaching context
+  coachingEngine.ts    # AI coaching logic
+  deloadEngine.ts      # Deload recommendations
+  discomfortTracker.ts # Pain/discomfort tracking
+  equipmentFilter.ts   # Equipment-based exercise filtering
+  exercisePreferencesService.ts # Exercise preference management
+  exerciseSafety.ts    # Exercise safety checks
+  exerciseService.ts   # Exercise data service
+  exerciseSwapper.ts   # Exercise swap suggestions
+  fatigueBudgetEngine.ts # Fatigue budget calculations
+  fatigueEngine.ts     # Readiness and fatigue tracking
+  fatSecretService.ts  # FatSecret API integration
+  goalPresets.ts       # Goal-based presets
+  importExport.ts      # Data import/export
+  injuryAwareSwapper.ts # Injury-aware exercise swapping
+  measurementImbalanceEngine.ts # Muscle imbalance detection
   mesocycleBuilder.ts  # Mesocycle program generation
+  openFoodFactsService.ts # OpenFoodFacts API
+  performanceTracker.ts # Performance metrics
+  plateauDetector.ts   # Plateau detection algorithms
+  progressionEngine.ts # Auto-progression calculations
+  regionalAnalysis.ts  # Regional body composition
+  repRangeEngine.ts    # Rep range recommendations
+  rpeCalibration.ts    # RPE calibration
+  sanityChecks.ts      # Data sanity checks
+  sessionBuilderWithFatigue.ts # Fatigue-aware session building
+  setPrescription.ts   # Set prescription logic
+  usdaService.ts       # USDA food database
+  volumeTracker.ts     # Weekly volume calculations
+  weightEstimationEngine.ts # Weight estimation for new exercises
 
 /stores                # Zustand state stores
+  exerciseStore.ts     # Exercise library cache
   userStore.ts         # User profile and preferences
   workoutStore.ts      # Active workout session state
-  exerciseStore.ts     # Exercise library cache
 
 /types                 # TypeScript interfaces
-  schema.ts            # Core domain types (User, Exercise, SetLog, etc.)
+  coaching.ts          # AI coaching types
   database.ts          # Supabase database types
-  training.ts          # Training-specific types
+  database-queries.ts  # Database query types
+  education.ts         # Educational content types
   nutrition.ts         # Nutrition tracking types
+  schema.ts            # Core domain types (User, Exercise, SetLog, etc.)
+  social.ts            # Social feature types
+  templates.ts         # Workout template types
+  training.ts          # Training-specific types
+  user-exercise-preferences.ts # Exercise preference types
+  wearable.ts          # Wearable integration types
 
 /supabase              # Database migrations and seeds
   /migrations          # SQL migration files (chronologically ordered)
   seed.sql             # Exercise library seed data
+
+/docs                  # Documentation
+  BEGINNER_ONBOARDING_PLAN.md
+  EXERCISE_VIDEOS_SETUP.md
+  MACRO_CALCULATOR_V3.3_INTEGRATION.md
+  SOCIAL_FEATURES_PLAN.md
+  SOCIAL_FEATURES_SETUP.md
+  SOCIAL_FEATURES_STATUS.md
 ```
 
 ## Key Concepts
@@ -100,6 +193,19 @@ Based on RPE analysis in `types/schema.ts`:
 - **Effective**: RPE 6-7 (contributing to volume)
 - **Stimulative**: RPE 7.5-9.5 (optimal for hypertrophy)
 - **Excessive**: RPE 10 (may impair recovery)
+
+### Set Feedback System
+Users provide structured feedback per set:
+- **RIR (Reps In Reserve)**: 4+ = Easy, 2-3 = Good, 1 = Hard, 0 = Maxed Out
+- **Form Rating**: clean, some_breakdown, ugly
+- **Discomfort**: Optional pain/discomfort logging by body part
+
+### Hypertrophy Scoring
+Based on Jeff Nippard's methodology, exercises are rated:
+- **Tier**: S (best) through F (worst) for hypertrophy
+- **Stretch Under Load**: 1-5 rating for lengthened position tension
+- **Resistance Profile**: 1-5 rating for consistent resistance
+- **Progression Ease**: 1-5 rating for overload potential
 
 ### Periodization Phases
 - **Hypertrophy**: Higher reps, moderate intensity
@@ -126,6 +232,15 @@ npm run lint         # Run ESLint
 npx supabase start   # Start local Supabase
 npx supabase db push # Push migrations
 npx supabase db reset # Reset and reseed database
+
+# Mobile (Capacitor)
+npm run cap:sync     # Sync web assets to native projects
+npm run cap:ios      # Open iOS project in Xcode
+npm run cap:android  # Open Android project in Android Studio
+npm run cap:run:ios  # Build and run on iOS device/simulator
+npm run cap:run:android # Build and run on Android device/emulator
+npm run cap:livereload:ios # Run iOS with live reload
+npm run cap:livereload:android # Run Android with live reload
 ```
 
 ## Code Conventions
@@ -194,9 +309,19 @@ npx supabase db reset # Reset and reseed database
 
 Tests are located in `__tests__` directories or as `.test.ts(x)` files.
 
-### Coverage Requirements
-- `lib/utils.ts`: 55% lines, 40% functions, 75% branches
-- Tests focus on unit conversion and preference handling
+### Coverage Requirements (from jest.config.js)
+
+| File/Module | Lines | Functions | Branches | Statements |
+|-------------|-------|-----------|----------|------------|
+| `lib/utils.ts` | 55% | 40% | 75% | 55% |
+| `services/progressionEngine.ts` | 70% | 60% | 50% | 70% |
+| `services/volumeTracker.ts` | 70% | 60% | 50% | 70% |
+| `services/fatigueEngine.ts` | 70% | 60% | 50% | 70% |
+| `services/plateauDetector.ts` | 70% | 60% | 50% | 70% |
+| `services/deloadEngine.ts` | 70% | 60% | 50% | 70% |
+| `services/exerciseSwapper.ts` | 70% | 60% | 50% | 70% |
+| `services/mesocycleBuilder.ts` | 70% | 60% | 50% | 70% |
+| `services/bodyCompEngine.ts` | 70% | 60% | 50% | 70% |
 
 ### Test Patterns
 ```typescript
@@ -213,6 +338,10 @@ await user.click(screen.getByRole('button'));
 | File | Purpose |
 |------|---------|
 | `services/progressionEngine.ts` | Core progression logic, set quality, warmup protocols |
+| `services/fatigueEngine.ts` | Readiness and fatigue tracking |
+| `services/volumeTracker.ts` | Weekly volume calculations per muscle |
+| `services/mesocycleBuilder.ts` | Mesocycle program generation |
+| `services/injuryAwareSwapper.ts` | Exercise swapping considering injuries |
 | `types/schema.ts` | All domain types and enums |
 | `lib/utils.ts` | Weight conversion, date formatting utilities |
 | `stores/userStore.ts` | User state and preferences management |
@@ -237,6 +366,19 @@ await user.click(screen.getByRole('button'));
 2. Page is Server Component by default
 3. Use client components for interactive parts
 
+### Adding a New Service
+1. Create file in `/services` directory
+2. Keep it as pure functions (no DB calls)
+3. Add corresponding types in `/types` if needed
+4. Add tests in `/services/__tests__/`
+5. Add coverage threshold in `jest.config.js`
+
+### Working with Social Features
+1. Check `/components/social` for UI components
+2. Use hooks: `useFollow`, `useReactions`, `useComments`, `useActivityFeed`
+3. Types are in `types/social.ts`
+4. See `docs/SOCIAL_FEATURES_*.md` for detailed documentation
+
 ## Environment Variables
 
 ```env
@@ -252,11 +394,18 @@ ANTHROPIC_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+
+# Mobile (Capacitor)
+NEXT_PUBLIC_APP_URL=  # Production URL for Capacitor
+
+# Wearables (optional)
+FITBIT_CLIENT_ID=
+FITBIT_CLIENT_SECRET=
 ```
 
 ## Important Warnings
 
-1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY` and `STRIPE_SECRET_KEY` are server-only
+1. **Never expose server-side keys**: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, and `ANTHROPIC_API_KEY` are server-only
 
 2. **Weight units**: Always store in kg, convert only for display
 
@@ -266,6 +415,8 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
 
 5. **Bodyweight exercises**: Use `effectiveLoadKg` (bodyweight +/- modifications) for progression tracking
 
+6. **Database constraints**: Check migrations for constraints (e.g., reps have upper bounds of 999)
+
 ## CI/CD
 
 GitHub Actions workflow (`.github/workflows/test.yml`):
@@ -273,3 +424,23 @@ GitHub Actions workflow (`.github/workflows/test.yml`):
 - Node.js 20
 - Runs `npm test` and coverage checks
 - Uploads coverage reports as artifacts
+
+## Mobile App (Capacitor)
+
+The app supports iOS and Android via Capacitor:
+- **App ID**: `app.hypertrack.workout`
+- **Web Dir**: `out` (static export)
+- **Production URL**: `https://hypertrack.app`
+
+### Native Features
+- Push notifications
+- Status bar customization
+- Splash screen with dark theme (#0a0a0a)
+- Deep linking via custom scheme `HyperTrack://`
+
+### Development Workflow
+1. Make changes to the web app
+2. Build: `npm run build`
+3. Sync: `npm run cap:sync`
+4. Test: `npm run cap:run:ios` or `npm run cap:run:android`
+5. For live development: `npm run cap:livereload:ios`

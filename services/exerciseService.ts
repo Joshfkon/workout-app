@@ -1,22 +1,28 @@
 /**
  * Exercise Service
- * 
+ *
  * Single source of truth for exercise data.
  * Fetches from Supabase with in-memory caching.
  * Falls back to constants if database is unavailable.
+ *
+ * Pure functions only — DB calls delegated to lib/actions/exercises.ts.
  */
 
-import { createUntypedClient } from '@/lib/supabase/client';
-import type { 
-  MuscleGroup, 
-  Equipment, 
+import type {
+  MuscleGroup,
+  Equipment,
   MovementPattern,
   ExerciseDifficulty,
   FatigueRating,
   HypertrophyScore,
   HypertrophyTier,
-  HypertrophyRating 
+  HypertrophyRating
 } from '@/types/schema';
+import {
+  fetchAllExercises,
+  insertCustomExercise,
+  removeCustomExercise,
+} from '@/lib/actions/exercises';
 
 // ============================================
 // TYPES
@@ -40,8 +46,8 @@ export interface PositionStress {
 export interface Exercise {
   id: string;
   name: string;
-  primaryMuscle: MuscleGroup;
-  secondaryMuscles: MuscleGroup[];
+  primaryMuscle: string; // Can be MuscleGroup (legacy) or DetailedMuscleGroup
+  secondaryMuscles: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
   pattern: MovementPattern | 'isolation' | 'carry';
   equipment: Equipment;
   difficulty: ExerciseDifficulty;
@@ -64,7 +70,7 @@ export interface Exercise {
   // === INJURY/SAFETY METADATA ===
 
   /** Muscles used for stability, not as primary movers */
-  stabilizers?: MuscleGroup[];
+  stabilizers?: string[]; // Can be MuscleGroup[] or DetailedMuscleGroup[]
 
   /** Compression/shear on spine */
   spinalLoading: SpinalLoading;
@@ -169,23 +175,19 @@ export async function getExercises(includeCustom: boolean = true): Promise<Exerc
   }
   
   try {
-    const supabase = createUntypedClient();
-    const { data, error } = await supabase
-      .from('exercises')
-      .select('*')
-      .order('name');
-    
+    const { data, error } = await fetchAllExercises();
+
     if (error || !data) {
       console.warn('Failed to load exercises from DB, using fallback:', error);
       return getFallbackExercises();
     }
-    
+
     const exercises = data.map(mapDbExercise);
     exerciseCache = exercises;
     cacheTimestamp = Date.now();
-    
-    return includeCustom 
-      ? exercises 
+
+    return includeCustom
+      ? exercises
       : exercises.filter((e: Exercise) => !e.isCustom);
   } catch (err) {
     console.warn('Error fetching exercises:', err);
@@ -297,121 +299,57 @@ export async function createCustomExercise(
   userId: string
 ): Promise<Exercise | null> {
   try {
-    const supabase = createUntypedClient();
-    
-    // Verify the user is authenticated and get their actual ID
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.error('Authentication error:', authError);
-      return null;
-    }
-    
-    // Verify session exists and refresh if needed
-    let { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.error('No active session found');
-      return null;
-    }
-    
-    // Refresh the session to ensure we have a valid token
-    const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError) {
-      console.warn('Session refresh failed, using existing session:', refreshError);
-    } else if (refreshedSession) {
-      session = refreshedSession;
-    }
-    
-    // Use the authenticated user's ID, not the passed userId (for security)
-    const authenticatedUserId = user.id;
-    
-    console.log('Creating exercise with:', {
-      userId: authenticatedUserId,
-      sessionExists: !!session,
-      accessToken: session?.access_token ? 'present' : 'missing',
-      tokenExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'unknown'
-    });
-    
-    const { data, error } = await supabase
-      .from('exercises')
-      .insert({
-        name: exercise.name,
-        primary_muscle: exercise.primaryMuscle,
-        secondary_muscles: exercise.secondaryMuscles || [],
-        mechanic: exercise.mechanic || 'compound',
-        pattern: exercise.pattern,
-        equipment: exercise.equipment,
-        difficulty: exercise.difficulty,
-        fatigue_rating: exercise.fatigueRating,
-        default_rep_range: exercise.defaultRepRange || [8, 12],
-        default_rir: exercise.defaultRir || 2,
-        min_weight_increment_kg: exercise.minWeightIncrementKg || 2.5,
-        movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
-        equipment_required: exercise.equipmentRequired || (exercise.equipment ? [exercise.equipment] : []),
-        is_custom: true,
-        created_by: authenticatedUserId,
-        notes: exercise.notes || '',
-        // Required fields with defaults
-        form_cues: exercise.formCues || [],
-        common_mistakes: exercise.commonMistakes || [],
-        setup_note: exercise.setupNote || '',
-        // Hypertrophy scoring
-        hypertrophy_tier: exercise.hypertrophyScore?.tier,
-        stretch_under_load: exercise.hypertrophyScore?.stretchUnderLoad,
-        resistance_profile: exercise.hypertrophyScore?.resistanceProfile,
-        progression_ease: exercise.hypertrophyScore?.progressionEase,
-        // Safety/injury metadata
-        stabilizers: exercise.stabilizers || [],
-        spinal_loading: exercise.spinalLoading,
-        requires_back_arch: exercise.requiresBackArch,
-        requires_spinal_flexion: exercise.requiresSpinalFlexion,
-        requires_spinal_extension: exercise.requiresSpinalExtension,
-        requires_spinal_rotation: exercise.requiresSpinalRotation,
-        position_stress: exercise.positionStress || {},
-        contraindications: exercise.contraindications || [],
-        // Bodyweight exercise metadata
-        is_bodyweight: exercise.isBodyweight ?? exercise.equipment === 'bodyweight',
-        bodyweight_type: exercise.bodyweightType,
-        assistance_type: exercise.assistanceType,
-      })
-      .select()
-      .single();
-    
+    const payload = {
+      name: exercise.name,
+      primary_muscle: exercise.primaryMuscle,
+      secondary_muscles: exercise.secondaryMuscles || [],
+      mechanic: exercise.mechanic || 'compound',
+      pattern: exercise.pattern,
+      equipment: exercise.equipment,
+      difficulty: exercise.difficulty,
+      fatigue_rating: exercise.fatigueRating,
+      default_rep_range: exercise.defaultRepRange || [8, 12],
+      default_rir: exercise.defaultRir ?? 2,
+      min_weight_increment_kg: exercise.minWeightIncrementKg ?? 2.5,
+      movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
+      equipment_required: exercise.equipmentRequired || (exercise.equipment ? [exercise.equipment] : []),
+      notes: exercise.notes || '',
+      form_cues: exercise.formCues || [],
+      common_mistakes: exercise.commonMistakes || [],
+      setup_note: exercise.setupNote || '',
+      hypertrophy_tier: exercise.hypertrophyScore?.tier,
+      stretch_under_load: exercise.hypertrophyScore?.stretchUnderLoad,
+      resistance_profile: exercise.hypertrophyScore?.resistanceProfile,
+      progression_ease: exercise.hypertrophyScore?.progressionEase,
+      stabilizers: exercise.stabilizers || [],
+      spinal_loading: exercise.spinalLoading,
+      requires_back_arch: exercise.requiresBackArch,
+      requires_spinal_flexion: exercise.requiresSpinalFlexion,
+      requires_spinal_extension: exercise.requiresSpinalExtension,
+      requires_spinal_rotation: exercise.requiresSpinalRotation,
+      position_stress: exercise.positionStress || {},
+      contraindications: exercise.contraindications || [],
+      is_bodyweight: exercise.isBodyweight ?? exercise.equipment === 'bodyweight',
+      bodyweight_type: exercise.bodyweightType,
+      assistance_type: exercise.assistanceType,
+    };
+
+    const { data, error } = await insertCustomExercise(payload);
+
     if (error || !data) {
-      console.error('Failed to create custom exercise:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
-        full: error,
-        userId: authenticatedUserId,
-        isCustom: true,
-        createdBy: authenticatedUserId,
-        authUserId: authenticatedUserId
-      });
-      
-      // Log the actual insert payload for debugging
-      console.error('Insert payload:', {
-        name: exercise.name,
-        primary_muscle: exercise.primaryMuscle,
-        is_custom: true,
-        created_by: authenticatedUserId,
-        movement_pattern: exercise.pattern || exercise.movementPattern || 'compound',
-        auth_uid_check: authenticatedUserId,
-      });
-      
-      // Throw error with code so it can be caught and handled properly
+      console.error('Failed to create custom exercise:', error);
+
       if (error) {
         const err = new Error(error.message || 'Failed to create exercise');
         (err as any).code = error.code;
         throw err;
       }
-      
+
       return null;
     }
-    
-    // Clear cache so new exercise shows up
+
     clearExerciseCache();
-    
+
     return mapDbExercise(data);
   } catch (err) {
     console.error('Error creating custom exercise:', err);
@@ -427,15 +365,8 @@ export async function deleteCustomExercise(
   userId: string
 ): Promise<boolean> {
   try {
-    const supabase = createUntypedClient();
-    
-    const { error } = await supabase
-      .from('exercises')
-      .delete()
-      .eq('id', exerciseId)
-      .eq('created_by', userId)
-      .eq('is_custom', true);
-    
+    const { error } = await removeCustomExercise(exerciseId, userId);
+
     if (error) {
       console.error('Failed to delete custom exercise:', error);
       return false;
@@ -477,8 +408,8 @@ function mapDbExercise(row: Record<string, unknown>): Exercise {
     difficulty: (row.difficulty as ExerciseDifficulty) || 'intermediate',
     fatigueRating: (row.fatigue_rating as FatigueRating) || 2,
     defaultRepRange: parseRepRange(row.default_rep_range) || [8, 12],
-    defaultRir: (row.default_rir as number) || 2,
-    minWeightIncrementKg: (row.min_weight_increment_kg as number) || getDefaultIncrement(equipment),
+    defaultRir: (row.default_rir as number) ?? 2,
+    minWeightIncrementKg: (row.min_weight_increment_kg as number) ?? getDefaultIncrement(equipment),
     mechanic: mechanic as 'compound' | 'isolation',
     isCustom: (row.is_custom as boolean) || false,
     createdBy: row.created_by as string | undefined,

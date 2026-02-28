@@ -1,10 +1,10 @@
 /**
  * Equipment Filter Service
  * Filters exercises based on user's available gym equipment
+ *
+ * Pure functions only — no database calls.
+ * Use lib/actions/equipment.ts to fetch equipment data.
  */
-
-import { createUntypedClient } from '@/lib/supabase/client';
-import type { Exercise } from '@/services/exerciseService';
 
 // Mapping from equipment_types IDs to exercise equipment names
 const EQUIPMENT_MAPPING: Record<string, string[]> = {
@@ -26,14 +26,14 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
   hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
   glute_kickback: ['glute kickback', 'cable'],
   reverse_hyper: ['reverse hyper'],
-  
+
   // Free Weights
   barbell: ['barbell', 'bar'],
   dumbbells: ['dumbbell', 'db'],
   kettlebells: ['kettlebell', 'kb'],
   ez_bar: ['ez bar', 'ez curl', 'curl bar'],
   trap_bar: ['trap bar', 'hex bar'],
-  
+
   // Benches & Racks
   flat_bench: ['flat bench', 'bench'],
   incline_bench: ['incline bench', 'incline'],
@@ -41,7 +41,7 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
   squat_rack: ['squat rack', 'power rack', 'rack'],
   dip_station: ['dip', 'parallel bars'],
   pull_up_bar: ['pull-up', 'pullup', 'chin-up', 'chinup'],
-  
+
   // Other
   resistance_bands: ['band', 'resistance band'],
   trx: ['trx', 'suspension'],
@@ -52,42 +52,27 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
 };
 
 /**
- * Get user's unavailable equipment IDs
- */
-export async function getUnavailableEquipment(userId: string): Promise<string[]> {
-  const supabase = createUntypedClient();
-  
-  const { data } = await supabase
-    .from('user_equipment')
-    .select('equipment_id')
-    .eq('user_id', userId)
-    .eq('is_available', false);
-  
-  return data?.map((e: { equipment_id: string }) => e.equipment_id) || [];
-}
-
-/**
  * Check if an exercise requires unavailable equipment
  */
 export function exerciseRequiresUnavailableEquipment(
-  exercise: Exercise | { name: string; equipment?: string },
+  exercise: { name: string; equipment?: string },
   unavailableEquipmentIds: string[]
 ): boolean {
   if (unavailableEquipmentIds.length === 0) return false;
-  
+
   const exerciseName = exercise.name.toLowerCase();
-  const exerciseEquipment = ('equipment' in exercise ? exercise.equipment : '')?.toLowerCase() || '';
-  
+  const exerciseEquipment = exercise.equipment?.toLowerCase() || '';
+
   for (const equipmentId of unavailableEquipmentIds) {
     const keywords = EQUIPMENT_MAPPING[equipmentId] || [];
-    
+
     for (const keyword of keywords) {
       if (exerciseName.includes(keyword) || exerciseEquipment.includes(keyword)) {
         return true;
       }
     }
   }
-  
+
   return false;
 }
 
@@ -99,7 +84,7 @@ export function filterExercisesByEquipment<T extends { name: string; equipment?:
   unavailableEquipmentIds: string[]
 ): T[] {
   if (unavailableEquipmentIds.length === 0) return exercises;
-  
+
   return exercises.filter(ex => !exerciseRequiresUnavailableEquipment(ex, unavailableEquipmentIds));
 }
 
@@ -111,22 +96,20 @@ export function getUnavailableExercises<T extends { name: string; equipment?: st
   unavailableEquipmentIds: string[]
 ): T[] {
   if (unavailableEquipmentIds.length === 0) return [];
-  
+
   return exercises.filter(ex => exerciseRequiresUnavailableEquipment(ex, unavailableEquipmentIds));
 }
 
 /**
- * Load unavailable equipment and return filter function
+ * Create an equipment filter from pre-fetched unavailable equipment IDs.
+ * Use fetchUnavailableEquipment() from lib/actions/equipment.ts to get the IDs first.
  */
-export async function createEquipmentFilter(userId: string) {
-  const unavailableIds = await getUnavailableEquipment(userId);
-  
+export function createEquipmentFilter(unavailableIds: string[]) {
   return {
     unavailableIds,
-    filter: <T extends { name: string; equipment?: string }>(exercises: T[]) => 
+    filter: <T extends { name: string; equipment?: string }>(exercises: T[]) =>
       filterExercisesByEquipment(exercises, unavailableIds),
-    isAvailable: (exercise: { name: string; equipment?: string }) => 
+    isAvailable: (exercise: { name: string; equipment?: string }) =>
       !exerciseRequiresUnavailableEquipment(exercise, unavailableIds),
   };
 }
-

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import type { FollowRelationship, FollowStatus } from '@/types/social';
 
 interface UseFollowOptions {
@@ -30,19 +31,17 @@ export function useFollow({
     follow_status: 'none',
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { user: authUser } = useAuthUser();
+  const currentUserId = authUser?.id ?? null;
 
   // Load initial relationship
   useEffect(() => {
     const loadRelationship = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user || user.id === targetUserId) {
+      if (!currentUserId || currentUserId === targetUserId) {
         return;
       }
 
-      setCurrentUserId(user.id);
+      const supabase = createClient();
 
       // Check if current user follows target
       type FollowRow = { status: string };
@@ -50,7 +49,7 @@ export function useFollow({
       const { data: followData } = (await supabase
         .from('follows' as never)
         .select('status')
-        .eq('follower_id', user.id)
+        .eq('follower_id', currentUserId)
         .eq('following_id', targetUserId)
         .single()) as { data: FollowRow | null };
 
@@ -59,7 +58,7 @@ export function useFollow({
         .from('follows' as never)
         .select('status')
         .eq('follower_id', targetUserId)
-        .eq('following_id', user.id)
+        .eq('following_id', currentUserId)
         .eq('status', 'accepted')
         .single()) as { data: FollowRow | null };
 
@@ -71,7 +70,7 @@ export function useFollow({
     };
 
     loadRelationship();
-  }, [targetUserId]);
+  }, [targetUserId, currentUserId]);
 
   const follow = useCallback(async () => {
     if (!currentUserId || isLoading) return;

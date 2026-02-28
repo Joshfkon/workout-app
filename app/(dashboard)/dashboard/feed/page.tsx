@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { ActivityCard } from '@/components/social/feed';
-import { Avatar } from '@/components/social/profile';
+import { Avatar, ProfilePromptModal } from '@/components/social/profile';
+import { isAnonymousUsername } from '@/lib/social';
 import { SharedWorkoutCard } from '@/components/social/sharing/SharedWorkoutCard';
 import { useActivityFeed } from '@/hooks/useActivityFeed';
 import { useReactions } from '@/hooks/useReactions';
@@ -137,6 +138,9 @@ export default function FeedPage() {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [needsProfile, setNeedsProfile] = useState(false);
+  const [showProfilePrompt, setShowProfilePrompt] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+  const [userDisplayName, setUserDisplayName] = useState<string | undefined>(undefined);
 
   // Leaderboard state
   const [selectedLeaderboardType, setSelectedLeaderboardType] = useState<LeaderboardType>('total_volume_week');
@@ -160,6 +164,10 @@ export default function FeedPage() {
         return;
       }
 
+      // Store user info for profile prompt
+      setUserEmail(authUser.email || undefined);
+      setUserDisplayName(authUser.user_metadata?.full_name || undefined);
+
       // Fetch user profile
       const { data: profileData, error } = await supabase
         .from('user_profiles')
@@ -170,10 +178,20 @@ export default function FeedPage() {
       if (error || !profileData) {
         setNeedsProfile(true);
         setProfileLoading(false);
+        // Show profile prompt for users without a profile
+        setShowProfilePrompt(true);
         return;
       }
 
-      setProfile(profileData);
+      const typedProfile = profileData as UserProfile;
+      setProfile(typedProfile);
+
+      // Check if user has an anonymous username and hasn't dismissed the prompt
+      const hasAnonymous = isAnonymousUsername(typedProfile.username);
+      const dismissedPrompt = localStorage.getItem('profile_prompt_dismissed');
+      if (hasAnonymous && !dismissedPrompt) {
+        setShowProfilePrompt(true);
+      }
 
       // Fetch additional stats
       const { data: workoutStats } = await supabase
@@ -193,16 +211,18 @@ export default function FeedPage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
-      // Calculate streaks from completed workout dates
-      const completedDates = workoutStats?.map((w: { completed_at: string | null }) => w.completed_at) ?? [];
-      const streaks = calculateStreaks(completedDates);
+      // Calculate workout streaks from completed workout dates
+      const workoutDates = workoutStats
+        ?.filter((w) => w.completed_at)
+        .map((w) => w.completed_at as string) ?? [];
+      const { currentStreak, longestStreak } = calculateStreaks(workoutDates);
 
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: streaks.current_streak,
-        longest_streak: streaks.longest_streak,
+        current_streak: currentStreak,
+        longest_streak: longestStreak,
         favorite_exercise: null,
         strongest_lift: null,
       });
@@ -999,6 +1019,21 @@ export default function FeedPage() {
           onClose={() => setCopyModalWorkout(null)}
         />
       )}
+
+      {/* Profile Prompt Modal */}
+      <ProfilePromptModal
+        isOpen={showProfilePrompt}
+        onClose={() => {
+          setShowProfilePrompt(false);
+          // Remember dismissal for users with anonymous usernames
+          if (profile && isAnonymousUsername(profile.username)) {
+            localStorage.setItem('profile_prompt_dismissed', 'true');
+          }
+        }}
+        currentUsername={profile?.username}
+        userEmail={userEmail}
+        userName={userDisplayName}
+      />
     </div>
   );
 }

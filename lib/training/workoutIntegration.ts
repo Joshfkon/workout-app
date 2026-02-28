@@ -28,9 +28,9 @@ export async function getWeightRecommendationsForWorkout(
       recommendations.set(exercise.name, rec);
     }
   } catch (error) {
-    console.warn('ProgramEngine failed to load, weight recommendations unavailable:', error);
+    console.error('[getWeightRecommendationsForWorkout] ProgramEngine failed to load:', error);
   }
-  
+
   return recommendations;
 }
 
@@ -45,7 +45,7 @@ export async function getTodayMesocycleWorkout(
     const engine = await ProgramEngine.create(userId);
     return engine.getTodayWorkout(mesocycleId);
   } catch (error) {
-    console.warn('Failed to get today\'s workout from ProgramEngine:', error);
+    console.error('[getTodayMesocycleWorkout] Failed to get workout from ProgramEngine:', error);
     return null;
   }
 }
@@ -61,7 +61,7 @@ export async function checkShouldDeload(
     const engine = await ProgramEngine.create(userId);
     return engine.checkDeloadTriggers(mesocycleId);
   } catch (error) {
-    console.warn('Failed to check deload triggers:', error);
+    console.error('[checkShouldDeload] Failed to check deload triggers:', error);
     return { shouldDeload: false, reasons: [], suggestedDeloadType: 'volume' as const };
   }
 }
@@ -88,7 +88,7 @@ export async function recordWorkoutExerciseHistory(
       );
     }
   } catch (error) {
-    console.warn('Failed to record exercise history:', error);
+    console.error('[recordWorkoutExerciseHistory] Failed to record exercise history:', error);
   }
 }
 
@@ -100,7 +100,7 @@ export async function getUserRecoveryFactors(userId: string) {
     const engine = await ProgramEngine.create(userId);
     return engine.calculateRecoveryFactors();
   } catch (error) {
-    console.warn('Failed to calculate recovery factors:', error);
+    console.error('[getUserRecoveryFactors] Failed to calculate recovery factors:', error);
     return {
       volumeMultiplier: 1.0,
       frequencyMultiplier: 1.0,
@@ -118,6 +118,7 @@ export async function hasCompletedTrainingOnboarding(userId: string): Promise<bo
     const engine = await ProgramEngine.create(userId);
     return engine.hasCompletedOnboarding();
   } catch (error) {
+    console.error('[hasCompletedTrainingOnboarding] Failed to check onboarding status:', error);
     return false;
   }
 }

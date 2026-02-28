@@ -127,8 +127,10 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
   } | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
+  const [gymLocations, setGymLocations] = useState<Array<{ id: string; name: string; is_default: boolean }>>([]);
+  const [locationAvailability, setLocationAvailability] = useState<Record<string, boolean>>({});
 
-  // Load equipment types on mount
+  // Load equipment types and gym locations on mount
   useEffect(() => {
     const loadEquipmentTypes = async () => {
       const supabase = createUntypedClient();
@@ -136,12 +138,30 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         .from('equipment_types')
         .select('id, name')
         .order('name');
-      
+
       if (data) {
         setEquipmentTypes(data);
       }
     };
+
+    const loadGymLocations = async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('gym_locations')
+        .select('id, name, is_default')
+        .eq('user_id', user.id)
+        .order('name');
+
+      if (data) {
+        setGymLocations(data);
+      }
+    };
+
     loadEquipmentTypes();
+    loadGymLocations();
   }, []);
 
   // Fetch exercise history when modal opens
@@ -371,6 +391,31 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         setupNote,
       });
       setShowAdvancedFields(false);
+
+      // Load location availability for this exercise
+      const loadLocationAvailability = async () => {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user || !exercise?.id) return;
+
+        const { data } = await supabase
+          .from('exercise_location_availability')
+          .select('location_id, is_available')
+          .eq('user_id', user.id)
+          .eq('exercise_id', exercise.id);
+
+        if (data) {
+          const availability: Record<string, boolean> = {};
+          data.forEach((row: { location_id: string; is_available: boolean }) => {
+            availability[row.location_id] = row.is_available;
+          });
+          setLocationAvailability(availability);
+        } else {
+          // Default: all locations are available
+          setLocationAvailability({});
+        }
+      };
+      loadLocationAvailability();
     }
   }, [isEditing, exercise]);
   
@@ -418,13 +463,29 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         .from('exercises')
         .update(updatePayload)
         .eq('id', exercise.id);
-      
+
       if (error) {
         console.error('Failed to update exercise:', error);
         setSaveError(error.message || 'Failed to update exercise');
         return;
       }
-      
+
+      // Save location availability if user has gym locations
+      if (gymLocations.length > 0 && Object.keys(locationAvailability).length > 0) {
+        for (const [locationId, isAvailable] of Object.entries(locationAvailability)) {
+          await supabase
+            .from('exercise_location_availability')
+            .upsert({
+              user_id: user.id,
+              exercise_id: exercise.id,
+              location_id: locationId,
+              is_available: isAvailable,
+            }, {
+              onConflict: 'user_id,exercise_id,location_id',
+            });
+        }
+      }
+
       setSaveSuccess(true);
       setTimeout(() => {
         setIsEditing(false);
@@ -707,7 +768,41 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   <option value="other">Other</option>
                 </select>
               </div>
-              
+
+              {/* Location Availability */}
+              {gymLocations.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-surface-400 mb-2">Available At</label>
+                  <p className="text-xs text-surface-500 mb-2">Select which gym locations have the equipment for this exercise</p>
+                  <div className="space-y-2">
+                    {gymLocations.map((location) => {
+                      const isAvailable = locationAvailability[location.id] !== false;
+                      return (
+                        <label key={location.id} className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isAvailable}
+                            onChange={(e) => {
+                              setLocationAvailability(prev => ({
+                                ...prev,
+                                [location.id]: e.target.checked
+                              }));
+                            }}
+                            className="w-4 h-4 rounded border-surface-600 bg-surface-900 text-primary-500 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-surface-200">
+                            {location.name}
+                            {location.is_default && (
+                              <span className="text-xs text-surface-500 ml-1">(Default)</span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Movement Pattern */}
               <div>
                 <label className="block text-xs font-medium text-surface-400 mb-1">Movement Pattern</label>

@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getLocalDateString } from '@/lib/utils';
 import {
   calculateAdaptiveTDEE,
   getFormulaTDEE,
@@ -22,6 +23,7 @@ import {
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { getEnhancedDailyDataPoints } from '@/lib/actions/wearable';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
+import { validateWeightEntry } from '@/lib/weightUtils';
 
 export interface TDEEData {
   adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null;
@@ -105,7 +107,7 @@ export async function getAdaptiveTDEE(
       .from('weight_log')
       .select('logged_at, weight, unit')
       .eq('user_id', user.id)
-      .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
+      .gte('logged_at', getLocalDateString(thirtyFiveDaysAgo))
       .order('logged_at', { ascending: false })
       .limit(1) as {
         data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;
@@ -113,8 +115,12 @@ export async function getAdaptiveTDEE(
     
     if (weightLogs && weightLogs.length > 0) {
       const latest = weightLogs[0];
-      const weightUnit = latest.unit || 'lb';
-      currentWeight = weightUnit === 'kg' ? latest.weight * 2.20462 : latest.weight;
+      // Use unified weight validation for consistency with enhanced data path
+      const validated = validateWeightEntry(latest.weight, latest.unit as 'lb' | 'kg' | null);
+      // Convert to lbs for TDEE calculations
+      currentWeight = validated.unit === 'kg'
+        ? validated.weight * 2.20462
+        : validated.weight;
     }
   }
 
@@ -530,5 +536,434 @@ export async function onWeightLoggedRecalculateTDEE(): Promise<{
   return {
     estimate: tdeeData.adaptiveEstimate,
     syncResult,
+  };
+}
+
+/**
+ * Reset and recalculate TDEE estimates from scratch.
+ * Use this after fixing weight unit bugs or when data needs to be recalculated.
+ *
+ * This function:
+ * 1. Deletes the stored TDEE estimate (calculated with potentially buggy data)
+ * 2. Recalculates TDEE fresh using the corrected weight validation logic
+ * 3. Returns the new estimate and comparison with old values
+ */
+export async function resetAndRecalculateTDEE(): Promise<{
+  success: boolean;
+  oldEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+  } | null;
+  newEstimate: {
+    tdee: number;
+    burnRate: number;
+    currentWeight: number;
+    confidence: string;
+    dataPointsUsed: number;
+    rSquared: number | null;
+  } | null;
+  weightDataSummary: {
+    totalEntries: number;
+    entriesWithKgUnit: number;
+    entriesWithLbUnit: number;
+    entriesWithNullUnit: number;
+    dateRange: { earliest: string; latest: string } | null;
+  };
+  message: string;
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      success: false,
+      oldEstimate: null,
+      newEstimate: null,
+      weightDataSummary: {
+        totalEntries: 0,
+        entriesWithKgUnit: 0,
+        entriesWithLbUnit: 0,
+        entriesWithNullUnit: 0,
+        dateRange: null,
+      },
+      message: 'User not authenticated',
+    };
+  }
+
+  // Step 1: Get the old stored estimate (if any)
+  const { data: oldData } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>)
+    .select('*')
+    .eq('user_id', user.id)
+    .single() as {
+      data: {
+        burn_rate_per_lb: number;
+        estimated_tdee: number;
+        current_weight: number;
+        confidence: string;
+      } | null;
+    };
+
+  const oldEstimate = oldData ? {
+    tdee: oldData.estimated_tdee,
+    burnRate: oldData.burn_rate_per_lb,
+    currentWeight: oldData.current_weight,
+    confidence: oldData.confidence,
+  } : null;
+
+  // Step 2: Analyze raw weight data to understand what we're working with
+  const { data: weightLogs } = await supabase
+    .from('weight_log')
+    .select('logged_at, weight, unit')
+    .eq('user_id', user.id)
+    .order('logged_at', { ascending: true }) as {
+      data: Array<{ logged_at: string; weight: number; unit: string | null }> | null;
+    };
+
+  const weightDataSummary = {
+    totalEntries: weightLogs?.length || 0,
+    entriesWithKgUnit: weightLogs?.filter(w => w.unit === 'kg').length || 0,
+    entriesWithLbUnit: weightLogs?.filter(w => w.unit === 'lb').length || 0,
+    entriesWithNullUnit: weightLogs?.filter(w => !w.unit).length || 0,
+    dateRange: weightLogs && weightLogs.length > 0 ? {
+      earliest: weightLogs[0].logged_at,
+      latest: weightLogs[weightLogs.length - 1].logged_at,
+    } : null,
+  };
+
+  // Log the raw weight data for debugging
+  console.log('[TDEE Reset] Raw weight data summary:', weightDataSummary);
+  if (weightLogs && weightLogs.length > 0) {
+    console.log('[TDEE Reset] Sample weight entries (first 5):');
+    weightLogs.slice(0, 5).forEach(w => {
+      const validated = validateWeightEntry(w.weight, w.unit as 'lb' | 'kg' | null);
+      const weightInLbs = validated.unit === 'kg' ? validated.weight * 2.20462 : validated.weight;
+      console.log(`  ${w.logged_at}: ${w.weight} ${w.unit || '(null)'} → ${weightInLbs.toFixed(1)} lbs`);
+    });
+  }
+
+  // Step 3: Delete the old TDEE estimate
+  const { error: deleteError } = await (supabase.from('tdee_estimates') as ReturnType<typeof supabase.from>)
+    .delete()
+    .eq('user_id', user.id);
+
+  if (deleteError) {
+    console.error('[TDEE Reset] Failed to delete old estimate:', deleteError);
+  } else {
+    console.log('[TDEE Reset] Deleted old TDEE estimate');
+  }
+
+  // Step 4: Recalculate TDEE fresh with corrected weight validation
+  const tdeeData = await getAdaptiveTDEE();
+
+  if (!tdeeData) {
+    return {
+      success: false,
+      oldEstimate,
+      newEstimate: null,
+      weightDataSummary,
+      message: 'Failed to recalculate TDEE - not enough data or error occurred',
+    };
+  }
+
+  // Step 5: Save the new estimate
+  if (tdeeData.adaptiveEstimate) {
+    await saveTDEEEstimate(tdeeData.adaptiveEstimate as TDEEEstimate | EnhancedTDEEEstimate);
+  }
+
+  const newEstimate = tdeeData.adaptiveEstimate ? {
+    tdee: tdeeData.adaptiveEstimate.estimatedTDEE,
+    burnRate: tdeeData.adaptiveEstimate.burnRatePerLb,
+    currentWeight: tdeeData.adaptiveEstimate.currentWeight,
+    confidence: tdeeData.adaptiveEstimate.confidence,
+    dataPointsUsed: tdeeData.adaptiveEstimate.dataPointsUsed,
+    rSquared: tdeeData.regressionAnalysis?.rSquared ?? null,
+  } : {
+    tdee: tdeeData.formulaEstimate.estimatedTDEE,
+    burnRate: tdeeData.formulaEstimate.burnRatePerLb,
+    currentWeight: tdeeData.formulaEstimate.currentWeight,
+    confidence: tdeeData.formulaEstimate.confidence,
+    dataPointsUsed: 0,
+    rSquared: null,
+  };
+
+  // Build comparison message
+  let message = 'TDEE recalculated successfully with corrected weight validation.';
+  if (oldEstimate && newEstimate) {
+    const tdeeDiff = newEstimate.tdee - oldEstimate.tdee;
+    const weightDiff = newEstimate.currentWeight - oldEstimate.currentWeight;
+    if (Math.abs(tdeeDiff) > 50 || Math.abs(weightDiff) > 5) {
+      message += ` Significant change detected: TDEE ${tdeeDiff > 0 ? '+' : ''}${tdeeDiff} cal/day, Weight ${weightDiff > 0 ? '+' : ''}${weightDiff.toFixed(1)} lbs.`;
+      if (Math.abs(weightDiff) > 50) {
+        message += ' Large weight difference suggests previous unit conversion bug was affecting your data.';
+      }
+    }
+  }
+
+  if (newEstimate.rSquared !== null) {
+    const rSquaredPercent = (newEstimate.rSquared * 100).toFixed(1);
+    message += ` New R² correlation: ${rSquaredPercent}%.`;
+  }
+
+  return {
+    success: true,
+    oldEstimate,
+    newEstimate,
+    weightDataSummary,
+    message,
+  };
+}
+
+/**
+ * Get detailed regression diagnostic data for manual verification.
+ * Returns all the raw data points used in the regression calculation.
+ */
+export async function getRegressionDiagnostics(): Promise<{
+  success: boolean;
+  rawData: Array<{
+    date: string;
+    weight: number;
+    calories: number;
+    isComplete: boolean;
+  }>;
+  regressionPairs: Array<{
+    date: string;
+    calories: number;
+    weight: number;
+    weightNextDay: number;
+    actualChange: number;
+    predictedChange: number;
+    residual: number;
+  }>;
+  excludedPairs: Array<{
+    date: string;
+    calories: number;
+    reason: string;
+  }>;
+  regressionStats: {
+    burnRatePerLb: number;
+    estimatedTDEE: number;
+    rSquared: number;
+    standardError: number;
+    dataPointsUsed: number;
+    meanActualChange: number;
+    ssTot: number;
+    ssRes: number;
+  } | null;
+  manualVerification: {
+    sumNumerator: number;
+    sumDenominator: number;
+    calculatedAlpha: number;
+    residuals: number[];
+    residualMean: number;
+    residualStdDev: number;
+  } | null;
+  message: string;
+}> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return {
+      success: false,
+      rawData: [],
+      regressionPairs: [],
+      excludedPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'User not authenticated',
+    };
+  }
+
+  // Get enhanced daily data points (includes weight and calories)
+  const enhancedDataPoints = await getEnhancedDailyDataPoints(35);
+
+  const basicDataPoints: DailyDataPoint[] = enhancedDataPoints.map(dp => ({
+    date: dp.date,
+    weight: dp.weight,
+    calories: dp.calories,
+    isComplete: dp.isComplete,
+  }));
+
+  // Get current weight
+  let currentWeight: number | null = null;
+  if (enhancedDataPoints.length > 0) {
+    const latestPoint = enhancedDataPoints[enhancedDataPoints.length - 1];
+    currentWeight = latestPoint.weight;
+  }
+
+  if (!currentWeight) {
+    return {
+      success: false,
+      rawData: basicDataPoints.map(dp => ({
+        date: dp.date,
+        weight: dp.weight,
+        calories: dp.calories,
+        isComplete: dp.isComplete,
+      })),
+      regressionPairs: [],
+      excludedPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'No weight data available',
+    };
+  }
+
+  // Get regression analysis
+  const regressionAnalysis = getRegressionAnalysis(basicDataPoints, currentWeight);
+
+  if (!regressionAnalysis) {
+    return {
+      success: false,
+      rawData: basicDataPoints.map(dp => ({
+        date: dp.date,
+        weight: dp.weight,
+        calories: dp.calories,
+        isComplete: dp.isComplete,
+      })),
+      regressionPairs: [],
+      excludedPairs: [],
+      regressionStats: null,
+      manualVerification: null,
+      message: 'Insufficient data for regression analysis',
+    };
+  }
+
+  // Build detailed regression pairs showing the day-to-day pairing
+  const CALORIES_PER_LB = 3500;
+  const MIN_CALORIES_THRESHOLD = 1000; // Same as in adaptive-tdee.ts
+
+  const validPairs = basicDataPoints
+    .filter(dp => dp.weight > 0 && dp.calories > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const regressionPairs: Array<{
+    date: string;
+    calories: number;
+    weight: number;
+    weightNextDay: number;
+    actualChange: number;
+    predictedChange: number;
+    residual: number;
+  }> = [];
+
+  const excludedPairs: Array<{
+    date: string;
+    calories: number;
+    reason: string;
+  }> = [];
+
+  for (let i = 0; i < validPairs.length - 1; i++) {
+    const today = validPairs[i];
+    const tomorrow = validPairs[i + 1];
+
+    // Check if dates are consecutive
+    const todayDate = new Date(today.date);
+    const tomorrowDate = new Date(tomorrow.date);
+    const daysDiff = Math.floor((tomorrowDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysDiff !== 1) {
+      excludedPairs.push({
+        date: today.date,
+        calories: today.calories,
+        reason: `Non-consecutive: ${daysDiff} days to next entry`,
+      });
+      continue;
+    }
+
+    // Exclude low-calorie days (likely incomplete logging)
+    if (today.calories < MIN_CALORIES_THRESHOLD) {
+      excludedPairs.push({
+        date: today.date,
+        calories: today.calories,
+        reason: `Low calories: ${today.calories} < ${MIN_CALORIES_THRESHOLD} threshold`,
+      });
+      continue;
+    }
+
+    const actualChange = tomorrow.weight - today.weight;
+    const predictedChange = (today.calories - regressionAnalysis.burnRatePerLb * today.weight) / CALORIES_PER_LB;
+
+    regressionPairs.push({
+      date: today.date,
+      calories: today.calories,
+      weight: today.weight,
+      weightNextDay: tomorrow.weight,
+      actualChange,
+      predictedChange,
+      residual: actualChange - predictedChange,
+    });
+  }
+
+  // Manual verification of regression math
+  let manualVerification = null;
+  if (regressionPairs.length >= 2) {
+    let sumNumerator = 0;
+    let sumDenominator = 0;
+
+    for (const pair of regressionPairs) {
+      sumNumerator += pair.weight * (pair.calories / CALORIES_PER_LB - pair.actualChange);
+      sumDenominator += (pair.weight * pair.weight) / CALORIES_PER_LB;
+    }
+
+    const calculatedAlpha = sumNumerator / sumDenominator;
+
+    // Recalculate residuals with our alpha
+    const residuals = regressionPairs.map(pair => {
+      const predicted = (pair.calories - calculatedAlpha * pair.weight) / CALORIES_PER_LB;
+      return pair.actualChange - predicted;
+    });
+
+    const residualMean = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+    const residualVariance = residuals.reduce((sum, r) => sum + (r - residualMean) ** 2, 0) / residuals.length;
+    const residualStdDev = Math.sqrt(residualVariance);
+
+    manualVerification = {
+      sumNumerator,
+      sumDenominator,
+      calculatedAlpha,
+      residuals,
+      residualMean,
+      residualStdDev,
+    };
+  }
+
+  // Calculate detailed R² stats
+  const actualChanges = regressionPairs.map(p => p.actualChange);
+  const meanActualChange = actualChanges.reduce((a, b) => a + b, 0) / actualChanges.length;
+  const ssTot = actualChanges.reduce((sum, ac) => sum + (ac - meanActualChange) ** 2, 0);
+  const ssRes = regressionPairs.reduce((sum, p) => sum + p.residual ** 2, 0);
+
+  const regressionStats = {
+    burnRatePerLb: regressionAnalysis.burnRatePerLb,
+    estimatedTDEE: regressionAnalysis.estimatedTDEE,
+    rSquared: regressionAnalysis.rSquared,
+    standardError: regressionAnalysis.standardError,
+    dataPointsUsed: regressionAnalysis.dataPoints.length,
+    meanActualChange,
+    ssTot,
+    ssRes,
+  };
+
+  return {
+    success: true,
+    rawData: basicDataPoints.map(dp => ({
+      date: dp.date,
+      weight: dp.weight,
+      calories: dp.calories,
+      isComplete: dp.isComplete,
+    })),
+    regressionPairs,
+    excludedPairs,
+    regressionStats,
+    manualVerification,
+    message: `Found ${regressionPairs.length} valid pairs (${excludedPairs.length} excluded)`,
   };
 }

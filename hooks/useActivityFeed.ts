@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
+import { fetchUserProfiles } from '@/lib/profiles';
 import type { ActivityWithProfile, ActivityReaction, ReactionType, ProfileVisibility, ActivityVisibility } from '@/types/social';
 
 interface FeedOptions {
@@ -39,6 +41,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [cursor, setCursor] = useState<string | null>(null);
+  const { user: authUser } = useAuthUser();
 
   const fetchActivities = useCallback(async (loadMore = false) => {
     if (loadMore && !hasMore) return;
@@ -48,7 +51,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
 
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = authUser;
 
       // Build base query for activities
       let query = supabase
@@ -113,27 +116,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
       if (activitiesData && activitiesData.length > 0) {
         // Fetch user profiles for all activities
         const userIds = Array.from(new Set(activitiesData.map(a => a.user_id)));
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('user_profiles' as never)
-          .select('id, user_id, username, display_name, avatar_url, bio, profile_visibility, follower_count, following_count, workout_count')
-          .in('user_id', userIds) as { data: any[] | null; error: any };
-
-        if (profilesError) {
-          console.error('[useActivityFeed] Profiles query error:', profilesError);
-          // If user_profiles table doesn't exist, provide helpful error
-          if (profilesError.code === 'PGRST116' || profilesError.message?.includes('does not exist')) {
-            throw new Error('The user_profiles table does not exist. Please run migration 20241228000001_add_user_profiles.sql in Supabase SQL Editor. See docs/SOCIAL_FEATURES_SETUP.md');
-          }
-          // For other errors, we'll continue but activities without profiles won't show
-        }
-
-        // Create a map of user_id -> profile
-        const profilesMap = new Map();
-        if (profilesData && profilesData.length > 0) {
-          profilesData.forEach(profile => {
-            profilesMap.set(profile.user_id, profile);
-          });
-        }
+        const profilesMap = await fetchUserProfiles(supabase, userIds, 'full');
 
         // Combine activities with profiles (only show activities that have profiles)
         const data: ActivityRow[] = activitiesData
@@ -240,7 +223,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
     } finally {
       setIsLoading(false);
     }
-  }, [feedType, userId, limit, hasMore, cursor]);
+  }, [feedType, userId, limit, hasMore, cursor, authUser]);
 
   // Initial load
   useEffect(() => {

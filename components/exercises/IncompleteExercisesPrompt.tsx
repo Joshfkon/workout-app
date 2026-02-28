@@ -38,7 +38,8 @@ export function IncompleteExercisesPrompt({
       try {
         const incomplete = await getIncompleteExercises();
         setExercises(incomplete);
-      } catch {
+      } catch (error) {
+        console.error('[IncompleteExercisesPrompt] Failed to load incomplete exercises:', error);
         setExercises([]);
       } finally {
         setLoading(false);

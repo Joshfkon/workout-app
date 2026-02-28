@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import type { LeaderboardType, LeaderboardEntryWithProfile } from '@/types/social';
 
 interface UseLeaderboardOptions {
@@ -46,6 +47,23 @@ export function useLeaderboard({
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       const currentOffset = loadMore ? offset : 0;
+
+      // Calculate leaderboard data before fetching (only on initial load/refresh)
+      if (!loadMore) {
+        if (type === 'total_volume_week') {
+          await supabase.rpc('calculate_weekly_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_week') {
+          await supabase.rpc('calculate_weekly_workouts_leaderboard' as never);
+        } else if (type === 'total_volume_month') {
+          await supabase.rpc('calculate_monthly_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_month') {
+          await supabase.rpc('calculate_monthly_workouts_leaderboard' as never);
+        } else if (type === 'total_volume_alltime') {
+          await supabase.rpc('calculate_alltime_volume_leaderboard' as never);
+        } else if (type === 'workouts_completed_alltime') {
+          await supabase.rpc('calculate_alltime_workouts_leaderboard' as never);
+        }
+      }
 
       // Fetch leaderboard entries
       const { data, error: fetchError } = await supabase.rpc('get_leaderboard' as never, {
@@ -131,8 +149,8 @@ export function useLeaderboard({
           setUserRank(null);
         }
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load leaderboard');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

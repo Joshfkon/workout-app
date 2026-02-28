@@ -7,4 +7,5 @@ export { useSupabase, useAuth } from './useSupabase';
 export { usePWA } from './usePWA';
 export { useAdaptiveVolume, useMuscleTolerance } from './useAdaptiveVolume';
 export { useBestLifts } from './useBestLifts';
+export { useDurationTimer } from './useDurationTimer';
 

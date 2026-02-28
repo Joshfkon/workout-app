@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, Slider } from '@/components/ui';
 import Link from 'next/link';
 import { WorkoutCard } from '@/components/workout/WorkoutCard';
 
@@ -18,11 +18,15 @@ const ExercisesTab = dynamic(() => import('../exercises/page'), {
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
+import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
+import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
+import { formatWeight, convertWeight, getLocalDateString } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
-import type { MuscleGroup } from '@/types/schema';
+import { WorkoutDaySelector } from '@/components/mesocycle';
+import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan } from '@/types/schema';
 
 interface PlannedWorkout {
   id: string;
@@ -46,12 +50,16 @@ interface Mesocycle {
   id: string;
   name: string;
   state: string;
+  start_date: string;
   total_weeks: number;
   current_week: number;
   days_per_week: number;
   split_type: string;
   deload_week: number;
   created_at: string;
+  preferred_workout_days: WorkoutDay[] | null;
+  session_duration_minutes: number | null;
+  program_data: unknown;
 }
 
 interface TodayWorkout {
@@ -158,8 +166,55 @@ function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGr
   return isCompound ? 150 : 75;
 }
 
+const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+function dayNameToNumber(dayName: WorkoutDay): number {
+  return WEEKDAY_NAMES.indexOf(dayName) + 1;
+}
+
+function numberToDayName(dayNumber: number): WorkoutDay {
+  return WEEKDAY_NAMES[dayNumber - 1] || 'Monday';
+}
+
+function getTrainingDays(daysPerWeek: number, preferredWorkoutDays?: WorkoutDay[] | null): number[] {
+  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
+    return preferredWorkoutDays.map(dayNameToNumber).sort((a, b) => a - b);
+  }
+
+  const trainingDayMaps: Record<number, number[]> = {
+    2: [1, 4],
+    3: [1, 3, 5],
+    4: [1, 2, 4, 5],
+    5: [1, 2, 3, 5, 6],
+    6: [1, 2, 3, 4, 5, 6],
+  };
+
+  return trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+}
+
+function getDefaultPreferredDays(daysPerWeek: number): WorkoutDay[] {
+  return getTrainingDays(daysPerWeek).map(numberToDayName);
+}
+
+function areSameWorkoutDays(a: WorkoutDay[], b: WorkoutDay[]): boolean {
+  if (a.length !== b.length) return false;
+  const normalizedA = [...a].sort();
+  const normalizedB = [...b].sort();
+  return normalizedA.every((day, index) => day === normalizedB[index]);
+}
+
+function formatPreferredDays(days: WorkoutDay[]): string {
+  if (days.length === 0) return 'Not set';
+  return days.map(day => day.slice(0, 3)).join(', ');
+}
+
 // Get workout schedule based on split type
-function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: number): TodayWorkout | null {
+function getWorkoutForDay(
+  splitType: string,
+  dayOfWeek: number,
+  daysPerWeek: number,
+  preferredWorkoutDays?: WorkoutDay[] | null
+): TodayWorkout | null {
   const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
     'Full Body': [
       { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
@@ -196,15 +251,7 @@ function getWorkoutForDay(splitType: string, dayOfWeek: number, daysPerWeek: num
 
   const schedule = splits[splitType] || splits['Upper/Lower'];
 
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 5, 6],
-    6: [1, 2, 3, 4, 5, 6],
-  };
-
-  const trainingDays = trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
+  const trainingDays = getTrainingDays(daysPerWeek, preferredWorkoutDays);
   const dayIndex = trainingDays.indexOf(dayOfWeek);
 
   if (dayIndex === -1) {
@@ -284,11 +331,16 @@ export default function WorkoutPage() {
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [editDuration, setEditDuration] = useState(60);
+  const [editPreferredDays, setEditPreferredDays] = useState<WorkoutDay[]>([]);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   // History states
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyDeletingId, setHistoryDeletingId] = useState<string | null>(null);
+  const [redoLoadingId, setRedoLoadingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
   const [loadingExercise, setLoadingExercise] = useState(false);
@@ -467,6 +519,194 @@ export default function WorkoutPage() {
     });
   }, []);
 
+  const handleUpdateSessionDuration = async (
+    mesocycleId: string,
+    newDuration: number,
+    newPreferredDays: WorkoutDay[]
+  ) => {
+    setIsRegenerating(true);
+    try {
+      const supabaseClient = createUntypedClient();
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      const { data: userProfile } = await supabaseClient
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      const { data: userData } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      const { data: dexaScans } = await supabaseClient
+        .from('dexa_scans')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('scan_date', { ascending: false })
+        .limit(1);
+
+      const latestDexa: DexaScan | null = dexaScans?.[0] ? {
+        id: dexaScans[0].id,
+        userId: dexaScans[0].user_id,
+        scanDate: dexaScans[0].scan_date,
+        weightKg: dexaScans[0].weight_kg,
+        leanMassKg: dexaScans[0].lean_mass_kg,
+        fatMassKg: dexaScans[0].fat_mass_kg,
+        bodyFatPercent: dexaScans[0].body_fat_percent,
+        boneMassKg: dexaScans[0].bone_mass_kg || null,
+        regionalData: dexaScans[0].regional_data || null,
+        notes: dexaScans[0].notes || null,
+        createdAt: dexaScans[0].created_at,
+      } : null;
+
+      const mesocycle = mesocycles.find(m => m.id === mesocycleId);
+      if (!mesocycle) throw new Error('Mesocycle not found');
+
+      const normalizedPreferredDays = newPreferredDays.length === mesocycle.days_per_week
+        ? newPreferredDays
+        : getDefaultPreferredDays(mesocycle.days_per_week);
+
+      const extendedProfile: ExtendedUserProfile = {
+        age: userData?.age || 30,
+        experience: (userProfile?.experience as Experience) || 'intermediate',
+        goal: (userProfile?.goal as SchemaGoal) || 'maintenance',
+        sleepQuality: (userData?.sleep_quality as Rating) || 3,
+        stressLevel: (userData?.stress_level as Rating) || 3,
+        trainingAge: userData?.training_age_years || 1,
+        availableEquipment: (userData?.available_equipment as Equipment[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'],
+        injuryHistory: (userData?.injury_history as MuscleGroup[]) || [],
+        heightCm: userData?.height_cm || null,
+        latestDexa: latestDexa,
+      };
+
+      let laggingAreas: string[] = [];
+      if (latestDexa?.regionalData && latestDexa.leanMassKg) {
+        const regionalAnalysis = analyzeRegionalComposition(
+          latestDexa.regionalData as DexaRegionalData,
+          latestDexa.leanMassKg
+        );
+        laggingAreas = regionalAnalysis.laggingAreas;
+      }
+
+      const newProgram = generateFullMesocycleWithFatigue(
+        mesocycle.days_per_week,
+        extendedProfile,
+        newDuration,
+        laggingAreas,
+        []
+      );
+
+      const recoveryFactors = calculateRecoveryFactors(extendedProfile);
+
+      type WorkoutSessionRow = { id: string; planned_date: string; state: string };
+      const { data: existingSessions } = await supabaseClient
+        .from('workout_sessions')
+        .select('id, planned_date, state')
+        .eq('mesocycle_id', mesocycleId);
+
+      const plannedSessions = (existingSessions as WorkoutSessionRow[] | null)?.filter(session => session.state === 'planned') || [];
+
+      if (plannedSessions.length > 0) {
+        const today = getLocalDateString();
+
+        await supabaseClient
+          .from('workout_sessions')
+          .delete()
+          .eq('mesocycle_id', mesocycleId)
+          .eq('state', 'planned')
+          .gte('planned_date', today);
+
+        const lockedDates = new Set(
+          ((existingSessions as WorkoutSessionRow[] | null) || [])
+            .filter(session => session.state !== 'planned')
+            .map(session => session.planned_date)
+        );
+
+        const trainingDays = new Set(
+          getTrainingDays(mesocycle.days_per_week, normalizedPreferredDays)
+        );
+
+        const startDate = new Date(mesocycle.start_date);
+        const endDate = new Date(mesocycle.start_date);
+        endDate.setDate(endDate.getDate() + (mesocycle.total_weeks * 7) - 1);
+
+        const newSessions = [];
+        for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+          const dayNumber = date.getDay() === 0 ? 7 : date.getDay();
+          if (!trainingDays.has(dayNumber)) continue;
+
+          const plannedDate = getLocalDateString(date);
+          if (plannedDate < today) continue;
+          if (lockedDates.has(plannedDate)) continue;
+
+          newSessions.push({
+            user_id: user.id,
+            mesocycle_id: mesocycleId,
+            planned_date: plannedDate,
+            state: 'planned',
+            completion_percent: 0,
+          });
+        }
+
+        if (newSessions.length > 0) {
+          const { error: insertError } = await supabaseClient
+            .from('workout_sessions')
+            .insert(newSessions);
+          if (insertError) throw insertError;
+        }
+      }
+
+      const { error: updateError } = await supabaseClient
+        .from('mesocycles')
+        .update({
+          session_duration_minutes: newDuration,
+          preferred_workout_days: normalizedPreferredDays,
+          program_data: newProgram,
+          fatigue_budget_config: newProgram?.fatigueBudget || null,
+          volume_per_muscle: newProgram?.volumePerMuscle || null,
+          periodization_model: newProgram?.periodization?.model || 'linear',
+          recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
+        })
+        .eq('id', mesocycleId);
+
+      if (updateError) throw updateError;
+
+      setMesocycles(mesocycles.map(m =>
+        m.id === mesocycleId
+          ? {
+            ...m,
+            session_duration_minutes: newDuration,
+            preferred_workout_days: normalizedPreferredDays,
+            program_data: newProgram,
+          }
+          : m
+      ));
+
+      if (mesocycleId === mesocycles.find(m => m.state === 'active')?.id) {
+        const today = new Date();
+        const dayOfWeek = today.getDay() || 7;
+        setTodayWorkout(
+          getWorkoutForDay(
+            mesocycle.split_type,
+            dayOfWeek,
+            mesocycle.days_per_week,
+            normalizedPreferredDays
+          )
+        );
+      }
+
+      setIsEditingDuration(false);
+    } catch (error) {
+      console.error('Failed to update session duration:', error);
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   async function fetchTemplates() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -596,7 +836,12 @@ export default function WorkoutPage() {
       if (active) {
         const today = new Date();
         const dayOfWeek = today.getDay() || 7;
-        const workout = getWorkoutForDay(active.split_type, dayOfWeek, active.days_per_week);
+        const workout = getWorkoutForDay(
+          active.split_type,
+          dayOfWeek,
+          active.days_per_week,
+          active.preferred_workout_days
+        );
         setTodayWorkout(workout);
       }
     }
@@ -720,6 +965,158 @@ export default function WorkoutPage() {
       alert('Failed to delete workout. Please try again.');
     } finally {
       setHistoryDeletingId(null);
+    }
+  };
+
+  const handleRedoWorkout = async (workout: WorkoutHistory) => {
+    if (redoLoadingId || workout.exercises.length === 0) return;
+    setRedoLoadingId(workout.id);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not logged in');
+
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('goal')
+        .eq('user_id', user.id)
+        .single();
+
+      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+
+      const exerciseIds = workout.exercises.map(exercise => exercise.exerciseId);
+
+      type ExerciseRow = {
+        id: string;
+        name: string;
+        primary_muscle: MuscleGroup;
+        secondary_muscles?: MuscleGroup[];
+        mechanic: 'compound' | 'isolation';
+        default_rep_range?: [number, number];
+        default_rir?: number;
+        min_weight_increment_kg?: number;
+        form_cues?: string[];
+        common_mistakes?: string[];
+        equipment_required?: string[];
+        setup_note?: string;
+        movement_pattern?: string;
+      };
+
+      const { data: exerciseRows, error: exerciseError } = await supabase
+        .from('exercises')
+        .select(`
+          id,
+          name,
+          primary_muscle,
+          secondary_muscles,
+          mechanic,
+          default_rep_range,
+          default_rir,
+          min_weight_increment_kg,
+          form_cues,
+          common_mistakes,
+          equipment_required,
+          setup_note,
+          movement_pattern
+        `)
+        .in('id', exerciseIds);
+
+      if (exerciseError) throw exerciseError;
+
+      const exerciseMap = new Map<string, ExerciseRow>(
+        (exerciseRows || []).map((row: ExerciseRow) => [row.id, row])
+      );
+
+      const { data: session, error: sessionError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          state: 'in_progress',
+          planned_date: getLocalDateString(),
+          started_at: new Date().toISOString(),
+          completion_percent: 0,
+        })
+        .select()
+        .single();
+
+      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
+
+      const warmedUpMuscles = new Set<string>();
+
+      const exerciseBlocks = workout.exercises.map((exercise, index) => {
+        const exerciseInfo = exerciseMap.get(exercise.exerciseId);
+        const defaultRepRange = exerciseInfo?.default_rep_range ?? [8, 12];
+        const reps = exercise.sets.map(set => set.reps).filter(rep => rep > 0);
+        const minReps = reps.length > 0 ? Math.min(...reps) : defaultRepRange[0];
+        const maxReps = reps.length > 0 ? Math.max(...reps) : defaultRepRange[1];
+        const maxTargetSets = 10;
+        const targetSets = Math.min(
+          exercise.sets.length > 0
+            ? exercise.sets.length
+            : exerciseInfo?.mechanic === 'compound'
+              ? 4
+              : 3,
+          maxTargetSets
+        );
+        const targetWeightKg = exercise.sets.length > 0
+          ? exercise.sets[exercise.sets.length - 1].weight_kg
+          : 0;
+        const isCompound = (exerciseInfo?.mechanic || 'compound') === 'compound';
+        const primaryMuscle = (exerciseInfo?.primary_muscle || exercise.primaryMuscle) as MuscleGroup;
+        const shouldWarmup = primaryMuscle && !warmedUpMuscles.has(primaryMuscle);
+
+        let warmupSets: any[] = [];
+        if (shouldWarmup) {
+          warmupSets = generateWarmupProtocol({
+            workingWeight: targetWeightKg > 0 ? targetWeightKg : 60,
+            exercise: {
+              id: exercise.exerciseId,
+              name: exerciseInfo?.name || exercise.name,
+              primaryMuscle,
+              secondaryMuscles: exerciseInfo?.secondary_muscles || [],
+              mechanic: isCompound ? 'compound' : 'isolation',
+              defaultRepRange,
+              defaultRir: exerciseInfo?.default_rir || 2,
+              minWeightIncrementKg: exerciseInfo?.min_weight_increment_kg || 2.5,
+              formCues: exerciseInfo?.form_cues || [],
+              commonMistakes: exerciseInfo?.common_mistakes || [],
+              equipmentRequired: exerciseInfo?.equipment_required || [],
+              setupNote: exerciseInfo?.setup_note || '',
+              movementPattern: exerciseInfo?.movement_pattern || '',
+            },
+            isFirstExercise: index === 0,
+          });
+          warmedUpMuscles.add(primaryMuscle);
+        }
+
+        return {
+          workout_session_id: session.id,
+          exercise_id: exercise.exerciseId,
+          order: index + 1,
+          target_sets: targetSets,
+          target_rep_range: [minReps, maxReps],
+          target_rir: exerciseInfo?.default_rir || 2,
+          target_weight_kg: targetWeightKg,
+          target_rest_seconds: getRestPeriod(isCompound, userGoal, primaryMuscle),
+          suggestion_reason: `Redo of ${formatHistoryDate(workout.completed_at || workout.planned_date)}`,
+          warmup_protocol: { sets: warmupSets },
+        };
+      });
+
+      if (exerciseBlocks.length > 0) {
+        const { error: blocksError } = await supabase
+          .from('exercise_blocks')
+          .insert(exerciseBlocks);
+
+        if (blocksError) throw blocksError;
+      }
+
+      router.push(`/dashboard/workout/${session.id}`);
+    } catch (err) {
+      console.error('Failed to redo workout:', err);
+      alert('Failed to redo workout. Please try again.');
+    } finally {
+      setRedoLoadingId(null);
     }
   };
 
@@ -934,7 +1331,7 @@ export default function WorkoutPage() {
     setExpandedWorkout(expandedWorkout === workoutId ? null : workoutId);
   };
 
-  const formatHistoryDate = (dateString: string) => {
+  function formatHistoryDate(dateString: string) {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
@@ -942,7 +1339,7 @@ export default function WorkoutPage() {
       month: 'long',
       day: 'numeric',
     });
-  };
+  }
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -1113,7 +1510,7 @@ export default function WorkoutPage() {
 
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: existingWorkout } = await supabase
         .from('workout_sessions')
         .select('id')
@@ -1148,7 +1545,7 @@ export default function WorkoutPage() {
         .in('primary_muscle', todayWorkout.muscles);
 
       if (exercises && exercises.length > 0) {
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
+        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; equipment_required?: string[] };
         const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
         (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
           if (!exercisesByMuscle[ex.primary_muscle]) {
@@ -1190,7 +1587,7 @@ export default function WorkoutPage() {
                   minWeightIncrementKg: 2.5,
                   formCues: [],
                   commonMistakes: [],
-                  equipmentRequired: [],
+                  equipmentRequired: exercise.equipment_required || [],
                   setupNote: '',
                   movementPattern: isCompound ? 'compound' : 'isolation',
                 },
@@ -1229,6 +1626,18 @@ export default function WorkoutPage() {
 
   const activeMeso = mesocycles.find(m => m.state === 'active');
   const pastMesocycles = mesocycles.filter(m => m.state !== 'active');
+  const preferredDays = activeMeso
+    ? (activeMeso.preferred_workout_days?.length
+      ? activeMeso.preferred_workout_days
+      : getDefaultPreferredDays(activeMeso.days_per_week))
+    : [];
+
+  const openScheduleEditor = () => {
+    if (!activeMeso) return;
+    setEditDuration(activeMeso.session_duration_minutes || 60);
+    setEditPreferredDays(preferredDays);
+    setIsEditingDuration(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -1739,7 +2148,7 @@ export default function WorkoutPage() {
                         {todayWorkout ? (
                           <Card variant="elevated" className="border-2 border-primary-500/30 bg-gradient-to-br from-primary-500/5 to-accent-500/5">
                             <CardContent className="p-6">
-                              <div className="flex items-center justify-between">
+                              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                   <div className="flex items-center gap-3 mb-2">
                                     <span className="text-3xl">🏋️</span>
@@ -1763,7 +2172,7 @@ export default function WorkoutPage() {
                                   size="lg"
                                   onClick={handleStartMesocycleWorkout}
                                   isLoading={isStartingWorkout}
-                                  className="shrink-0"
+                                  className="w-full shrink-0 sm:w-auto"
                                 >
                                   <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -1814,11 +2223,16 @@ export default function WorkoutPage() {
                                 <CardTitle>{activeMeso.name}</CardTitle>
                                 <p className="text-surface-400 text-sm mt-1">{activeMeso.split_type}</p>
                               </div>
-                              <Badge variant="success">Active</Badge>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="success">Active</Badge>
+                                <Button variant="ghost" size="sm" onClick={openScheduleEditor}>
+                                  Edit Schedule
+                                </Button>
+                              </div>
                             </div>
                           </CardHeader>
                           <CardContent>
-                            <div className="grid gap-4 sm:grid-cols-4">
+                            <div className="grid gap-4 grid-cols-2 sm:grid-cols-6">
                               <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                                 <p className="text-2xl font-bold text-surface-100">
                                   {activeMeso.current_week}/{activeMeso.total_weeks}
@@ -1829,11 +2243,31 @@ export default function WorkoutPage() {
                                 <p className="text-2xl font-bold text-surface-100">{activeMeso.days_per_week}</p>
                                 <p className="text-sm text-surface-500">Days/Week</p>
                               </div>
+                              <div
+                                className="text-center p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-700/50 transition-colors"
+                                onClick={openScheduleEditor}
+                                title="Click to edit session duration"
+                              >
+                                <p className="text-2xl font-bold text-surface-100">{activeMeso.session_duration_minutes || 60}</p>
+                                <p className="text-sm text-surface-500">Min/Session</p>
+                                <p className="text-xs text-primary-400 mt-1">Edit</p>
+                              </div>
+                              <div
+                                className="text-center p-4 bg-surface-800/50 rounded-lg cursor-pointer hover:bg-surface-700/50 transition-colors"
+                                onClick={openScheduleEditor}
+                                title="Click to edit preferred workout days"
+                              >
+                                <p className="text-lg font-semibold text-surface-100">
+                                  {formatPreferredDays(preferredDays)}
+                                </p>
+                                <p className="text-sm text-surface-500">Preferred Days</p>
+                                <p className="text-xs text-primary-400 mt-1">Edit</p>
+                              </div>
                               <div className="text-center p-4 bg-surface-800/50 rounded-lg">
                                 <p className="text-2xl font-bold text-surface-100">{activeMeso.deload_week}</p>
                                 <p className="text-sm text-surface-500">Deload Week</p>
                               </div>
-                              <div className="text-center p-4 bg-surface-800/50 rounded-lg">
+                              <div className="text-center p-4 bg-surface-800/50 rounded-lg col-span-2 sm:col-span-1">
                                 <p className="text-2xl font-bold text-primary-400">
                                   {Math.round((activeMeso.current_week / activeMeso.total_weeks) * 100)}%
                                 </p>
@@ -1855,13 +2289,81 @@ export default function WorkoutPage() {
                               </div>
                             </div>
 
+                            {isEditingDuration && (
+                              <div className="mt-6 p-4 bg-surface-800/50 rounded-lg border border-primary-500/30">
+                                <h4 className="text-sm font-medium text-surface-300 mb-4">Edit Schedule & Duration</h4>
+                                <p className="text-xs text-surface-400 mb-4">
+                                  Changing your time or preferred days will regenerate workouts to fit the updated schedule.
+                                </p>
+                                <div className="mb-4">
+                                  <div className="flex justify-between text-sm text-surface-400 mb-2">
+                                    <span>Time per session</span>
+                                    <span className="text-primary-400 font-medium">{editDuration} min</span>
+                                  </div>
+                                  <Slider
+                                    value={editDuration}
+                                    onChange={(e) => setEditDuration(parseInt(e.target.value, 10))}
+                                    min={15}
+                                    max={120}
+                                    step={5}
+                                  />
+                                  <div className="flex justify-between text-xs text-surface-500 mt-1">
+                                    <span>15 min</span>
+                                    <span>120 min</span>
+                                  </div>
+                                </div>
+                                <div className="mb-4">
+                                  <label className="block text-sm font-medium text-surface-200 mb-2">
+                                    Preferred workout days
+                                  </label>
+                                  <p className="text-xs text-surface-500 mb-2">
+                                    Pick {activeMeso.days_per_week} days that match your new schedule.
+                                  </p>
+                                  <WorkoutDaySelector
+                                    daysPerWeek={activeMeso.days_per_week}
+                                    selectedDays={editPreferredDays}
+                                    onChange={setEditPreferredDays}
+                                    showPresets={true}
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsEditingDuration(false)}
+                                    disabled={isRegenerating}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleUpdateSessionDuration(activeMeso.id, editDuration, editPreferredDays)}
+                                    disabled={
+                                      isRegenerating
+                                      || (
+                                        editDuration === (activeMeso.session_duration_minutes || 60)
+                                        && areSameWorkoutDays(editPreferredDays, preferredDays)
+                                      )
+                                    }
+                                  >
+                                    {isRegenerating ? 'Regenerating...' : 'Update & Regenerate'}
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Week Schedule */}
                             <div className="mt-6 pt-6 border-t border-surface-800">
                               <h4 className="text-sm font-medium text-surface-300 mb-3">This Week&apos;s Schedule</h4>
                               <div className="flex gap-2 overflow-x-auto pb-2">
                                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
                                   const dayNum = index + 1;
-                                  const workout = getWorkoutForDay(activeMeso.split_type, dayNum, activeMeso.days_per_week);
+                                  const workout = getWorkoutForDay(
+                                    activeMeso.split_type,
+                                    dayNum,
+                                    activeMeso.days_per_week,
+                                    activeMeso.preferred_workout_days
+                                  );
                                   const isToday = (new Date().getDay() || 7) === dayNum;
 
                                   return (
@@ -2239,26 +2741,49 @@ export default function WorkoutPage() {
                       </button>
                     )}
 
-                    {/* Delete button */}
+                    {/* Action buttons */}
                     {!isSelectMode && (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteWorkout(workout.id, workout.state);
-                        }}
-                        disabled={historyDeletingId === workout.id}
-                        className="absolute top-3 right-3 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all z-10"
-                        title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
-                      >
-                        {historyDeletingId === workout.id ? (
-                          <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                      <div className="absolute top-3 right-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all z-10">
+                        {workout.state === 'completed' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleRedoWorkout(workout);
+                            }}
+                            disabled={redoLoadingId === workout.id}
+                            className="p-1.5 rounded-lg hover:bg-primary-500/20 text-surface-500 hover:text-primary-300 transition-colors"
+                            title="Redo workout"
+                          >
+                            {redoLoadingId === workout.id ? (
+                              <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12a9 9 0 0115.364-6.364L21 8m-3-2v6h-6" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-15.364 6.364L3 16m3 2v-6h6" />
+                              </svg>
+                            )}
+                          </button>
                         )}
-                      </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteWorkout(workout.id, workout.state);
+                          }}
+                          disabled={historyDeletingId === workout.id}
+                          className="p-1.5 rounded-lg hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-colors"
+                          title={workout.state === 'in_progress' ? 'Cancel workout' : 'Delete workout'}
+                        >
+                          {historyDeletingId === workout.id ? (
+                            <div className="w-4 h-4 border-2 border-danger-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
                     )}
 
                     {/* Main clickable area */}

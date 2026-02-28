@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   Sex,
   BodyComposition,
@@ -83,7 +84,7 @@ export class CoachingService {
     
     await this.supabase.from('dexa_scans').insert({
       user_id: this.userId,
-      scan_date: new Date().toISOString().split('T')[0],
+      scan_date: getLocalDateString(),
       weight_kg: weightKg,
       lean_mass_kg: bodyComp.leanMassKg,
       fat_mass_kg: weightKg - bodyComp.leanMassKg,

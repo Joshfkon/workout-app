@@ -18,6 +18,7 @@ import {
   clamp,
   percentage,
   cn,
+  calculateStreaks,
 } from '../utils';
 
 describe('Date Utilities', () => {
@@ -300,6 +301,122 @@ describe('Utility Functions', () => {
 
     it('handles empty input', () => {
       expect(cn()).toBe('');
+    });
+  });
+});
+
+describe('Streak Calculation', () => {
+  describe('calculateStreaks', () => {
+    it('returns zeros for empty array', () => {
+      const result = calculateStreaks([]);
+      expect(result.currentStreak).toBe(0);
+      expect(result.longestStreak).toBe(0);
+    });
+
+    it('calculates a single workout as streak of 1', () => {
+      const today = getLocalDateString();
+      const result = calculateStreaks([today]);
+      expect(result.currentStreak).toBe(1);
+      expect(result.longestStreak).toBe(1);
+    });
+
+    it('calculates consecutive days correctly', () => {
+      const today = new Date();
+      const dates = [
+        new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+        new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000), // yesterday
+        today, // today
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(3);
+      expect(result.longestStreak).toBe(3);
+    });
+
+    it('breaks streak when there is a gap', () => {
+      const today = new Date();
+      const dates = [
+        new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        new Date(today.getTime() - 4 * 24 * 60 * 60 * 1000), // 4 days ago
+        // 3 day gap
+        today, // today
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(1);
+      expect(result.longestStreak).toBe(2);
+    });
+
+    it('handles multiple workouts on the same day', () => {
+      const today = new Date();
+      const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+      const dates = [
+        yesterday,
+        yesterday, // same day
+        today,
+        today, // same day
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(2);
+      expect(result.longestStreak).toBe(2);
+    });
+
+    it('accepts ISO date strings', () => {
+      const today = getLocalDateString();
+      const yesterday = getLocalDateString(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const dates = [yesterday + 'T10:00:00Z', today + 'T15:30:00Z'];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(2);
+      expect(result.longestStreak).toBe(2);
+    });
+
+    it('current streak is 0 if last workout was more than 1 day ago', () => {
+      const dates = [
+        new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+        new Date(Date.now() - 4 * 24 * 60 * 60 * 1000), // 4 days ago
+        new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(0);
+      expect(result.longestStreak).toBe(3);
+    });
+
+    it('current streak starts from yesterday if no workout today', () => {
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+      const dates = [twoDaysAgo, yesterday];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(2);
+      expect(result.longestStreak).toBe(2);
+    });
+
+    it('handles unsorted dates', () => {
+      const today = new Date();
+      const dates = [
+        today, // out of order
+        new Date(today.getTime() - 2 * 24 * 60 * 60 * 1000),
+        new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000),
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(3);
+      expect(result.longestStreak).toBe(3);
+    });
+
+    it('identifies longest streak when it is not the most recent', () => {
+      const today = new Date();
+      const dates = [
+        // Old 5-day streak
+        new Date(today.getTime() - 20 * 24 * 60 * 60 * 1000),
+        new Date(today.getTime() - 19 * 24 * 60 * 60 * 1000),
+        new Date(today.getTime() - 18 * 24 * 60 * 60 * 1000),
+        new Date(today.getTime() - 17 * 24 * 60 * 60 * 1000),
+        new Date(today.getTime() - 16 * 24 * 60 * 60 * 1000),
+        // Gap
+        // Recent 2-day streak
+        new Date(today.getTime() - 1 * 24 * 60 * 60 * 1000),
+        today,
+      ];
+      const result = calculateStreaks(dates);
+      expect(result.currentStreak).toBe(2);
+      expect(result.longestStreak).toBe(5);
     });
   });
 });
