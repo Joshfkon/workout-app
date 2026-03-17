@@ -15,7 +15,7 @@ import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
 import { copySharedWorkout } from '@/lib/workout-sharing';
 import { useUserStore } from '@/stores';
 import { createClient } from '@/lib/supabase/client';
-import { cn, formatWeight } from '@/lib/utils';
+import { cn, formatWeight, calculateStreaks } from '@/lib/utils';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
 import type { ReactionType, LeaderboardType, ShareType, Difficulty, SharedWorkoutWithProfile } from '@/types/social';
 import type { UserProfile, ProfileStats } from '@/types/social';
@@ -211,12 +211,18 @@ export default function FeedPage() {
       const totalVolume = setLogs?.reduce((sum, log) =>
         sum + ((log.weight_kg ?? 0) * (log.reps ?? 0)), 0) ?? 0;
 
+      // Calculate workout streaks from completed workout dates
+      const workoutDates = workoutStats
+        ?.filter((w) => w.completed_at)
+        .map((w) => w.completed_at as string) ?? [];
+      const { currentStreak, longestStreak } = calculateStreaks(workoutDates);
+
       setStats({
         total_workouts: workoutStats?.length ?? 0,
         total_volume_kg: totalVolume,
         total_sets: totalSets,
-        current_streak: 0,
-        longest_streak: 0,
+        current_streak: currentStreak,
+        longest_streak: longestStreak,
         favorite_exercise: null,
         strongest_lift: null,
       });

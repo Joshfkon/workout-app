@@ -312,7 +312,6 @@ export function GymEquipmentSettings() {
   }
 
   function handleCreateLocation() {
-    console.log('handleCreateLocation called');
     setEditingLocation(null);
     setLocationName('');
     setShowLocationModal(true);
@@ -478,7 +477,6 @@ export function GymEquipmentSettings() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Add Location button clicked', { selectedLocationId, locations });
                   handleCreateLocation();
                 }}
                 variant="outline"
