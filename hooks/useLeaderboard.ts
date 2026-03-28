@@ -1,6 +1,9 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getErrorMessage } from '@/lib/errors';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import type { LeaderboardType, LeaderboardEntryWithProfile } from '@/types/social';
 
 interface UseLeaderboardOptions {
@@ -38,6 +41,7 @@ export function useLeaderboard({
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const { user: authUser } = useAuthUser();
 
   const fetchLeaderboard = useCallback(async (loadMore = false) => {
     setIsLoading(true);
@@ -45,7 +49,6 @@ export function useLeaderboard({
 
     try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
       const currentOffset = loadMore ? offset : 0;
 
       // Calculate leaderboard data before fetching (only on initial load/refresh)
@@ -135,9 +138,9 @@ export function useLeaderboard({
       setOffset(currentOffset + transformedEntries.length);
 
       // Fetch user's own rank if logged in
-      if (user && !loadMore) {
+      if (authUser && !loadMore) {
         const { data: rankData } = await supabase.rpc('get_user_rank' as never, {
-          p_user_id: user.id,
+          p_user_id: authUser.id,
           p_type: type,
           p_exercise_id: exerciseId || null,
         } as never);
@@ -154,7 +157,7 @@ export function useLeaderboard({
     } finally {
       setIsLoading(false);
     }
-  }, [type, exerciseId, limit, offset]);
+  }, [type, exerciseId, limit, offset, authUser]);
 
   const refresh = useCallback(async () => {
     setOffset(0);

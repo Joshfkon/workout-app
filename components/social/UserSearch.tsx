@@ -41,7 +41,7 @@ export function UserSearch({
         .select('*')
         .or(`username.ilike.%${searchQuery}%,display_name.ilike.%${searchQuery}%`)
         .eq('profile_visibility', 'public')
-        .limit(20);
+        .limit(20) as { data: any[]; error: any };
 
       if (!error && data) {
         setResults(data as UserProfile[]);

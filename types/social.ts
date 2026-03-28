@@ -286,7 +286,7 @@ export interface SharedExercise {
   rep_range: [number, number];
   target_rir: number;
   notes?: string;
-  superset_group?: number;
+  superset_group?: string | number;
 }
 
 export interface SharedWorkoutWithProfile extends SharedWorkout {

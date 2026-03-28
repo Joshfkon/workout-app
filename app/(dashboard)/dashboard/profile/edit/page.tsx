@@ -35,18 +35,10 @@ export default function ProfileEditPage() {
       }
 
       const { data: profile, error: fetchError } = await supabase
-        .from('user_profiles' as never)
+        .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single() as { data: {
-          display_name: string | null;
-          bio: string | null;
-          profile_visibility: ProfileVisibility;
-          show_workouts: boolean;
-          show_stats: boolean;
-          training_experience: TrainingExperience | null;
-          gym_name: string | null;
-        } | null; error: any };
+        .single() as { data: any; error: any };
 
       if (fetchError || !profile) {
         setError('Failed to load profile');
@@ -81,8 +73,8 @@ export default function ProfileEditPage() {
         throw new Error('Not logged in');
       }
 
-      const { error: updateError } = await (supabase
-        .from('user_profiles' as never)
+      const { error: updateError } = await supabase
+        .from('user_profiles')
         .update({
           display_name: displayName.trim() || null,
           bio: bio.trim() || null,
@@ -92,7 +84,7 @@ export default function ProfileEditPage() {
           training_experience: trainingExperience || null,
           gym_name: gymName.trim() || null,
         } as never)
-        .eq('user_id', user.id)) as { error: any };
+        .eq('user_id', user.id);
 
       if (updateError) throw updateError;
 

@@ -45,7 +45,7 @@ export default function SharedWorkoutDetailPage() {
 
         // Fetch workout with user profile
         const { data, error: fetchError } = await supabase
-          .from('shared_workouts' as never)
+          .from('shared_workouts')
           .select(`
             *,
             user_profiles (
@@ -193,7 +193,7 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: saveError } = await supabase
-      .from('saved_workouts' as never)
+      .from('saved_workouts')
       .insert({ user_id: user.id, shared_workout_id: id } as never);
 
     if (saveError) {
@@ -213,7 +213,7 @@ export default function SharedWorkoutDetailPage() {
     }
 
     const { error: deleteError } = await supabase
-      .from('saved_workouts' as never)
+      .from('saved_workouts')
       .delete()
       .eq('user_id', user.id)
       .eq('shared_workout_id', id);

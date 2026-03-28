@@ -44,23 +44,21 @@ export function useFollow({
       const supabase = createClient();
 
       // Check if current user follows target
-      type FollowRow = { status: string };
-
-      const { data: followData } = (await supabase
-        .from('follows' as never)
+      const { data: followData } = await supabase
+        .from('follows')
         .select('status')
         .eq('follower_id', currentUserId)
         .eq('following_id', targetUserId)
-        .single()) as { data: FollowRow | null };
+        .single() as { data: any };
 
       // Check if target follows current user
-      const { data: followedByData } = (await supabase
-        .from('follows' as never)
+      const { data: followedByData } = await supabase
+        .from('follows')
         .select('status')
         .eq('follower_id', targetUserId)
         .eq('following_id', currentUserId)
         .eq('status', 'accepted')
-        .single()) as { data: FollowRow | null };
+        .single() as { data: any };
 
       setRelationship({
         is_following: followData?.status === 'accepted',
@@ -81,8 +79,8 @@ export function useFollow({
     // Determine status based on target's profile visibility
     const status: FollowStatus = targetProfileVisibility === 'private' ? 'pending' : 'accepted';
 
-    const { error } = await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    const { error } = await supabase
+      .from('follows')
       .insert({
         follower_id: currentUserId,
         following_id: targetUserId,
@@ -113,8 +111,8 @@ export function useFollow({
 
     const wasFollowing = relationship.is_following;
 
-    const { error } = await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    const { error } = await supabase
+      .from('follows')
       .delete()
       .eq('follower_id', currentUserId)
       .eq('following_id', targetUserId);
@@ -141,8 +139,8 @@ export function useFollow({
     const supabase = createClient();
 
     // This is for when someone sent US a request
-    const { error } = await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    const { error } = await supabase
+      .from('follows')
       .update({ status: 'accepted', accepted_at: new Date().toISOString() } as never)
       .eq('follower_id', targetUserId)
       .eq('following_id', currentUserId)
@@ -164,8 +162,8 @@ export function useFollow({
     setIsLoading(true);
     const supabase = createClient();
 
-    await (supabase
-      .from('follows' as never) as ReturnType<typeof supabase.from>)
+    await supabase
+      .from('follows')
       .delete()
       .eq('follower_id', targetUserId)
       .eq('following_id', currentUserId)

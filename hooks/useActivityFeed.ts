@@ -55,7 +55,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
 
       // Build base query for activities
       let query = supabase
-        .from('activities' as never)
+        .from('activities')
         .select(`
           id,
           user_id,
@@ -74,11 +74,11 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         query = query.eq('user_id', userId);
       } else if (feedType === 'following' && user) {
         // Get activities from users we follow
-        const { data: following } = (await supabase
-          .from('follows' as never)
+        const { data: following } = await supabase
+          .from('follows')
           .select('following_id')
           .eq('follower_id', user.id)
-          .eq('status', 'accepted')) as { data: { following_id: string }[] | null };
+          .eq('status', 'accepted') as { data: any[] | null };
 
         if (following && following.length > 0) {
           const followingIds = following.map(f => f.following_id);
@@ -136,11 +136,11 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
 
         if (user && data.length > 0) {
           const activityIds = data.map(a => a.id);
-          const { data: reactions } = (await supabase
-            .from('activity_reactions' as never)
+          const { data: reactions } = await supabase
+            .from('activity_reactions')
             .select('activity_id, reaction_type')
             .eq('user_id', user.id)
-            .in('activity_id', activityIds)) as { data: { activity_id: string; reaction_type: ReactionType }[] | null };
+            .in('activity_id', activityIds) as { data: any[] | null };
 
           if (reactions) {
             userReactions = reactions.reduce((acc, r) => {
