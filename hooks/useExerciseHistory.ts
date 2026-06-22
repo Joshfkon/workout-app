@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
 import type { ExercisePerformanceSnapshotRow } from '@/types/database-queries';
@@ -16,7 +16,13 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Monotonic request id. Only the most recent request is allowed to commit
+  // results, so out-of-order responses (e.g. params changed mid-flight) and
+  // post-unmount responses are ignored.
+  const requestIdRef = useRef(0);
+
   const fetchHistory = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
 
@@ -28,6 +34,9 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
         .eq('exercise_id', exerciseId)
         .order('session_date', { ascending: false })
         .limit(limit);
+
+      // Ignore stale/out-of-order responses.
+      if (requestId !== requestIdRef.current) return;
 
       if (fetchError) throw fetchError;
 
@@ -46,14 +55,22 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
 
       setSnapshots(mappedData);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to fetch history');
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [exerciseId, limit]);
 
   useEffect(() => {
     fetchHistory();
+    // Invalidate any in-flight request on unmount / dependency change so its
+    // response is discarded and never sets state on an unmounted component.
+    return () => {
+      requestIdRef.current++;
+    };
   }, [fetchHistory]);
 
   // Calculate stats

@@ -105,14 +105,29 @@ export const useUserStore = create<UserState>()(
       },
 
       signOut: () => {
+        // Clear in-memory state. The persist middleware writes this through,
+        // so persisted `user` becomes null. We also explicitly clear the
+        // persisted storage to remove any stale/legacy keys that partialize
+        // might not overwrite.
         set({ user: null, isLoading: false });
+        void useUserStore.persist.clearStorage();
       },
     }),
     {
       name: 'user-storage',
+      version: 1,
       partialize: (state) => ({
         user: state.user,
       }),
+      // Migrate stale persisted shapes forward. A pre-versioned (version 0)
+      // User object may not match the current schema, so we drop it and let
+      // the app re-hydrate the user from the server/session on next load.
+      migrate: (persistedState, version) => {
+        if (version === 0) {
+          return { user: null };
+        }
+        return persistedState as { user: User | null };
+      },
     }
   )
 );
