@@ -198,7 +198,10 @@ describe('useRestTimer', () => {
         jest.advanceTimersByTime(2000);
       });
 
-      expect(window.AudioContext).toHaveBeenCalled();
+      // The AudioContext is created once and shared (so it can be resumed on a
+      // user gesture for iOS), so assert the alarm actually played by checking
+      // an oscillator was created rather than that the context was reconstructed.
+      expect(mockAudioContext.createOscillator).toHaveBeenCalled();
     });
   });
 
