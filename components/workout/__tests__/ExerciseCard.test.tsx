@@ -102,6 +102,9 @@ jest.mock('@/lib/utils', () => ({
   convertWeight: jest.fn((w, _, toUnit) => toUnit === 'lb' ? w * 2.205 : w),
   formatWeight: jest.fn((w, unit) => `${w}${unit}`),
   formatWeightValue: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205) : w),
+  // Exact display conversion (preserves user input, 1 decimal) — used for completed sets
+  convertWeightForDisplay: jest.fn((w, unit, decimals = 1) =>
+    parseFloat((unit === 'lb' ? w * 2.20462 : w).toFixed(decimals))),
   inputWeightToKg: jest.fn((w, unit) => unit === 'lb' ? w / 2.205 : w),
   roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
   formatDuration: jest.fn((s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`),
@@ -363,10 +366,12 @@ describe('ExerciseCard', () => {
 
     it('displays set count badge', () => {
       const { container } = render(<ExerciseCard {...defaultProps} />);
-      // Badge with "X/Y" format exists
-      const badge = container.querySelector('.rounded-full');
-      expect(badge).toBeInTheDocument();
-      expect(badge?.textContent).toContain('/');
+      // The set-count badge shows completed/total like "0/3". Other pill badges
+      // (e.g. a muscle-protection chip) also use .rounded-full, so match by the
+      // X/Y content rather than assuming it's the first rounded element.
+      const badges = Array.from(container.querySelectorAll('.rounded-full'));
+      const countBadge = badges.find((b) => /\d+\s*\/\s*\d+/.test(b.textContent || ''));
+      expect(countBadge).toBeTruthy();
     });
 
     it('displays primary muscle', () => {

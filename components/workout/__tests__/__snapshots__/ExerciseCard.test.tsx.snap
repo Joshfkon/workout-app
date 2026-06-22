@@ -1410,7 +1410,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
 exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all "
+    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -1429,6 +1429,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -1445,7 +1456,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1.5 "
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2.5 py-1 text-xs"
@@ -1456,55 +1467,9 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
           </span>
         </div>
       </div>
-      <div
-        class="flex items-center justify-between gap-3 mt-2"
-      >
-        <div
-          class="flex items-center gap-2 text-xs text-surface-400"
-        >
-          <span>
-            8
-            -
-            12
-             reps
-          </span>
-          <span>
-            @
-          </span>
-          <span>
-            RIR 
-            2
-          </span>
-        </div>
-      </div>
-      <div
-        class="mt-3 pt-3 border-t border-surface-800"
-      >
-        <div
-          class="flex gap-2"
-        >
-          <a
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
-            href="https://www.youtube.com/results?search_query=Bench%20Press%20exercise%20form"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <svg
-              class="w-4 h-4 text-red-500"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
-              />
-            </svg>
-            Watch Form
-          </a>
-        </div>
-      </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
         class="w-full text-sm"
@@ -1514,37 +1479,83 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-1.5 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
-              RPE
+              <span
+                class="inline-flex items-center justify-center"
+              >
+                RPE
+                <button
+                  aria-expanded="false"
+                  aria-label="Learn more about RPE"
+                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
+                >
+                  <svg
+                    class="w-full h-full"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </span>
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
-              Quality
+              <span
+                class="inline-flex items-center justify-center"
+              >
+                Quality
+                <button
+                  aria-expanded="false"
+                  aria-label="Learn more about Stimulative Set"
+                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
+                >
+                  <svg
+                    class="w-full h-full"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </span>
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10"
             />
           </tr>
         </thead>
@@ -1555,26 +1566,30 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-1.5 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                1
+                <span
+                  class="truncate"
+                >
+                  1
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
                 class="font-mono text-surface-200 "
@@ -1583,32 +1598,36 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-xs "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
-            >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-              >
-                Stimulative
-              </span>
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 text-center"
             >
               <div
-                class="p-2 rounded-lg bg-success-500"
+                class="flex justify-center"
+              >
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
+            </td>
+            <td
+              class="px-1 py-2.5 relative"
+            >
+              <div
+                class="p-1.5 rounded-lg bg-success-500"
               >
                 <svg
                   class="w-4 h-4 text-white"
@@ -1630,26 +1649,30 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-1.5 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                2
+                <span
+                  class="truncate"
+                >
+                  2
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
                 class="font-mono text-surface-200 "
@@ -1658,32 +1681,36 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-xs "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
-            >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-              >
-                Stimulative
-              </span>
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 text-center"
             >
               <div
-                class="p-2 rounded-lg bg-success-500"
+                class="flex justify-center"
+              >
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
+            </td>
+            <td
+              class="px-1 py-2.5 relative"
+            >
+              <div
+                class="p-1.5 rounded-lg bg-success-500"
               >
                 <svg
                   class="w-4 h-4 text-white"
@@ -1705,26 +1732,30 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-1.5 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                3
+                <span
+                  class="truncate"
+                >
+                  3
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
                 class="font-mono text-surface-200 "
@@ -1733,32 +1764,36 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-xs "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
-            >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-              >
-                Stimulative
-              </span>
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 text-center"
             >
               <div
-                class="p-2 rounded-lg bg-success-500"
+                class="flex justify-center"
+              >
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
+            </td>
+            <td
+              class="px-1 py-2.5 relative"
+            >
+              <div
+                class="p-1.5 rounded-lg bg-success-500"
               >
                 <svg
                   class="w-4 h-4 text-white"
@@ -3225,7 +3260,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all "
+    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -3244,6 +3279,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             >
               Bench Press
             </button>
+            <div
+              class="relative inline-flex"
+            >
+              <span
+                class="inline-flex items-center font-medium rounded-full bg-danger-500/20 text-danger-400 border border-danger-500/30 px-2 py-0.5 text-xs"
+              >
+                🔴
+                 
+                Protect
+              </span>
+            </div>
           </div>
           <p
             class="text-sm text-surface-400 mt-0.5"
@@ -3260,7 +3306,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1 "
+          class="flex items-center gap-1.5 "
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -3271,55 +3317,9 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           </span>
         </div>
       </div>
-      <div
-        class="flex items-center justify-between gap-3 mt-2"
-      >
-        <div
-          class="flex items-center gap-2 text-xs text-surface-400"
-        >
-          <span>
-            8
-            -
-            12
-             reps
-          </span>
-          <span>
-            @
-          </span>
-          <span>
-            RIR 
-            2
-          </span>
-        </div>
-      </div>
-      <div
-        class="mt-3 pt-3 border-t border-surface-800"
-      >
-        <div
-          class="flex gap-2"
-        >
-          <a
-            class="flex items-center gap-1.5 px-3 py-1.5 bg-surface-800 hover:bg-surface-700 rounded-lg text-xs text-surface-300 transition-colors"
-            href="https://www.youtube.com/results?search_query=Bench%20Press%20exercise%20form"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <svg
-              class="w-4 h-4 text-red-500"
-              fill="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
-              />
-            </svg>
-            Watch Form
-          </a>
-        </div>
-      </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="overflow-hidden"
     >
       <table
         class="w-full text-sm"
@@ -3329,37 +3329,83 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         >
           <tr>
             <th
-              class="px-3 py-2 text-left text-surface-400 font-medium w-12"
+              class="px-1.5 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
-              RPE
+              <span
+                class="inline-flex items-center justify-center"
+              >
+                RPE
+                <button
+                  aria-expanded="false"
+                  aria-label="Learn more about RPE"
+                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
+                >
+                  <svg
+                    class="w-full h-full"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </span>
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
               Form
             </th>
             <th
-              class="px-3 py-2 text-center text-surface-400 font-medium w-20"
+              class="px-1 py-2 text-center text-surface-400 font-medium"
             >
-              Quality
+              <span
+                class="inline-flex items-center justify-center"
+              >
+                Quality
+                <button
+                  aria-expanded="false"
+                  aria-label="Learn more about Stimulative Set"
+                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
+                >
+                  <svg
+                    class="w-full h-full"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </span>
             </th>
             <th
-              class="px-2 py-2 w-12"
+              class="px-1 py-2 w-10"
             />
           </tr>
         </thead>
@@ -3370,26 +3416,30 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-1.5 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                1
+                <span
+                  class="truncate"
+                >
+                  1
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
                 class="font-mono text-surface-200 "
@@ -3398,32 +3448,36 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-xs "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
-            >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-              >
-                Stimulative
-              </span>
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 text-center"
             >
               <div
-                class="p-2 rounded-lg bg-success-500"
+                class="flex justify-center"
+              >
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
+            </td>
+            <td
+              class="px-1 py-2.5 relative"
+            >
+              <div
+                class="p-1.5 rounded-lg bg-success-500"
               >
                 <svg
                   class="w-4 h-4 text-white"
@@ -3445,26 +3499,30 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-3 py-2.5 text-surface-300 font-medium"
+              class="px-1.5 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1"
+                class="flex items-center gap-1 min-w-0"
               >
-                2
+                <span
+                  class="truncate"
+                >
+                  2
+                </span>
               </div>
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-surface-200 "
+              class="px-1 py-2.5 text-center font-mono text-surface-200 "
             >
               9
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
                 class="font-mono text-surface-200 "
@@ -3473,32 +3531,36 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </span>
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-1 py-2.5 text-center"
             >
               <span
-                class="text-surface-200 "
+                class="text-surface-200 text-xs "
               >
                 <span
-                  class="text-surface-500 text-xs"
+                  class="text-surface-500"
                 >
                   —
                 </span>
               </span>
             </td>
             <td
-              class="px-3 py-2.5 text-center"
-            >
-              <span
-                class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-              >
-                Stimulative
-              </span>
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 text-center"
             >
               <div
-                class="p-2 rounded-lg bg-success-500"
+                class="flex justify-center"
+              >
+                <span
+                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
+                >
+                  Stimulative
+                </span>
+              </div>
+            </td>
+            <td
+              class="px-1 py-2.5 relative"
+            >
+              <div
+                class="p-1.5 rounded-lg bg-success-500"
               >
                 <svg
                   class="w-4 h-4 text-white"
@@ -3520,37 +3582,37 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-3 py-2.5 text-surface-500"
+              class="px-1.5 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-xs"
             >
-              ???
+              —
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-xs"
             >
-              ???
+              —
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-xs"
             >
-              ???
+              —
             </td>
             <td
-              class="px-2 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-xs"
             >
-              ???
+              —
             </td>
             <td
-              class="px-3 py-2.5 text-center text-surface-600"
+              class="px-1 py-2.5 text-center text-surface-600 text-xs"
             >
-              ???
+              —
             </td>
             <td
-              class="px-2 py-2.5"
+              class="px-1 py-2.5"
             />
           </tr>
         </tbody>

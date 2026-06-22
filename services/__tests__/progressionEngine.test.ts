@@ -202,7 +202,9 @@ describe('calculateNextTargets', () => {
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance({
-          reps: 10, // Top of 6-10 range
+          // Week 2/6 is the hypertrophy phase, which adjusts a compound's [6,10]
+          // default to [6,12]; 12 is the top of that phase-adjusted range.
+          reps: 12,
           rpe: 8,
           averageRpe: 8,
         }),
@@ -234,7 +236,9 @@ describe('calculateNextTargets', () => {
       const result = calculateNextTargets({
         ...baseInput,
         lastPerformance: createMockPerformance({
-          reps: 6, // At minimum of 6-10 range
+          // Week 3/6 is the strength phase, which adjusts a compound's [6,10]
+          // default to [4,6]; 4 is the minimum of that phase-adjusted range.
+          reps: 4,
           rpe: 7,
           averageRpe: 7,
           allSetsCompleted: true,
