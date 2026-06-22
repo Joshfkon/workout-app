@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, SetQualityBadge, Button } from '@/components/ui';
+import { Card, Badge, SetQualityBadge, Button, InfoTooltip } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
@@ -1020,7 +1020,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-red-500 transition-colors"
+                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-red-500 transition-colors"
                 title="Watch Form"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -1037,7 +1037,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onTargetSetsChange(newSets);
                   }}
                   disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                  className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Remove a set"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1047,7 +1047,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <button
                   onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
                   disabled={Number(block.targetSets) >= 10}
-                  className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Add a set"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1060,7 +1060,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             {onExerciseSwap && isActive && similarExercises.length > 0 && (
               <button
                 onClick={() => setShowSwapModal(true)}
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors"
+                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors"
                 title="Swap exercise"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1076,7 +1076,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onExerciseDelete();
                   }
                 }}
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
+                className="ml-2 min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
                 title="Remove exercise"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1092,7 +1092,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const initialWeight = block.targetWeightKg || workingWeight || recommendedWeight || 0;
                   onPlateCalculatorOpen(initialWeight > 0 ? initialWeight : undefined);
                 }}
-                className="w-7 h-7 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-primary-400 transition-colors"
+                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-primary-400 transition-colors"
                 title="Plate Calculator"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1294,6 +1294,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         {isEditingThis ? (
                           <input
                             type="number"
+                            inputMode="decimal"
                             value={warmupWeightInput}
                             onChange={(e) => setWarmupWeightInput(e.target.value)}
                             onBlur={() => {
@@ -1559,9 +1560,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">RPE</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">
+                  <span className="inline-flex items-center justify-center">RPE<InfoTooltip term="RPE" size="sm" /></span>
+                </th>
                 <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Quality</th>
+                <th className="px-1 py-2 text-center text-surface-400 font-medium">
+                  <span className="inline-flex items-center justify-center">Quality<InfoTooltip term="STIMULATIVE_SET" size="sm" /></span>
+                </th>
                 <th className="px-1 py-2 w-10"></th>
               </tr>
             </thead>
@@ -1577,6 +1582,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
+                        inputMode="decimal"
                         value={editWeight}
                         onChange={(e) => setEditWeight(e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -1589,6 +1595,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={editReps}
                         onChange={(e) => setEditReps(e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -1599,6 +1607,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
+                        inputMode="decimal"
                         value={editRpe}
                         onChange={(e) => setEditRpe(e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -1673,6 +1682,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         {editingRpeId === set.id ? (
                           <input
                             type="number"
+                            inputMode="decimal"
                             value={editRpeValue}
                             onChange={(e) => setEditRpeValue(e.target.value)}
                             onFocus={(e) => e.target.select()}
@@ -1812,7 +1822,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               e.stopPropagation();
                               onSetDelete(set.id);
                             }}
-                            className="p-1.5 rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
+                            className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
                             title="Uncheck set"
                           >
                             <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1907,6 +1917,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-1 py-1.5">
                     <input
                       type="number"
+                      inputMode="decimal"
                       defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
                       id="dropset-weight-input"
                       step="0.5"
@@ -1917,6 +1928,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-1 py-1.5">
                     <input
                       type="number"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       defaultValue=""
                       id="dropset-reps-input"
                       placeholder="?"
@@ -1926,6 +1939,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   <td className="px-1 py-1.5">
                     <input
                       type="number"
+                      inputMode="decimal"
                       defaultValue="10"
                       id="dropset-rpe-input"
                       step="0.5"
@@ -1999,6 +2013,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
+                        inputMode="decimal"
                         value={input.weight || ''}
                         onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -2011,7 +2026,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           if (lastCompleted) return String(displayWeight(lastCompleted.weightKg));
                           if (prevSet) return String(displayWeight(prevSet.weightKg));
                           if (suggestedWeight > 0) return String(displayWeight(suggestedWeight));
-                          return '???';
+                          return '—';
                         })()}
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
@@ -2019,6 +2034,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1 py-1.5">
                       <input
                         type="number"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={input.reps}
                         onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
                         onFocus={(e) => e.target.select()}
@@ -2036,6 +2053,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           return (
                             <input
                               type="number"
+                              inputMode="decimal"
                               value={input.rpe || '9.5'}
                               onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
                               onFocus={(e) => e.target.select()}
@@ -2058,7 +2076,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <span className="text-surface-600 text-xs">—</span>
                     </td>
                     <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-600 text-xs">???</span>
+                      <span className="text-surface-600 text-xs">—</span>
                     </td>
                     <td className="px-1 py-1.5 relative">
                       {/* Delete reveal background for swipe */}
@@ -2074,7 +2092,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <button
                         onClick={() => completeSetImmediately(index)}
                         disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
-                        className="p-1.5 rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
+                        className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
                         title="Complete set"
                       >
                         {isCompletingSet ? (
@@ -2101,11 +2119,11 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-1.5 py-2.5 text-surface-500">
                       {inactiveSetNumber}
                     </td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">???</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
                     <td className="px-1 py-2.5"></td>
                   </tr>
                 );

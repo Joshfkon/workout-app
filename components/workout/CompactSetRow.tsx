@@ -85,8 +85,10 @@ export const CompactSetRow = memo(function CompactSetRow({
 }: CompactSetRowProps) {
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
   const [weight, setWeight] = useState(
-    previousSet?.weightKg 
-      ? formatWeightValue(previousSet.weightKg, unit).toString()
+    // Seed an EXISTING logged value exactly (convertWeightForDisplay); only fall back to
+    // the rounded suggestion (formatWeightValue) when there is no previous set.
+    previousSet?.weightKg !== undefined
+      ? convertWeightForDisplay(previousSet.weightKg, unit).toString()
       : (suggestedWeight > 0 ? formatWeightValue(suggestedWeight, unit).toString() : '')
   );
   const [phase, setPhase] = useState<InputPhase>('input');
@@ -213,6 +215,36 @@ export const CompactSetRow = memo(function CompactSetRow({
     setPhase('feedback');
   };
 
+  // One-tap "Repeat last set": log identical weight/reps as the previous set in a single
+  // tap, reusing its feedback (or a neutral default). Skips the feedback screen entirely.
+  const handleRepeatLastSet = async () => {
+    if (!onSubmit || !previousSet) return;
+
+    const repsNum = previousSet.reps;
+    if (!repsNum || repsNum < 1) return;
+
+    const bwData = isBodyweight ? getBodyweightData() : undefined;
+    const weightKg = isBodyweight && bwData
+      ? bwData.effectiveLoadKg
+      : previousSet.weightKg;
+
+    const feedback = previousSet.feedback ?? { repsInTank: 2, form: 'clean' };
+    const rpe = previousSet.rpe
+      ?? (feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10);
+
+    await onSubmit({
+      weightKg,
+      reps: repsNum,
+      rpe,
+      feedback,
+      bodyweightData: bwData,
+    });
+    setReps(String(targetRepRange[1]));
+    setWeight('');
+  };
+
+  const canRepeatLastSet = isActive && !!previousSet && previousSet.reps > 0;
+
   const displayBw = userBodyweightKg ? formatWeightValue(userBodyweightKg, unit) : '—';
 
   return (
@@ -238,6 +270,7 @@ export const CompactSetRow = memo(function CompactSetRow({
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-surface-500">+</span>
               <input
                 type="number"
+                inputMode="decimal"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
                 placeholder="0"
@@ -250,6 +283,7 @@ export const CompactSetRow = memo(function CompactSetRow({
               <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-surface-500">-</span>
               <input
                 type="number"
+                inputMode="decimal"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
                 placeholder="0"
@@ -261,6 +295,7 @@ export const CompactSetRow = memo(function CompactSetRow({
         ) : (
           <input
             type="number"
+            inputMode="decimal"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             placeholder={suggestedWeight > 0 ? formatWeightValue(suggestedWeight, unit).toString() : '—'}
@@ -276,6 +311,8 @@ export const CompactSetRow = memo(function CompactSetRow({
       <div className="w-20">
         <input
           type="number"
+          inputMode="numeric"
+          pattern="[0-9]*"
           value={reps}
           onChange={(e) => setReps(e.target.value)}
           disabled={disabled}
@@ -285,15 +322,30 @@ export const CompactSetRow = memo(function CompactSetRow({
         />
       </div>
 
-      {/* Check button */}
-      <div className="w-10 flex justify-center">
+      {/* Repeat last set - one tap to log identical weight/reps */}
+      {canRepeatLastSet && (
+        <button
+          onClick={handleRepeatLastSet}
+          disabled={disabled}
+          className="shrink-0 inline-flex items-center justify-center min-w-[44px] min-h-[44px] -my-1 rounded text-surface-400 hover:text-primary-400 hover:bg-surface-700/50 transition-colors disabled:opacity-30"
+          title="Repeat last set"
+          aria-label="Repeat last set"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+      )}
+
+      {/* Check button - >=44px tap target */}
+      <div className="flex justify-center">
         <Button
           onClick={handleProceed}
           disabled={disabled || !reps || parseInt(reps) < 1}
           size="sm"
-          className="w-8 h-8 p-0"
+          className="min-w-[44px] min-h-[44px] -my-1 p-0"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </Button>

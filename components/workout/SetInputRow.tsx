@@ -4,7 +4,7 @@ import { useState, memo } from 'react';
 import { Button, InfoTooltip } from '@/components/ui';
 import { SetFeedbackCard } from './SetFeedbackCard';
 import type { SetLog, WeightUnit, SetFeedback } from '@/types/schema';
-import { formatWeightValue, inputWeightToKg } from '@/lib/utils';
+import { formatWeightValue, convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 
 interface SetInputRowProps {
   setNumber: number;
@@ -38,11 +38,15 @@ export const SetInputRow = memo(function SetInputRow({
   disabled = false,
   unit = 'kg',
 }: SetInputRowProps) {
-  // Convert from kg to display unit
-  const displayWeight = (kg: number) => formatWeightValue(kg, unit);
-  const initialWeight = previousSet?.weightKg ?? targetWeight;
+  // Convert from kg to display unit.
+  // Seeding an EXISTING logged value (previousSet.weightKg) must preserve the user's
+  // exact input — use convertWeightForDisplay. Only the target/suggestion path rounds
+  // to plate increments via formatWeightValue.
+  const seedWeight = previousSet?.weightKg !== undefined
+    ? convertWeightForDisplay(previousSet.weightKg, unit)
+    : formatWeightValue(targetWeight, unit);
 
-  const [weight, setWeight] = useState(String(displayWeight(initialWeight)));
+  const [weight, setWeight] = useState(String(seedWeight));
   const [reps, setReps] = useState(String(previousSet?.reps ?? targetRepRange[1]));
   const [note, setNote] = useState('');
   const [showNote, setShowNote] = useState(false);
@@ -144,6 +148,7 @@ export const SetInputRow = memo(function SetInputRow({
           <input
             id={weightInputId}
             type="number"
+            inputMode="decimal"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             disabled={disabled}
@@ -160,6 +165,8 @@ export const SetInputRow = memo(function SetInputRow({
           <input
             id={repsInputId}
             type="number"
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={reps}
             onChange={(e) => setReps(e.target.value)}
             disabled={disabled}

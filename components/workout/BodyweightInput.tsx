@@ -12,7 +12,7 @@ import {
   calculateEffectiveLoad,
   getBandAssistanceKg,
 } from '@/types/schema';
-import { formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
+import { formatWeightValue, convertWeightForDisplay, inputWeightToKg, convertWeight } from '@/lib/utils';
 
 interface BodyweightInputProps {
   /** User's current body weight in kg */
@@ -47,11 +47,13 @@ export function BodyweightInput({
   const [modification, setModification] = useState<BodyweightModification>(
     value?.modification || 'none'
   );
+  // Seed existing modification weights exactly (convertWeightForDisplay) so editing a set
+  // doesn't silently round the user's input to plate increments.
   const [addedWeight, setAddedWeight] = useState(
-    value?.addedWeightKg ? formatWeightValue(value.addedWeightKg, unit).toString() : ''
+    value?.addedWeightKg ? convertWeightForDisplay(value.addedWeightKg, unit).toString() : ''
   );
   const [assistanceWeight, setAssistanceWeight] = useState(
-    value?.assistanceWeightKg ? formatWeightValue(value.assistanceWeightKg, unit).toString() : ''
+    value?.assistanceWeightKg ? convertWeightForDisplay(value.assistanceWeightKg, unit).toString() : ''
   );
   const [assistanceType, setAssistanceType] = useState<'machine' | 'band' | 'partner'>(
     value?.assistanceType || 'machine'
@@ -160,6 +162,7 @@ export function BodyweightInput({
             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-surface-500 text-xs">+</span>
             <input
               type="number"
+              inputMode="decimal"
               value={addedWeight}
               onChange={(e) => setAddedWeight(e.target.value)}
               disabled={disabled}
@@ -199,6 +202,7 @@ export function BodyweightInput({
               </label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={assistanceWeight}
                 onChange={(e) => setAssistanceWeight(e.target.value)}
                 disabled={disabled}
