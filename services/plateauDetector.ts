@@ -11,6 +11,7 @@ import type {
   ExerciseTrend,
   PlateauAlert,
 } from '@/types/schema';
+import { estimateE1RM } from '@/lib/utils';
 
 // ============================================
 // CONSTANTS
@@ -38,15 +39,9 @@ export function calculateE1RM(
   reps: number,
   rpe: number = 10
 ): number {
-  if (reps === 0 || weight === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Calculate RIR and add to reps for effective reps
+  // Delegate to the canonical estimator (Epley + RIR, with rep clamping).
   const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
+  return estimateE1RM(weight, reps, rir);
 }
 
 /**
@@ -138,7 +133,11 @@ function calculateWeeklyChange(
   const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
   const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
 
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  // Guard against a zero denominator (e.g. all points share the same x / week).
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return 0;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
 
   return Math.round(slope * 100) / 100;
 }
@@ -155,6 +154,12 @@ function checkForPlateau(
   const recentPoints = dataPoints.slice(-MIN_WEEKS_FOR_ANALYSIS);
   const firstE1RM = recentPoints[0].e1rm;
   const lastE1RM = recentPoints[recentPoints.length - 1].e1rm;
+
+  // Guard against a zero (or invalid) baseline to avoid divide-by-zero.
+  if (firstE1RM <= 0) {
+    // No meaningful baseline: treat any positive improvement as not plateaued.
+    return lastE1RM <= 0;
+  }
 
   // Calculate percent change
   const percentChange = (lastE1RM - firstE1RM) / firstE1RM;

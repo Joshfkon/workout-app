@@ -14,6 +14,8 @@ import {
   roundToPlateIncrement,
   rirToRpe,
   rpeToRir,
+  rirToRpeLinear,
+  rpeToRirLinear,
   generateId,
   clamp,
   percentage,
@@ -94,44 +96,43 @@ describe('Date Utilities', () => {
 });
 
 describe('RPE/RIR Conversion', () => {
-  describe('rirToRpe', () => {
-    it('converts RIR to RPE correctly', () => {
+  // Canonical mapping is the non-linear / discrete one from types/schema.ts,
+  // re-exported by lib/utils. RIR 2 -> RPE 7.5 (not 8). The continuous 1:1
+  // mapping is preserved separately as rirToRpeLinear / rpeToRirLinear.
+  describe('rirToRpe (canonical, non-linear)', () => {
+    it('converts RIR to RPE using the discrete training mapping', () => {
       expect(rirToRpe(0)).toBe(10);
       expect(rirToRpe(1)).toBe(9);
-      expect(rirToRpe(2)).toBe(8);
-      expect(rirToRpe(3)).toBe(7);
+      expect(rirToRpe(2)).toBe(7.5);
+      expect(rirToRpe(3)).toBe(7); // default 10 - rir
       expect(rirToRpe(4)).toBe(6);
-      expect(rirToRpe(5)).toBe(5);
-    });
-
-    it('handles decimal RIR values', () => {
-      expect(rirToRpe(1.5)).toBe(8.5);
-      expect(rirToRpe(0.5)).toBe(9.5);
+      expect(rirToRpe(5)).toBe(5); // default 10 - rir
     });
   });
 
-  describe('rpeToRir', () => {
-    it('converts RPE to RIR correctly', () => {
+  describe('rpeToRir (canonical, bucketed)', () => {
+    it('converts RPE to RIR using the discrete training buckets', () => {
       expect(rpeToRir(10)).toBe(0);
       expect(rpeToRir(9)).toBe(1);
       expect(rpeToRir(8)).toBe(2);
-      expect(rpeToRir(7)).toBe(3);
+      expect(rpeToRir(7)).toBe(2); // <= 8 bucket
       expect(rpeToRir(6)).toBe(4);
-    });
-
-    it('handles decimal RPE values', () => {
-      expect(rpeToRir(8.5)).toBe(1.5);
-      expect(rpeToRir(7.5)).toBe(2.5);
     });
   });
 
-  describe('round trip conversion', () => {
-    it('rirToRpe and rpeToRir are inverses', () => {
+  describe('linear variants', () => {
+    it('rirToRpeLinear is a continuous 10 - rir mapping', () => {
+      expect(rirToRpeLinear(0)).toBe(10);
+      expect(rirToRpeLinear(2)).toBe(8);
+      expect(rirToRpeLinear(1.5)).toBe(8.5);
+      expect(rirToRpeLinear(0.5)).toBe(9.5);
+    });
+
+    it('rpeToRirLinear is the inverse of rirToRpeLinear', () => {
+      expect(rpeToRirLinear(8)).toBe(2);
+      expect(rpeToRirLinear(8.5)).toBe(1.5);
       for (let rir = 0; rir <= 5; rir++) {
-        expect(rpeToRir(rirToRpe(rir))).toBe(rir);
-      }
-      for (let rpe = 5; rpe <= 10; rpe++) {
-        expect(rirToRpe(rpeToRir(rpe))).toBe(rpe);
+        expect(rpeToRirLinear(rirToRpeLinear(rir))).toBe(rir);
       }
     });
   });

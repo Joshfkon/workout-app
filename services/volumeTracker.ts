@@ -17,6 +17,57 @@ import type {
 import { MUSCLE_GROUPS, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 
 // ============================================
+// CONSTANTS / HELPERS
+// ============================================
+
+/** Fractional set credit given to a secondary (indirect) muscle per working set. */
+export const SECONDARY_MUSCLE_CREDIT = 0.5;
+
+/**
+ * Map of common muscle-name synonyms/variants to their canonical MUSCLE_GROUPS key.
+ * Keys are already lowercased/trimmed.
+ */
+const MUSCLE_SYNONYMS: Record<string, MuscleGroup> = {
+  quadriceps: 'quads',
+  quad: 'quads',
+  hamstring: 'hamstrings',
+  hams: 'hamstrings',
+  glute: 'glutes',
+  bicep: 'biceps',
+  tricep: 'triceps',
+  calf: 'calves',
+  ab: 'abs',
+  core: 'abs',
+  abdominals: 'abs',
+  delts: 'shoulders',
+  delt: 'shoulders',
+  deltoids: 'shoulders',
+  shoulder: 'shoulders',
+  trap: 'traps',
+  trapezius: 'traps',
+  lats: 'back',
+  lat: 'back',
+  forearm: 'forearms',
+  adductor: 'adductors',
+  pecs: 'chest',
+  pec: 'chest',
+};
+
+/**
+ * Normalize a raw muscle name to a canonical MUSCLE_GROUPS key.
+ * Handles case + whitespace and a small set of obvious synonyms.
+ * Returns null if no canonical match is found.
+ */
+export function normalizeMuscleName(raw: string): MuscleGroup | null {
+  if (!raw) return null;
+  const key = raw.trim().toLowerCase();
+  if ((MUSCLE_GROUPS as readonly string[]).includes(key)) {
+    return key as MuscleGroup;
+  }
+  return MUSCLE_SYNONYMS[key] ?? null;
+}
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -80,6 +131,11 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, 
     });
   });
 
+  // Accumulate fractional indirect credit per muscle so we only floor ONCE,
+  // at finalization. Flooring per-exercise (the old Math.round(setCount*0.5))
+  // both lost fractional sets and was inconsistent with mesocycleBuilder.
+  const fractionalIndirect = new Map<string, number>();
+
   // Count sets per muscle group
   for (const { exercise, completedSets } of exerciseBlocks) {
     const workingSets = completedSets.filter((s) => !s.isWarmup);
@@ -88,24 +144,40 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<string, 
     if (setCount === 0) continue;
 
     // Primary muscle: full set credit
-    const primaryMuscle = exercise.primaryMuscle.toLowerCase();
-    if (volumeMap.has(primaryMuscle)) {
+    const primaryMuscle = normalizeMuscleName(exercise.primaryMuscle);
+    if (primaryMuscle && volumeMap.has(primaryMuscle)) {
       const data = volumeMap.get(primaryMuscle)!;
       data.directSets += setCount;
       data.totalSets += setCount;
+    } else if (process.env.NODE_ENV !== 'production') {
+      // A primary muscle that doesn't map to a canonical group silently drops
+      // volume; surface it in dev so the exercise data can be corrected.
+      console.warn(
+        `[volumeTracker] Unmatched primary muscle "${exercise.primaryMuscle}" - volume not counted`
+      );
     }
 
-    // Secondary muscles: partial set credit (typically 0.5)
+    // Secondary muscles: partial set credit (0.5 per set), accumulated.
     for (const secondary of exercise.secondaryMuscles) {
-      const secondaryMuscle = secondary.toLowerCase();
-      if (volumeMap.has(secondaryMuscle)) {
-        const data = volumeMap.get(secondaryMuscle)!;
-        const indirectCredit = Math.round(setCount * 0.5);
-        data.indirectSets += indirectCredit;
-        data.totalSets += indirectCredit;
+      const secondaryMuscle = normalizeMuscleName(secondary);
+      if (secondaryMuscle && volumeMap.has(secondaryMuscle)) {
+        fractionalIndirect.set(
+          secondaryMuscle,
+          (fractionalIndirect.get(secondaryMuscle) ?? 0) + setCount * SECONDARY_MUSCLE_CREDIT
+        );
       }
     }
   }
+
+  // Finalize: floor accumulated indirect credit once per muscle (shared FLOOR
+  // convention with mesocycleBuilder).
+  fractionalIndirect.forEach((credit, muscle) => {
+    const data = volumeMap.get(muscle);
+    if (!data) return;
+    const indirectCredit = Math.floor(credit);
+    data.indirectSets += indirectCredit;
+    data.totalSets += indirectCredit;
+  });
 
   // Calculate status for each muscle group
   volumeMap.forEach((data, muscle) => {
@@ -392,7 +464,8 @@ export function getVolumeSummary(volumeData: Map<string, MuscleVolumeData>): {
     musclesBelowMev,
     musclesOptimal,
     musclesOverMrv,
-    averagePercentMrv: Math.round(totalPercentMrv / volumeData.size),
+    // Guard against an empty map (divide-by-zero -> NaN).
+    averagePercentMrv: volumeData.size === 0 ? 0 : Math.round(totalPercentMrv / volumeData.size),
   };
 }
 

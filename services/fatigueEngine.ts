@@ -344,6 +344,16 @@ export function forecastWeeklyFatigue(
   projectedFatigue: number;
   recommendation: string;
 } {
+  // Guard against zero/negative planned sessions (no training -> just recover).
+  if (plannedSessions <= 0) {
+    const recovered = Math.max(0, currentFatigue - 7 * FATIGUE_RECOVERY_RATE);
+    return {
+      projectedFatigue: Math.round(recovered),
+      recommendation:
+        'No sessions planned: expect full recovery and fresh capacity next week',
+    };
+  }
+
   // Simulate week with evenly spaced sessions
   const daysPerSession = Math.floor(7 / plannedSessions);
   let fatigue = currentFatigue;

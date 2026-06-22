@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
-import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from '@/services/volumeTracker';
-import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
+import { type MuscleVolumeData } from '@/services/volumeTracker';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
 import { MUSCLE_GROUPS } from '@/types/schema';
+import { getLocalDateString } from '@/lib/utils';
 
 interface UseWeeklyVolumeOptions {
   weekStart?: string; // YYYY-MM-DD, defaults to current week
@@ -19,14 +19,14 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
   const { user, getVolumeLandmarks } = useUserStore();
 
-  // Calculate week start (Monday)
+  // Calculate week start (Monday) in LOCAL timezone (do not mutate `now`).
   const weekStart = useMemo(() => {
     if (options.weekStart) return options.weekStart;
     const now = new Date();
     const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(now.setDate(diff));
-    return monday.toISOString().split('T')[0];
+    const diff = day === 0 ? -6 : 1 - day; // days to shift back to Monday
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+    return getLocalDateString(monday);
   }, [options.weekStart]);
 
   const fetchVolume = useCallback(async () => {

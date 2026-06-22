@@ -845,6 +845,9 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<string, VolumeL
     glutes: { mev: 4, mav: 10, mrv: 16 },
     calves: { mev: 6, mav: 12, mrv: 18 },
     abs: { mev: 4, mav: 10, mrv: 16 },
+    adductors: { mev: 4, mav: 10, mrv: 14 },
+    forearms: { mev: 4, mav: 8, mrv: 12 },
+    traps: { mev: 4, mav: 10, mrv: 16 },
   },
   intermediate: {
     chest: { mev: 8, mav: 14, mrv: 20 },
@@ -857,6 +860,9 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<string, VolumeL
     glutes: { mev: 6, mav: 12, mrv: 20 },
     calves: { mev: 8, mav: 14, mrv: 22 },
     abs: { mev: 6, mav: 12, mrv: 20 },
+    adductors: { mev: 6, mav: 12, mrv: 18 },
+    forearms: { mev: 6, mav: 10, mrv: 16 },
+    traps: { mev: 6, mav: 12, mrv: 20 },
   },
   advanced: {
     chest: { mev: 10, mav: 18, mrv: 26 },
@@ -869,6 +875,9 @@ export const DEFAULT_VOLUME_LANDMARKS: Record<Experience, Record<string, VolumeL
     glutes: { mev: 8, mav: 16, mrv: 24 },
     calves: { mev: 10, mav: 18, mrv: 26 },
     abs: { mev: 8, mav: 16, mrv: 24 },
+    adductors: { mev: 8, mav: 14, mrv: 22 },
+    forearms: { mev: 8, mav: 14, mrv: 20 },
+    traps: { mev: 8, mav: 16, mrv: 24 },
   },
 };
 

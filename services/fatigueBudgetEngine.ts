@@ -20,6 +20,7 @@ import type {
   MuscleRecoveryStatus,
   WeeklyMuscleVolumeStatus,
 } from '@/types/schema';
+import { MUSCLE_GROUPS } from '@/types/schema';
 import { MUSCLE_FIBER_PROFILE } from './repRangeEngine';
 
 // ============================================================
@@ -419,12 +420,11 @@ export class WeeklyFatigueTracker {
       cumulativeSystemicFatigue: 0,
     };
     
-    // Initialize all muscles
-    const allMuscles: MuscleGroup[] = [
-      'chest', 'back', 'shoulders', 'biceps', 'triceps',
-      'quads', 'hamstrings', 'glutes', 'calves', 'abs',
-    ];
-    
+    // Initialize all muscles from the canonical list so every muscle group
+    // (including traps/forearms/adductors) has an entry. Using a partial list
+    // here left later `.get(muscle)!` lookups returning undefined -> crash.
+    const allMuscles: readonly MuscleGroup[] = MUSCLE_GROUPS;
+
     for (const muscle of allMuscles) {
       this.state.muscleRecoveryStatus.set(muscle, {
         lastTrainedDay: -7,  // Assume fully recovered at start

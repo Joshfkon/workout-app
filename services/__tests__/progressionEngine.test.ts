@@ -31,6 +31,7 @@ import type {
   PRCriteria,
   SessionFormHistory,
 } from '@/types/schema';
+import { roundToIncrement } from '@/lib/utils';
 
 // ============================================
 // TEST FIXTURES
@@ -111,6 +112,15 @@ describe('getPeriodizationPhase', () => {
     expect(getPeriodizationPhase(3, 8, 'block')).toBe('hypertrophy');
     expect(getPeriodizationPhase(5, 8, 'block')).toBe('strength');
     expect(getPeriodizationPhase(7, 8, 'block')).toBe('peaking'); // Last blocks are peaking
+  });
+
+  it('guards against non-positive total weeks', () => {
+    expect(getPeriodizationPhase(1, 0)).toBe('deload');
+    expect(getPeriodizationPhase(1, -3)).toBe('deload');
+  });
+
+  it('treats weeks beyond the mesocycle as deload', () => {
+    expect(getPeriodizationPhase(7, 6)).toBe('deload');
   });
 });
 
@@ -387,6 +397,30 @@ describe('calculateE1RM', () => {
     const result = calculateE1RM(50, 20, 10);
     expect(result).toBeGreaterThan(50);
   });
+
+  it('clamps effective reps to a sane ceiling (12) to avoid inflation', () => {
+    // 20 effective reps would give 100*(1+20/30)=166.7 without clamping.
+    // Clamped to 12: 100*(1+12/30)=140.
+    expect(calculateE1RM(100, 20, 10)).toBeCloseTo(140, 1);
+    // 15 reps at 0 RIR also clamps to 12.
+    expect(calculateE1RM(100, 15, 10)).toBeCloseTo(140, 1);
+  });
+});
+
+describe('roundToIncrement (bodyweight zero-increment guard)', () => {
+  it('returns the value unchanged when increment is 0 (no NaN)', () => {
+    // Bodyweight equipment has a 0 min increment -> previously divided by zero.
+    expect(roundToIncrement(72.5, 0)).toBe(72.5);
+    expect(Number.isNaN(roundToIncrement(72.5, 0))).toBe(false);
+  });
+
+  it('returns the value unchanged for negative increments', () => {
+    expect(roundToIncrement(50, -2.5)).toBe(50);
+  });
+
+  it('still rounds normally for a positive increment', () => {
+    expect(roundToIncrement(101, 2.5)).toBe(100);
+  });
 });
 
 describe('calculateBodyweightE1RM', () => {
@@ -614,6 +648,39 @@ describe('extractPerformanceFromSets', () => {
     expect(result!.weightKg).toBe(100);
     expect(result!.reps).toBe(6);
   });
+
+  it('reports allSetsCompleted=false when target is unknown', () => {
+    const sets = [createMockSetLog({}), createMockSetLog({})];
+    const result = extractPerformanceFromSets(sets, 'test');
+    expect(result!.allSetsCompleted).toBe(false);
+  });
+
+  it('reports allSetsCompleted based on target set count', () => {
+    const sets = [createMockSetLog({}), createMockSetLog({}), createMockSetLog({})];
+
+    expect(extractPerformanceFromSets(sets, 'test', 3)!.allSetsCompleted).toBe(true);
+    expect(extractPerformanceFromSets(sets, 'test', 4)!.allSetsCompleted).toBe(false);
+    // Did more than target -> still counts as completed.
+    expect(extractPerformanceFromSets(sets, 'test', 2)!.allSetsCompleted).toBe(true);
+  });
+
+  it('preserves a legitimate 0 effective load for bodyweight sets', () => {
+    const sets = [
+      createMockSetLog({
+        weightKg: 50, // would wrongly be used if `||` dropped the 0
+        reps: 10,
+        rpe: 8,
+        bodyweightData: {
+          modification: 'assisted',
+          userBodyweightKg: 80,
+          effectiveLoadKg: 0,
+        } as SetLog['bodyweightData'],
+      }),
+    ];
+
+    const result = extractPerformanceFromSets(sets, 'pullup');
+    expect(result!.weightKg).toBe(0);
+  });
 });
 
 // ============================================
@@ -686,6 +753,15 @@ describe('checkForPR', () => {
     const result = checkForPR(current, previous);
     expect(result.isPR).toBe(true);
     expect(result.type).toBe('form');
+  });
+
+  it('does not award a weight PR on an E1RM regression', () => {
+    // Heavier weight but far fewer reps -> lower estimated 1RM.
+    const previous: PRCriteria = { weight: 100, reps: 12, repsInTank: 2, form: 'clean' };
+    const current: PRCriteria = { weight: 110, reps: 1, repsInTank: 2, form: 'clean' };
+
+    const result = checkForPR(current, previous);
+    expect(result.isPR).toBe(false);
   });
 });
 

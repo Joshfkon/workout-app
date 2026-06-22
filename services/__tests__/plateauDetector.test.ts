@@ -51,9 +51,15 @@ describe('calculateE1RM (Epley formula)', () => {
   });
 
   it('handles high rep sets', () => {
-    // 50kg x 20 reps @ RPE 10
-    // 50 * (1 + 20/30) = 50 * 1.667 = 83.33
-    expect(calculateE1RM(50, 20, 10)).toBeCloseTo(83.33, 1);
+    // 50kg x 20 reps @ RPE 10. Effective reps are clamped to 12 to avoid
+    // high-rep inflation: 50 * (1 + 12/30) = 50 * 1.4 = 70.
+    expect(calculateE1RM(50, 20, 10)).toBeCloseTo(70, 1);
+  });
+
+  it('clamps effective reps to a ceiling (12)', () => {
+    // 15 reps and 20 reps both clamp to 12 -> identical estimate.
+    expect(calculateE1RM(100, 15, 10)).toBeCloseTo(calculateE1RM(100, 20, 10), 5);
+    expect(calculateE1RM(100, 20, 10)).toBeCloseTo(140, 1);
   });
 });
 
@@ -142,6 +148,33 @@ describe('analyzeExerciseTrend', () => {
 
     const result = analyzeExerciseTrend(snapshots);
     expect(result.exerciseId).toBe('bench-press');
+  });
+
+  it('does not produce NaN when all data points share the same date (zero denominator)', () => {
+    const snapshots: ExercisePerformanceSnapshot[] = [
+      createSnapshot('2024-01-01', 100),
+      createSnapshot('2024-01-01', 105),
+      createSnapshot('2024-01-01', 110),
+      createSnapshot('2024-01-01', 115),
+    ];
+
+    const result = analyzeExerciseTrend(snapshots);
+    expect(Number.isNaN(result.weeklyChange)).toBe(false);
+    expect(result.weeklyChange).toBe(0);
+  });
+
+  it('does not divide by zero when the baseline E1RM is zero', () => {
+    const snapshots: ExercisePerformanceSnapshot[] = [
+      createSnapshot('2024-01-01', 0),
+      createSnapshot('2024-01-08', 0),
+      createSnapshot('2024-01-15', 0),
+      createSnapshot('2024-01-22', 0),
+    ];
+
+    const result = analyzeExerciseTrend(snapshots);
+    expect(Number.isNaN(result.weeklyChange)).toBe(false);
+    // Zero baseline + zero progress => treated as plateaued, not NaN.
+    expect(result.isPlateaued).toBe(true);
   });
 });
 

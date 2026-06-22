@@ -18,7 +18,7 @@ import type {
   MovementPattern,
   Equipment,
 } from '@/types/schema';
-import { roundToIncrement } from '@/lib/utils';
+import { roundToIncrement, estimateE1RM } from '@/lib/utils';
 
 // ============================================
 // TYPE ADAPTERS
@@ -149,10 +149,14 @@ export function getPeriodizationPhase(
   totalWeeks: number,
   model: 'linear' | 'daily_undulating' | 'weekly_undulating' | 'block' = 'linear'
 ): PeriodizationPhase {
+  // Guard against a non-positive mesocycle length (avoids divide-by-zero /
+  // NaN progress). Treat it as the deload/terminal phase.
+  if (totalWeeks <= 0) return 'deload';
+
   const progress = weekInMeso / totalWeeks;
-  
-  // Deload is always the last week
-  if (weekInMeso === totalWeeks) return 'deload';
+
+  // Deload is always the last week (or beyond, defensively)
+  if (weekInMeso >= totalWeeks) return 'deload';
   
   if (model === 'block') {
     if (progress < 0.5) return 'hypertrophy';
@@ -934,15 +938,9 @@ function getRestSecondsForMechanic(mechanic: 'compound' | 'isolation'): number {
  * Calculate estimated 1 rep max using Epley formula
  */
 export function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 0) return 0;
-  if (reps === 1 && rpe === 10) return weight;
-
-  // Adjust reps for RIR
+  // Delegate to the canonical estimator (Epley + RIR, with rep clamping).
   const rir = 10 - rpe;
-  const effectiveReps = reps + rir;
-
-  // Epley formula: weight * (1 + reps/30)
-  return Math.round(weight * (1 + effectiveReps / 30) * 100) / 100;
+  return estimateE1RM(weight, reps, rir);
 }
 
 /**
@@ -951,7 +949,7 @@ export function calculateE1RM(weight: number, reps: number, rpe: number = 10): n
  */
 export function calculateBodyweightE1RM(set: SetLog): number {
   // Use effective load if available, otherwise fall back to weightKg
-  const effectiveLoad = set.bodyweightData?.effectiveLoadKg || set.weightKg;
+  const effectiveLoad = set.bodyweightData?.effectiveLoadKg ?? set.weightKg;
   const reps = set.reps;
   const rpe = set.rpe;
 
@@ -975,7 +973,8 @@ export function calculateRelativeStrength(set: SetLog): number {
  */
 export function extractPerformanceFromSets(
   sets: SetLog[],
-  exerciseId: string
+  exerciseId: string,
+  targetSets?: number
 ): LastSessionPerformance | null {
   const workingSets = sets.filter((s) => !s.isWarmup);
 
@@ -984,8 +983,8 @@ export function extractPerformanceFromSets(
   // Get top set based on effective load for bodyweight exercises
   const topSet = workingSets.reduce((best, current) => {
     // Use effective load if available (bodyweight exercises), otherwise weight
-    const currentLoad = current.bodyweightData?.effectiveLoadKg || current.weightKg;
-    const bestLoad = best.bodyweightData?.effectiveLoadKg || best.weightKg;
+    const currentLoad = current.bodyweightData?.effectiveLoadKg ?? current.weightKg;
+    const bestLoad = best.bodyweightData?.effectiveLoadKg ?? best.weightKg;
 
     if (currentLoad > bestLoad) return current;
     if (currentLoad === bestLoad && current.reps > best.reps) return current;
@@ -996,7 +995,13 @@ export function extractPerformanceFromSets(
     workingSets.reduce((sum, s) => sum + s.rpe, 0) / workingSets.length;
 
   // Use effective load for bodyweight exercises
-  const weightKg = topSet.bodyweightData?.effectiveLoadKg || topSet.weightKg;
+  const weightKg = topSet.bodyweightData?.effectiveLoadKg ?? topSet.weightKg;
+
+  // Only claim all sets completed when we know the target and met it.
+  // When the target is unknown, stay conservative (false) rather than
+  // assuming completion.
+  const allSetsCompleted =
+    targetSets !== undefined ? workingSets.length >= targetSets : false;
 
   return {
     exerciseId,
@@ -1004,7 +1009,7 @@ export function extractPerformanceFromSets(
     reps: topSet.reps,
     rpe: topSet.rpe,
     sets: workingSets.length,
-    allSetsCompleted: true, // Would need target to verify
+    allSetsCompleted,
     averageRpe: Math.round(averageRpe * 10) / 10,
   };
 }
@@ -1015,7 +1020,8 @@ export function extractPerformanceFromSets(
  */
 export function extractBodyweightPerformance(
   sets: SetLog[],
-  exerciseId: string
+  exerciseId: string,
+  targetSets?: number
 ): {
   performance: LastSessionPerformance | null;
   bodyweightData: {
@@ -1026,7 +1032,7 @@ export function extractBodyweightPerformance(
     effectiveLoadKg: number;
   } | null;
 } {
-  const performance = extractPerformanceFromSets(sets, exerciseId);
+  const performance = extractPerformanceFromSets(sets, exerciseId, targetSets);
 
   const workingSets = sets.filter((s) => !s.isWarmup && s.bodyweightData);
   if (workingSets.length === 0) {
@@ -1163,8 +1169,14 @@ export function checkForPR(
     };
   }
 
-  // Weight PR (heavier weight even with fewer reps)
-  if (current.weight > previousPR.weight && current.reps >= previousPR.reps * 0.7) {
+  // Weight PR (heavier weight even with fewer reps).
+  // Require the estimated 1RM not to regress, otherwise a much heavier single
+  // at far fewer reps would falsely register as a PR over a strong rep set.
+  if (
+    current.weight > previousPR.weight &&
+    current.reps >= previousPR.reps * 0.7 &&
+    currentE1RM >= previousE1RM
+  ) {
     const improvement = (current.weight - previousPR.weight) / previousPR.weight;
     return {
       isPR: true,

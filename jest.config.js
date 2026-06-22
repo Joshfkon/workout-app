@@ -16,6 +16,9 @@ const customJestConfig = {
     '**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)',
     '**/*.(test|spec).(ts|tsx|js|jsx)',
   ],
+  // Ignore git worktrees (.claude/worktrees/*) which contain full duplicate
+  // copies of the repo and otherwise double/triple-count every test.
+  testPathIgnorePatterns: ['/node_modules/', '/.claude/worktrees/'],
   collectCoverageFrom: [
     'lib/utils.ts',
     'lib/nutrition/**/*.ts',

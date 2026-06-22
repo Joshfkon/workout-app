@@ -511,6 +511,18 @@ describe('forecastWeeklyFatigue', () => {
     // Should end up in 70-85 range
     expect(result.recommendation).toMatch(/reducing|maintain/i);
   });
+
+  it('guards against zero planned sessions (recovers instead of dividing by zero)', () => {
+    const result = forecastWeeklyFatigue(40, 0, 7.5);
+    expect(Number.isNaN(result.projectedFatigue)).toBe(false);
+    expect(result.projectedFatigue).toBeLessThanOrEqual(40);
+    expect(result.recommendation).toBeTruthy();
+  });
+
+  it('guards against negative planned sessions', () => {
+    const result = forecastWeeklyFatigue(40, -2, 7.5);
+    expect(Number.isNaN(result.projectedFatigue)).toBe(false);
+  });
 });
 
 // ============================================
