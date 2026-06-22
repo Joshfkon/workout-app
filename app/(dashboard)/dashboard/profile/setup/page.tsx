@@ -14,6 +14,7 @@ import {
 } from '@/lib/social';
 import { debounce } from '@/lib/utils';
 import type { TrainingExperience } from '@/types/social';
+import type { Database } from '@/types/database';
 
 export default function ProfileSetupPage() {
   const router = useRouter();
@@ -150,8 +151,10 @@ export default function ProfileSetupPage() {
       return;
     }
 
-    // @ts-expect-error - user_profiles table not in generated types yet
-    const { error } = await supabase.from('user_profiles').insert({
+    // Payload typed against the generated table type; `as never` works around
+    // the @supabase/ssr / @supabase/supabase-js generic skew that collapses
+    // write builders to `never` (not a missing-type workaround).
+    const insert: Database['public']['Tables']['user_profiles']['Insert'] = {
       user_id: user.id,
       username: normalizeUsername(username),
       display_name: displayName.trim() || null,
@@ -161,7 +164,8 @@ export default function ProfileSetupPage() {
       profile_visibility: 'public',
       show_workouts: true,
       show_stats: true,
-    });
+    };
+    const { error } = await supabase.from('user_profiles').insert(insert as never);
 
     if (error) {
       if (error.code === '23505') {

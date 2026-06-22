@@ -10,6 +10,9 @@ export type Json =
   | Json[];
 
 export interface Database {
+  __InternalSupabase: {
+    PostgrestVersion: '12';
+  };
   public: {
     Tables: {
       users: {
@@ -40,6 +43,7 @@ export interface Database {
           preferences?: Json;
           volume_landmarks?: Json;
         };
+        Relationships: [];
       };
       bodyweight_entries: {
         Row: {
@@ -63,6 +67,7 @@ export interface Database {
           weight_kg?: number;
           source?: 'manual' | 'pre_workout';
         };
+        Relationships: [];
       };
       exercises: {
         Row: {
@@ -119,6 +124,7 @@ export interface Database {
           demo_thumbnail_url?: string | null;
           youtube_video_id?: string | null;
         };
+        Relationships: [];
       };
       mesocycles: {
         Row: {
@@ -166,6 +172,7 @@ export interface Database {
           started_at?: string | null;
           completed_at?: string | null;
         };
+        Relationships: [];
       };
       workout_sessions: {
         Row: {
@@ -210,6 +217,7 @@ export interface Database {
           session_notes?: string | null;
           completion_percent?: number;
         };
+        Relationships: [];
       };
       exercise_blocks: {
         Row: {
@@ -269,6 +277,7 @@ export interface Database {
           dropsets_per_set?: number;
           drop_percentage?: number;
         };
+        Relationships: [];
       };
       set_logs: {
         Row: {
@@ -319,6 +328,7 @@ export interface Database {
           note?: string | null;
           logged_at?: string;
         };
+        Relationships: [];
       };
       exercise_performance_snapshots: {
         Row: {
@@ -354,6 +364,7 @@ export interface Database {
           total_working_sets?: number;
           estimated_e1rm?: number;
         };
+        Relationships: [];
       };
       weekly_muscle_volume: {
         Row: {
@@ -377,6 +388,7 @@ export interface Database {
           total_sets?: number;
           status?: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
         };
+        Relationships: [];
       };
       plateau_alerts: {
         Row: {
@@ -406,6 +418,136 @@ export interface Database {
           suggested_actions?: string[];
           dismissed?: boolean;
         };
+        Relationships: [];
+      };
+      ai_coaching_conversations: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string | null;
+          started_at: string;
+          last_message_at: string;
+          messages: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title?: string | null;
+          started_at?: string;
+          last_message_at?: string;
+          messages?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string | null;
+          started_at?: string;
+          last_message_at?: string;
+          messages?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      ai_exercise_completions: {
+        Row: {
+          id: string;
+          user_id: string;
+          exercise_name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          exercise_name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          exercise_name?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      user_profiles: {
+        Row: {
+          id: string;
+          user_id: string;
+          username: string;
+          display_name: string | null;
+          avatar_url: string | null;
+          bio: string | null;
+          profile_visibility: 'public' | 'followers_only' | 'private';
+          show_workouts: boolean;
+          show_stats: boolean;
+          show_progress_photos: boolean;
+          follower_count: number;
+          following_count: number;
+          workout_count: number;
+          total_volume_kg: number;
+          badges: Json;
+          featured_achievement: string | null;
+          training_experience: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal: string | null;
+          gym_name: string | null;
+          show_on_leaderboards: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          username: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          profile_visibility?: 'public' | 'followers_only' | 'private';
+          show_workouts?: boolean;
+          show_stats?: boolean;
+          show_progress_photos?: boolean;
+          follower_count?: number;
+          following_count?: number;
+          workout_count?: number;
+          total_volume_kg?: number;
+          badges?: Json;
+          featured_achievement?: string | null;
+          training_experience?: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal?: string | null;
+          gym_name?: string | null;
+          show_on_leaderboards?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          username?: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+          bio?: string | null;
+          profile_visibility?: 'public' | 'followers_only' | 'private';
+          show_workouts?: boolean;
+          show_stats?: boolean;
+          show_progress_photos?: boolean;
+          follower_count?: number;
+          following_count?: number;
+          workout_count?: number;
+          total_volume_kg?: number;
+          badges?: Json;
+          featured_achievement?: string | null;
+          training_experience?: 'beginner' | 'intermediate' | 'advanced' | 'elite' | null;
+          primary_goal?: string | null;
+          gym_name?: string | null;
+          show_on_leaderboards?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
     };
     Views: {
