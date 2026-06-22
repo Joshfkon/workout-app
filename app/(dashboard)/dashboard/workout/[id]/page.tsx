@@ -42,13 +42,11 @@ import {
   type InjuryArea,
   type InjuryContext,
 } from '@/services/injuryAwareSwapper';
-import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
 import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
-import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
 
 import type {
@@ -63,6 +61,16 @@ import type {
 import { getExerciseInjuryRisk } from './_lib/injuryRisk';
 import { calculateE1RM, generateCoachMessage } from './_lib/coachMessage';
 import { CoachMessageCard } from './_components/CoachMessageCard';
+import { AutoAdjustMessage } from './_components/AutoAdjustMessage';
+import { WorkoutErrorAlert } from './_components/WorkoutErrorAlert';
+import { UndoSetDeleteSnackbar } from './_components/UndoSetDeleteSnackbar';
+import { CalibrationResultOverlay } from './_components/CalibrationResultOverlay';
+import { FloatingDragPreview } from './_components/FloatingDragPreview';
+import { CancelWorkoutModal } from './_components/CancelWorkoutModal';
+import { CustomExerciseModal } from './_components/CustomExerciseModal';
+import { InjuryReportModal } from './_components/InjuryReportModal';
+import { PageLevelSwapModal } from './_components/PageLevelSwapModal';
+import { AddExerciseModal } from './_components/AddExerciseModal';
 
 export default function WorkoutPage() {
   const params = useParams();
@@ -2933,249 +2941,27 @@ export default function WorkoutPage() {
 
         {/* Add Exercise Modal */}
         {showAddExercise && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div 
-              className="absolute inset-0 bg-black/60"
-              onClick={handleCloseAddExerciseModal}
-            />
-            <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-surface-800 flex items-center justify-between">
-                <button
-                  onClick={handleCloseAddExerciseModal}
-                  className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
-                <button
-                  onClick={handleAddSelectedExercises}
-                  disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
-                  className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                    selectedExercisesToAdd.length > 0
-                      ? 'bg-primary-500 text-white hover:bg-primary-600'
-                      : 'bg-surface-700 text-surface-500 cursor-not-allowed'
-                  }`}
-                >
-                  {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
-                </button>
-              </div>
-              
-              {/* Search and Filters */}
-              <div className="p-4 border-b border-surface-800 space-y-3">
-                <input
-                  type="text"
-                  value={exerciseSearch}
-                  onChange={(e) => setExerciseSearch(e.target.value)}
-                  placeholder="Search exercises..."
-                  className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
-                />
-
-                {/* Body Part Dropdown and Sort Button */}
-                <div className="flex gap-2">
-                  {/* Body Part Dropdown */}
-                  <div className="relative flex-1">
-                    <button
-                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                    >
-                      <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                        {selectedMuscleFilter || 'Any Body Part'}
-                      </span>
-                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Dropdown Menu */}
-                    {showMuscleDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                        <button
-                          onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Any Body Part</span>
-                          {!selectedMuscleFilter && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        {(() => {
-                          const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                          return muscles.map(muscle => (
-                            <button
-                              key={muscle}
-                              onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                                selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                              }`}
-                            >
-                              <span>{muscle}</span>
-                              {selectedMuscleFilter === muscle && (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </button>
-                          ));
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sort Button */}
-                  <div className="relative">
-                    <button
-                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
-                      className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
-                      title="Sort exercises"
-                    >
-                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
-                    </button>
-
-                    {/* Sort Dropdown */}
-                    {showSortDropdown && (
-                      <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
-                        <button
-                          onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Most Frequent</span>
-                          {exerciseSortOption === 'frequency' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Recently Done</span>
-                          {exerciseSortOption === 'recent' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Name (A-Z)</span>
-                          {exerciseSortOption === 'name' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Exercise List */}
-              <div className="flex-1 overflow-y-auto">
-                {(() => {
-                  let filteredExercises = availableExercises;
-                  
-                  // Filter by muscle
-                  if (selectedMuscleFilter) {
-                    filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
-                  }
-                  
-                  // Filter by search
-                  if (exerciseSearch) {
-                    filteredExercises = filteredExercises.filter(ex => 
-                      ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
-                    );
-                  }
-                  
-                  // Sort based on selected option
-                  filteredExercises = [...filteredExercises].sort((a, b) => {
-                    switch (exerciseSortOption) {
-                      case 'frequency': {
-                        // Sort by frequency (highest first), then by name for ties
-                        const freqA = frequentExerciseIds.get(a.id) || 0;
-                        const freqB = frequentExerciseIds.get(b.id) || 0;
-                        if (freqB !== freqA) return freqB - freqA;
-                        return a.name.localeCompare(b.name);
-                      }
-                      case 'recent': {
-                        // Sort by most recently done first, then by name for ties
-                        const dateA = lastDoneExercises.get(a.id);
-                        const dateB = lastDoneExercises.get(b.id);
-                        // Exercises without a date go to the bottom
-                        if (!dateA && !dateB) return a.name.localeCompare(b.name);
-                        if (!dateA) return 1;
-                        if (!dateB) return -1;
-                        return dateB.getTime() - dateA.getTime();
-                      }
-                      case 'name':
-                      default:
-                        return a.name.localeCompare(b.name);
-                    }
-                  });
-                  
-                  if (availableExercises.length === 0) {
-                    return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
-                  }
-                  
-                  if (filteredExercises.length === 0) {
-                    return <p className="text-center text-surface-400 py-8">No exercises found</p>;
-                  }
-                  
-                  return filteredExercises.map((exercise) => {
-                    const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
-                    return (
-                      <button
-                        key={exercise.id}
-                        onClick={() => toggleExerciseSelection(exercise)}
-                        disabled={isAddingExercise}
-                        className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-                          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-surface-200">{exercise.name}</span>
-                          {frequentExerciseIds.has(exercise.id) && (
-                            <span className="text-amber-400 text-sm">★</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            exercise.mechanic === 'compound' 
-                              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                              : 'bg-surface-700 text-surface-400'
-                          }`}>
-                            {exercise.mechanic}
-                          </span>
-                          {isSelected && (
-                            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          </div>
+          <AddExerciseModal
+            variant="empty"
+            availableExercises={availableExercises}
+            frequentExerciseIds={frequentExerciseIds}
+            lastDoneExercises={lastDoneExercises}
+            selectedExercisesToAdd={selectedExercisesToAdd}
+            isAddingExercise={isAddingExercise}
+            exerciseSearch={exerciseSearch}
+            selectedMuscleFilter={selectedMuscleFilter}
+            showMuscleDropdown={showMuscleDropdown}
+            showSortDropdown={showSortDropdown}
+            exerciseSortOption={exerciseSortOption}
+            onClose={handleCloseAddExerciseModal}
+            onExerciseSearchChange={setExerciseSearch}
+            onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+            onShowMuscleDropdownChange={setShowMuscleDropdown}
+            onShowSortDropdownChange={setShowSortDropdown}
+            onExerciseSortOptionChange={setExerciseSortOption}
+            onToggleExerciseSelection={toggleExerciseSelection}
+            onAddSelectedExercises={handleAddSelectedExercises}
+          />
         )}
       </div>
     );
@@ -3200,23 +2986,8 @@ export default function WorkoutPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-8">
       {/* Auto-adjust message */}
-      {autoAdjustMessage && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
-          <div className="bg-primary-500/20 backdrop-blur-sm border border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
-            <span className="text-primary-400 text-lg">🔄</span>
-            <p className="text-sm text-primary-200 flex-1">{autoAdjustMessage}</p>
-            <button 
-              onClick={() => setAutoAdjustMessage(null)}
-              className="text-primary-400 hover:text-primary-200"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-      
+      <AutoAdjustMessage message={autoAdjustMessage} onDismiss={() => setAutoAdjustMessage(null)} />
+
       {/* Workout header */}
       <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3346,22 +3117,7 @@ export default function WorkoutPage() {
       )}
 
       {/* Error alert */}
-      {error && (
-        <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg flex items-center gap-2">
-          <svg className="w-5 h-5 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-sm text-danger-300">{error}</span>
-          <button 
-            onClick={() => setError(null)} 
-            className="ml-auto p-1 hover:bg-danger-500/20 rounded"
-          >
-            <svg className="w-4 h-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
+      <WorkoutErrorAlert error={error} onDismiss={() => setError(null)} />
 
       {/* Coach Message - only show if AI coach notes are enabled */}
       <CoachMessageCard
@@ -3939,40 +3695,14 @@ export default function WorkoutPage() {
       </div>
 
       {/* Floating drag preview */}
-      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
-        <div
-          className="fixed pointer-events-none z-50 transition-transform duration-75"
-          style={{
-            left: dragPosition.x,
-            top: dragPosition.y,
-            width: draggedBlockRect?.width ?? 'auto',
-          }}
-        >
-          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.02]">
-            <div className="flex items-center gap-3">
-              {/* Drag handle */}
-              <div className="flex flex-col gap-0.5 text-surface-400 p-1">
-                <div className="w-4 h-0.5 bg-current rounded" />
-                <div className="w-4 h-0.5 bg-current rounded" />
-                <div className="w-4 h-0.5 bg-current rounded" />
-              </div>
-              {/* Exercise number circle */}
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-primary-500 text-white">
-                {draggedBlockIndex + 1}
-              </div>
-              {/* Exercise name */}
-              <div className="flex-1">
-                <p className="font-medium text-surface-100">
-                  {blocks[draggedBlockIndex]?.exercise?.name}
-                </p>
-                <p className="text-xs text-surface-500">
-                  {getSetsForBlock(blocks[draggedBlockIndex]?.id).length}/{blocks[draggedBlockIndex]?.targetSets} sets
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <FloatingDragPreview
+        isDraggingBlock={isDraggingBlock}
+        draggedBlockIndex={draggedBlockIndex}
+        dragPosition={dragPosition}
+        draggedBlockRect={draggedBlockRect}
+        blocks={blocks}
+        getSetsForBlock={getSetsForBlock}
+      />
 
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
@@ -3993,493 +3723,54 @@ export default function WorkoutPage() {
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/60"
-            onClick={handleCloseAddExerciseModal}
-          />
-          
-          {/* Modal */}
-          <div className="relative w-full max-w-lg max-h-[80vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
-              <button
-                onClick={handleCloseAddExerciseModal}
-                className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
-              <button
-                onClick={handleAddSelectedExercises}
-                disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
-                className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                  selectedExercisesToAdd.length > 0
-                    ? 'bg-primary-500 text-white hover:bg-primary-600'
-                    : 'bg-surface-700 text-surface-500 cursor-not-allowed'
-                }`}
-              >
-                {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
-              </button>
-            </div>
-
-            {/* Search and Filters */}
-            <div className="p-4 space-y-3 border-b border-surface-800">
-              <Input
-                placeholder="Search exercises..."
-                value={exerciseSearch}
-                onChange={(e) => setExerciseSearch(e.target.value)}
-              />
-
-              {/* Body Part Dropdown and Sort Button */}
-              <div className="flex gap-2">
-                {/* Body Part Dropdown */}
-                <div className="relative flex-1">
-                  <button
-                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); }}
-                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                  >
-                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                      {selectedMuscleFilter || 'Any Body Part'}
-                    </span>
-                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showMuscleDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                      <button
-                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Any Body Part</span>
-                        {!selectedMuscleFilter && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      {(() => {
-                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                        return muscles.map(muscle => (
-                          <button
-                            key={muscle}
-                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                            }`}
-                          >
-                            <span>{muscle}</span>
-                            {selectedMuscleFilter === muscle && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                        ));
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Sort Button */}
-                <div className="relative">
-                  <button
-                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); }}
-                    className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
-                    title="Sort exercises"
-                  >
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                  </button>
-
-                  {/* Sort Dropdown */}
-                  {showSortDropdown && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
-                      <button
-                        onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Most Frequent</span>
-                        {exerciseSortOption === 'frequency' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Recently Done</span>
-                        {exerciseSortOption === 'recent' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Name (A-Z)</span>
-                        {exerciseSortOption === 'name' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Create custom exercise button */}
-              <button
-                onClick={() => setShowCustomExercise(true)}
-                className="w-full p-3 bg-surface-800/50 hover:bg-surface-800 rounded-lg border border-dashed border-surface-600 hover:border-primary-500/50 transition-all flex items-center justify-center gap-2 text-surface-400 hover:text-primary-400"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="text-sm font-medium">Create Custom Exercise</span>
-              </button>
-              
-              {/* Error display */}
-              {error && (
-                <div className="mt-2 p-2 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-xs">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Exercise list */}
-            <div className="flex-1 overflow-y-auto">
-              {(() => {
-                let filteredExercises = availableExercises;
-                
-                // Filter by muscle
-                if (selectedMuscleFilter) {
-                  filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
-                }
-                
-                // Filter by search
-                if (exerciseSearch) {
-                  filteredExercises = filteredExercises.filter(ex => 
-                    ex.name.toLowerCase().includes(exerciseSearch.toLowerCase())
-                  );
-                }
-                
-                // Sort based on selected option
-                filteredExercises = [...filteredExercises].sort((a, b) => {
-                  switch (exerciseSortOption) {
-                    case 'frequency': {
-                      // Sort by frequency (highest first), then by name for ties
-                      const freqA = frequentExerciseIds.get(a.id) || 0;
-                      const freqB = frequentExerciseIds.get(b.id) || 0;
-                      if (freqB !== freqA) return freqB - freqA;
-                      return a.name.localeCompare(b.name);
-                    }
-                    case 'recent': {
-                      // Sort by most recently done first, then by name for ties
-                      const dateA = lastDoneExercises.get(a.id);
-                      const dateB = lastDoneExercises.get(b.id);
-                      // Exercises without a date go to the bottom
-                      if (!dateA && !dateB) return a.name.localeCompare(b.name);
-                      if (!dateA) return 1;
-                      if (!dateB) return -1;
-                      return dateB.getTime() - dateA.getTime();
-                    }
-                    case 'name':
-                    default:
-                      return a.name.localeCompare(b.name);
-                  }
-                });
-
-                if (availableExercises.length === 0) {
-                  return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
-                }
-                
-                if (filteredExercises.length === 0) {
-                  return <p className="text-center text-surface-500 py-8">No exercises found</p>;
-                }
-                
-                return filteredExercises.map((exercise) => {
-                  const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
-                  return (
-                    <button
-                      key={exercise.id}
-                      onClick={() => toggleExerciseSelection(exercise)}
-                      disabled={isAddingExercise}
-                      className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-                        isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-surface-200">{exercise.name}</span>
-                        {frequentExerciseIds.has(exercise.id) && (
-                          <span className="text-amber-400 text-sm">★</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          exercise.mechanic === 'compound' 
-                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                            : 'bg-surface-700 text-surface-400'
-                        }`}>
-                          {exercise.mechanic}
-                        </span>
-                        {isSelected && (
-                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-          </div>
-        </div>
+        <AddExerciseModal
+          variant="main"
+          availableExercises={availableExercises}
+          frequentExerciseIds={frequentExerciseIds}
+          lastDoneExercises={lastDoneExercises}
+          selectedExercisesToAdd={selectedExercisesToAdd}
+          isAddingExercise={isAddingExercise}
+          exerciseSearch={exerciseSearch}
+          selectedMuscleFilter={selectedMuscleFilter}
+          showMuscleDropdown={showMuscleDropdown}
+          showSortDropdown={showSortDropdown}
+          exerciseSortOption={exerciseSortOption}
+          error={error}
+          onClose={handleCloseAddExerciseModal}
+          onExerciseSearchChange={setExerciseSearch}
+          onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+          onShowMuscleDropdownChange={setShowMuscleDropdown}
+          onShowSortDropdownChange={setShowSortDropdown}
+          onExerciseSortOptionChange={setExerciseSortOption}
+          onToggleExerciseSelection={toggleExerciseSelection}
+          onAddSelectedExercises={handleAddSelectedExercises}
+          onCreateCustomExercise={() => setShowCustomExercise(true)}
+        />
       )}
 
       {/* Custom Exercise Creation Modal with AI */}
-      {showCustomExercise && session && (
-        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
-          {/* Backdrop */}
-          <div 
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setShowCustomExercise(false)}
-          />
-          
-          {/* Modal */}
-          <div className="relative w-full max-w-lg max-h-[90vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowCustomExercise(false)}
-                  className="p-1 text-surface-400 hover:text-surface-200"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h2 className="text-lg font-semibold text-surface-100">Create Custom Exercise</h2>
-              </div>
-            </div>
-
-            {/* AI-Powered Exercise Creation Component */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <CreateCustomExercise
-                userId={session.userId}
-                onSuccess={handleCustomExerciseSuccess}
-                onCancel={() => setShowCustomExercise(false)}
-              />
-            </div>
-          </div>
-        </div>
+      {session && (
+        <CustomExerciseModal
+          isOpen={showCustomExercise}
+          userId={session.userId}
+          onClose={() => setShowCustomExercise(false)}
+          onSuccess={handleCustomExerciseSuccess}
+        />
       )}
 
       {/* Injury Report Modal */}
-      {showInjuryModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          <div 
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setShowInjuryModal(false)}
-          />
-          
-          <div className="relative w-full max-w-md max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🤕</span>
-                <h2 className="text-lg font-semibold text-surface-100">Report Pain/Injury</h2>
-              </div>
-              <button
-                onClick={() => setShowInjuryModal(false)}
-                className="p-2 text-surface-400 hover:text-surface-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <p className="text-sm text-surface-400">
-                Tell us about any pain or discomfort. We&apos;ll suggest exercise swaps to avoid aggravating it.
-              </p>
-
-              {/* Current injuries */}
-              {temporaryInjuries.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-surface-300">Currently reported:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {temporaryInjuries.map(injury => {
-                      const areaLabels: Record<string, string> = {
-                        lower_back: '🔻 Lower Back', upper_back: '🔺 Upper Back', neck: '🦴 Neck',
-                        shoulder_left: '💪 Left Shoulder', shoulder_right: '💪 Right Shoulder',
-                        elbow_left: '🦾 Left Elbow', elbow_right: '🦾 Right Elbow',
-                        wrist_left: '🤚 Left Wrist', wrist_right: '🤚 Right Wrist',
-                        hip_left: '🦵 Left Hip', hip_right: '🦵 Right Hip',
-                        knee_left: '🦿 Left Knee', knee_right: '🦿 Right Knee',
-                        ankle_left: '🦶 Left Ankle', ankle_right: '🦶 Right Ankle',
-                        chest: '❤️ Chest', other: '⚠️ Other'
-                      };
-                      const severityLabels = ['Mild', 'Moderate', 'Significant'];
-                      return (
-                        <div 
-                          key={injury.area}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-                            injury.severity === 3 
-                              ? 'bg-danger-500/20 text-danger-400' 
-                              : injury.severity === 2 
-                                ? 'bg-warning-500/20 text-warning-400'
-                                : 'bg-surface-700 text-surface-300'
-                          }`}
-                        >
-                          <span>{areaLabels[injury.area] || injury.area}</span>
-                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
-                          <button
-                            onClick={() => setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== injury.area))}
-                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
-                          >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Add new injury */}
-              <div className="space-y-3 p-4 bg-surface-800/50 rounded-lg">
-                <p className="text-xs font-medium text-surface-300">Add an issue:</p>
-                
-                <div>
-                  <label className="block text-xs text-surface-400 mb-1">Area affected</label>
-                  <select
-                    value={selectedInjuryArea}
-                    onChange={(e) => setSelectedInjuryArea(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
-                  >
-                    <option value="">Select area...</option>
-                    <optgroup label="Back & Core">
-                      <option value="lower_back">🔻 Lower Back</option>
-                      <option value="upper_back">🔺 Upper Back</option>
-                      <option value="neck">🦴 Neck</option>
-                      <option value="chest">❤️ Chest</option>
-                    </optgroup>
-                    <optgroup label="Upper Body">
-                      <option value="shoulder_left">💪 Left Shoulder</option>
-                      <option value="shoulder_right">💪 Right Shoulder</option>
-                      <option value="elbow_left">🦾 Left Elbow</option>
-                      <option value="elbow_right">🦾 Right Elbow</option>
-                      <option value="wrist_left">🤚 Left Wrist</option>
-                      <option value="wrist_right">🤚 Right Wrist</option>
-                    </optgroup>
-                    <optgroup label="Lower Body">
-                      <option value="hip_left">🦵 Left Hip</option>
-                      <option value="hip_right">🦵 Right Hip</option>
-                      <option value="knee_left">🦿 Left Knee</option>
-                      <option value="knee_right">🦿 Right Knee</option>
-                      <option value="ankle_left">🦶 Left Ankle</option>
-                      <option value="ankle_right">🦶 Right Ankle</option>
-                    </optgroup>
-                    <option value="other">⚠️ Other</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-surface-400 mb-1">Severity</label>
-                  <div className="flex gap-2">
-                    {[1, 2, 3].map(level => (
-                      <button
-                        key={level}
-                        type="button"
-                        onClick={() => setSelectedInjurySeverity(level as 1 | 2 | 3)}
-                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
-                          selectedInjurySeverity === level
-                            ? level === 3 
-                              ? 'bg-danger-500 text-white'
-                              : level === 2
-                                ? 'bg-warning-500 text-black'
-                                : 'bg-primary-500 text-white'
-                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
-                        }`}
-                      >
-                        {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => {
-                    if (selectedInjuryArea && !temporaryInjuries.some(i => i.area === selectedInjuryArea)) {
-                      setTemporaryInjuries([...temporaryInjuries, { area: selectedInjuryArea, severity: selectedInjurySeverity }]);
-                      setSelectedInjuryArea('');
-                      setSelectedInjurySeverity(1);
-                    }
-                  }}
-                  disabled={!selectedInjuryArea || temporaryInjuries.some(i => i.area === selectedInjuryArea)}
-                  className="w-full"
-                >
-                  + Add to List
-                </Button>
-              </div>
-
-              {/* What will happen info */}
-              {temporaryInjuries.length > 0 && (
-                <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
-                  <p className="text-xs text-primary-400 font-medium mb-1">What happens now?</p>
-                  <p className="text-xs text-surface-400">
-                    We&apos;ll flag exercises that could aggravate these areas. You can easily swap them for safer alternatives.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-surface-800 space-y-2">
-              {/* Show risky exercises count */}
-              {temporaryInjuries.length > 0 && (
-                <div className="text-center text-sm text-surface-400 mb-2">
-                  {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).isRisky).length > 0 ? (
-                    <span className="text-warning-400">
-                      ⚠️ {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
-                    </span>
-                  ) : (
-                    <span className="text-success-400">✓ All exercises look safe!</span>
-                  )}
-                </div>
-              )}
-              <Button onClick={handleApplyInjuries} className="w-full">
-                {temporaryInjuries.length > 0 ? 'Apply & Continue Workout' : 'Close'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <InjuryReportModal
+        isOpen={showInjuryModal}
+        blocks={blocks}
+        temporaryInjuries={temporaryInjuries}
+        selectedInjuryArea={selectedInjuryArea}
+        selectedInjurySeverity={selectedInjurySeverity}
+        onClose={() => setShowInjuryModal(false)}
+        onSelectedInjuryAreaChange={setSelectedInjuryArea}
+        onSelectedInjurySeverityChange={setSelectedInjurySeverity}
+        onTemporaryInjuriesChange={setTemporaryInjuries}
+        onApply={handleApplyInjuries}
+      />
 
       {/* Plate Calculator Modal */}
       <PlateCalculatorModal
@@ -4493,221 +3784,32 @@ export default function WorkoutPage() {
       />
 
       {/* Page-level Swap Modal for injury-related swaps */}
-      {showPageLevelSwapModal && swapTargetBlockId && (() => {
-        const targetBlock = blocks.find(b => b.id === swapTargetBlockId);
-        if (!targetBlock) return null;
-        
-        // Get safe alternatives using the intelligent injury swapper
-        const safeAlternatives = availableExercises
-          .filter(ex => {
-            // Must target same muscle
-            if (ex.primary_muscle !== targetBlock.exercise.primaryMuscle) return false;
-            // Must not be the current exercise
-            if (ex.id === targetBlock.exercise.id) return false;
-            // Must not already be in workout
-            if (blocks.some(b => b.exercise.id === ex.id)) return false;
-            // Check search filter
-            if (swapSearchQuery && !ex.name.toLowerCase().includes(swapSearchQuery.toLowerCase())) return false;
-            // Check if safe for injuries
-            const risk = getExerciseInjuryRisk(
-              { ...targetBlock.exercise, id: ex.id, name: ex.name, primaryMuscle: ex.primary_muscle },
-              temporaryInjuries
-            );
-            return !risk.isRisky || risk.risk === 'caution';
-          })
-          .map(ex => {
-            const risk = getExerciseInjuryRisk(
-              { ...targetBlock.exercise, id: ex.id, name: ex.name, primaryMuscle: ex.primary_muscle },
-              temporaryInjuries
-            );
-            return { exercise: ex, risk };
-          })
-          .sort((a, b) => {
-            // Safe first, then caution
-            if (a.risk.risk === 'safe' && b.risk.risk !== 'safe') return -1;
-            if (a.risk.risk !== 'safe' && b.risk.risk === 'safe') return 1;
-            return a.exercise.name.localeCompare(b.exercise.name);
-          });
-        
-        return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            <div 
-              className="absolute inset-0 bg-black/60"
-              onClick={() => setShowPageLevelSwapModal(false)}
-            />
-            
-            <div className="relative w-full max-w-lg max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-surface-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-surface-100">Swap Exercise</h3>
-                    <p className="text-sm text-surface-400">
-                      Replace <span className="text-warning-400 font-medium">{targetBlock.exercise.name}</span>
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowPageLevelSwapModal(false)}
-                    className="p-2 text-surface-400 hover:text-surface-200"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-                
-                {/* Search */}
-                <div className="mt-3">
-                  <Input
-                    placeholder="Search exercises..."
-                    value={swapSearchQuery}
-                    onChange={(e) => setSwapSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-3">
-                {/* Info banner */}
-                <div className={`mb-3 p-3 rounded-lg ${
-                  safeAlternatives.length > 0 
-                    ? 'bg-success-500/10 border border-success-500/20' 
-                    : 'bg-warning-500/10 border border-warning-500/20'
-                }`}>
-                  {safeAlternatives.length > 0 ? (
-                    <p className="text-xs text-success-400">
-                      ✓ <span className="font-medium">{safeAlternatives.filter(a => a.risk.risk === 'safe').length} safe alternative(s)</span> found for {targetBlock.exercise.primaryMuscle}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-warning-400">
-                      ⚠️ No safe alternatives found. Consider skipping this exercise.
-                    </p>
-                  )}
-                </div>
-                
-                {/* Exercise list */}
-                <div className="space-y-1">
-                  {safeAlternatives.map(({ exercise: alt, risk }) => (
-                    <button
-                      key={alt.id}
-                      onClick={async () => {
-                        // Perform the swap
-                        await handleExerciseSwap(swapTargetBlockId, {
-                          id: alt.id,
-                          name: alt.name,
-                          primaryMuscle: alt.primary_muscle,
-                          secondaryMuscles: alt.secondary_muscles || [],
-                          mechanic: alt.mechanic,
-                          defaultRepRange: [8, 12] as [number, number],
-                          defaultRir: 2,
-                          minWeightIncrementKg: 2.5,
-                          formCues: [],
-                          commonMistakes: [],
-                          setupNote: '',
-                          movementPattern: '',
-                          equipmentRequired: [],
-                        });
-                        setShowPageLevelSwapModal(false);
-                        setAutoAdjustMessage(`✓ Swapped ${targetBlock.exercise.name} → ${alt.name}`);
-                        setTimeout(() => setAutoAdjustMessage(null), 5000);
-                      }}
-                      className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-surface-100 truncate">{alt.name}</p>
-                          {risk.risk === 'safe' && temporaryInjuries.length > 0 && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-success-400">
-                              ✓ Safe
-                            </span>
-                          )}
-                          {risk.risk === 'caution' && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-500/20 text-warning-400">
-                              ⚠️ Caution
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-surface-500 capitalize">
-                          {alt.primary_muscle} • {alt.mechanic}
-                        </p>
-                      </div>
-                      <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  ))}
-                  
-                  {safeAlternatives.length === 0 && (
-                    <p className="py-8 text-center text-surface-500">
-                      No safe alternatives found for {targetBlock.exercise.primaryMuscle}
-                    </p>
-                  )}
-                </div>
-              </div>
-              
-              {/* Skip option */}
-              <div className="p-3 border-t border-surface-800 bg-surface-800/50">
-                <button
-                  onClick={async () => {
-                    await handleExerciseDelete(swapTargetBlockId);
-                    setShowPageLevelSwapModal(false);
-                    setAutoAdjustMessage(`Removed ${targetBlock.exercise.name} from workout`);
-                    setTimeout(() => setAutoAdjustMessage(null), 5000);
-                  }}
-                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Skip this exercise
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      <PageLevelSwapModal
+        isOpen={showPageLevelSwapModal}
+        swapTargetBlockId={swapTargetBlockId}
+        blocks={blocks}
+        availableExercises={availableExercises}
+        temporaryInjuries={temporaryInjuries}
+        swapSearchQuery={swapSearchQuery}
+        onSwapSearchQueryChange={setSwapSearchQuery}
+        onClose={() => setShowPageLevelSwapModal(false)}
+        onExerciseSwap={handleExerciseSwap}
+        onExerciseDelete={handleExerciseDelete}
+        onAutoAdjustMessage={(message) => {
+          setAutoAdjustMessage(message);
+          setTimeout(() => setAutoAdjustMessage(null), 5000);
+        }}
+      />
 
       {/* Cancel Workout Confirmation Modal */}
-      {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => !isCancelling && setShowCancelModal(false)}
-          />
-          <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
-                <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
-              <p className="text-sm text-surface-400 mb-6">
-                {totalCompletedSets > 0
-                  ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
-                  : 'This will reset the workout so you can start fresh later.'}
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowCancelModal(false)}
-                  disabled={isCancelling}
-                  className="flex-1"
-                >
-                  Keep Going
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleCancelWorkout}
-                  disabled={isCancelling}
-                  className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
-                >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
+      <CancelWorkoutModal
+        isOpen={showCancelModal}
+        isCancelling={isCancelling}
+        totalCompletedSets={totalCompletedSets}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={handleCancelWorkout}
+      />
+
       {/* Exercise Details Modal */}
       <ExerciseDetailsModal
         exercise={selectedExerciseForDetails}
@@ -4725,34 +3827,16 @@ export default function WorkoutPage() {
       )}
 
       {/* Undo set-delete snackbar */}
-      {pendingSetDelete && (
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md">
-          <div className="flex items-center gap-3 px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg shadow-lg">
-            <svg className="w-5 h-5 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-            <span className="text-sm text-surface-200 flex-1">Set removed</span>
-            <button
-              onClick={() => { void undoSetDelete(); }}
-              className="px-3 py-1.5 text-sm font-semibold text-primary-300 hover:text-primary-200 rounded-md hover:bg-primary-500/10 transition-colors"
-            >
-              Undo
-            </button>
-          </div>
-        </div>
-      )}
+      <UndoSetDeleteSnackbar
+        visible={!!pendingSetDelete}
+        onUndo={() => { void undoSetDelete(); }}
+      />
 
       {/* Calibration Result Card (modal overlay) */}
-      {calibrationResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="max-w-md w-full">
-            <CalibrationResultCard
-              result={calibrationResult}
-              onDismiss={() => setCalibrationResult(null)}
-            />
-          </div>
-        </div>
-      )}
+      <CalibrationResultOverlay
+        result={calibrationResult}
+        onDismiss={() => setCalibrationResult(null)}
+      />
     </div>
   );
 }
