@@ -11,7 +11,7 @@ import { createUntypedServerClient } from '@/lib/supabase/server';
 import { calculateMacros, type Goal, type ActivityLevel, type Peptide, type UserStats, type ActivityConfig, type GoalConfig } from '@/lib/nutrition/macroCalculator';
 
 // Note: Food search functions (searchFoods, getFoodDetails, lookupBarcode, FoodSearchResult)
-// should be imported directly from '@/services/fatSecretService'
+// should be imported directly from '@/lib/data/fatSecretService'
 
 export interface MacroSettings {
   height_cm: number | null;

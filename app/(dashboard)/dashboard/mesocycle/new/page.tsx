@@ -22,7 +22,7 @@ import {
 } from '@/services/mesocycleBuilder';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getUnavailableEquipment } from '@/services/equipmentFilter';
+import { getUnavailableEquipment } from '@/lib/data/equipmentData';
 
 export default function NewMesocyclePage() {
   const router = useRouter();

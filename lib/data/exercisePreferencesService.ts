@@ -15,7 +15,7 @@ import type {
   SetExerciseStatusInput,
   BulkArchiveByEquipmentInput,
 } from '@/types/user-exercise-preferences';
-import { getExercises, type Exercise } from './exerciseService';
+import { getExercises, type Exercise } from '@/services/exerciseService';
 
 // ============================================
 // CACHE

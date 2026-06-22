@@ -3,7 +3,6 @@
  * Filters exercises based on user's available gym equipment
  */
 
-import { createUntypedClient } from '@/lib/supabase/client';
 import type { Exercise } from '@/services/exerciseService';
 
 // Mapping from equipment_types IDs to exercise equipment names
@@ -52,21 +51,6 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
 };
 
 /**
- * Get user's unavailable equipment IDs
- */
-export async function getUnavailableEquipment(userId: string): Promise<string[]> {
-  const supabase = createUntypedClient();
-  
-  const { data } = await supabase
-    .from('user_equipment')
-    .select('equipment_id')
-    .eq('user_id', userId)
-    .eq('is_available', false);
-  
-  return data?.map((e: { equipment_id: string }) => e.equipment_id) || [];
-}
-
-/**
  * Check if an exercise requires unavailable equipment
  */
 export function exerciseRequiresUnavailableEquipment(
@@ -113,20 +97,5 @@ export function getUnavailableExercises<T extends { name: string; equipment?: st
   if (unavailableEquipmentIds.length === 0) return [];
   
   return exercises.filter(ex => exerciseRequiresUnavailableEquipment(ex, unavailableEquipmentIds));
-}
-
-/**
- * Load unavailable equipment and return filter function
- */
-export async function createEquipmentFilter(userId: string) {
-  const unavailableIds = await getUnavailableEquipment(userId);
-  
-  return {
-    unavailableIds,
-    filter: <T extends { name: string; equipment?: string }>(exercises: T[]) => 
-      filterExercisesByEquipment(exercises, unavailableIds),
-    isAvailable: (exercise: { name: string; equipment?: string }) => 
-      !exerciseRequiresUnavailableEquipment(exercise, unavailableIds),
-  };
 }
 

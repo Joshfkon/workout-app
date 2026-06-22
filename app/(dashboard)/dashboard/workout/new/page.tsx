@@ -7,7 +7,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS, type MuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
-import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
+import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';

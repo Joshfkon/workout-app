@@ -16,7 +16,7 @@ import {
   resetAllPreferences as resetAllPreferencesService,
   getPreferenceSummary,
   clearPreferencesCache,
-} from '@/services/exercisePreferencesService';
+} from '@/lib/data/exercisePreferencesService';
 
 // Global state to share preferences across components
 let globalPreferences: Map<string, UserExercisePreference> = new Map();

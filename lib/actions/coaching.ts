@@ -9,7 +9,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
-import { buildCoachingContext, formatCoachingContext } from '@/services/coachingContextService';
+import { buildCoachingContext } from '@/lib/data/coachingContext';
+import { formatCoachingContext } from '@/services/coachingContextService';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
 import type { Database, Json } from '@/types/database';
 
