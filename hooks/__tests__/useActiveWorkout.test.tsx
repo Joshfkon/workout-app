@@ -4,7 +4,12 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useActiveWorkout } from '../useActiveWorkout';
 import { useWorkoutStore } from '@/stores';
-import type { WorkoutSession, ExerciseBlock, SetLog, Exercise } from '@/types/schema';
+import {
+  makeWorkoutSession,
+  makeExerciseBlock,
+  makeExercise,
+  makePreWorkoutCheckIn,
+} from '@/test-utils/factories';
 
 // Mock Supabase client
 const mockSupabaseClient = {
@@ -34,57 +39,11 @@ jest.mock('@/lib/utils', () => ({
   generateId: () => 'generated-id',
 }));
 
-// Test fixtures
-function createMockSession(overrides: Partial<WorkoutSession> = {}): WorkoutSession {
-  return {
-    id: 'session-1',
-    userId: 'user-1',
-    mesocycleId: null,
-    name: 'Test Workout',
-    state: 'in_progress',
-    scheduledFor: new Date().toISOString(),
-    startedAt: new Date().toISOString(),
-    completedAt: null,
-    sessionRpe: null,
-    sessionNotes: null,
-    completionPercent: 0,
-    preWorkoutCheckIn: null,
-    ...overrides,
-  };
-}
-
-function createMockBlock(overrides: Partial<ExerciseBlock> = {}): ExerciseBlock {
-  return {
-    id: 'block-1',
-    workoutSessionId: 'session-1',
-    exerciseId: 'exercise-1',
-    order: 1,
-    targetSets: 3,
-    targetRepRange: [8, 12],
-    targetRir: 2,
-    restSeconds: 120,
-    suggestedWeightKg: 60,
-    notes: null,
-    exercise: null,
-    ...overrides,
-  };
-}
-
-function createMockExercise(overrides: Partial<Exercise> = {}): Exercise {
-  return {
-    id: 'exercise-1',
-    name: 'Bench Press',
-    primaryMuscle: 'chest',
-    secondaryMuscles: ['triceps', 'shoulders'],
-    pattern: 'compound',
-    equipment: 'barbell',
-    difficulty: 'intermediate',
-    fatigueRating: 3,
-    notes: null,
-    hypertrophyScore: null,
-    ...overrides,
-  };
-}
+// Test fixtures (delegate to shared schema-aligned factories)
+const createMockSession = (overrides = {}) =>
+  makeWorkoutSession({ state: 'in_progress', startedAt: new Date().toISOString(), mesocycleId: null, ...overrides });
+const createMockBlock = makeExerciseBlock;
+const createMockExercise = makeExercise;
 
 describe('useActiveWorkout', () => {
   beforeEach(() => {
@@ -209,7 +168,7 @@ describe('useActiveWorkout', () => {
           rpe: 7,
           feedback: {
             form: 'clean',
-            difficulty: 'appropriate',
+            repsInTank: 2,
           },
         });
       });
@@ -275,12 +234,10 @@ describe('useActiveWorkout', () => {
     it('updates session with check-in data', async () => {
       const { result } = renderHook(() => useActiveWorkout());
 
-      const checkIn = {
+      const checkIn = makePreWorkoutCheckIn({
         sleepQuality: 4,
-        energyLevel: 3,
         stressLevel: 2,
-        soreness: [],
-      };
+      });
 
       await act(async () => {
         await result.current.submitCheckIn(checkIn);

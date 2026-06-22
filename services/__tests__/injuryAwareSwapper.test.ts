@@ -16,28 +16,18 @@ import {
   type InjuryRisk,
 } from '../injuryAwareSwapper';
 import type { Exercise } from '@/types/schema';
+import { makeExercise } from '@/test-utils/factories';
 
 // ============================================
 // TEST HELPERS
 // ============================================
 
 function createExercise(overrides: Partial<Exercise> = {}): Exercise {
-  return {
+  return makeExercise({
     id: 'ex-1',
-    name: 'Bench Press',
-    primaryMuscle: 'chest',
-    secondaryMuscles: ['triceps', 'shoulders'],
-    movementPattern: 'horizontal_push',
-    mechanic: 'compound',
-    forceType: 'push',
     equipmentRequired: ['barbell', 'bench'],
-    defaultRepRange: [6, 10] as [number, number],
-    instructions: [],
-    tips: [],
-    commonMistakes: [],
-    hypertrophyTier: 'A',
     ...overrides,
-  };
+  });
 }
 
 // ============================================

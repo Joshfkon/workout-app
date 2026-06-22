@@ -20,6 +20,7 @@ import {
   generateMesocycleRecommendation,
 } from '../mesocycleBuilder';
 import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
+import { makeDexaScan } from '@/test-utils/factories';
 
 // Helper to create a profile with defaults
 function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUserProfile {
@@ -409,7 +410,7 @@ describe('mesocycleBuilder', () => {
     });
 
     it('slightly increases volume during bulk', () => {
-      const maintenanceVolume = recommendVolume('intermediate', 'maintain', 'chest');
+      const maintenanceVolume = recommendVolume('intermediate', 'maintenance', 'chest');
       const bulkVolume = recommendVolume('intermediate', 'bulk', 'chest');
 
       expect(bulkVolume).toBeGreaterThanOrEqual(maintenanceVolume);
@@ -798,12 +799,11 @@ describe('mesocycleBuilder', () => {
         availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'] as Equipment[],
         injuryHistory: [],
         heightCm: 180,
-        latestDexa: {
-          date: new Date().toISOString(),
+        latestDexa: makeDexaScan({
           bodyFatPercent: 25,
           leanMassKg: 65,
           fatMassKg: 22,
-        },
+        }),
         goal: 'bulk',
       });
 
@@ -1047,12 +1047,11 @@ describe('mesocycleBuilder', () => {
         goal: 'bulk' as Goal,
         experience: 'intermediate' as Experience,
         heightCm: 180,
-        latestDexa: {
-          date: new Date().toISOString(),
+        latestDexa: makeDexaScan({
           bodyFatPercent: 25,
           leanMassKg: 65,
           fatMassKg: 22,
-        },
+        }),
       };
 
       const recommendation = generateMesocycleRecommendation(profile, 4);
@@ -1076,7 +1075,7 @@ describe('mesocycleBuilder', () => {
 
     it('handles maintenance goal', () => {
       const maintainProfile = {
-        goal: 'maintain' as Goal,
+        goal: 'maintenance' as Goal,
         experience: 'intermediate' as Experience,
         heightCm: 180,
         latestDexa: null,

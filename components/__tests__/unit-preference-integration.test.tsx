@@ -60,55 +60,19 @@ describe('Unit Preference Integration', () => {
       const onSubmit = jest.fn();
       render(<SetInputRow {...defaultProps} unit="kg" onSubmit={onSubmit} />);
 
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
+      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
 
       fireEvent.change(weightInput, { target: { value: '100' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
-      // Click proceed to go to feedback phase
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Advance to the feedback phase (proceed button is labelled "Log set N")
+      fireEvent.click(screen.getByRole('button', { name: /log set/i }));
 
-      // Now we're in feedback phase - find RIR selector buttons
-      // RIRSelector shows buttons with labels like "2-3", "1", "4+", "Maxed"
-      const allButtons = screen.getAllByRole('button');
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
-        btn.textContent?.includes('Good')
-      );
-      
-      expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
-
-      // Find form selector button (Clean, Some Breakdown, Ugly)
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
-        btn.textContent?.includes('Textbook')
-      );
-      
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
-
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
-        btn.textContent?.includes('Save Set')
-      );
-      
-      expect(saveButton).toBeTruthy();
+      // Feedback (RIR/form) is optional now — Save Set is always enabled and falls
+      // back to neutral defaults (repsInTank: 2 -> RPE 7.5, form: 'clean').
+      const saveButton = await screen.findByRole('button', { name: /save set/i });
       expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      fireEvent.click(saveButton);
 
       // Verify submission - weight should be stored in kg
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -116,10 +80,10 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: 100, // 100kg stored as 100kg
           reps: 10,
-          rpe: 7.5, // RIR 2 converts to RPE 7.5
+          rpe: 7.5, // default RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
-            repsInTank: 2, // Selected "2-3" RIR
-            form: 'clean', // Selected "Clean" form
+            repsInTank: 2, // default feedback
+            form: 'clean', // default feedback
           }),
         })
       );
@@ -135,56 +99,18 @@ describe('Unit Preference Integration', () => {
       const onSubmit = jest.fn();
       render(<SetInputRow {...defaultProps} unit="lb" onSubmit={onSubmit} />);
 
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
+      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
 
       fireEvent.change(weightInput, { target: { value: '225' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
-      
-      // Click proceed to go to feedback phase
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
 
-      // Wait for feedback phase to render
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Advance to the feedback phase (proceed button is labelled "Log set N")
+      fireEvent.click(screen.getByRole('button', { name: /log set/i }));
 
-      // Now we're in feedback phase - find RIR and Form selectors
-      const allButtons = screen.getAllByRole('button');
-      
-      // Find RIR selector button (shows "2-3" or "Good")
-      const rirButton = allButtons.find(btn => 
-        btn.textContent?.includes('2-3') || 
-        btn.textContent?.includes('Good')
-      );
-      
-      expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
-
-      // Find form selector button (shows "Clean")
-      const formButton = allButtons.find(btn => 
-        btn.textContent?.includes('Clean') || 
-        btn.textContent?.includes('Textbook')
-      );
-      
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
-
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
-        btn.textContent?.includes('Save Set')
-      );
-      
-      expect(saveButton).toBeTruthy();
+      // Feedback optional — Save Set always enabled, falls back to neutral defaults.
+      const saveButton = await screen.findByRole('button', { name: /save set/i });
       expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      fireEvent.click(saveButton);
 
       // Verify the conversion is correct (225lbs ~= 102.06kg)
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -192,10 +118,10 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: expect.any(Number), // 225lbs converted to kg
           reps: 10,
-          rpe: 7.5, // RIR 2 converts to RPE 7.5
+          rpe: 7.5, // default RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
-            repsInTank: 2, // Selected "2-3" RIR
-            form: 'clean', // Selected "Clean" form
+            repsInTank: 2, // default feedback
+            form: 'clean', // default feedback
           }),
         })
       );
@@ -239,8 +165,9 @@ describe('Unit Preference Integration', () => {
 
       const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
       const weightInput = inputs[0];
-      // 100kg = 220.46 lbs, should show ~220lbs
-      expect(parseFloat(weightInput.value)).toBeCloseTo(220, 0);
+      // 100kg = 220.46 lbs. The seed preserves the EXACT converted value (220.5)
+      // rather than snapping to a plate increment (the old, lossy behavior).
+      expect(parseFloat(weightInput.value)).toBeCloseTo(220.5, 1);
     });
   });
 
