@@ -22,6 +22,7 @@ import {
 import type { EnhancedTDEEEstimate } from '@/types/wearable';
 import { getEnhancedDailyDataPoints } from '@/lib/actions/wearable';
 import type { UserStats, ActivityConfig } from '@/lib/nutrition/macroCalculator';
+import { getLocalDateString } from '@/lib/utils';
 
 export interface TDEEData {
   adaptiveEstimate: TDEEEstimate | EnhancedTDEEEstimate | null;
@@ -105,7 +106,7 @@ export async function getAdaptiveTDEE(
       .from('weight_log')
       .select('logged_at, weight, unit')
       .eq('user_id', user.id)
-      .gte('logged_at', thirtyFiveDaysAgo.toISOString().split('T')[0])
+      .gte('logged_at', getLocalDateString(thirtyFiveDaysAgo))
       .order('logged_at', { ascending: false })
       .limit(1) as {
         data: Array<{ logged_at: string; weight: number; unit?: string | null }> | null;

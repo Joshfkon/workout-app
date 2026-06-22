@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
+import { estimateE1RM, getLocalDateString } from '@/lib/utils';
 import type { CoachingContext, RecentLift, PhaseType } from '@/types/coaching';
 import type {
   UserRow,
@@ -115,7 +116,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     .from('bodyweight_entries')
     .select('weight_kg, date')
     .eq('user_id', authUser.id)
-    .gte('date', twoWeeksAgo.toISOString().split('T')[0])
+    .gte('date', getLocalDateString(twoWeeksAgo))
     .order('date', { ascending: true });
 
   const weights = recentWeights as Pick<BodyweightEntryRow, 'weight_kg' | 'date'>[] | null;
@@ -193,7 +194,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
     `)
     .eq('user_id', authUser.id)
     .eq('state', 'completed')
-    .gte('planned_date', thirtyDaysAgo.toISOString().split('T')[0])
+    .gte('planned_date', getLocalDateString(thirtyDaysAgo))
     .order('planned_date', { ascending: false })
     .limit(20);
 
@@ -227,14 +228,14 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
           const currentReps = current.reps || 0;
           const bestWeight = best.weight_kg || 0;
           const bestReps = best.reps || 0;
-          const currentE1RM = currentWeight * (1 + currentReps / 30);
-          const bestE1RM = bestWeight * (1 + bestReps / 30);
+          const currentE1RM = estimateE1RM(currentWeight, currentReps);
+          const bestE1RM = estimateE1RM(bestWeight, bestReps);
           return currentE1RM > bestE1RM ? current : best;
         });
 
         if (!topSet.weight_kg || !topSet.reps) continue;
 
-        const estimated1RM = topSet.weight_kg * (1 + topSet.reps / 30);
+        const estimated1RM = estimateE1RM(topSet.weight_kg, topSet.reps);
 
         const lift: RecentLift = {
           exerciseName: block.exercise_name,

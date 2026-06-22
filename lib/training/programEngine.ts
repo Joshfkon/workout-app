@@ -35,6 +35,7 @@ import type {
   FFMIBracket,
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
+import { getLocalDateString } from '@/lib/utils';
 import {
   EXERCISE_DATABASE,
   MUSCLE_FIBER_PROFILE,
@@ -91,12 +92,12 @@ export function estimate1RM(weight: number, reps: number, rpe?: number): number 
   if (reps > 12) {
     return weight * (1 + reps / 40);
   }
-  
+
   const effectiveReps = rpe ? reps + (10 - rpe) : reps;
   const brzycki = weight * (36 / (37 - effectiveReps));
   const epley = weight * (1 + effectiveReps / 30);
   const lombardi = weight * Math.pow(effectiveReps, 0.10);
-  
+
   return Math.round(((brzycki + epley + lombardi) / 3) * 10) / 10;
 }
 
@@ -942,7 +943,7 @@ export class ProgramEngine {
         volume_per_muscle: volumePerMuscle,
         recovery_multiplier: recoveryFactors.volumeMultiplier,
         is_active: true,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: getLocalDateString(),
       })
       .select('id')
       .single();

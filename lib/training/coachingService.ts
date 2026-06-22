@@ -17,6 +17,7 @@ import type {
 } from '@/types/training';
 import { BENCHMARK_LIFTS } from './constants';
 import { calculateBodyComposition, estimate1RM } from './programEngine';
+import { getLocalDateString } from '@/lib/utils';
 
 // ============================================================
 // COACHING SERVICE CLASS
@@ -83,7 +84,7 @@ export class CoachingService {
     
     await this.supabase.from('dexa_scans').insert({
       user_id: this.userId,
-      scan_date: new Date().toISOString().split('T')[0],
+      scan_date: getLocalDateString(),
       weight_kg: weightKg,
       lean_mass_kg: bodyComp.leanMassKg,
       fat_mass_kg: weightKg - bodyComp.leanMassKg,

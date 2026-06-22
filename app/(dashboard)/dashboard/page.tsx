@@ -21,6 +21,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
+import { MUSCLE_GROUPS } from '@/types/schema';
 
 // Card identifiers for reordering
 type DashboardCardId =
@@ -65,7 +66,7 @@ const MEV_TARGETS: Record<string, number> = {
 };
 
 // All muscle groups to check (including those with 0 sets)
-const ALL_MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'quads', 'hamstrings', 'glutes', 'biceps', 'triceps', 'calves', 'abs', 'traps', 'forearms', 'adductors'];
+const ALL_MUSCLE_GROUPS = MUSCLE_GROUPS;
 
 interface NutritionTotals {
   calories: number;

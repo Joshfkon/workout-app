@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup, WeightUnit, FormRating } from '@/types/schema';
-import { formatDuration, formatWeight } from '@/lib/utils';
+import { formatDuration, formatWeight, estimateE1RM } from '@/lib/utils';
 import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
 
 interface ExerciseWithHistory {
@@ -46,12 +46,6 @@ interface SessionSummaryProps {
 
 // Convert kg to lbs
 const kgToLbs = (kg: number) => Math.round(kg * 2.20462 * 10) / 10;
-
-// Calculate estimated 1RM using Epley formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  return Math.round(weight * (1 + reps / 30));
-}
 
 // Estimate calories burned (rough estimate based on duration, sets, and intensity)
 function estimateCaloriesBurned(durationMinutes: number, totalSets: number, avgRpe: number): number {
@@ -181,7 +175,7 @@ export function SessionSummary({
           bestForm = setForm;
         }
         if (set.reps > bestReps) bestReps = set.reps;
-        const e1rm = calculateE1RM(set.weightKg, set.reps);
+        const e1rm = estimateE1RM(set.weightKg, set.reps);
         if (e1rm > bestE1RM) bestE1RM = e1rm;
         totalVolume += set.weightKg * set.reps;
       });
@@ -299,7 +293,7 @@ export function SessionSummary({
         ? Math.round((sets.reduce((sum, s) => sum + s.rpe, 0) / sets.length) * 10) / 10 
         : 0;
       const bestE1RM = sets.length > 0 
-        ? Math.max(...sets.map(s => calculateE1RM(s.weightKg, s.reps))) 
+        ? Math.max(...sets.map(s => estimateE1RM(s.weightKg, s.reps))) 
         : 0;
       
       // Check if this exercise had a PR

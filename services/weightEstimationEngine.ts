@@ -430,25 +430,28 @@ function getFFMIBracket(ffmi: number): FFMIBracket {
 // ============================================================
 
 /**
- * Estimate 1RM from weight, reps, and optional RPE
- * Uses average of Brzycki, Epley, and Lombardi formulas for accuracy
- * 
- * NOTE: This function is duplicated in lib/training/programEngine.ts
- * Both implementations should be kept in sync. Consider consolidating in the future.
+ * Estimate 1RM from weight, reps, and optional RPE — the PROGRAMMING estimator.
+ * Uses the average of Brzycki, Epley, and Lombardi with a simpler high-rep
+ * branch, intentionally distinct from the display/PR `estimateE1RM` in lib/utils
+ * (which clamps reps to 12). Do not collapse the two: they serve different
+ * purposes (weight prescription vs. per-set 1RM display).
+ *
+ * NOTE: lib/training/programEngine.ts holds the same programming formula; keep
+ * the two in sync.
  */
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   if (reps === 1) return weight;
   if (reps > 12) {
     return weight * (1 + reps / 40);
   }
-  
+
   const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  
+
   // Multiple formulas for accuracy
   const brzycki = weight * (36 / (37 - effectiveReps));
   const epley = weight * (1 + effectiveReps / 30);
   const lombardi = weight * Math.pow(effectiveReps, 0.10);
-  
+
   const average = (brzycki + epley + lombardi) / 3;
   return Math.round(average * 10) / 10;
 }

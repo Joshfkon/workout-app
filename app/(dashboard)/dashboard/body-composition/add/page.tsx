@@ -7,6 +7,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { calculateLeanMass, calculateFatMass } from '@/services/bodyCompEngine';
 import type { DexaRegionalData } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import { getLocalDateString } from '@/lib/utils';
 
 // Unit conversion helpers
 const kgToLbs = (kg: number) => kg * 2.20462;
@@ -20,7 +21,7 @@ export default function AddDexaScanPage() {
   const [error, setError] = useState<string | null>(null);
   
   // Form state - stored in display units, converted to kg on save
-  const [scanDate, setScanDate] = useState(new Date().toISOString().split('T')[0]);
+  const [scanDate, setScanDate] = useState(getLocalDateString());
   const [weightDisplay, setWeightDisplay] = useState('');
   const [bodyFatPercent, setBodyFatPercent] = useState('');
   const [leanMassDisplay, setLeanMassDisplay] = useState('');

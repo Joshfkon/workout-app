@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type { Exercise } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { completeSingleExercise } from '@/lib/actions/exercise-completion';
 import {
   LineChart,
@@ -44,12 +44,6 @@ interface ExerciseHistoryData {
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
   chartData: SessionData[];
-}
-
-// Calculate E1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  return weight * (36 / (37 - reps));
 }
 
 // Helper to get property value from either camelCase or snake_case
@@ -216,7 +210,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
             const reps = set.reps || 0;
             sessionVolume += weight * reps;
             
-            const e1rm = calculateE1RM(weight, reps);
+            const e1rm = estimateE1RM(weight, reps);
             if (e1rm > sessionBestE1RM) {
               sessionBestE1RM = e1rm;
               sessionBestWeight = weight;

@@ -20,6 +20,8 @@ import type {
   WorkoutSession,
   Rating,
 } from '@/types/schema';
+import { MUSCLE_GROUPS } from '@/types/schema';
+import { estimateE1RM } from '@/lib/utils';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -282,11 +284,7 @@ export function createInitialVolumeProfile(
 ): UserVolumeProfile {
   const muscleTolerance: Record<MuscleGroup, MuscleTolerance> = {} as Record<MuscleGroup, MuscleTolerance>;
 
-  const muscles: MuscleGroup[] = [
-    'chest', 'back', 'shoulders', 'biceps', 'triceps',
-    'quads', 'hamstrings', 'glutes', 'calves', 'abs',
-    'traps', 'forearms', 'adductors'
-  ];
+  const muscles: readonly MuscleGroup[] = MUSCLE_GROUPS;
 
   for (const muscle of muscles) {
     const baseline = getAdjustedBaseline(muscle, trainingAge, isEnhanced);
@@ -325,12 +323,11 @@ export function formToScore(form: FormRating): number {
 }
 
 /**
- * Calculate Estimated 1RM using Epley formula
+ * Calculate Estimated 1RM. Delegates to the canonical Epley + RIR estimator in
+ * lib/utils (single source of truth).
  */
 export function calculateE1RM(weight: number, reps: number, rir: number = 0): number {
-  const actualReps = reps + rir;
-  if (actualReps <= 1) return weight;
-  return weight * (1 + actualReps / 30);
+  return estimateE1RM(weight, reps, rir);
 }
 
 /**

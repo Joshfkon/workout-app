@@ -28,6 +28,7 @@ import {
   formatMeasurementDiff,
   cmToIn,
   inToCm,
+  getLocalDateString,
 } from '@/lib/utils';
 
 interface Measurements {
@@ -289,7 +290,7 @@ export function BodyMeasurements({
   useEffect(() => {
     const loadMeasurements = async () => {
       const supabase = createUntypedClient();
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
 
       // Get last 5 measurement entries (fetch history first to use as fallback)
       const { data: historyData } = await supabase
@@ -366,7 +367,7 @@ export function BodyMeasurements({
   const handleSave = async () => {
     setIsSaving(true);
     const supabase = createUntypedClient();
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
 
     // Note: measurements state already stores values in cm
     // The onChange handler converts input values to cm regardless of displayUnit

@@ -12,6 +12,7 @@ import {
   type ParsedLoseItEntry,
   type ImportResult,
 } from '@/services/importExport';
+import { getLocalDateString } from '@/lib/utils';
 
 type ImportSource = 'strong' | 'loseit' | null;
 
@@ -564,7 +565,7 @@ export function ImportExportSettings() {
 
         if (logs) {
           const entries = logs.map((l: any) => ({
-            date: l.logged_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+            date: l.logged_at?.split('T')[0] || getLocalDateString(),
             name: l.food_name,
             calories: l.calories,
             protein: l.protein,

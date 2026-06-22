@@ -17,6 +17,7 @@ import type {
   BurnRateHistoryPoint,
 } from '@/types/wearable';
 import { calculateAdaptiveTDEE, type TDEEEstimate, type DailyDataPoint } from './adaptive-tdee';
+import { getLocalDateString } from '@/lib/utils';
 
 // === TYPES ===
 
@@ -587,7 +588,7 @@ function filterDataPoints(
 ): EnhancedDailyDataPoint[] {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - windowDays);
-  const cutoffStr = cutoffDate.toISOString().split('T')[0];
+  const cutoffStr = getLocalDateString(cutoffDate);
 
   return dataPoints
     .filter((dp) => {

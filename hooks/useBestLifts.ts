@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { UserLifts } from '@/services/measurementImbalanceEngine';
+import { estimateE1RM, getLocalDateString } from '@/lib/utils';
 
 interface BestLiftRecord {
   exerciseName: string;
@@ -20,12 +21,6 @@ interface UseBestLiftsReturn {
   error: Error | null;
   refreshLifts: () => Promise<void>;
   updateLift: (exerciseName: string, weightKg: number, reps: number) => Promise<void>;
-}
-
-// Epley formula for E1RM calculation
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  return weight * (1 + reps / 30);
 }
 
 // Map common exercise names to the standard lift names used by the imbalance engine
@@ -110,7 +105,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
             exerciseName: lift.exercise_name,
             weightKg: lift.weight_kg,
             reps: lift.reps,
-            estimated1rmKg: lift.estimated_1rm_kg || calculateE1RM(lift.weight_kg, lift.reps),
+            estimated1rmKg: lift.estimated_1rm_kg || estimateE1RM(lift.weight_kg, lift.reps),
             achievedAt: lift.achieved_at,
             source: lift.source,
           });
@@ -174,7 +169,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
           const exerciseName = log.exercise_block.exercise.name.toLowerCase();
           if (!keyExercises.includes(exerciseName)) return;
 
-          const e1rm = calculateE1RM(log.weight_kg, log.reps);
+          const e1rm = estimateE1RM(log.weight_kg, log.reps);
           const existing = exerciseBests.get(exerciseName);
 
           if (!existing || e1rm > existing.estimated1rmKg) {
@@ -218,7 +213,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
     reps: number
   ) => {
     const supabase = createUntypedClient();
-    const e1rm = calculateE1RM(weightKg, reps);
+    const e1rm = estimateE1RM(weightKg, reps);
 
     const { error } = await supabase
       .from('user_best_lifts')
@@ -228,7 +223,7 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
         weight_kg: weightKg,
         reps,
         estimated_1rm_kg: e1rm,
-        achieved_at: new Date().toISOString().split('T')[0],
+        achieved_at: getLocalDateString(),
         source: 'manual',
       }, {
         onConflict: 'user_id,exercise_name',

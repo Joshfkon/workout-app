@@ -27,7 +27,7 @@ import {
   getStrengthLevelColor,
   generatePercentileSegments
 } from '@/services/coachingEngine';
-import { kgToLbs, roundToIncrement, formatWeight, formatDuration } from '@/lib/utils';
+import { kgToLbs, roundToIncrement, formatWeight, formatDuration, estimateE1RM, getLocalDateString } from '@/lib/utils';
 // Recharts components still used inline - these will be gradually migrated
 import {
   LineChart,
@@ -300,13 +300,6 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   );
 }
 
-// Calculate estimated 1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
-}
-
 export default function AnalyticsPage() {
   const router = useRouter();
   const { preferences } = useUserPreferences();
@@ -555,7 +548,7 @@ export default function AnalyticsPage() {
             .from('weigh_ins')
             .select('logged_at, weight_kg')
             .eq('user_id', userId)
-            .gte('logged_at', new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+            .gte('logged_at', getLocalDateString(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)))
             .order('logged_at', { ascending: true }),
           // Latest body measurements
           supabase
@@ -722,7 +715,7 @@ export default function AnalyticsPage() {
           startDate = new Date(0); // All time
       }
 
-      const startDateStr = startDate.toISOString().split('T')[0];
+      const startDateStr = getLocalDateString(startDate);
 
       try {
         // Fetch hydration data
@@ -925,7 +918,7 @@ export default function AnalyticsPage() {
                 totalSets++;
                 totalVolume += set.weight_kg * set.reps;
 
-                const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                const e1rm = estimateE1RM(set.weight_kg, set.reps);
                 
                 // Update best E1RM for this exercise in muscle group
                 if (e1rm > exInMuscle.bestE1RM) {

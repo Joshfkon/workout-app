@@ -5,7 +5,7 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/compon
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 
@@ -59,13 +59,6 @@ interface ExerciseHistoryData {
   allTimeBestReps: number;
   totalSetsAllTime: number;
   progressPercent: number;
-}
-
-// Calculate estimated 1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
 }
 
 function HistoryPageContent() {
@@ -261,7 +254,7 @@ function HistoryPageContent() {
         const sets: { weight: number; reps: number; rpe: number | null }[] = [];
 
         workingSets.forEach((set: any) => {
-          const e1rm = calculateE1RM(set.weight_kg, set.reps);
+          const e1rm = estimateE1RM(set.weight_kg, set.reps);
           sets.push({ weight: set.weight_kg, reps: set.reps, rpe: set.rpe });
           sessionVolume += set.weight_kg * set.reps;
           

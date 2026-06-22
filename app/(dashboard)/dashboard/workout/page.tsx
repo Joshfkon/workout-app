@@ -18,7 +18,7 @@ const ExercisesTab = dynamic(() => import('../exercises/page'), {
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
@@ -119,13 +119,6 @@ interface ExerciseHistoryData {
 }
 
 type Goal = 'bulk' | 'cut' | 'maintain';
-
-// Calculate estimated 1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
-}
 
 const FOLDER_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
@@ -856,7 +849,7 @@ export default function WorkoutPage() {
         const sets: { weight: number; reps: number; rpe: number | null }[] = [];
 
         workingSets.forEach((set: any) => {
-          const e1rm = calculateE1RM(set.weight_kg, set.reps);
+          const e1rm = estimateE1RM(set.weight_kg, set.reps);
           sets.push({ weight: set.weight_kg, reps: set.reps, rpe: set.rpe });
           sessionVolume += set.weight_kg * set.reps;
 
@@ -1113,7 +1106,7 @@ export default function WorkoutPage() {
 
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       const { data: existingWorkout } = await supabase
         .from('workout_sessions')
         .select('id')
