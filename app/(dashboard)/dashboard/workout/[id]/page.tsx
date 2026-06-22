@@ -33,7 +33,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
-import { formatWeight } from '@/lib/utils';
+import { formatWeight, getLocalDateString, estimateE1RM } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -132,11 +132,9 @@ function getExerciseInjuryRisk(
   };
 }
 
-// Calculate E1RM using Brzycki formula
+// Calculate E1RM using the canonical estimator (Epley + RIR, reps clamped to 12)
 function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
+  return estimateE1RM(weight, reps);
 }
 
 // Generate coach message based on workout structure and user context
@@ -414,6 +412,9 @@ export default function WorkoutPage() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
+  // Deferred set-delete with undo: the DB delete only commits after the undo window elapses
+  const [pendingSetDelete, setPendingSetDelete] = useState<SetLog | null>(null);
+  const pendingDeleteTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
   const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(true);
@@ -1358,7 +1359,7 @@ export default function WorkoutPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString();
 
         // Fetch today's food log entries (logged_at is a DATE column, not timestamp)
         const { data: foodEntries } = await supabase
@@ -1494,7 +1495,7 @@ export default function WorkoutPage() {
         if (checkInData.bodyweightKg) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             await supabase
               .from('weight_log')
               .upsert(
@@ -1940,9 +1941,97 @@ export default function WorkoutPage() {
     }
   };
 
+  // Commit a deferred set delete to the database (runs after the undo window elapses).
+  // Local UI state was already updated optimistically in handleDeleteSet.
+  const commitSetDelete = useCallback(async (setToDelete: SetLog) => {
+    try {
+      const supabase = createUntypedClient();
+      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setToDelete.id);
+
+      if (deleteError) {
+        console.error('Failed to delete set:', deleteError);
+        setError(`Failed to delete set: ${deleteError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete set');
+    }
+  }, []);
+
+  // Undo a pending set delete: re-insert the set into local state, the store, and the DB.
+  const undoSetDelete = useCallback(async () => {
+    if (pendingDeleteTimerRef.current) {
+      clearTimeout(pendingDeleteTimerRef.current);
+      pendingDeleteTimerRef.current = null;
+    }
+    const restored = pendingSetDelete;
+    setPendingSetDelete(null);
+    if (!restored) return;
+
+    // Re-insert into local state and renumber the block's working sets immutably
+    setCompletedSets(prevSets => {
+      if (prevSets.some(s => s.id === restored.id)) return prevSets;
+      const merged = [...prevSets, restored];
+      let blockSetNumber = 1;
+      return merged.map(set => {
+        if (set.exerciseBlockId === restored.exerciseBlockId && !set.isWarmup) {
+          return { ...set, setNumber: blockSetNumber++ };
+        }
+        return set;
+      });
+    });
+
+    // Sync back to the store for resume functionality
+    logSetToStore(restored.exerciseBlockId, restored);
+
+    // Re-insert into the database, preserving the original id so references stay valid
+    try {
+      const supabase = createUntypedClient();
+      const { error: insertError } = await supabase.from('set_logs').insert({
+        id: restored.id,
+        exercise_block_id: restored.exerciseBlockId,
+        set_number: restored.setNumber,
+        weight_kg: restored.weightKg,
+        reps: restored.reps,
+        set_type: restored.setType,
+        parent_set_id: restored.parentSetId || null,
+        rpe: restored.rpe,
+        is_warmup: restored.isWarmup,
+        quality: restored.quality,
+        quality_reason: restored.qualityReason,
+        note: restored.note || null,
+        logged_at: restored.loggedAt,
+        feedback: restored.feedback ? JSON.stringify(restored.feedback) : null,
+        bodyweight_data: restored.bodyweightData ? JSON.stringify(restored.bodyweightData) : null,
+      });
+
+      if (insertError) {
+        console.error('Failed to restore set:', insertError);
+        setError(`Failed to restore set: ${insertError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to restore set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to restore set');
+    }
+  }, [pendingSetDelete, logSetToStore]);
+
   const handleDeleteSet = async (setId: string) => {
     // Find the set before deleting to get the blockId for store sync
     const setToDelete = completedSets.find(s => s.id === setId);
+
+    // If a previous delete is still pending its undo window, commit it now so we
+    // never lose track of more than one deferred delete at a time.
+    if (pendingDeleteTimerRef.current) {
+      clearTimeout(pendingDeleteTimerRef.current);
+      pendingDeleteTimerRef.current = null;
+    }
+    if (pendingSetDelete) {
+      void commitSetDelete(pendingSetDelete);
+    }
 
     // Remove from local state using functional update to avoid stale closure
     setCompletedSets(prevSets => {
@@ -1968,22 +2057,34 @@ export default function WorkoutPage() {
       deleteSetFromStore(setToDelete.exerciseBlockId, setId);
     }
 
-    // Delete from database
-    try {
-      const supabase = createUntypedClient();
-      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
-      
-      if (deleteError) {
-        console.error('Failed to delete set:', deleteError);
-        setError(`Failed to delete set: ${deleteError.message}`);
-      } else {
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Failed to delete set:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete set');
-    }
+    if (!setToDelete) return;
+
+    // Defer the actual DB delete so the user can undo it within the toast window.
+    setPendingSetDelete(setToDelete);
+    pendingDeleteTimerRef.current = setTimeout(() => {
+      pendingDeleteTimerRef.current = null;
+      setPendingSetDelete(current => {
+        if (current && current.id === setToDelete.id) {
+          void commitSetDelete(setToDelete);
+          return null;
+        }
+        return current;
+      });
+    }, 5000);
   };
+
+  // On unmount, flush any pending deferred delete so we don't silently lose it
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteTimerRef.current) {
+        clearTimeout(pendingDeleteTimerRef.current);
+        pendingDeleteTimerRef.current = null;
+        if (pendingSetDelete) {
+          void commitSetDelete(pendingSetDelete);
+        }
+      }
+    };
+  }, [pendingSetDelete, commitSetDelete]);
 
   // State for adding extra sets beyond target
   const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
@@ -5016,6 +5117,24 @@ export default function WorkoutPage() {
           check={sanityCheckResult}
           onDismiss={() => setSanityCheckResult(null)}
         />
+      )}
+
+      {/* Undo set-delete snackbar */}
+      {pendingSetDelete && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md">
+          <div className="flex items-center gap-3 px-4 py-3 bg-surface-800 border border-surface-700 rounded-lg shadow-lg">
+            <svg className="w-5 h-5 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            <span className="text-sm text-surface-200 flex-1">Set removed</span>
+            <button
+              onClick={() => { void undoSetDelete(); }}
+              className="px-3 py-1.5 text-sm font-semibold text-primary-300 hover:text-primary-200 rounded-md hover:bg-primary-500/10 transition-colors"
+            >
+              Undo
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Calibration Result Card (modal overlay) */}
