@@ -463,12 +463,18 @@ export async function runMesocycleCompletionAnalysis(
 
     // 1. Pull this mesocycle's weekly volume rows, ordered chronologically so
     //    each muscle's array is week-1 -> week-N (analyzeMesocycle is order-sensitive).
-    const { data: weeklyRows, error: weeklyError } = await supabase
+    //    NOTE: weekly_muscle_volume has no mesocycle_id column (the slim initial
+    //    schema is the one that applied), so scope by the mesocycle's date window
+    //    via week_start instead of filtering on mesocycle_id.
+    let weeklyQuery = supabase
       .from('weekly_muscle_volume')
       .select('*')
-      .eq('user_id', userId)
-      .eq('mesocycle_id', mesocycleId)
-      .order('week_start', { ascending: true });
+      .eq('user_id', userId);
+    if (options?.startDate) weeklyQuery = weeklyQuery.gte('week_start', options.startDate);
+    if (options?.endDate) weeklyQuery = weeklyQuery.lte('week_start', options.endDate);
+    const { data: weeklyRows, error: weeklyError } = await weeklyQuery.order('week_start', {
+      ascending: true,
+    });
 
     if (weeklyError) {
       console.error('runMesocycleCompletionAnalysis: failed to load weekly volume:', weeklyError);
