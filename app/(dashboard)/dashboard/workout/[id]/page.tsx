@@ -1693,10 +1693,13 @@ export default function WorkoutPage() {
     // Sync back to the store for resume functionality
     logSetToStore(restored.exerciseBlockId, restored);
 
-    // Re-insert into the database, preserving the original id so references stay valid
+    // Restore in the database, preserving the original id so references stay valid.
+    // Use upsert (not insert): the delete is DEFERRED, so on a quick undo the row
+    // usually still exists in the DB (re-inserting it would hit a primary-key
+    // violation). Upsert is idempotent whether or not the deferred delete fired.
     try {
       const supabase = createUntypedClient();
-      const { error: insertError } = await supabase.from('set_logs').insert({
+      const { error: insertError } = await supabase.from('set_logs').upsert({
         id: restored.id,
         exercise_block_id: restored.exerciseBlockId,
         set_number: restored.setNumber,
@@ -1712,7 +1715,7 @@ export default function WorkoutPage() {
         logged_at: restored.loggedAt,
         feedback: restored.feedback ? JSON.stringify(restored.feedback) : null,
         bodyweight_data: restored.bodyweightData ? JSON.stringify(restored.bodyweightData) : null,
-      });
+      }, { onConflict: 'id' });
 
       if (insertError) {
         console.error('Failed to restore set:', insertError);
