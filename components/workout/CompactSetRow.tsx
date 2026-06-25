@@ -223,10 +223,12 @@ export const CompactSetRow = memo(function CompactSetRow({
     const repsNum = previousSet.reps;
     if (!repsNum || repsNum < 1) return;
 
-    const bwData = isBodyweight ? getBodyweightData() : undefined;
-    const weightKg = isBodyweight && bwData
-      ? bwData.effectiveLoadKg
-      : previousSet.weightKg;
+    // "Repeat" means log an identical set, so reuse the previous set's stored
+    // values directly. Recomputing from the current inputs would double-count
+    // for weighted/assisted bodyweight: those inputs are seeded from the
+    // previous EFFECTIVE load, not the added/assistance amount.
+    const bwData = isBodyweight ? previousSet.bodyweightData : undefined;
+    const weightKg = previousSet.weightKg;
 
     const feedback = previousSet.feedback ?? { repsInTank: 2, form: 'clean' };
     const rpe = previousSet.rpe
