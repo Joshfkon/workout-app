@@ -3,7 +3,7 @@
  *
  * Helpers that persist derived workout data on completion / check-in.
  * These are the WRITERS for tables that were previously read-only in the app:
- *   - exercise_performance_snapshots  (read by useProgressionTargets / useExerciseHistory)
+ *   - exercise_performance_snapshots  (read by useExerciseHistory)
  *   - weekly_fatigue_logs             (read by ProgramEngine.checkDeloadTriggers)
  *
  * Schema confirmed from migrations:

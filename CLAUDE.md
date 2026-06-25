@@ -27,8 +27,8 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
   /api                 # API routes (Stripe, Fitbit integration)
 
 /components            # React components
-  /analytics           # Charts and analytics (E1RMGraph, VolumeChart, FFMIGauge)
-  /coaching            # AI coaching UI (ImbalanceAlert, PercentileChart)
+  /analytics           # Charts and analytics (FFMIGauge, PlateauAlert, ProgressVisualization)
+  /coaching            # AI coaching UI (ImbalanceAlert)
   /dashboard           # Dashboard cards (ActivityCard, CardioTracker)
   /exercises           # Exercise management (CreateCustomExercise, FormCuesEditor)
   /nutrition           # Nutrition tracking (MacroCalculator, BarcodeScanner)
@@ -37,12 +37,10 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
   /workout             # Workout-specific (SetInputRow, RestTimer, ExerciseCard)
 
 /hooks                 # Custom React hooks
-  useActiveWorkout.ts  # Active workout session state
   useExerciseHistory.ts # Historical exercise data
-  useProgressionTargets.ts # Progression engine integration
   useRestTimer.ts      # Rest timer functionality
   useUserPreferences.ts # User preferences with unit conversion
-  useWeeklyVolume.ts   # Volume tracking per muscle group
+  useAdaptiveVolume.ts # Weekly volume / muscle tolerance tracking
 
 /lib                   # Utilities and integrations
   /actions             # Server actions (coaching, nutrition, tdee)
@@ -54,7 +52,8 @@ HyperTrack is a science-based hypertrophy training app with intelligent auto-reg
   utils.ts             # Common utilities (weight conversion, date formatting)
 
 /services              # Pure business logic (NO database calls)
-  progressionEngine.ts # Auto-progression calculations
+  progressionEngine.ts # Set quality, E1RM, warmup protocols, PR detection, periodization phase
+  weightEstimationEngine.ts # Live next-set weight suggestions (quickWeightEstimate) + 1RM estimation
   fatigueEngine.ts     # Readiness and fatigue tracking
   volumeTracker.ts     # Weekly volume calculations
   plateauDetector.ts   # Plateau detection algorithms
@@ -88,11 +87,18 @@ The app tracks training volume using research-based landmarks:
 - **MRV** (Maximum Recoverable Volume): Upper limit before excessive fatigue
 
 ### Progression Hierarchy
-The `progressionEngine.ts` uses this hierarchy:
+The conceptual progression hierarchy is:
 1. **Load progression**: Increase weight when hitting rep targets
 2. **Rep progression**: Add reps before increasing weight
 3. **Set progression**: Add sets within mesocycle
 4. **Technique progression**: Maintain for consolidation
+
+In the LIVE app, next-set weight **suggestions** come from
+`weightEstimationEngine.quickWeightEstimate` (E1RM-based), and
+progression / PR detection happens inline in the workout page
+(`app/(dashboard)/dashboard/workout/[id]/page.tsx`) and `SessionSummary`,
+using `progressionEngine`'s set-quality and `checkForPR` helpers. The older
+`progressionEngine.calculateNextTargets` orchestrator has been retired.
 
 ### Set Quality Classification
 Based on RPE analysis in `types/schema.ts`:
@@ -151,10 +157,10 @@ npx supabase db reset # Reset and reseed database
 3. **Services are pure functions**: No database calls in `/services`. Pass data as input:
    ```typescript
    // GOOD: Pure function
-   export function calculateNextTargets(input: CalculateNextTargetsInput): ProgressionTargets
+   export function calculateSetQuality(input: CalculateSetQualityInput): { quality: SetQuality }
 
    // BAD: Database call inside service
-   export async function calculateNextTargets(userId: string) { /* db call */ }
+   export async function calculateSetQuality(userId: string) { /* db call */ }
    ```
 
 4. **Type imports from schema.ts**: Use the canonical types:
@@ -212,7 +218,8 @@ await user.click(screen.getByRole('button'));
 
 | File | Purpose |
 |------|---------|
-| `services/progressionEngine.ts` | Core progression logic, set quality, warmup protocols |
+| `services/progressionEngine.ts` | Set quality, E1RM, warmup protocols, PR detection, periodization phase |
+| `services/weightEstimationEngine.ts` | Live next-set weight suggestions (`quickWeightEstimate`) + 1RM estimation |
 | `types/schema.ts` | All domain types and enums |
 | `lib/utils.ts` | Weight conversion, date formatting utilities |
 | `stores/userStore.ts` | User state and preferences management |

@@ -2794,7 +2794,7 @@ export default function WorkoutPage() {
         const sessionDate = session.plannedDate || getLocalDateString();
 
         // 1) Aggregate working sets per exercise into performance snapshots.
-        //    Read by useProgressionTargets / useExerciseHistory.
+        //    Read by useExerciseHistory.
         const snapshotResult = await writePerformanceSnapshots(supabase, {
           userId: session.userId,
           sessionDate,

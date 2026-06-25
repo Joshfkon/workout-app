@@ -4,21 +4,18 @@
  */
 
 import {
-  calculateNextTargets,
   calculateSetQuality,
   calculateE1RM,
   calculateBodyweightE1RM,
   detectJunkVolume,
   detectRegression,
   generateWarmupProtocol,
-  extractPerformanceFromSets,
   getPeriodizationPhase,
   adjustForFatigue,
   checkForPR,
   calculateSuggestedWeight,
   checkFormTrend,
   exerciseEntryToExercise,
-  type CalculateNextTargetsInput,
   type CalculateSetQualityInput,
   type GenerateWarmupInput,
   type FormAwareProgressionInput,
@@ -121,161 +118,6 @@ describe('getPeriodizationPhase', () => {
 
   it('treats weeks beyond the mesocycle as deload', () => {
     expect(getPeriodizationPhase(7, 6)).toBe('deload');
-  });
-});
-
-// ============================================
-// CALCULATE NEXT TARGETS TESTS
-// ============================================
-
-describe('calculateNextTargets', () => {
-  const baseInput: CalculateNextTargetsInput = {
-    exercise: createMockExercise(),
-    lastPerformance: null,
-    experience: 'intermediate',
-    weekInMeso: 2,
-    totalWeeksInMeso: 6,
-    isDeloadWeek: false,
-    readinessScore: 80,
-  };
-
-  describe('first time doing exercise', () => {
-    it('returns technique progression with no prior data', () => {
-      const result = calculateNextTargets(baseInput);
-
-      expect(result.progressionType).toBe('technique');
-      expect(result.weightKg).toBe(0);
-      expect(result.reason).toContain('New exercise');
-    });
-
-    it('uses calibrated E1RM if available', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        calibratedE1RM: 120,
-      });
-
-      expect(result.weightKg).toBeGreaterThan(0);
-      expect(result.reason).toContain('calibrated');
-    });
-
-    it('uses estimated from related exercises (conservative)', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        estimatedFromRelated: 120,
-      });
-
-      expect(result.weightKg).toBeGreaterThan(0);
-      expect(result.reason).toContain('estimated');
-    });
-  });
-
-  describe('deload week', () => {
-    it('reduces weight and volume', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance(),
-        isDeloadWeek: true,
-      });
-
-      expect(result.weightKg).toBeLessThan(100); // Less than last performance
-      expect(result.sets).toBeLessThanOrEqual(2);
-      expect(result.targetRir).toBe(4);
-      expect(result.reason).toContain('Deload');
-    });
-  });
-
-  describe('low readiness', () => {
-    it('reduces targets when readiness is low', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance(),
-        readinessScore: 50,
-      });
-
-      expect(result.weightKg).toBeLessThan(100);
-      expect(result.reason).toContain('readiness');
-    });
-  });
-
-  describe('load progression', () => {
-    it('increases weight when hitting top of rep range with good RPE', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance({
-          // Week 2/6 is the hypertrophy phase, which adjusts a compound's [6,10]
-          // default to [6,12]; 12 is the top of that phase-adjusted range.
-          reps: 12,
-          rpe: 8,
-          averageRpe: 8,
-        }),
-      });
-
-      expect(result.progressionType).toBe('load');
-      expect(result.weightKg).toBeGreaterThan(100);
-    });
-  });
-
-  describe('rep progression', () => {
-    it('suggests rep progression when not at top of range', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance({
-          reps: 7, // Below top of 6-10 range
-          rpe: 7.5,
-          averageRpe: 7.5,
-        }),
-      });
-
-      expect(result.progressionType).toBe('reps');
-      expect(result.reason).toContain('reps');
-    });
-  });
-
-  describe('set progression', () => {
-    it('suggests set progression when RPE is low and reps at minimum', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance({
-          // Week 3/6 is the strength phase, which adjusts a compound's [6,10]
-          // default to [4,6]; 4 is the minimum of that phase-adjusted range.
-          reps: 4,
-          rpe: 7,
-          averageRpe: 7,
-          allSetsCompleted: true,
-        }),
-        weekInMeso: 3,
-      });
-
-      // When in the rep range but RPE suggests capacity, sets or reps may be recommended
-      expect(['sets', 'reps', 'technique']).toContain(result.progressionType);
-    });
-  });
-
-  describe('fatigue adjustment', () => {
-    it('adjusts targets for high systemic fatigue', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance(),
-        systemicFatiguePercent: 85,
-      });
-
-      expect(result.targetRir).toBeGreaterThan(baseInput.exercise.defaultRir);
-      expect(result.reason).toContain('fatigue');
-    });
-
-    it('holds progression for high weekly fatigue', () => {
-      const result = calculateNextTargets({
-        ...baseInput,
-        lastPerformance: createMockPerformance({
-          reps: 10,
-          rpe: 8,
-          averageRpe: 8,
-        }),
-        weeklyFatigueScore: 8,
-      });
-
-      expect(result.reason).toContain('fatigue');
-    });
   });
 });
 
@@ -605,85 +447,6 @@ describe('generateWarmupProtocol', () => {
     const heavySet = protocol[protocol.length - 1];
     const lightSet = protocol[0];
     expect(heavySet.targetReps).toBeLessThanOrEqual(lightSet.targetReps);
-  });
-});
-
-// ============================================
-// EXTRACT PERFORMANCE TESTS
-// ============================================
-
-describe('extractPerformanceFromSets', () => {
-  it('extracts performance from working sets only', () => {
-    const sets = [
-      createMockSetLog({ isWarmup: true, weightKg: 50, reps: 10 }),
-      createMockSetLog({ isWarmup: false, weightKg: 100, reps: 8, rpe: 8 }),
-      createMockSetLog({ isWarmup: false, weightKg: 100, reps: 7, rpe: 9 }),
-    ];
-
-    const result = extractPerformanceFromSets(sets, 'bench-press');
-
-    expect(result).not.toBeNull();
-    expect(result!.weightKg).toBe(100);
-    expect(result!.sets).toBe(2);
-    expect(result!.averageRpe).toBe(8.5);
-  });
-
-  it('returns null for empty sets', () => {
-    expect(extractPerformanceFromSets([], 'bench-press')).toBeNull();
-  });
-
-  it('returns null when only warmup sets', () => {
-    const sets = [
-      createMockSetLog({ isWarmup: true }),
-      createMockSetLog({ isWarmup: true }),
-    ];
-
-    expect(extractPerformanceFromSets(sets, 'bench-press')).toBeNull();
-  });
-
-  it('uses top set weight and reps', () => {
-    const sets = [
-      createMockSetLog({ weightKg: 95, reps: 8, rpe: 7 }),
-      createMockSetLog({ weightKg: 100, reps: 6, rpe: 9 }), // Higher weight
-      createMockSetLog({ weightKg: 95, reps: 10, rpe: 8 }),
-    ];
-
-    const result = extractPerformanceFromSets(sets, 'test');
-    expect(result!.weightKg).toBe(100);
-    expect(result!.reps).toBe(6);
-  });
-
-  it('reports allSetsCompleted=false when target is unknown', () => {
-    const sets = [createMockSetLog({}), createMockSetLog({})];
-    const result = extractPerformanceFromSets(sets, 'test');
-    expect(result!.allSetsCompleted).toBe(false);
-  });
-
-  it('reports allSetsCompleted based on target set count', () => {
-    const sets = [createMockSetLog({}), createMockSetLog({}), createMockSetLog({})];
-
-    expect(extractPerformanceFromSets(sets, 'test', 3)!.allSetsCompleted).toBe(true);
-    expect(extractPerformanceFromSets(sets, 'test', 4)!.allSetsCompleted).toBe(false);
-    // Did more than target -> still counts as completed.
-    expect(extractPerformanceFromSets(sets, 'test', 2)!.allSetsCompleted).toBe(true);
-  });
-
-  it('preserves a legitimate 0 effective load for bodyweight sets', () => {
-    const sets = [
-      createMockSetLog({
-        weightKg: 50, // would wrongly be used if `||` dropped the 0
-        reps: 10,
-        rpe: 8,
-        bodyweightData: {
-          modification: 'assisted',
-          userBodyweightKg: 80,
-          effectiveLoadKg: 0,
-        } as SetLog['bodyweightData'],
-      }),
-    ];
-
-    const result = extractPerformanceFromSets(sets, 'pullup');
-    expect(result!.weightKg).toBe(0);
   });
 });
 
