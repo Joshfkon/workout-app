@@ -7,7 +7,10 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimati
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
-import type { Split, MuscleGroup } from '@/types/schema';
+import { getTodayMesocycleWorkout } from '@/lib/training/workoutIntegration';
+import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
+import type { MuscleGroup, Goal } from '@/types/schema';
+import type { DetailedSession } from '@/types/training';
 
 interface Mesocycle {
   id: string;
@@ -19,6 +22,7 @@ interface Mesocycle {
   split_type: string;
   deload_week: number;
   created_at: string;
+  start_date: string | null;
 }
 
 interface TodayWorkout {
@@ -26,8 +30,6 @@ interface TodayWorkout {
   muscles: MuscleGroup[];
   dayNumber: number;
 }
-
-type Goal = 'bulk' | 'cut' | 'maintain';
 
 /**
  * Get rest period based on exercise type and user's goal
@@ -47,7 +49,7 @@ function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGr
   if (goal === 'bulk') {
     return isCompound ? 180 : 90;  // 3min / 1.5min
   }
-  // maintain
+  // maintenance
   return isCompound ? 150 : 75;    // 2.5min / 1.25min
 }
 
@@ -120,6 +122,7 @@ export default function MesocyclePage() {
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [mesocycleJustCompleted, setMesocycleJustCompleted] = useState(false);
 
   const handleDeleteMesocycle = async (id: string) => {
     setDeletingId(id);
@@ -171,14 +174,51 @@ export default function MesocyclePage() {
         .order('created_at', { ascending: false });
 
       if (data && !error) {
-        setMesocycles(data);
-        
-        // Calculate today's workout for active mesocycle
-        const active = data.find((m: Mesocycle) => m.state === 'active');
-        if (active) {
+        let rows = data as Mesocycle[];
+
+        // Date-based week advancement for the active mesocycle.
+        const active = rows.find((m: Mesocycle) => m.state === 'active');
+        if (active && active.start_date) {
+          const { week, isComplete } = computeCurrentWeek(active.start_date, active.total_weeks);
+
+          if (isComplete) {
+            // Mesocycle duration elapsed -> mark completed & inactive.
+            const { error: completeError } = await supabase
+              .from('mesocycles')
+              .update({ state: 'completed', is_active: false })
+              .eq('id', active.id);
+            if (completeError) {
+              console.error('Failed to mark mesocycle complete:', completeError);
+            } else {
+              setMesocycleJustCompleted(true);
+              rows = rows.map((m) =>
+                m.id === active.id ? { ...m, state: 'completed' } : m
+              );
+            }
+          } else if (week !== active.current_week) {
+            // Advance the stored current_week so getTodayMesocycleWorkout reads the right week.
+            const { error: weekError } = await supabase
+              .from('mesocycles')
+              .update({ current_week: week })
+              .eq('id', active.id);
+            if (weekError) {
+              console.error('Failed to advance mesocycle week:', weekError);
+            } else {
+              rows = rows.map((m) =>
+                m.id === active.id ? { ...m, current_week: week } : m
+              );
+            }
+          }
+        }
+
+        setMesocycles(rows);
+
+        // Calculate today's workout for the (still) active mesocycle
+        const stillActive = rows.find((m: Mesocycle) => m.state === 'active');
+        if (stillActive) {
           const today = new Date();
           const dayOfWeek = today.getDay() || 7; // Convert Sunday(0) to 7
-          const workout = getWorkoutForDay(active.split_type, dayOfWeek, active.days_per_week);
+          const workout = getWorkoutForDay(stillActive.split_type, dayOfWeek, stillActive.days_per_week);
           setTodayWorkout(workout);
         }
       }
@@ -202,14 +242,42 @@ export default function MesocyclePage() {
       
       if (!user) throw new Error('Not logged in');
 
-      // Fetch user's goal from profile
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
+      // Fetch user's goal (lives on the users table, not user_profiles)
+      const { data: userRow } = await supabase
+        .from('users')
         .select('goal')
-        .eq('user_id', user.id)
+        .eq('id', user.id)
         .single();
-      
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
+
+      const userGoal: Goal = (userRow?.goal as Goal) || 'maintenance';
+
+      // Ensure the stored current_week reflects elapsed time before reading the
+      // program, so getTodayMesocycleWorkout indexes the correct week.
+      let effectiveWeek = activeMesocycle.current_week;
+      if (activeMesocycle.start_date) {
+        const { week, isComplete } = computeCurrentWeek(
+          activeMesocycle.start_date,
+          activeMesocycle.total_weeks
+        );
+        effectiveWeek = week;
+        if (isComplete) {
+          const { error: completeError } = await supabase
+            .from('mesocycles')
+            .update({ state: 'completed', is_active: false })
+            .eq('id', activeMesocycle.id);
+          if (completeError) console.error('Failed to mark mesocycle complete:', completeError);
+          setMesocycleJustCompleted(true);
+          setIsStartingWorkout(false);
+          return;
+        }
+        if (week !== activeMesocycle.current_week) {
+          const { error: weekError } = await supabase
+            .from('mesocycles')
+            .update({ current_week: week })
+            .eq('id', activeMesocycle.id);
+          if (weekError) console.error('Failed to advance mesocycle week:', weekError);
+        }
+      }
 
       // Check if there's already a workout for today
       const today = getLocalDateString();
@@ -243,13 +311,114 @@ export default function MesocyclePage() {
 
       if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
-      // Get exercises for the target muscles
-      const { data: exercises } = await supabase
-        .from('exercises')
-        .select('*')
-        .in('primary_muscle', todayWorkout.muscles);
+      // ---- PROGRAM-DRIVEN PATH ----
+      // Prefer the rich, pre-generated program saved in mesocycles.program_data.
+      // getTodayMesocycleWorkout returns the DetailedSession for today (or null
+      // for old mesocycles without program_data, rest days, or engine errors).
+      let usedProgram = false;
+      try {
+        const detailedSession: DetailedSession | null = await getTodayMesocycleWorkout(
+          user.id,
+          activeMesocycle.id
+        );
 
-      if (exercises && exercises.length > 0) {
+        if (detailedSession && detailedSession.exercises.length > 0) {
+          // Resolve each program exercise (by name) to a DB exercises row.
+          const names = detailedSession.exercises.map((e) => e.exercise.name);
+          const { data: dbExercises } = await supabase
+            .from('exercises')
+            .select('id, name, primary_muscle, mechanic')
+            .in('name', names);
+
+          type DbExRow = { id: string; name: string; primary_muscle: string; mechanic: string };
+          const byName = new Map<string, DbExRow>();
+          ((dbExercises as DbExRow[]) || []).forEach((row) => byName.set(row.name, row));
+
+          const blocks: Record<string, unknown>[] = [];
+          let order = 1;
+
+          for (const detailed of detailedSession.exercises) {
+            const dbEx = byName.get(detailed.exercise.name);
+            if (!dbEx) {
+              // No matching DB exercise (e.g. custom name) -> skip; can't satisfy FK.
+              console.warn('Mesocycle: no DB exercise match for', detailed.exercise.name);
+              continue;
+            }
+
+            const isCompound = dbEx.mechanic === 'compound';
+            // Program supplies a structured rep range + RIR target.
+            const repRange: [number, number] = [
+              detailed.reps?.min ?? 8,
+              detailed.reps?.max ?? 12,
+            ];
+            const targetRir = detailed.reps?.targetRIR ?? 2;
+
+            // Warmup only for the first exercise of the session.
+            let warmupSets: any[] = [];
+            if (order === 1) {
+              warmupSets = generateWarmupProtocol({
+                workingWeight: 60, // Adjusted in the workout from history/user input
+                exercise: {
+                  id: dbEx.id,
+                  name: dbEx.name,
+                  primaryMuscle: dbEx.primary_muscle,
+                  secondaryMuscles: [],
+                  mechanic: isCompound ? 'compound' : 'isolation',
+                  defaultRepRange: repRange,
+                  defaultRir: targetRir,
+                  minWeightIncrementKg: 2.5,
+                  formCues: [],
+                  commonMistakes: [],
+                  equipmentRequired: [],
+                  setupNote: '',
+                  movementPattern: isCompound ? 'compound' : 'isolation',
+                },
+                isFirstExercise: true,
+              });
+            }
+
+            blocks.push({
+              workout_session_id: session.id,
+              exercise_id: dbEx.id,
+              order: order++,
+              target_sets: Math.max(1, Math.min(10, detailed.sets || (isCompound ? 4 : 3))),
+              target_rep_range: repRange,
+              target_rir: Math.max(0, Math.min(5, targetRir)),
+              target_weight_kg: 0, // Filled from history or user input
+              target_rest_seconds: Math.max(
+                0,
+                Math.min(600, detailed.restSeconds || getRestPeriod(isCompound, userGoal, dbEx.primary_muscle as MuscleGroup))
+              ),
+              suggestion_reason: detailed.notes
+                ? `${detailedSession.day} - Week ${effectiveWeek} - ${detailed.notes}`
+                : `${detailedSession.day} - Week ${effectiveWeek}`,
+              warmup_protocol: { sets: warmupSets },
+            });
+          }
+
+          if (blocks.length > 0) {
+            await supabase.from('exercise_blocks').insert(blocks);
+            usedProgram = true;
+          } else {
+            console.warn('Mesocycle: program session had no resolvable exercises; falling back to muscle map');
+          }
+        } else {
+          console.info('Mesocycle: no program session for today; falling back to muscle map');
+        }
+      } catch (programError) {
+        console.error('Mesocycle: program-driven block build failed; falling back to muscle map:', programError);
+      }
+
+      // ---- FALLBACK PATH (legacy muscle map) ----
+      // Used for old mesocycles without program_data, unresolved exercises, or errors.
+      const exercises = usedProgram
+        ? null
+        : (await supabase
+            .from('exercises')
+            .select('*')
+            .in('primary_muscle', todayWorkout.muscles)).data;
+
+      if (!usedProgram && exercises && exercises.length > 0) {
         // Group exercises by muscle and pick 1-2 per muscle
         type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
         const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
@@ -364,6 +533,21 @@ export default function MesocyclePage() {
           </Button>
         </Link>
       </div>
+
+      {mesocycleJustCompleted && (
+        <Card className="border-2 border-success-500/30 bg-success-500/5">
+          <CardContent className="p-6 text-center">
+            <span className="text-4xl block mb-3">🎉</span>
+            <h3 className="text-lg font-semibold text-success-300">Mesocycle Complete!</h3>
+            <p className="text-surface-400 mt-1 max-w-md mx-auto">
+              You&apos;ve finished this training block. Time to deload, reassess, and start your next mesocycle.
+            </p>
+            <Link href="/dashboard/mesocycle/new">
+              <Button className="mt-4">Start a New Mesocycle</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <Card className="text-center py-12">
