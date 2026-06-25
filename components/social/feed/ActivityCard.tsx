@@ -10,6 +10,22 @@ import { ReactionBar } from './ReactionBar';
 import { CommentSection } from './CommentSection';
 import type { ActivityWithProfile, WorkoutCompletedData, PersonalRecordData, StreakMilestoneData } from '@/types/social';
 
+// A single workout longer than this is almost certainly a session that was left
+// open and never properly closed (duration is computed from start->complete), so
+// treat such values as invalid rather than showing e.g. "82351 min".
+const MAX_PLAUSIBLE_WORKOUT_MINUTES = 8 * 60; // 8 hours
+
+/** Format a workout duration, or return null if the stored value is implausible. */
+function formatWorkoutDuration(minutes: number | null | undefined): string | null {
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return null;
+  const mins = Math.round(minutes);
+  if (mins <= 0 || mins > MAX_PLAUSIBLE_WORKOUT_MINUTES) return null;
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 export interface ActivityCardProps {
   activity: ActivityWithProfile;
   currentUserId?: string;
@@ -132,10 +148,10 @@ function WorkoutContent({ data, units }: { data: WorkoutCompletedData; units: 'k
 
       {/* Stats row */}
       <div className="flex gap-4 text-sm">
-        {data.duration_minutes && (
+        {formatWorkoutDuration(data.duration_minutes) && (
           <div>
             <span className="text-surface-400">Duration:</span>{' '}
-            <span className="text-surface-200">{Math.round(data.duration_minutes)} min</span>
+            <span className="text-surface-200">{formatWorkoutDuration(data.duration_minutes)}</span>
           </div>
         )}
         <div>
