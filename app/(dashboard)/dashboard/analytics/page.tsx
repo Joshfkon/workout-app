@@ -42,9 +42,11 @@ import {
   ReferenceLine,
   Legend,
 } from 'recharts';
-import type { Mesocycle, BodyCompositionTarget } from '@/types/schema';
+import type { Mesocycle, BodyCompositionTarget, ExercisePerformanceSnapshot } from '@/types/schema';
 import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnalytics';
 import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
+import { analyzeAllExercises, type PlateauDetectionResult } from '@/services/plateauDetector';
+import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
@@ -327,6 +329,7 @@ export default function AnalyticsPage() {
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
   const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
   const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
 
@@ -866,6 +869,7 @@ export default function AnalyticsPage() {
 
         if (error || !workoutSessions || workoutSessions.length === 0) {
           setAnalytics(null);
+          setPlateauAlerts([]);
           return;
         }
 
@@ -876,6 +880,9 @@ export default function AnalyticsPage() {
         const durations: number[] = [];
         const muscleVolumeMap = new Map<string, { sets: number; workouts: Set<string>; exercises: Map<string, { id: string; name: string; sets: number; bestE1RM: number }> }>();
         const exercisePerformanceMap = new Map<string, ExercisePerformance>();
+        // Per-session snapshots per exercise, for plateau detection
+        const snapshotMap = new Map<string, ExercisePerformanceSnapshot[]>();
+        const exerciseNameMap = new Map<string, string>();
 
         workoutSessions.forEach((session: any) => {
           if (session.started_at && session.completed_at) {
@@ -945,9 +952,59 @@ export default function AnalyticsPage() {
                   exData.bestReps = set.reps;
                 }
               });
+
+              // Build a per-session snapshot for this exercise (top set by E1RM)
+              // so the plateau detector can analyze E1RM trends over time.
+              if (workingSets.length > 0) {
+                const sessionDate = getLocalDateString(new Date(session.completed_at));
+                let topE1RM = 0;
+                let topWeight = 0;
+                let topReps = 0;
+                workingSets.forEach((set: any) => {
+                  const e1rm = estimateE1RM(set.weight_kg, set.reps);
+                  if (e1rm > topE1RM) {
+                    topE1RM = e1rm;
+                    topWeight = set.weight_kg;
+                    topReps = set.reps;
+                  }
+                });
+
+                exerciseNameMap.set(exerciseId, exerciseName);
+                if (!snapshotMap.has(exerciseId)) {
+                  snapshotMap.set(exerciseId, []);
+                }
+                snapshotMap.get(exerciseId)!.push({
+                  id: `${session.id}-${exerciseId}`,
+                  userId: user.id,
+                  exerciseId,
+                  sessionDate,
+                  topSetWeightKg: topWeight,
+                  topSetReps: topReps,
+                  // RPE is not selected in this query; default to 10 (E1RM already
+                  // reflects logged performance, and the detector mainly trends E1RM).
+                  topSetRpe: 10,
+                  totalWorkingSets: workingSets.length,
+                  estimatedE1RM: topE1RM,
+                });
+              }
             });
           }
         });
+
+        // Run plateau detection over per-exercise session snapshots.
+        const plateauResults = analyzeAllExercises(snapshotMap);
+        const detectedPlateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> = [];
+        plateauResults.forEach((result, exerciseId) => {
+          if (result.isPlateaued) {
+            detectedPlateauAlerts.push({
+              exerciseId,
+              exerciseName: exerciseNameMap.get(exerciseId) ?? 'Exercise',
+              result,
+            });
+          }
+        });
+        detectedPlateauAlerts.sort((a, b) => b.result.weeksSinceProgress - a.result.weeksSinceProgress);
+        setPlateauAlerts(detectedPlateauAlerts);
 
         const totalWorkouts = workoutSessions.length;
         const avgWorkoutDuration = durations.length > 0
@@ -1359,6 +1416,10 @@ export default function AnalyticsPage() {
 
       {activeTab === 'strength' && (
         <div className="space-y-6">
+          {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
+          {plateauAlerts.length > 0 && (
+            <PlateauAlertList alerts={plateauAlerts} />
+          )}
           {strengthProfile ? (
             <>
               {/* Overall Score */}

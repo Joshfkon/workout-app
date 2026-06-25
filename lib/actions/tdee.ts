@@ -89,6 +89,22 @@ export async function getAdaptiveTDEE(
       data: { calories?: number } | null;
     };
 
+  // Fall back to the latest DEXA scan's body fat % when no manual value is set.
+  // Manual user_preferences.body_fat_percent stays the priority; DEXA is fallback only.
+  let dexaBodyFatPercent: number | null = null;
+  if (userPrefs?.body_fat_percent == null) {
+    const { data: latestDexa } = await supabase
+      .from('dexa_scans')
+      .select('body_fat_percent')
+      .eq('user_id', user.id)
+      .order('scan_date', { ascending: false })
+      .limit(1)
+      .maybeSingle() as {
+        data: { body_fat_percent?: number } | null;
+      };
+    dexaBodyFatPercent = latestDexa?.body_fat_percent ?? null;
+  }
+
   // Try to get enhanced data points (includes steps and workout calories)
   const enhancedDataPoints = await getEnhancedDailyDataPoints(35);
   
@@ -200,7 +216,7 @@ export async function getAdaptiveTDEE(
     heightCm: userPrefs?.height_cm || 175,
     age: userPrefs?.age || 30,
     sex: userPrefs?.sex || 'male',
-    bodyFatPercent: userPrefs?.body_fat_percent || undefined,
+    bodyFatPercent: userPrefs?.body_fat_percent ?? dexaBodyFatPercent ?? undefined,
   };
 
   const activityConfig: ActivityConfig = {
@@ -446,6 +462,22 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
         data: { goal?: string; peptide?: string } | null;
       };
 
+    // Fall back to the latest DEXA scan's body fat % when no manual value is set.
+    // Manual user_preferences.body_fat_percent stays the priority; DEXA is fallback only.
+    let dexaBodyFatPercent: number | null = null;
+    if (userPrefs?.body_fat_percent == null) {
+      const { data: latestDexa } = await supabase
+        .from('dexa_scans')
+        .select('body_fat_percent')
+        .eq('user_id', user.id)
+        .order('scan_date', { ascending: false })
+        .limit(1)
+        .maybeSingle() as {
+          data: { body_fat_percent?: number } | null;
+        };
+      dexaBodyFatPercent = latestDexa?.body_fat_percent ?? null;
+    }
+
     // Import and use calculateMacros with adaptive TDEE
     const { calculateMacros } = await import('@/lib/nutrition/macroCalculator');
 
@@ -454,7 +486,7 @@ export async function syncAdaptiveTDEEWithTargets(): Promise<SyncResult | null> 
       heightCm: userPrefs?.height_cm || 175,
       age: userPrefs?.age || 30,
       sex: userPrefs?.sex || 'male',
-      bodyFatPercent: userPrefs?.body_fat_percent,
+      bodyFatPercent: userPrefs?.body_fat_percent ?? dexaBodyFatPercent ?? undefined,
     };
 
     const activity: ActivityConfig = {
