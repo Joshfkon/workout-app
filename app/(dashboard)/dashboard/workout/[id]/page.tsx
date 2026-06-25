@@ -60,6 +60,8 @@ import type {
 } from './_lib/types';
 import { getExerciseInjuryRisk } from './_lib/injuryRisk';
 import { calculateE1RM, generateCoachMessage } from './_lib/coachMessage';
+import { writePerformanceSnapshots, upsertWeeklyFatigueLog } from './_lib/sessionWrites';
+import { adjustWorkingWeightForReadiness } from './_lib/readinessAdjust';
 import { CoachMessageCard } from './_components/CoachMessageCard';
 import { AutoAdjustMessage } from './_components/AutoAdjustMessage';
 import { WorkoutErrorAlert } from './_components/WorkoutErrorAlert';
@@ -187,6 +189,13 @@ export default function WorkoutPage() {
     bodyweightKg?: number | null;
   } | null>(null);
   
+  // Readiness score (0-100) read back from pre_workout_check_in on load.
+  // When < 80 it scales SUGGESTED working weights down for un-logged sets.
+  const [readinessScore, setReadinessScore] = useState<number>(0);
+
+  // Mesocycle context for weekly_fatigue_logs writes (deload detection data)
+  const [mesoWeekNumber, setMesoWeekNumber] = useState<number | null>(null);
+
   // State for showing swap modal for a specific exercise due to injury
   const [showSwapForInjury, setShowSwapForInjury] = useState<string | null>(null);
   const [showPageLevelSwapModal, setShowPageLevelSwapModal] = useState(false);
@@ -605,6 +614,7 @@ export default function WorkoutPage() {
           const now = new Date();
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.total_weeks);
+          setMesoWeekNumber(userContext.weekInMesocycle);
         }
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
@@ -613,10 +623,22 @@ export default function WorkoutPage() {
         // to provide accurate weight suggestions based on user's training history
 
         // Check for existing injuries from session's pre_workout_check_in
-        const existingCheckIn = sessionData.pre_workout_check_in as { temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }> } | null;
+        const existingCheckIn = sessionData.pre_workout_check_in as {
+          temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }>;
+          readinessScore?: number;
+        } | null;
         const existingInjuries = existingCheckIn?.temporaryInjuries || [];
         if (existingInjuries.length > 0) {
           setTemporaryInjuries(existingInjuries);
+        }
+
+        // Read back the readiness score so it can scale suggested target weights.
+        // Only applied while the workout is still in progress (not a completed view).
+        if (
+          typeof existingCheckIn?.readinessScore === 'number' &&
+          sessionData.state !== 'completed'
+        ) {
+          setReadinessScore(existingCheckIn.readinessScore);
         }
         
         // Check if AI coach notes are enabled in user preferences
@@ -2753,7 +2775,7 @@ export default function WorkoutPage() {
   const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
     try {
       const supabase = createUntypedClient();
-      
+
       // Update workout session
       await supabase
         .from('workout_sessions')
@@ -2766,6 +2788,40 @@ export default function WorkoutPage() {
           completion_percent: 100,
         })
         .eq('id', sessionId);
+
+      // ---- Persist derived performance + fatigue data (previously had no writer) ----
+      if (session?.userId) {
+        const sessionDate = session.plannedDate || getLocalDateString();
+
+        // 1) Aggregate working sets per exercise into performance snapshots.
+        //    Read by useProgressionTargets / useExerciseHistory.
+        const snapshotResult = await writePerformanceSnapshots(supabase, {
+          userId: session.userId,
+          sessionDate,
+          blocks,
+          sets: completedSets,
+        });
+        if (snapshotResult.errors.length > 0) {
+          console.error('Failed to write performance snapshots:', snapshotResult.errors);
+          setError(`Saved workout, but performance history failed: ${snapshotResult.errors[0]}`);
+        }
+
+        // 2) Upsert the weekly fatigue log so deload detection has data.
+        //    Derive metrics from the check-in + this session's RPE.
+        const checkIn = session.preWorkoutCheckIn;
+        const fatigueRes = await upsertWeeklyFatigueLog(supabase, {
+          userId: session.userId,
+          mesocycleId: session.mesocycleId ?? null,
+          weekNumber: mesoWeekNumber ?? 1,
+          readinessScore: checkIn?.readinessScore ?? readinessScore ?? 0,
+          sleepQuality: checkIn?.sleepQuality ?? null,
+          stressLevel: checkIn?.stressLevel ?? null,
+          sessionAvgRpe: data.sessionRpe,
+        });
+        if (!fatigueRes.ok) {
+          console.error('Failed to write weekly fatigue log:', fatigueRes.error);
+        }
+      }
 
       // Calculate and save workout calories (using set-based HyperTracker method)
       if (session?.plannedDate) {
@@ -3336,9 +3392,22 @@ export default function WorkoutPage() {
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
                 );
-                const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
+                const baseAiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
+
+                // Apply pre-workout readiness to the SUGGESTED seed weight only.
+                // Targets coming from the program (block.targetWeightKg) are left
+                // as-is; we only scale the AI suggestion that seeds un-logged sets.
+                const readinessAdjusted = adjustWorkingWeightForReadiness(
+                  baseAiRecommendedWeight,
+                  readinessScore,
+                  block.targetRepRange,
+                  block.targetRir ?? 2,
+                  block.exercise.minWeightIncrementKg ?? 2.5
+                );
+                const aiRecommendedWeight = readinessAdjusted.weightKg;
+                const showReadinessNote = readinessAdjusted.wasReduced && block.targetWeightKg <= 0;
                 const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
-                
+
                 return (
                   // Exercise group container - visually connects name with card
                   <div className={`mt-4 mb-6 rounded-xl border-l-4 ${
@@ -3441,6 +3510,16 @@ export default function WorkoutPage() {
                       </div>
                     </Card>
                   )}
+
+                    {/* Readiness-reduced suggestion note (only when scaling the AI seed) */}
+                    {showReadinessNote && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
+                        <span aria-hidden>🛟</span>
+                        <span>
+                          Suggested weight reduced for readiness ({readinessScore}%). Logged sets are unchanged — adjust up if you feel strong.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
                     <ExerciseCard
