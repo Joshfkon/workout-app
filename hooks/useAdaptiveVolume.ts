@@ -429,6 +429,160 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
 }
 
 /**
+ * Run the end-of-mesocycle volume-learning loop.
+ *
+ * Closes the adaptive-volume feedback loop that was previously dead code:
+ *   1. Aggregates that mesocycle's weekly_muscle_volume rows into per-muscle
+ *      weekly series.
+ *   2. Calls analyzeMesocycle() to score volume vs. outcomes.
+ *   3. Persists the analysis into mesocycle_analyses (so /dashboard/volume/review
+ *      can surface latestAnalysis).
+ *   4. Calls updateVolumeProfile() to grow muscleTolerance.dataPoints / confidence
+ *      and upserts the result into user_volume_profiles (same shape the hook reads).
+ *
+ * Pure-data-fetch + pure-service composition; safe to call once when a mesocycle
+ * transitions to 'completed'. Idempotent at the DB layer thanks to the
+ * UNIQUE(user_id, mesocycle_id) constraint on mesocycle_analyses.
+ *
+ * Returns true if an analysis was written, false otherwise (e.g. no volume data
+ * yet, or an error — errors are swallowed/logged so the UI flow is never blocked).
+ */
+export async function runMesocycleCompletionAnalysis(
+  userId: string,
+  mesocycleId: string,
+  options?: {
+    startDate?: string | null;
+    endDate?: string | null;
+    experience?: 'novice' | 'intermediate' | 'advanced';
+  }
+): Promise<boolean> {
+  if (!userId || !mesocycleId) return false;
+
+  try {
+    const supabase = createUntypedClient();
+
+    // 1. Pull this mesocycle's weekly volume rows, ordered chronologically so
+    //    each muscle's array is week-1 -> week-N (analyzeMesocycle is order-sensitive).
+    const { data: weeklyRows, error: weeklyError } = await supabase
+      .from('weekly_muscle_volume')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('mesocycle_id', mesocycleId)
+      .order('week_start', { ascending: true });
+
+    if (weeklyError) {
+      console.error('runMesocycleCompletionAnalysis: failed to load weekly volume:', weeklyError);
+      return false;
+    }
+
+    const rows = (weeklyRows as WeeklyMuscleVolumeRow[]) || [];
+    if (rows.length === 0) {
+      // No aggregated volume for this meso yet -> nothing to learn from.
+      return false;
+    }
+
+    // Build Record<MuscleGroup, MuscleVolumeData[]> grouped by muscle, in week order.
+    const muscleData: Record<MuscleGroup, MuscleVolumeData[]> = {} as Record<MuscleGroup, MuscleVolumeData[]>;
+    const weekIndexByStart = new Map<string, number>();
+    const orderedStarts = Array.from(new Set(rows.map((r) => r.week_start))).sort();
+    orderedStarts.forEach((ws, idx) => weekIndexByStart.set(ws, idx + 1));
+
+    for (const row of rows) {
+      const muscle = row.muscle_group as MuscleGroup;
+      if (!muscleData[muscle]) muscleData[muscle] = [];
+      muscleData[muscle].push({
+        id: row.id || `${muscle}-${row.week_start}`,
+        muscle,
+        weekNumber: weekIndexByStart.get(row.week_start) ?? muscleData[muscle].length + 1,
+        mesocycleId,
+        totalSets: row.total_sets,
+        workingSets: row.total_sets,
+        effectiveSets: row.effective_sets ?? row.total_sets,
+        totalVolume: 0,
+        averageRIR: row.average_rir ?? 2,
+        averageFormScore: row.average_form_score ?? 0.8,
+        exercisePerformance: [],
+      });
+    }
+
+    // 2. Load (or synthesize) the user's current volume profile.
+    const { data: profileData } = await supabase
+      .from('user_volume_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    let currentProfile: UserVolumeProfile;
+    if (profileData) {
+      currentProfile = {
+        userId: profileData.user_id,
+        updatedAt: new Date(profileData.updated_at),
+        muscleTolerance: profileData.muscle_tolerance || {},
+        globalRecoveryMultiplier: profileData.global_recovery_multiplier || 1.0,
+        isEnhanced: profileData.is_enhanced || false,
+        trainingAge: profileData.training_age || 'intermediate',
+      };
+    } else {
+      const trainingAge = (options?.experience || 'intermediate');
+      currentProfile = createInitialVolumeProfile(userId, trainingAge, false);
+    }
+
+    // Date range for the analysis record. Fall back to the volume rows' span.
+    const startDate = options?.startDate || orderedStarts[0];
+    const endDate = options?.endDate || orderedStarts[orderedStarts.length - 1];
+
+    // 3. Pure service: analyze the mesocycle.
+    const analysis = analyzeMesocycle(mesocycleId, muscleData, currentProfile, startDate, endDate);
+
+    // Persist analysis (UNIQUE(user_id, mesocycle_id) -> upsert is idempotent).
+    const { error: analysisError } = await supabase
+      .from('mesocycle_analyses')
+      .upsert(
+        {
+          user_id: userId,
+          mesocycle_id: mesocycleId,
+          start_date: analysis.startDate,
+          end_date: analysis.endDate,
+          weeks: analysis.weeks,
+          muscle_volumes: analysis.muscleVolumes,
+          muscle_outcomes: analysis.muscleOutcomes,
+          overall_recovery: analysis.overallRecovery,
+        },
+        { onConflict: 'user_id,mesocycle_id' }
+      );
+
+    if (analysisError) {
+      console.error('runMesocycleCompletionAnalysis: failed to persist analysis:', analysisError);
+      return false;
+    }
+
+    // 4. Pure service: learn from the analysis, then persist the grown profile
+    //    using the same upsert shape useAdaptiveVolume.saveProfile uses.
+    const learnedProfile = updateVolumeProfile(currentProfile, analysis);
+    const { error: profileError } = await supabase
+      .from('user_volume_profiles')
+      .upsert({
+        user_id: learnedProfile.userId,
+        muscle_tolerance: learnedProfile.muscleTolerance,
+        global_recovery_multiplier: learnedProfile.globalRecoveryMultiplier,
+        is_enhanced: learnedProfile.isEnhanced,
+        training_age: learnedProfile.trainingAge,
+        updated_at: new Date().toISOString(),
+      });
+
+    if (profileError) {
+      console.error('runMesocycleCompletionAnalysis: failed to persist learned profile:', profileError);
+      // Analysis was still written, so the review page populates. Treat as partial success.
+    }
+
+    return true;
+  } catch (err) {
+    console.error('runMesocycleCompletionAnalysis: unexpected error:', err);
+    return false;
+  }
+}
+
+/**
  * Hook for getting volume tolerance for a specific muscle
  */
 export function useMuscleTolerance(muscle: MuscleGroup) {

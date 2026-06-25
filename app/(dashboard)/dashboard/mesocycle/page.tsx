@@ -7,8 +7,10 @@ import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimati
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
-import { getTodayMesocycleWorkout } from '@/lib/training/workoutIntegration';
+import { getTodayMesocycleWorkout, checkShouldDeload } from '@/lib/training/workoutIntegration';
+import { runMesocycleCompletionAnalysis } from '@/hooks/useAdaptiveVolume';
 import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
+import type { DeloadTriggers } from '@/types/training';
 import type { MuscleGroup, Goal } from '@/types/schema';
 import type { DetailedSession } from '@/types/training';
 
@@ -123,6 +125,7 @@ export default function MesocyclePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [mesocycleJustCompleted, setMesocycleJustCompleted] = useState(false);
+  const [deloadInfo, setDeloadInfo] = useState<DeloadTriggers | null>(null);
 
   const handleDeleteMesocycle = async (id: string) => {
     setDeletingId(id);
@@ -194,6 +197,18 @@ export default function MesocyclePage() {
               rows = rows.map((m) =>
                 m.id === active.id ? { ...m, state: 'completed' } : m
               );
+              // Close the volume-learning loop: analyze this completed meso and
+              // grow the user's volume profile. Best-effort; never blocks the UI.
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  await runMesocycleCompletionAnalysis(user.id, active.id, {
+                    startDate: active.start_date,
+                  });
+                }
+              } catch (analysisError) {
+                console.error('Mesocycle completion analysis failed:', analysisError);
+              }
             }
           } else if (week !== active.current_week) {
             // Advance the stored current_week so getTodayMesocycleWorkout reads the right week.
@@ -220,6 +235,20 @@ export default function MesocyclePage() {
           const dayOfWeek = today.getDay() || 7; // Convert Sunday(0) to 7
           const workout = getWorkoutForDay(stillActive.split_type, dayOfWeek, stillActive.days_per_week);
           setTodayWorkout(workout);
+
+          // Surface auto-deload recommendations. Reads weekly_fatigue_logs via the
+          // ProgramEngine; safely returns shouldDeload:false until logs exist.
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const triggers = await checkShouldDeload(user.id, stillActive.id);
+              if (triggers.shouldDeload) {
+                setDeloadInfo(triggers);
+              }
+            }
+          } catch (deloadError) {
+            console.error('Failed to check deload triggers:', deloadError);
+          }
         }
       }
       setIsLoading(false);
@@ -266,6 +295,14 @@ export default function MesocyclePage() {
             .update({ state: 'completed', is_active: false })
             .eq('id', activeMesocycle.id);
           if (completeError) console.error('Failed to mark mesocycle complete:', completeError);
+          // Close the volume-learning loop on this completion path too.
+          try {
+            await runMesocycleCompletionAnalysis(user.id, activeMesocycle.id, {
+              startDate: activeMesocycle.start_date,
+            });
+          } catch (analysisError) {
+            console.error('Mesocycle completion analysis failed:', analysisError);
+          }
           setMesocycleJustCompleted(true);
           setIsStartingWorkout(false);
           return;
@@ -545,6 +582,39 @@ export default function MesocyclePage() {
             <Link href="/dashboard/mesocycle/new">
               <Button className="mt-4">Start a New Mesocycle</Button>
             </Link>
+          </CardContent>
+        </Card>
+      )}
+
+      {deloadInfo?.shouldDeload && (
+        <Card className="border-2 border-warning-500/40 bg-warning-500/5">
+          <CardContent className="p-6">
+            <div className="flex items-start gap-4">
+              <span className="text-3xl shrink-0">😴</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-semibold text-warning-300">Deload Recommended</h3>
+                  <Badge variant="warning" className="capitalize">
+                    {deloadInfo.suggestedDeloadType} deload
+                  </Badge>
+                </div>
+                <p className="text-surface-400 mt-1">
+                  Your fatigue signals suggest it&apos;s time to back off and recover:
+                </p>
+                <ul className="mt-3 space-y-1.5">
+                  {deloadInfo.reasons.map((reason, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-surface-300">
+                      <span className="text-warning-400 mt-0.5">•</span>
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-xs text-surface-500 mt-3">
+                  A <span className="text-warning-400">{deloadInfo.suggestedDeloadType}</span> deload
+                  reduces {deloadInfo.suggestedDeloadType === 'intensity' ? 'load' : deloadInfo.suggestedDeloadType === 'full' ? 'volume and load' : 'volume'} for ~1 week so accumulated fatigue can dissipate.
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
