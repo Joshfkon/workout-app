@@ -1,7 +1,9 @@
 // ============================================================
 // MESOCYCLE PROGRESS
-// Pure date-based week advancement for mesocycles.
-// No DB access — callers persist the result.
+// Pure week-advancement helpers for mesocycles. The app advances by COMPLETED
+// SESSIONS (see computeCurrentWeekFromSessions) so progression tracks actual
+// training, not the calendar. A date-based variant is kept for reference.
+// No DB access — callers fetch the inputs and persist the result.
 // ============================================================
 
 import { getLocalDateString } from '@/lib/utils';
@@ -51,6 +53,35 @@ export function computeCurrentWeek(
   const rawWeek = Math.floor(Math.max(0, daysSinceStart) / 7) + 1;
   const week = Math.min(Math.max(rawWeek, 1), safeTotalWeeks);
   const isComplete = daysSinceStart >= safeTotalWeeks * 7;
+
+  return { week, isComplete };
+}
+
+/**
+ * Compute the effective current week from the number of COMPLETED sessions in the
+ * mesocycle, so progression follows actual training rather than the calendar.
+ * A week advances once the user has completed `daysPerWeek` sessions, and the
+ * block completes after `totalWeeks * daysPerWeek` sessions.
+ *
+ * week = clamp(floor(completedSessions / daysPerWeek) + 1, 1, totalWeeks)
+ * isComplete = completedSessions >= totalWeeks * daysPerWeek
+ *
+ * @param completedSessions Count of completed workout sessions for the mesocycle.
+ * @param daysPerWeek Planned training days per week (>= 1).
+ * @param totalWeeks Number of weeks in the program (>= 1).
+ */
+export function computeCurrentWeekFromSessions(
+  completedSessions: number,
+  daysPerWeek: number,
+  totalWeeks: number
+): CurrentWeekResult {
+  const safeTotalWeeks = Math.max(1, Math.floor(totalWeeks || 1));
+  const safeDaysPerWeek = Math.max(1, Math.floor(daysPerWeek || 1));
+  const safeCompleted = Math.max(0, Math.floor(completedSessions || 0));
+
+  const rawWeek = Math.floor(safeCompleted / safeDaysPerWeek) + 1;
+  const week = Math.min(Math.max(rawWeek, 1), safeTotalWeeks);
+  const isComplete = safeCompleted >= safeTotalWeeks * safeDaysPerWeek;
 
   return { week, isComplete };
 }

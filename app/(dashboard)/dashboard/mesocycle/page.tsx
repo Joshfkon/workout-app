@@ -9,7 +9,7 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { getLocalDateString } from '@/lib/utils';
 import { getTodayMesocycleWorkout, checkShouldDeload } from '@/lib/training/workoutIntegration';
 import { runMesocycleCompletionAnalysis } from '@/hooks/useAdaptiveVolume';
-import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
+import { computeCurrentWeekFromSessions } from '@/lib/training/mesocycleProgress';
 import type { DeloadTriggers } from '@/types/training';
 import type { MuscleGroup, Goal } from '@/types/schema';
 import type { DetailedSession } from '@/types/training';
@@ -179,10 +179,19 @@ export default function MesocyclePage() {
       if (data && !error) {
         let rows = data as Mesocycle[];
 
-        // Date-based week advancement for the active mesocycle.
+        // Session-based week advancement: progression tracks completed sessions.
         const active = rows.find((m: Mesocycle) => m.state === 'active');
-        if (active && active.start_date) {
-          const { week, isComplete } = computeCurrentWeek(active.start_date, active.total_weeks);
+        if (active) {
+          const { count: completedSessionCount } = await supabase
+            .from('workout_sessions')
+            .select('id', { count: 'exact', head: true })
+            .eq('mesocycle_id', active.id)
+            .eq('state', 'completed');
+          const { week, isComplete } = computeCurrentWeekFromSessions(
+            completedSessionCount ?? 0,
+            active.days_per_week,
+            active.total_weeks
+          );
 
           if (isComplete) {
             // Mesocycle duration elapsed -> mark completed & inactive.
@@ -282,38 +291,43 @@ export default function MesocyclePage() {
 
       // Ensure the stored current_week reflects elapsed time before reading the
       // program, so getTodayMesocycleWorkout indexes the correct week.
-      let effectiveWeek = activeMesocycle.current_week;
-      if (activeMesocycle.start_date) {
-        const { week, isComplete } = computeCurrentWeek(
-          activeMesocycle.start_date,
-          activeMesocycle.total_weeks
-        );
-        effectiveWeek = week;
-        if (isComplete) {
-          const { error: completeError } = await supabase
-            .from('mesocycles')
-            .update({ state: 'completed', is_active: false })
-            .eq('id', activeMesocycle.id);
-          if (completeError) console.error('Failed to mark mesocycle complete:', completeError);
-          // Close the volume-learning loop on this completion path too.
-          try {
-            await runMesocycleCompletionAnalysis(user.id, activeMesocycle.id, {
-              startDate: activeMesocycle.start_date,
-            });
-          } catch (analysisError) {
-            console.error('Mesocycle completion analysis failed:', analysisError);
-          }
-          setMesocycleJustCompleted(true);
-          setIsStartingWorkout(false);
-          return;
+      // Session-based week advancement: count this mesocycle's completed sessions
+      // so the program is read at the week the user has actually trained into.
+      const { count: completedSessionCount } = await supabase
+        .from('workout_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('mesocycle_id', activeMesocycle.id)
+        .eq('state', 'completed');
+      const { week, isComplete } = computeCurrentWeekFromSessions(
+        completedSessionCount ?? 0,
+        activeMesocycle.days_per_week,
+        activeMesocycle.total_weeks
+      );
+      const effectiveWeek = week;
+      if (isComplete) {
+        const { error: completeError } = await supabase
+          .from('mesocycles')
+          .update({ state: 'completed', is_active: false })
+          .eq('id', activeMesocycle.id);
+        if (completeError) console.error('Failed to mark mesocycle complete:', completeError);
+        // Close the volume-learning loop on this completion path too.
+        try {
+          await runMesocycleCompletionAnalysis(user.id, activeMesocycle.id, {
+            startDate: activeMesocycle.start_date,
+          });
+        } catch (analysisError) {
+          console.error('Mesocycle completion analysis failed:', analysisError);
         }
-        if (week !== activeMesocycle.current_week) {
-          const { error: weekError } = await supabase
-            .from('mesocycles')
-            .update({ current_week: week })
-            .eq('id', activeMesocycle.id);
-          if (weekError) console.error('Failed to advance mesocycle week:', weekError);
-        }
+        setMesocycleJustCompleted(true);
+        setIsStartingWorkout(false);
+        return;
+      }
+      if (week !== activeMesocycle.current_week) {
+        const { error: weekError } = await supabase
+          .from('mesocycles')
+          .update({ current_week: week })
+          .eq('id', activeMesocycle.id);
+        if (weekError) console.error('Failed to advance mesocycle week:', weekError);
       }
 
       // Check if there's already a workout for today
