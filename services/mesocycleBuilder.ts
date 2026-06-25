@@ -34,7 +34,19 @@ import type {
   FatigueBudgetConfig,
   RepRangeConfig,
 } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
+
+/** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
+const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
+
+/** Look up the experience-specific MRV for a muscle, with a sane fallback */
+function getMuscleMRV(experience: Experience, muscle: string): number {
+  return (
+    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle]?.mrv ??
+    FALLBACK_VOLUME_LANDMARK.mrv
+  );
+}
 
 // Re-export from sub-engines for convenience
 export {
@@ -145,9 +157,6 @@ function getExerciseDatabase(): ExerciseEntry[] {
     hypertrophyScore: e.hypertrophyScore,
   }));
 }
-
-// For backward compatibility - getter function that returns current exercises
-const EXERCISE_DATABASE: ExerciseEntry[] = getExerciseDatabase();
 
 // ============================================================
 // RECOVERY FACTOR CALCULATIONS
@@ -688,7 +697,12 @@ export function calculateVolumeDistribution(
     const muscleMultiplier = muscleMultipliers.get(muscle) || 1.0;
     baseVolume = Math.round(baseVolume * muscleMultiplier);
 
-    const adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
+    let adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
+
+    // Clamp to the muscle's experience-specific MRV so week-1 volume never
+    // starts above the maximum recoverable volume after all multipliers.
+    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle));
+
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
 
     result[muscle] = {
@@ -722,9 +736,12 @@ export function selectExercises(
   sessionFatigueBudget: number,
   prioritizeHypertrophy: boolean = true
 ): { exercises: ExerciseEntry[]; setsPerExercise: number[]; remainingFatigueBudget: number } {
-  
+
+  // Read live exercise data on each call (DB-backed with fallback)
+  const exerciseDb = getExerciseDatabase();
+
   // Filter available exercises
-  let candidates = EXERCISE_DATABASE.filter(e => 
+  let candidates = exerciseDb.filter(e =>
     e.primaryMuscle === muscle &&
     profile.availableEquipment.includes(e.equipment) &&
     !profile.injuryHistory.includes(muscle)  // Be cautious with injured areas
@@ -747,15 +764,15 @@ export function selectExercises(
   
   if (candidates.length === 0) {
     // Fallback: allow any difficulty but still respect equipment
-    candidates = EXERCISE_DATABASE.filter(e =>
+    candidates = exerciseDb.filter(e =>
       e.primaryMuscle === muscle &&
       profile.availableEquipment.includes(e.equipment)
     );
   }
-  
+
   if (candidates.length === 0) {
     // Ultimate fallback: any exercise for this muscle
-    candidates = EXERCISE_DATABASE.filter(e => e.primaryMuscle === muscle);
+    candidates = exerciseDb.filter(e => e.primaryMuscle === muscle);
   }
   
   // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound vs isolation, 3) Fatigue rating
@@ -797,14 +814,21 @@ export function selectExercises(
     fatigueBudget -= exercise.fatigueRating;
   }
   
-  // If we still have sets to allocate, add to existing exercises
+  // If we still have sets to allocate, add to existing exercises - but respect
+  // each exercise's per-exercise cap (3 isolation / 4 compound). Stop once every
+  // selected exercise is at its cap to avoid an infinite loop.
   while (remainingSets > 0 && exercises.length > 0) {
+    let addedThisPass = false;
     for (let i = 0; i < exercises.length && remainingSets > 0; i++) {
+      const maxSetsForExercise = exercises[i].pattern === 'isolation' ? 3 : 4;
+      if (setsPerExercise[i] >= maxSetsForExercise) continue;
       setsPerExercise[i]++;
       remainingSets--;
+      addedThisPass = true;
     }
+    if (!addedThisPass) break; // all exercises capped
   }
-  
+
   return { exercises, setsPerExercise, remainingFatigueBudget: fatigueBudget };
 }
 
@@ -1239,7 +1263,7 @@ export function getRecommendedExercises(
   muscleGroup: string,
   mechanic: 'compound' | 'isolation' | 'both' = 'both'
 ): string[] {
-  const exercises = EXERCISE_DATABASE.filter(e => e.primaryMuscle === muscleGroup);
+  const exercises = getExerciseDatabase().filter(e => e.primaryMuscle === muscleGroup);
   
   if (mechanic === 'compound') {
     return exercises.filter(e => e.pattern !== 'isolation').map(e => e.name);
@@ -1360,11 +1384,12 @@ export function calculateWeeklyVolumePerMuscle(
   sessions: { muscles: string[]; exercises: { sets: number; exerciseName: string }[] }[]
 ): Record<string, number> {
   const volume: Record<string, number> = {};
-  
+  const exerciseDb = getExerciseDatabase();
+
   sessions.forEach(session => {
     session.exercises.forEach(ex => {
       // Try to find the exercise in our database
-      const dbExercise = EXERCISE_DATABASE.find(e => e.name === ex.exerciseName);
+      const dbExercise = exerciseDb.find(e => e.name === ex.exerciseName);
       if (dbExercise) {
         volume[dbExercise.primaryMuscle] = (volume[dbExercise.primaryMuscle] || 0) + ex.sets;
         dbExercise.secondaryMuscles.forEach(m => {
