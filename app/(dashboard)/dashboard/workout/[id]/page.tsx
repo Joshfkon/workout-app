@@ -4493,6 +4493,7 @@ export default function WorkoutPage() {
                     recommendedWeight={aiRecommendedWeightKg}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
+                    previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
                     adjustedTargetRir={
                       (() => {
                         const adjusted = calibrationEngineRef.current.getAdjustedRIR(block.exercise.name, block.targetRir);

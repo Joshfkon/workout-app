@@ -71,7 +71,7 @@ export function EnhancedTDEEDashboard({
       <CardContent className="space-y-4">
         {/* Today's Burn */}
         {hasActivityData && todayTDEE && (
-          <div className="p-4 bg-surface-50 dark:bg-surface-800 rounded-lg">
+          <div className="p-4 bg-surface-800 rounded-lg">
             <div className="flex items-baseline justify-between mb-3">
               <span className="text-sm text-surface-500">Today&apos;s Estimated Burn</span>
               <span
@@ -88,28 +88,28 @@ export function EnhancedTDEEDashboard({
             </div>
 
             {/* Breakdown */}
-            <div className="space-y-2 border-t border-surface-200 dark:border-surface-700 pt-3">
+            <div className="space-y-2 border-t border-surface-700 pt-3">
               <div className="flex justify-between text-sm">
-                <span className="text-surface-600 dark:text-surface-400">
+                <span className="text-surface-400">
                   Base metabolism
                 </span>
                 <span>{todayTDEE.baseTDEE.toLocaleString()} cal</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-surface-600 dark:text-surface-400">
+                <span className="text-surface-400">
                   Steps ({todayActivity?.steps.total.toLocaleString()})
                 </span>
                 <span>+{todayTDEE.stepExpenditure.toLocaleString()} cal</span>
               </div>
               {todayTDEE.workoutExpenditure > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-surface-600 dark:text-surface-400">
+                  <span className="text-surface-400">
                     Workout
                   </span>
                   <span>+{todayTDEE.workoutExpenditure.toLocaleString()} cal</span>
                 </div>
               )}
-              <div className="flex justify-between font-medium pt-2 border-t border-surface-200 dark:border-surface-700">
+              <div className="flex justify-between font-medium pt-2 border-t border-surface-700">
                 <span>Total</span>
                 <span>{todayTDEE.totalTDEE.toLocaleString()} cal</span>
               </div>
@@ -118,7 +118,7 @@ export function EnhancedTDEEDashboard({
         )}
 
         {/* Average TDEE */}
-        <div className="p-4 bg-surface-50 dark:bg-surface-800 rounded-lg">
+        <div className="p-4 bg-surface-800 rounded-lg">
           <div className="flex items-baseline justify-between mb-2">
             <span className="text-sm text-surface-500">Your Average TDEE</span>
             <span className="text-sm text-surface-400">
@@ -131,7 +131,7 @@ export function EnhancedTDEEDashboard({
 
           {/* Confidence indicator */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 h-2 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-surface-700 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${getConfidenceColor(
                   tdeeEstimate.confidence
@@ -149,7 +149,7 @@ export function EnhancedTDEEDashboard({
         {(tdeeEstimate.averageSteps > 0 || tdeeEstimate.averageWorkoutCalories > 0) && (
           <div className="grid grid-cols-2 gap-3">
             {tdeeEstimate.averageSteps > 0 && (
-              <div className="p-3 bg-surface-50 dark:bg-surface-800 rounded-lg text-center">
+              <div className="p-3 bg-surface-800 rounded-lg text-center">
                 <div className="text-lg font-semibold">
                   {tdeeEstimate.averageSteps.toLocaleString()}
                 </div>
@@ -157,7 +157,7 @@ export function EnhancedTDEEDashboard({
               </div>
             )}
             {tdeeEstimate.averageWorkoutCalories > 0 && (
-              <div className="p-3 bg-surface-50 dark:bg-surface-800 rounded-lg text-center">
+              <div className="p-3 bg-surface-800 rounded-lg text-center">
                 <div className="text-lg font-semibold">
                   {tdeeEstimate.averageWorkoutCalories}
                 </div>
@@ -245,7 +245,7 @@ export function CompactTDEECard({
             : 'Sedentary';
 
   return (
-    <div className="flex items-center justify-between p-3 bg-surface-50 dark:bg-surface-800 rounded-lg">
+    <div className="flex items-center justify-between p-3 bg-surface-800 rounded-lg">
       <div className="flex items-center gap-3">
         <span className="text-xl">🔥</span>
         <div>
