@@ -240,7 +240,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
   const [customWarmupWeights, setCustomWarmupWeights] = useState<Map<number, number>>(new Map());
   const [warmupWeightInput, setWarmupWeightInput] = useState('');
-  const [isWarmupExpanded, setIsWarmupExpanded] = useState(true);
+  const [isWarmupExpanded, setIsWarmupExpanded] = useState(false);
+  const [showExerciseMenu, setShowExerciseMenu] = useState(false);
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
@@ -985,20 +986,6 @@ export const ExerciseCard = memo(function ExerciseCard({
             </div>
           )}
           <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-between' : ''}`}>
-            {/* Watch Form button - compact icon only */}
-            {isActive && (
-              <a
-                href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-red-500 transition-colors"
-                title="Watch Form"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                </svg>
-              </a>
-            )}
             {/* Set controls */}
             {onTargetSetsChange && isActive && (
               <div className="flex items-center gap-1">
@@ -1027,49 +1014,86 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </button>
               </div>
             )}
-            {/* Swap exercise button */}
-            {onExerciseSwap && isActive && similarExercises.length > 0 && (
-              <button
-                onClick={() => setShowSwapModal(true)}
-                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-warning-500/20 text-surface-400 hover:text-warning-400 transition-colors"
-                title="Swap exercise"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
-              </button>
-            )}
-            {/* Delete exercise button */}
-            {onExerciseDelete && isActive && (
-              <button
-                onClick={() => {
-                  if (confirm(`Remove "${exercise.name}" from this workout?`)) {
-                    onExerciseDelete();
-                  }
-                }}
-                className="ml-2 min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-error-500/20 text-surface-400 hover:text-error-400 transition-colors"
-                title="Remove exercise"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            )}
-            {/* Plate calculator button */}
-            {onPlateCalculatorOpen && isActive && (
-              <button
-                onClick={() => {
-                  // Use target weight, working weight, or recommended weight
-                  const initialWeight = block.targetWeightKg || workingWeight || recommendedWeight || 0;
-                  onPlateCalculatorOpen(initialWeight > 0 ? initialWeight : undefined);
-                }}
-                className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-400 hover:text-primary-400 transition-colors"
-                title="Plate Calculator"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              </button>
+            {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
+            {isActive && (onExerciseSwap || onExerciseDelete || onPlateCalculatorOpen) && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowExerciseMenu((v) => !v)}
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 transition-colors"
+                  title="More"
+                  aria-haspopup="menu"
+                  aria-expanded={showExerciseMenu}
+                >
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z" />
+                  </svg>
+                </button>
+                {showExerciseMenu && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowExerciseMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-20 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1" role="menu">
+                      <a
+                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' exercise form')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setShowExerciseMenu(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors"
+                        role="menuitem"
+                      >
+                        <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                        </svg>
+                        Watch form
+                      </a>
+                      {onExerciseSwap && similarExercises.length > 0 && (
+                        <button
+                          onClick={() => { setShowSwapModal(true); setShowExerciseMenu(false); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                          role="menuitem"
+                        >
+                          <svg className="w-4 h-4 text-warning-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                          Swap exercise
+                        </button>
+                      )}
+                      {onPlateCalculatorOpen && (
+                        <button
+                          onClick={() => {
+                            const initialWeight = block.targetWeightKg || workingWeight || recommendedWeight || 0;
+                            onPlateCalculatorOpen(initialWeight > 0 ? initialWeight : undefined);
+                            setShowExerciseMenu(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                          role="menuitem"
+                        >
+                          <svg className="w-4 h-4 text-primary-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                          </svg>
+                          Plate calculator
+                        </button>
+                      )}
+                      {onExerciseDelete && (
+                        <button
+                          onClick={() => {
+                            setShowExerciseMenu(false);
+                            if (confirm(`Remove "${exercise.name}" from this workout?`)) {
+                              onExerciseDelete();
+                            }
+                          }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger-400 hover:bg-danger-500/10 transition-colors text-left border-t border-surface-700/60 mt-1"
+                          role="menuitem"
+                        >
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Remove exercise
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {/* Progress badge */}
             <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
@@ -1101,13 +1125,15 @@ export const ExerciseCard = memo(function ExerciseCard({
               className="flex items-center justify-between w-full text-left"
             >
               <div className="flex items-center gap-4">
-                {/* Estimated 1RM */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-surface-500">Est 1RM:</span>
-                  <span className="text-sm font-bold text-primary-400">
-                    {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
-                  </span>
-                </div>
+                {/* Estimated 1RM — hidden until there's a real estimate (avoid "0 lbs") */}
+                {exerciseHistory.estimatedE1RM > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-surface-500">Est 1RM:</span>
+                    <span className="text-sm font-bold text-primary-400">
+                      {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
+                    </span>
+                  </div>
+                )}
                 {/* PR indicator */}
                 {exerciseHistory.personalRecord && (
                   <div className="flex items-center gap-1.5">
