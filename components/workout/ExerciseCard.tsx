@@ -10,7 +10,6 @@ import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerc
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
-import { SetFeedbackCard } from './SetFeedbackCard';
 import { BodyweightSetInputRow } from './BodyweightSetInputRow';
 import { BodyweightDisplay } from './BodyweightDisplay';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -1813,7 +1812,41 @@ export const ExerciseCard = memo(function ExerciseCard({
                         )}
                       </td>
                     </tr>
-                    
+
+                    {/* Inline RIR rating for the just-completed set (replaces the old modal) */}
+                    {pendingFeedbackSet?.setId === set.id && onSetFeedbackUpdate && (
+                      <tr className="bg-primary-500/5">
+                        <td colSpan={7} className="px-2 py-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs text-surface-400 mr-0.5 inline-flex items-center">
+                              Reps in reserve?<InfoTooltip term="RIR" size="sm" />
+                            </span>
+                            {([
+                              { v: 4, label: '4+', sub: 'Easy' },
+                              { v: 2, label: '2-3', sub: 'Good' },
+                              { v: 1, label: '1', sub: 'Hard' },
+                              { v: 0, label: '0', sub: 'Max' },
+                            ] as const).map((o) => (
+                              <button
+                                key={o.v}
+                                onClick={() => submitFeedback({ repsInTank: o.v, form: set.feedback?.form ?? 'clean' })}
+                                className="min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-800 text-surface-200 hover:bg-primary-500 hover:text-white active:bg-primary-600 transition-colors"
+                              >
+                                {o.label}
+                                <span className="ml-1 text-[10px] font-normal opacity-70">{o.sub}</span>
+                              </button>
+                            ))}
+                            <button
+                              onClick={skipFeedback}
+                              className="ml-auto text-xs text-surface-500 hover:text-surface-300 px-2 py-1"
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
                     {/* Add Dropset button */}
                     {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
                      pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
@@ -2608,57 +2641,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                 </p>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Optional Feedback Overlay - appears after set completion */}
-      {pendingFeedbackSet && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={skipFeedback}>
-          <div
-            className="w-full max-w-md bg-surface-900 border border-surface-700 rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 bg-surface-800/50">
-              <div>
-                <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
-                <p className="text-xs text-surface-400">
-                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} reps
-                </p>
-              </div>
-              <button
-                onClick={skipFeedback}
-                className="p-1.5 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Feedback Card Content */}
-            <div className="p-4">
-              <SetFeedbackCard
-                setNumber={pendingFeedbackSet.setNumber}
-                weightKg={pendingFeedbackSet.weightKg}
-                reps={pendingFeedbackSet.reps}
-                unit={unit}
-                onSave={submitFeedback}
-                onCancel={skipFeedback}
-                disabled={false}
-              />
-            </div>
-
-            {/* Skip button */}
-            <div className="px-4 pb-4">
-              <button
-                onClick={skipFeedback}
-                className="w-full py-2 text-sm text-surface-400 hover:text-surface-300 transition-colors"
-              >
-                Skip for now
-              </button>
-            </div>
           </div>
         </div>
       )}
