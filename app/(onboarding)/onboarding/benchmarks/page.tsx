@@ -146,7 +146,7 @@ function BenchmarksContent() {
       </div>
       
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-white mb-2">Select Benchmark Lifts</h1>
+        <h1 className="text-3xl font-bold text-surface-100 mb-2">Select Benchmark Lifts</h1>
         <p className="text-surface-400">
           Choose which lifts you&apos;d like to test. This helps us personalize your entire training experience.
         </p>
@@ -175,7 +175,7 @@ function BenchmarksContent() {
                 <p className="text-sm text-surface-400">{selectedBenchmarks.length} lifts selected</p>
               </div>
             </div>
-            <p className="text-2xl font-bold text-white">{estimatedTime} min</p>
+            <p className="text-2xl font-bold text-surface-100">{estimatedTime} min</p>
           </div>
         </CardContent>
       </Card>

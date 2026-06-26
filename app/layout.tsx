@@ -69,6 +69,13 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" style={{ backgroundColor: '#09090b' }}>
       <head>
+        {/* No-FOUC theme: apply the saved theme before first paint. Default is dark
+            (no attribute); only light needs the data-theme set. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.setAttribute('data-theme','light');}}catch(e){}})();`,
+          }}
+        />
         {/* DNS prefetch for Supabase - loaded dynamically */}
         <link rel="dns-prefetch" href="https://*.supabase.co" />
 
@@ -90,6 +97,9 @@ export default function RootLayout({
           html {
             background-color: #09090b !important;
           }
+          html[data-theme="light"] {
+            background-color: #f8fafc !important;
+          }
           html::before {
             content: '';
             position: fixed;
@@ -97,9 +107,15 @@ export default function RootLayout({
             background: linear-gradient(to bottom right, #09090b, #18181b, #09090b);
             z-index: -1;
           }
+          html[data-theme="light"]::before {
+            background: #f8fafc;
+          }
           body {
             background-color: #09090b !important;
             font-family: var(--font-inter);
+          }
+          html[data-theme="light"] body {
+            background-color: #f8fafc !important;
           }
           #static-splash {
             position: fixed;

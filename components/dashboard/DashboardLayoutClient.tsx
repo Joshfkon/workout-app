@@ -44,7 +44,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="text-base font-bold text-white hidden sm:block">HyperTrack</span>
+            <span className="text-base font-bold text-surface-100 hidden sm:block">HyperTrack</span>
           </Link>
 
           {/* Spacer */}

@@ -259,7 +259,7 @@ export default function OnboardingBodyCompPage() {
         </div>
         
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome to HyperTracker!</h1>
+          <h1 className="text-3xl font-bold text-surface-100 mb-2">Welcome to HyperTracker!</h1>
           <p className="text-surface-400 mb-6">
             Your AI-powered hypertrophy training and nutrition companion.
           </p>
@@ -306,7 +306,7 @@ export default function OnboardingBodyCompPage() {
               >
                 <div className="text-center">
                   <div className="text-4xl mb-2">🇺🇸</div>
-                  <div className="text-xl font-bold text-white">Imperial</div>
+                  <div className="text-xl font-bold text-surface-100">Imperial</div>
                   <div className="text-sm text-surface-400 mt-1">lbs, inches</div>
                 </div>
               </button>
@@ -321,7 +321,7 @@ export default function OnboardingBodyCompPage() {
               >
                 <div className="text-center">
                   <div className="text-4xl mb-2">🌍</div>
-                  <div className="text-xl font-bold text-white">Metric</div>
+                  <div className="text-xl font-bold text-surface-100">Metric</div>
                   <div className="text-sm text-surface-400 mt-1">kg, cm</div>
                 </div>
               </button>
@@ -364,7 +364,7 @@ export default function OnboardingBodyCompPage() {
       </div>
       
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold text-white mb-2">Body Composition</h1>
+        <h1 className="text-3xl font-bold text-surface-100 mb-2">Body Composition</h1>
         <p className="text-surface-400">
           Let&apos;s understand your body composition to personalize your training.
         </p>
@@ -592,7 +592,7 @@ export default function OnboardingBodyCompPage() {
                   <p className="text-sm text-surface-500 mb-1">
                     <ExplainedTerm term="FFMI" />
                   </p>
-                  <p className="text-5xl font-bold text-white mb-2">{bodyComp.ffmi.toFixed(1)}</p>
+                  <p className="text-5xl font-bold text-surface-100 mb-2">{bodyComp.ffmi.toFixed(1)}</p>
                   <p className={`text-sm font-medium capitalize ${
                     bodyComp.ffmiBracket === 'elite' ? 'text-accent-400' :
                     bodyComp.ffmiBracket === 'excellent' ? 'text-primary-400' :

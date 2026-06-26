@@ -119,7 +119,7 @@ export function Sidebar({ onSignOut }: SidebarProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <span className="text-lg font-bold text-white">HyperTrack</span>
+            <span className="text-lg font-bold text-surface-100">HyperTrack</span>
           </Link>
         </div>
 

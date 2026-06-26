@@ -175,7 +175,7 @@ export default function LearnPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
                       <div>
-                        <h3 className="text-lg font-semibold text-surface-100 group-hover:text-white transition-colors">
+                        <h3 className="text-lg font-semibold text-surface-100 group-hover:text-surface-50 transition-colors">
                           {article.title}
                         </h3>
                         <p className="text-sm text-surface-400">{article.subtitle}</p>

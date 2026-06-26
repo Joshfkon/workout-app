@@ -109,7 +109,7 @@ function NativeInstallPrompt({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Install HyperTrack</h1>
+        <h1 className="text-2xl font-bold text-surface-100 mb-2">Install HyperTrack</h1>
         <p className="text-surface-400">
           Add to your homescreen for quick access and the best experience
         </p>
@@ -185,7 +185,7 @@ function ManualInstallInstructions({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Install HyperTrack</h1>
+        <h1 className="text-2xl font-bold text-surface-100 mb-2">Install HyperTrack</h1>
         <p className="text-surface-400">
           Add to your homescreen for the best experience
         </p>

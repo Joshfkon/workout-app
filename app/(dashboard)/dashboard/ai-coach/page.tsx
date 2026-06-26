@@ -101,7 +101,7 @@ export default function AICoachPage() {
     return (
       <div className="max-w-4xl mx-auto p-6 space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">AI Coach</h1>
+          <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
           <p className="text-surface-400">
             Get personalized training advice based on your actual data
           </p>
@@ -121,7 +121,7 @@ export default function AICoachPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">AI Coach</h1>
+          <h1 className="text-3xl font-bold text-surface-100 mb-2">AI Coach</h1>
           <p className="text-surface-400">
             Ask me anything about your training, nutrition, or progress
           </p>
@@ -147,7 +147,7 @@ export default function AICoachPage() {
       {showContext && context && (
         <Card className="mb-4 bg-surface-800 border-surface-700">
           <CardContent className="p-4">
-            <h3 className="text-sm font-semibold text-white mb-2">Your Data Context</h3>
+            <h3 className="text-sm font-semibold text-surface-100 mb-2">Your Data Context</h3>
             <div className="text-xs text-surface-300 space-y-1">
               <p>
                 <strong>User:</strong> {context.user.name} ({context.user.age}yo,{' '}
@@ -199,7 +199,7 @@ export default function AICoachPage() {
             </div>
 
             <div>
-              <h3 className="text-xl font-semibold text-white mb-2">
+              <h3 className="text-xl font-semibold text-surface-100 mb-2">
                 Welcome to Your AI Coach
               </h3>
               <p className="text-surface-400 max-w-md">
@@ -213,7 +213,7 @@ export default function AICoachPage() {
                 onClick={() => setInput("How's my progress looking?")}
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-white">How&apos;s my progress?</p>
+                <p className="text-sm font-medium text-surface-100">How&apos;s my progress?</p>
                 <p className="text-xs text-surface-400 mt-1">
                   Get a summary of your recent performance
                 </p>
@@ -225,7 +225,7 @@ export default function AICoachPage() {
                 }
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-white">Deload or push?</p>
+                <p className="text-sm font-medium text-surface-100">Deload or push?</p>
                 <p className="text-xs text-surface-400 mt-1">
                   Get advice on when to take a deload week
                 </p>
@@ -235,7 +235,7 @@ export default function AICoachPage() {
                 onClick={() => setInput('What exercises should I focus on for hypertrophy?')}
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-white">Exercise selection</p>
+                <p className="text-sm font-medium text-surface-100">Exercise selection</p>
                 <p className="text-xs text-surface-400 mt-1">
                   Get recommendations on exercise choices
                 </p>
@@ -247,7 +247,7 @@ export default function AICoachPage() {
                 }
                 className="p-4 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-left transition-colors"
               >
-                <p className="text-sm font-medium text-white">Phase adjustments</p>
+                <p className="text-sm font-medium text-surface-100">Phase adjustments</p>
                 <p className="text-xs text-surface-400 mt-1">
                   Optimize training for cut/bulk/maintenance
                 </p>
@@ -313,7 +313,7 @@ export default function AICoachPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Ask me anything about your training..."
-            className="flex-1 bg-surface-900 text-white border border-surface-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="flex-1 bg-surface-900 text-surface-100 border border-surface-700 rounded-lg p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
             rows={3}
             disabled={isLoading}
           />

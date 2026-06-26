@@ -686,7 +686,7 @@ export default function ExercisesPage() {
           onClick={() => setStatusFilter('archived')}
           className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
             statusFilter === 'archived'
-              ? 'bg-surface-600 text-white'
+              ? 'bg-surface-600 text-surface-100'
               : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
           }`}
         >

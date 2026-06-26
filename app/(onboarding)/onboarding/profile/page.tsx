@@ -251,7 +251,7 @@ function ProfileSetupContent() {
       </div>
 
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Set Up Your Profile</h1>
+        <h1 className="text-3xl font-bold text-surface-100 mb-2">Set Up Your Profile</h1>
         <p className="text-surface-400">
           Customize your profile to connect with other lifters
         </p>

@@ -152,7 +152,7 @@ export default function LearnPage() {
             Back to Home
           </Link>
           
-          <h1 className="text-4xl md:text-6xl font-black text-white mb-6">
+          <h1 className="text-4xl md:text-6xl font-black text-surface-100 mb-6">
             The Science Behind{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-purple-400">
               HyperTracker
@@ -170,7 +170,7 @@ export default function LearnPage() {
         
         {/* The Problem */}
         <section className="py-12 border-b border-surface-800">
-          <h2 className="text-3xl font-bold text-white mb-6">The Problem with Most Workout Apps</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-6">The Problem with Most Workout Apps</h2>
           <div className="grid md:grid-cols-3 gap-6">
             <div className="p-6 bg-surface-900/50 rounded-xl border border-surface-800">
               <div className="text-4xl mb-4">📝</div>
@@ -198,7 +198,7 @@ export default function LearnPage() {
 
         {/* Features Deep Dive */}
         <section>
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">Features That Actually Matter</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">Features That Actually Matter</h2>
           <div className="space-y-8">
             {features.map((feature, idx) => (
               <div 
@@ -212,7 +212,7 @@ export default function LearnPage() {
                 <div className="flex items-start gap-6">
                   <div className="text-5xl shrink-0">{feature.icon}</div>
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
+                    <h3 className="text-xl font-bold text-surface-100 mb-2">{feature.title}</h3>
                     <p className="text-surface-300 mb-4">{feature.description}</p>
                     <div className="p-4 bg-surface-900/50 rounded-lg border border-surface-700">
                       <p className="text-sm text-surface-400">
@@ -229,7 +229,7 @@ export default function LearnPage() {
 
         {/* The Science */}
         <section>
-          <h2 className="text-3xl font-bold text-white mb-4 text-center">Built on Real Science</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-4 text-center">Built on Real Science</h2>
           <p className="text-center text-surface-400 mb-12 max-w-2xl mx-auto">
             Every algorithm in HyperTracker is based on peer-reviewed research and proven training methodologies.
           </p>
@@ -238,7 +238,7 @@ export default function LearnPage() {
             {scienceConcepts.map((concept) => (
               <div key={concept.title} className="p-6 bg-surface-900/50 rounded-xl border border-surface-800 hover:border-surface-700 transition-colors">
                 <div className="flex items-start justify-between gap-4 mb-3">
-                  <h3 className="text-lg font-bold text-white">{concept.title}</h3>
+                  <h3 className="text-lg font-bold text-surface-100">{concept.title}</h3>
                   <span className="px-3 py-1 bg-surface-800 rounded-full text-xs text-surface-400 shrink-0">
                     {concept.source}
                   </span>
@@ -259,7 +259,7 @@ export default function LearnPage() {
 
         {/* Comparison */}
         <section>
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">How We Compare</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-8 text-center">How We Compare</h2>
           <div className="overflow-hidden rounded-xl border border-surface-800">
             <table className="w-full">
               <thead>
@@ -297,13 +297,13 @@ export default function LearnPage() {
 
         {/* Who It's For */}
         <section className="text-center">
-          <h2 className="text-3xl font-bold text-white mb-8">Who Is HyperTracker For?</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-8">Who Is HyperTracker For?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="p-6">
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
                 <span className="text-4xl">🏆</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Intermediate Lifters</h3>
+              <h3 className="text-xl font-semibold text-surface-100 mb-2">Intermediate Lifters</h3>
               <p className="text-surface-400">
                 Past the beginner gains, ready to maximize the next phase with intelligent programming.
               </p>
@@ -312,7 +312,7 @@ export default function LearnPage() {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
                 <span className="text-4xl">📚</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Science-Based Lifters</h3>
+              <h3 className="text-xl font-semibold text-surface-100 mb-2">Science-Based Lifters</h3>
               <p className="text-surface-400">
                 You&apos;ve read the research and want an app that actually implements it. No bro-science.
               </p>
@@ -321,7 +321,7 @@ export default function LearnPage() {
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
                 <span className="text-4xl">⚙️</span>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Optimization Nerds</h3>
+              <h3 className="text-xl font-semibold text-surface-100 mb-2">Optimization Nerds</h3>
               <p className="text-surface-400">
                 You want to squeeze every drop of gains from your training. Efficiency over effort.
               </p>
@@ -331,7 +331,7 @@ export default function LearnPage() {
 
         {/* CTA */}
         <section className="text-center py-12 px-8 bg-gradient-to-r from-primary-500/10 via-purple-500/10 to-primary-500/10 rounded-2xl border border-primary-500/20">
-          <h2 className="text-3xl font-bold text-white mb-4">Ready to Train Smarter?</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-4">Ready to Train Smarter?</h2>
           <p className="text-surface-300 mb-8 max-w-xl mx-auto">
             Stop leaving gains on the table with outdated training methods. 
             Join the evidence-based lifting revolution.

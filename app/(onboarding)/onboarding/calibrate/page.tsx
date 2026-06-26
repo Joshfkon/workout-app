@@ -402,7 +402,7 @@ function CalibrateContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Testing Complete!</h2>
+              <h2 className="text-2xl font-bold text-surface-100 mb-2">Testing Complete!</h2>
               <p className="text-surface-400">
                 You&apos;ve tested {completedResults.length} lifts. Let&apos;s see your strength profile.
               </p>
@@ -581,7 +581,7 @@ function CalibrateContent() {
                     <p className="text-sm text-surface-500">
                       <ExplainedTerm term="E1RM" />
                     </p>
-                    <p className="text-4xl font-bold text-white">
+                    <p className="text-4xl font-bold text-surface-100">
                       {currentBenchmark.id === 'pullup'
                         ? `${currentResult.testedReps} reps`
                         : `${displayWeight(currentResult.estimated1RM)} ${weightUnit}`}
