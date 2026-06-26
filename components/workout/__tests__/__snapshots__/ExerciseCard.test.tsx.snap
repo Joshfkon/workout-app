@@ -2869,38 +2869,30 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           <div
             class="flex items-center gap-4"
           >
-            <div
-              class="flex items-center gap-1.5"
+            <span
+              class="text-xs text-surface-400"
             >
+              1RM 
               <span
-                class="text-xs text-surface-500"
-              >
-                Est 1RM:
-              </span>
-              <span
-                class="text-sm font-bold text-primary-400"
+                class="text-surface-300"
               >
                 125
                  
                 kg
               </span>
-            </div>
-            <div
-              class="flex items-center gap-1.5"
+            </span>
+            <span
+              class="text-xs text-surface-400"
             >
+              PR 
               <span
-                class="text-xs text-surface-500"
-              >
-                PR:
-              </span>
-              <span
-                class="text-sm font-medium text-success-400"
+                class="text-surface-300"
               >
                 120
                  × 
                 1
               </span>
-            </div>
+            </span>
             <span
               class="text-xs text-surface-500"
             >
