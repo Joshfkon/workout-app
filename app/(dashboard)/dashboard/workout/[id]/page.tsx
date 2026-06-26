@@ -659,6 +659,7 @@ export default function WorkoutPage() {
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [showReadinessModal, setShowReadinessModal] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
@@ -3998,36 +3999,58 @@ export default function WorkoutPage() {
                 </>
               )}
             </button>
-            <button
-              onClick={() => setShowInjuryModal(true)}
-              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-                temporaryInjuries.length > 0
-                  ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
-                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-              }`}
-              title="Report pain or injury"
-            >
-              <span>🤕</span>
-              <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
-            </button>
-            <button
-              onClick={() => setShowReadinessModal(true)}
-              className="px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium bg-surface-800 hover:bg-surface-700 text-surface-400"
-              title="Log readiness (sleep, stress, soreness) — optional"
-            >
-              <span>🔋</span>
-              <span className="hidden sm:inline">Readiness</span>
-            </button>
-            <button
-              onClick={() => setShowPlateCalculator(true)}
-              className="px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium bg-surface-800 hover:bg-surface-700 text-surface-400"
-              title="Plate Calculator"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-              <span className="hidden sm:inline">Plates</span>
-            </button>
+            {/* Secondary tools tucked into one quiet menu (Hurt / Readiness / Plates) */}
+            <div className="relative">
+              <button
+                onClick={() => setShowToolsMenu((v) => !v)}
+                className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+                  temporaryInjuries.length > 0
+                    ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
+                    : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+                }`}
+                title="More tools"
+                aria-haspopup="menu"
+                aria-expanded={showToolsMenu}
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z" />
+                </svg>
+                <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Tools'}</span>
+              </button>
+              {showToolsMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowToolsMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1" role="menu">
+                    <button
+                      onClick={() => { setShowInjuryModal(true); setShowToolsMenu(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                      role="menuitem"
+                    >
+                      <span>🤕</span>
+                      {temporaryInjuries.length > 0 ? 'Injuries' : 'Hurt?'}
+                    </button>
+                    <button
+                      onClick={() => { setShowReadinessModal(true); setShowToolsMenu(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                      role="menuitem"
+                    >
+                      <span>🔋</span>
+                      Readiness
+                    </button>
+                    <button
+                      onClick={() => { setShowPlateCalculator(true); setShowToolsMenu(false); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                      role="menuitem"
+                    >
+                      <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      Plate calculator
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
             <Button
               variant="ghost"
               onClick={() => setShowCancelModal(true)}

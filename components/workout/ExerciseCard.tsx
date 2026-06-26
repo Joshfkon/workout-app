@@ -1076,7 +1076,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onTargetSetsChange(newSets);
                   }}
                   disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Remove a set"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1086,7 +1086,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <button
                   onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
                   disabled={Number(block.targetSets) >= 10}
-                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                   title="Add a set"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1100,7 +1100,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div className="relative">
                 <button
                   onClick={() => setShowExerciseMenu((v) => !v)}
-                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded bg-surface-700 hover:bg-surface-600 text-surface-300 transition-colors"
+                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
                   title="More"
                   aria-haspopup="menu"
                   aria-expanded={showExerciseMenu}
@@ -1208,21 +1208,15 @@ export const ExerciseCard = memo(function ExerciseCard({
               <div className="flex items-center gap-4">
                 {/* Estimated 1RM — hidden until there's a real estimate (avoid "0 lbs") */}
                 {exerciseHistory.estimatedE1RM > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-surface-500">Est 1RM:</span>
-                    <span className="text-sm font-bold text-primary-400">
-                      {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
-                    </span>
-                  </div>
+                  <span className="text-xs text-surface-400">
+                    1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span>
+                  </span>
                 )}
                 {/* PR indicator */}
                 {exerciseHistory.personalRecord && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-surface-500">PR:</span>
-                    <span className="text-sm font-medium text-success-400">
-                      {displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}
-                    </span>
-                  </div>
+                  <span className="text-xs text-surface-400">
+                    PR <span className="text-surface-300">{displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}</span>
+                  </span>
                 )}
                 {/* Sessions count */}
                 <span className="text-xs text-surface-500">
