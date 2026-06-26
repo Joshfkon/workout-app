@@ -162,6 +162,7 @@ export default function WorkoutPage() {
   
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
+  const [showReadinessModal, setShowReadinessModal] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
   const [temporaryInjuries, setTemporaryInjuries] = useState<{ area: string; severity: 1 | 2 | 3 }[]>([]);
@@ -802,26 +803,19 @@ export default function WorkoutPage() {
         } else if (sessionData.state === 'in_progress') {
           setPhase('workout');
         } else {
-          // Check if user wants to skip pre-workout check-in (use preferences already fetched above)
-          const userPrefs = (userData?.preferences as Record<string, unknown>) || {};
-          const shouldSkipCheckIn = (userPrefs.skipPreWorkoutCheckIn as boolean) ?? false;
-
-          if (shouldSkipCheckIn) {
-            // Skip check-in, go directly to workout
-            const startedAt = new Date().toISOString();
-            await supabase
-              .from('workout_sessions')
-              .update({
-                state: 'in_progress',
-                started_at: startedAt,
-              })
-              .eq('id', sessionId);
-            // Update session state with the started time
-            setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
-            setPhase('workout');
-          } else {
-            setPhase('checkin');
-          }
+          // Start the workout immediately. The pre-workout check-in is now
+          // optional (available from the "Readiness" button in the workout
+          // header), not a gate on getting to your sets.
+          const startedAt = new Date().toISOString();
+          await supabase
+            .from('workout_sessions')
+            .update({
+              state: 'in_progress',
+              started_at: startedAt,
+            })
+            .eq('id', sessionId);
+          setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
+          setPhase('workout');
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load workout');
@@ -1178,15 +1172,19 @@ export default function WorkoutPage() {
     }
   };
 
-  const handleCheckInComplete = async (checkInData?: PreWorkoutCheckIn) => {
+  const handleCheckInComplete = async (
+    checkInData?: PreWorkoutCheckIn,
+    opts?: { startSession?: boolean }
+  ) => {
+    const startSession = opts?.startSession ?? true;
     try {
       const supabase = createUntypedClient();
-      
-      // Prepare check-in data for database
-      const updateData: Record<string, unknown> = {
-        state: 'in_progress',
-        started_at: new Date().toISOString(),
-      };
+
+      // Only (re)start the session on the workout-start path. The optional
+      // in-workout readiness logger must NOT reset state/started_at.
+      const updateData: Record<string, unknown> = startSession
+        ? { state: 'in_progress', started_at: new Date().toISOString() }
+        : {};
       
       // If we have check-in data, save it
       if (checkInData) {
@@ -1199,7 +1197,12 @@ export default function WorkoutPage() {
           readinessScore: checkInData.readinessScore,
           temporaryInjuries: checkInData.temporaryInjuries,
         };
-        
+
+        // Apply readiness immediately so it scales the suggested target weights.
+        if (typeof checkInData.readinessScore === 'number') {
+          setReadinessScore(checkInData.readinessScore);
+        }
+
         // Set temporary injuries in state so they carry over to workout
         if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
           setTemporaryInjuries(
@@ -1246,27 +1249,22 @@ export default function WorkoutPage() {
         }
       }
       
-      await supabase
-        .from('workout_sessions')
-        .update(updateData)
-        .eq('id', sessionId);
+      if (Object.keys(updateData).length > 0) {
+        await supabase
+          .from('workout_sessions')
+          .update(updateData)
+          .eq('id', sessionId);
+      }
 
-      // Update session state with the started time
-      const startedAt = updateData.started_at as string;
-      setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
-
-      setPhase('workout');
+      if (startSession) {
+        const startedAt = updateData.started_at as string;
+        setSession(prev => prev ? { ...prev, startedAt, state: 'in_progress' } : prev);
+        setPhase('workout');
+      }
     } catch (err) {
       console.error('Failed to update session:', err);
-      setPhase('workout'); // Continue anyway
+      if (startSession) setPhase('workout'); // Continue anyway
     }
-  };
-
-  const handleSkipCheckInPermanently = async () => {
-    // Save preference to skip check-ins in the future
-    await updatePreference('skipPreWorkoutCheckIn', true);
-    // Then complete the check-in for this workout (without check-in data)
-    await handleCheckInComplete();
   };
 
   const handleSetComplete = async (data: {
@@ -2887,22 +2885,6 @@ export default function WorkoutPage() {
     );
   }
 
-  if (phase === 'checkin') {
-    return (
-      <div className="max-w-lg mx-auto py-8">
-        <ReadinessCheckIn
-          onSubmit={handleCheckInComplete}
-          onSkip={() => handleCheckInComplete()}
-          onSkipPermanently={handleSkipCheckInPermanently}
-          unit={preferences.units}
-          todayNutrition={todayNutrition || undefined}
-          userGoal={userGoal}
-          initialValues={todayCheckInData || undefined}
-        />
-      </div>
-    );
-  }
-
   if (phase === 'summary' && session) {
     // Check if this is a previously completed workout (viewing from history)
     const isViewingCompleted = session.state === 'completed' && !!session.completedAt;
@@ -3136,6 +3118,18 @@ export default function WorkoutPage() {
             >
               <span>🤕</span>
               <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Hurt?'}</span>
+            </button>
+            <button
+              onClick={() => setShowReadinessModal(true)}
+              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+                readinessScore > 0
+                  ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
+                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+              }`}
+              title="Log readiness (sleep, stress, soreness) — optional"
+            >
+              <span>🔋</span>
+              <span className="hidden sm:inline">Readiness</span>
             </button>
             <button
               onClick={() => setShowPlateCalculator(true)}
@@ -3856,6 +3850,28 @@ export default function WorkoutPage() {
           onClose={() => setShowCustomExercise(false)}
           onSuccess={handleCustomExerciseSuccess}
         />
+      )}
+
+      {/* Optional readiness logger (no longer gates the workout) */}
+      {showReadinessModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-6"
+          onClick={() => setShowReadinessModal(false)}
+        >
+          <div className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <ReadinessCheckIn
+              onSubmit={async (data) => {
+                await handleCheckInComplete(data, { startSession: false });
+                setShowReadinessModal(false);
+              }}
+              onSkip={() => setShowReadinessModal(false)}
+              unit={preferences.units}
+              todayNutrition={todayNutrition || undefined}
+              userGoal={userGoal}
+              initialValues={todayCheckInData || undefined}
+            />
+          </div>
+        </div>
       )}
 
       {/* Injury Report Modal */}
