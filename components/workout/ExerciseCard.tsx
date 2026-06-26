@@ -234,10 +234,6 @@ export const ExerciseCard = memo(function ExerciseCard({
   const effectiveTargetRir = adjustedTargetRir ?? block.targetRir;
   
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
-  const [editingRpeId, setEditingRpeId] = useState<string | null>(null);
-  const [editingFormId, setEditingFormId] = useState<string | null>(null);
-  const [editRpeValue, setEditRpeValue] = useState('');
-  const [editFormValue, setEditFormValue] = useState<'clean' | 'some_breakdown' | 'ugly' | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
   const [editingWarmupId, setEditingWarmupId] = useState<number | null>(null);
@@ -1528,17 +1524,13 @@ export const ExerciseCard = memo(function ExerciseCard({
           <table className="w-full text-sm">
             <thead className="bg-surface-800/50">
               <tr>
-                <th className="px-1.5 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Weight</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Reps</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">
-                  <span className="inline-flex items-center justify-center">RPE<InfoTooltip term="RPE" size="sm" /></span>
-                </th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">Form</th>
-                <th className="px-1 py-2 text-center text-surface-400 font-medium">
+                <th className="px-2 py-2 text-left text-surface-400 font-medium">Set</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Reps</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">
                   <span className="inline-flex items-center justify-center">Quality<InfoTooltip term="STIMULATIVE_SET" size="sm" /></span>
                 </th>
-                <th className="px-1 py-2 w-10"></th>
+                <th className="px-2 py-2 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -1549,8 +1541,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                 
                 return editingSetId === set.id ? (
                   <tr key={set.id} className="bg-primary-500/10">
-                    <td className="px-1.5 py-2 text-surface-300 font-medium">{set.setNumber}</td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-2 text-surface-300 font-medium">{set.setNumber}</td>
+                    <td className="px-2 py-1.5">
                       <input
                         type="number"
                         inputMode="decimal"
@@ -1563,7 +1555,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         autoFocus
                       />
                     </td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-1.5">
                       <input
                         type="number"
                         inputMode="numeric"
@@ -1575,27 +1567,12 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
                     </td>
-                    <td className="px-1 py-1.5">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={editRpe}
-                        onChange={(e) => setEditRpe(e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={handleEditKeyDown}
-                        step="0.5"
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                      />
-                    </td>
-                    <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-500 text-xs">—</span>
-                    </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-2 py-1.5 text-center">
                       <div className="flex justify-center">
                         <SetQualityBadge quality={set.quality} />
                       </div>
                     </td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-1.5">
                       <div className="flex gap-1 justify-center">
                         <button
                           onClick={saveEdit}
@@ -1627,156 +1604,43 @@ export const ExerciseCard = memo(function ExerciseCard({
                       onTouchEnd={() => handleTouchEnd(set.id, true)}
                       style={getSwipeTransform(set.id)}
                     >
-                      <td className="px-1.5 py-2.5 text-surface-300 font-medium">
+                      <td className="px-2 py-2.5 text-surface-300 font-medium">
                         <div className="flex items-center gap-1 min-w-0">
                           {isDropset && <span className="text-purple-400 text-xs">↓</span>}
                           <span className="truncate">{set.setNumber}</span>
                         </div>
                       </td>
                       <td
-                        className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
-                        {set.bodyweightData 
+                        {set.bodyweightData
                           ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
                           : displayWeight(set.weightKg, true)}
                       </td>
                       <td
-                        className={`px-1 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
+                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
                       >
                         {set.reps}
                       </td>
-                      <td
-                        className="px-1 py-2.5 text-center"
-                      >
-                        {editingRpeId === set.id ? (
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            value={editRpeValue}
-                            onChange={(e) => setEditRpeValue(e.target.value)}
-                            onFocus={(e) => e.target.select()}
-                            onBlur={() => {
-                              const rpeNum = parseFloat(editRpeValue);
-                              if (!isNaN(rpeNum) && rpeNum >= 0 && rpeNum <= 10 && onSetEdit) {
-                                onSetEdit(set.id, {
-                                  weightKg: set.weightKg,
-                                  reps: set.reps,
-                                  rpe: rpeNum,
-                                });
-                                // Recalculate suggestions for next set after RPE is updated
-                                setTimeout(() => recalculatePendingInputs(), 100);
-                              }
-                              setEditingRpeId(null);
-                              setEditRpeValue('');
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const rpeNum = parseFloat(editRpeValue);
-                                if (!isNaN(rpeNum) && rpeNum >= 0 && rpeNum <= 10 && onSetEdit) {
-                                  onSetEdit(set.id, {
-                                    weightKg: set.weightKg,
-                                    reps: set.reps,
-                                    rpe: rpeNum,
-                                  });
-                                  // Recalculate suggestions for next set after RPE is updated
-                                  setTimeout(() => recalculatePendingInputs(), 100);
-                                }
-                                setEditingRpeId(null);
-                                setEditRpeValue('');
-                              } else if (e.key === 'Escape') {
-                                setEditingRpeId(null);
-                                setEditRpeValue('');
-                              }
-                            }}
-                            step="0.5"
-                            min="0"
-                            max="10"
-                            className="w-full px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center font-mono text-surface-100 text-sm"
-                            autoFocus
-                          />
-                        ) : (
-                          <span
-                            className={`font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                            onClick={() => {
-                              if (onSetEdit) {
-                                setEditingRpeId(set.id);
-                                setEditRpeValue(set.rpe ? set.rpe.toFixed(1) : '');
-                              }
-                            }}
+                      <td className="px-2 py-2.5 text-center">
+                        {onSetFeedbackUpdate ? (
+                          <button
+                            type="button"
+                            onClick={() => setPendingFeedbackSet({ setId: set.id, weightKg: set.weightKg, reps: set.reps, setNumber: set.setNumber })}
+                            className="inline-flex justify-center rounded hover:opacity-80 transition-opacity"
+                            title="Tap to rate effort (RIR)"
                           >
-                            {set.rpe ? set.rpe.toFixed(1) : '—'}
-                          </span>
+                            <SetQualityBadge quality={set.quality} />
+                          </button>
+                        ) : (
+                          <div className="flex justify-center">
+                            <SetQualityBadge quality={set.quality} />
+                          </div>
                         )}
                       </td>
-                      <td
-                        className="px-1 py-2.5 text-center"
-                      >
-                        {editingFormId === set.id ? (
-                          <select
-                            value={editFormValue || ''}
-                            onChange={(e) => {
-                              const formValue = e.target.value as 'clean' | 'some_breakdown' | 'ugly' | '';
-                              if (formValue && onSetFeedbackUpdate) {
-                                onSetFeedbackUpdate(set.id, {
-                                  ...set.feedback,
-                                  form: formValue as 'clean' | 'some_breakdown' | 'ugly',
-                                  repsInTank: set.feedback?.repsInTank || 2,
-                                });
-                                // Recalculate suggestions for next set after Form is updated
-                                // (Form affects progression logic, though less directly than RPE)
-                                setTimeout(() => recalculatePendingInputs(), 100);
-                              }
-                              setEditingFormId(null);
-                              setEditFormValue(null);
-                            }}
-                            onBlur={() => {
-                              setEditingFormId(null);
-                              setEditFormValue(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                setEditingFormId(null);
-                                setEditFormValue(null);
-                              }
-                            }}
-                            className="w-full px-1 py-1 bg-surface-900 border border-primary-500 rounded text-center text-surface-100 text-xs"
-                            autoFocus
-                          >
-                            <option value="">—</option>
-                            <option value="clean">Clean</option>
-                            <option value="some_breakdown">~Form</option>
-                            <option value="ugly">Ugly</option>
-                          </select>
-                        ) : (
-                          <span
-                            className={`text-surface-200 text-xs ${onSetFeedbackUpdate ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                            onClick={() => {
-                              if (onSetFeedbackUpdate) {
-                                setEditingFormId(set.id);
-                                setEditFormValue(set.feedback?.form || null);
-                              }
-                            }}
-                          >
-                            {set.feedback?.form === 'clean' ? (
-                              <span className="text-success-400">Clean</span>
-                            ) : set.feedback?.form === 'some_breakdown' ? (
-                              <span className="text-warning-400">~Form</span>
-                            ) : set.feedback?.form === 'ugly' ? (
-                              <span className="text-danger-400">Ugly</span>
-                            ) : (
-                              <span className="text-surface-500">—</span>
-                            )}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-1 py-2.5 text-center">
-                        <div className="flex justify-center">
-                          <SetQualityBadge quality={set.quality} />
-                        </div>
-                      </td>
-                      <td className="px-1 py-2.5 relative">
+                      <td className="px-2 py-2.5 relative">
                         {/* Delete reveal background for swipe */}
                         {swipeState.setId === set.id && swipeState.isSwiping && (
                           <div
@@ -1816,7 +1680,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     {/* Inline RIR rating for the just-completed set (replaces the old modal) */}
                     {pendingFeedbackSet?.setId === set.id && onSetFeedbackUpdate && (
                       <tr className="bg-primary-500/5">
-                        <td colSpan={7} className="px-2 py-2">
+                        <td colSpan={5} className="px-2 py-2">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="text-xs text-surface-400 mr-0.5 inline-flex items-center">
                               Reps in reserve?<InfoTooltip term="RIR" size="sm" />
@@ -1851,7 +1715,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
                      pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
                       <tr className="bg-surface-800/20">
-                        <td colSpan={7} className="px-3 py-2">
+                        <td colSpan={5} className="px-3 py-2">
                           <button
                             onClick={() => startDropset(set)}
                             className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
@@ -1871,7 +1735,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               {/* Auto-triggered Dropset Prompt */}
               {isActive && pendingDropset && (
                 <tr>
-                  <td colSpan={7} className="p-0">
+                  <td colSpan={5} className="p-0">
                     <DropsetPrompt
                       parentWeight={pendingDropset.parentWeight}
                       dropNumber={pendingDropset.dropNumber}
@@ -1906,7 +1770,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   isSkipped={timerIsSkipped}
                   restedSeconds={timerRestedSeconds}
                   onShowControls={onShowTimerControls}
-                  colSpan={7}
+                  colSpan={5}
                 />
               )}
 
@@ -1930,7 +1794,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       autoFocus
                     />
                   </td>
-                  <td className="px-1 py-1.5">
+                  <td className="px-2 py-1.5">
                     <input
                       type="number"
                       inputMode="numeric"
@@ -1941,33 +1805,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                       className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-xs sm:text-sm placeholder-surface-500"
                     />
                   </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      defaultValue="10"
-                      id="dropset-rpe-input"
-                      step="0.5"
-                      className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
-                    />
-                  </td>
-                  <td className="px-1 py-1.5 text-center">
-                    <span className="text-surface-600 text-[10px] sm:text-xs">—</span>
-                  </td>
                   <td className="px-2 py-1.5 text-center min-w-0">
                     <span className="text-[10px] sm:text-xs text-purple-400 font-medium truncate block">DROPSET</span>
                   </td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-1.5">
                     <div className="flex gap-1">
                       <button
                         onClick={() => {
                           const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
                           const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
-                          const rpeEl = document.getElementById('dropset-rpe-input') as HTMLInputElement;
 
                           const weight = parseFloat(weightEl?.value || '0');
                           const reps = parseInt(repsEl?.value || '0');
-                          const rpe = parseFloat(rpeEl?.value || '10');
+                          const rpe = 10; // dropsets are taken to/near failure
 
                           if (weight > 0 && reps > 0 && onSetComplete) {
                             const weightKg = inputWeightToKg(weight, unit);
@@ -2014,8 +1864,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                     onTouchEnd={() => handleTouchEnd(pendingId, false)}
                     style={getSwipeTransform(pendingId)}
                   >
-                    <td className="px-1.5 py-2 text-surface-400 font-medium">{setNumber}</td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-2 text-surface-400 font-medium">{setNumber}</td>
+                    <td className="px-2 py-1.5">
                       <input
                         type="number"
                         inputMode="decimal"
@@ -2036,7 +1886,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
-                    <td className="px-1 py-1.5">
+                    <td className="px-2 py-1.5">
                       <input
                         type="number"
                         inputMode="numeric"
@@ -2049,41 +1899,10 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </td>
-                    <td className="px-1 py-1.5 text-center">
-                      {(() => {
-                        const isLastPendingSet = index === pendingInputs.length - 1;
-                        const shouldShowAmrapInput = isLastPendingSet && isAmrapSuggested;
-
-                        if (shouldShowAmrapInput) {
-                          return (
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              value={input.rpe || '9.5'}
-                              onChange={(e) => updatePendingInput(index, 'rpe', e.target.value)}
-                              onFocus={(e) => e.target.select()}
-                              step="0.5"
-                              min="1"
-                              max="10"
-                              className="w-full px-1 py-1 bg-surface-800/50 border border-surface-600/50 rounded text-center font-mono text-surface-400 text-xs focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50"
-                              placeholder="9.5"
-                              title="AMRAP target: Push to failure (RPE 9.5+)"
-                            />
-                          );
-                        }
-
-                        return (
-                          <span className="text-surface-600 text-xs font-mono">—</span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-1 py-1.5 text-center">
+                    <td className="px-2 py-1.5 text-center">
                       <span className="text-surface-600 text-xs">—</span>
                     </td>
-                    <td className="px-1 py-1.5 text-center">
-                      <span className="text-surface-600 text-xs">—</span>
-                    </td>
-                    <td className="px-1 py-1.5 relative">
+                    <td className="px-2 py-1.5 relative">
                       {/* Delete reveal background for swipe */}
                       {swipeState.setId === pendingId && swipeState.isSwiping && (
                         <div
@@ -2121,15 +1940,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 const inactiveSetNumber = completedSets.length + i + 1;
                 return (
                   <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
-                    <td className="px-1.5 py-2.5 text-surface-500">
+                    <td className="px-2 py-2.5 text-surface-500">
                       {inactiveSetNumber}
                     </td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-1 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-1 py-2.5"></td>
+                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
+                    <td className="px-2 py-2.5"></td>
                   </tr>
                 );
               })}

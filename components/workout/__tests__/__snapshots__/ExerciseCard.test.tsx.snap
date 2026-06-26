@@ -301,55 +301,22 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -377,7 +344,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -388,111 +355,81 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -640,55 +577,22 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -716,7 +620,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -727,111 +631,81 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -996,55 +870,22 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -1072,7 +913,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -1083,12 +924,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             class="bg-surface-800/30"
           >
             <td
-              class="px-1.5 py-2 text-surface-400 font-medium"
+              class="px-2 py-2 text-surface-400 font-medium"
             >
               1
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1101,7 +942,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1114,16 +955,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs font-mono"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 text-center"
+              class="px-2 py-1.5 text-center"
             >
               <span
                 class="text-surface-600 text-xs"
@@ -1132,16 +964,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </span>
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 relative"
+              class="px-2 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1167,12 +990,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             class="bg-surface-800/30"
           >
             <td
-              class="px-1.5 py-2 text-surface-400 font-medium"
+              class="px-2 py-2 text-surface-400 font-medium"
             >
               2
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1185,7 +1008,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1198,16 +1021,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs font-mono"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 text-center"
+              class="px-2 py-1.5 text-center"
             >
               <span
                 class="text-surface-600 text-xs"
@@ -1216,16 +1030,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </span>
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 relative"
+              class="px-2 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1251,12 +1056,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             class="bg-surface-800/30"
           >
             <td
-              class="px-1.5 py-2 text-surface-400 font-medium"
+              class="px-2 py-2 text-surface-400 font-medium"
             >
               3
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1269,7 +1074,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5"
+              class="px-2 py-1.5"
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1282,16 +1087,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               />
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs font-mono"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 text-center"
+              class="px-2 py-1.5 text-center"
             >
               <span
                 class="text-surface-600 text-xs"
@@ -1300,16 +1096,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </span>
             </td>
             <td
-              class="px-1 py-1.5 text-center"
-            >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
-            </td>
-            <td
-              class="px-1 py-1.5 relative"
+              class="px-2 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1479,55 +1266,22 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -1555,7 +1309,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -1566,7 +1320,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
                 class="flex items-center gap-1 min-w-0"
@@ -1579,39 +1333,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="font-mono text-surface-200 "
-              >
-                8.0
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="text-surface-200 text-xs "
-              >
-                <span
-                  class="text-surface-500"
-                >
-                  —
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
+              class="px-2 py-2.5 text-center"
             >
               <div
                 class="flex justify-center"
@@ -1624,7 +1356,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 relative"
+              class="px-2 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1649,7 +1381,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
                 class="flex items-center gap-1 min-w-0"
@@ -1662,39 +1394,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="font-mono text-surface-200 "
-              >
-                8.0
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="text-surface-200 text-xs "
-              >
-                <span
-                  class="text-surface-500"
-                >
-                  —
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
+              class="px-2 py-2.5 text-center"
             >
               <div
                 class="flex justify-center"
@@ -1707,7 +1417,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 relative"
+              class="px-2 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1732,7 +1442,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
                 class="flex items-center gap-1 min-w-0"
@@ -1745,39 +1455,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="font-mono text-surface-200 "
-              >
-                8.0
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="text-surface-200 text-xs "
-              >
-                <span
-                  class="text-surface-500"
-                >
-                  —
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
+              class="px-2 py-2.5 text-center"
             >
               <div
                 class="flex justify-center"
@@ -1790,7 +1478,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 relative"
+              class="px-2 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1956,55 +1644,22 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -2032,7 +1687,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -2043,111 +1698,81 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -2295,55 +1920,22 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -2371,7 +1963,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -2382,111 +1974,81 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -2634,55 +2196,22 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -2710,7 +2239,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -2721,111 +2250,81 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -2973,55 +2472,22 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -3049,7 +2515,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -3060,111 +2526,81 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -3329,55 +2765,22 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -3405,7 +2808,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -3416,7 +2819,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
                 class="flex items-center gap-1 min-w-0"
@@ -3429,39 +2832,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
             </td>
             <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="font-mono text-surface-200 "
-              >
-                7.0
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="text-surface-200 text-xs "
-              >
-                <span
-                  class="text-surface-500"
-                >
-                  —
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
+              class="px-2 py-2.5 text-center"
             >
               <div
                 class="flex justify-center"
@@ -3474,7 +2855,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 relative"
+              class="px-2 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -3499,7 +2880,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="hover:bg-surface-800/30 group bg-success-500/5"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-300 font-medium"
+              class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
                 class="flex items-center gap-1 min-w-0"
@@ -3512,39 +2893,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
             </td>
             <td
-              class="px-1 py-2.5 text-center font-mono text-surface-200 "
+              class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               9
             </td>
             <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="font-mono text-surface-200 "
-              >
-                8.0
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
-            >
-              <span
-                class="text-surface-200 text-xs "
-              >
-                <span
-                  class="text-surface-500"
-                >
-                  —
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-1 py-2.5 text-center"
+              class="px-2 py-2.5 text-center"
             >
               <div
                 class="flex justify-center"
@@ -3557,7 +2916,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
-              class="px-1 py-2.5 relative"
+              class="px-2 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -3582,37 +2941,27 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -3823,55 +3172,22 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -3899,7 +3215,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -3910,111 +3226,81 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -4183,55 +3469,22 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -4259,7 +3512,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -4270,111 +3523,81 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -4522,55 +3745,22 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -4598,7 +3788,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -4609,111 +3799,81 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -4861,55 +4021,22 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -4937,7 +4064,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -4948,111 +4075,81 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -5200,55 +4297,22 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -5276,7 +4340,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -5287,111 +4351,81 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
@@ -5539,55 +4573,22 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
         >
           <tr>
             <th
-              class="px-1.5 py-2 text-left text-surface-400 font-medium"
+              class="px-2 py-2 text-left text-surface-400 font-medium"
             >
               Set
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Weight
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
             </th>
             <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                RPE
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about RPE"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
-            >
-              Form
-            </th>
-            <th
-              class="px-1 py-2 text-center text-surface-400 font-medium"
+              class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               <span
                 class="inline-flex items-center justify-center"
@@ -5615,7 +4616,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
               </span>
             </th>
             <th
-              class="px-1 py-2 w-10"
+              class="px-2 py-2 w-10"
             />
           </tr>
         </thead>
@@ -5626,111 +4627,81 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               1
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               2
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
           <tr
             class="bg-surface-800/20"
           >
             <td
-              class="px-1.5 py-2.5 text-surface-500"
+              class="px-2 py-2.5 text-surface-500"
             >
               3
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
+              class="px-2 py-2.5 text-center text-surface-600 text-xs"
             >
               —
             </td>
             <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5 text-center text-surface-600 text-xs"
-            >
-              —
-            </td>
-            <td
-              class="px-1 py-2.5"
+              class="px-2 py-2.5"
             />
           </tr>
         </tbody>
