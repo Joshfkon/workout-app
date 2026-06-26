@@ -272,7 +272,6 @@ export function QuickFoodLogger({
 
   const handleBarcodeProduct = (product: NonNullable<BarcodeSearchResult['product']>) => {
     try {
-      console.log('[QuickFoodLogger] Product received:', product?.name);
       setBarcodeProduct(product);
       // Reset portion selection for new product
       setBarcodeQuantity('1');

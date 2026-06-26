@@ -59,6 +59,10 @@ const BASE_REP_RANGES: Record<Goal, { compound: [number, number]; isolation: [nu
     compound: [5, 8],      // Balance strength and hypertrophy
     isolation: [8, 12],
   },
+  recomp: {
+    compound: [5, 8],      // Similar to maintenance - balanced approach
+    isolation: [8, 12],
+  },
 };
 
 // ============================================================
@@ -154,7 +158,7 @@ export function calculateRepRange(factors: RepRangeFactors): RepRangeConfig {
   
   // === FINAL BOUNDS CHECK ===
   minReps = Math.max(1, Math.min(20, minReps));
-  maxReps = Math.max(minReps + 2, Math.min(30, maxReps));
+  maxReps = Math.max(minReps + 2, Math.min(25, maxReps));
   
   // === CALCULATE TARGET RIR ===
   let targetRIR: number;

@@ -87,6 +87,7 @@ export interface Database {
           demo_gif_url: string | null;
           demo_thumbnail_url: string | null;
           youtube_video_id: string | null;
+          exercise_type: 'rep_based' | 'duration_based';
         };
         Insert: {
           id?: string;
@@ -105,6 +106,7 @@ export interface Database {
           demo_gif_url?: string | null;
           demo_thumbnail_url?: string | null;
           youtube_video_id?: string | null;
+          exercise_type?: 'rep_based' | 'duration_based';
         };
         Update: {
           id?: string;
@@ -123,6 +125,7 @@ export interface Database {
           demo_gif_url?: string | null;
           demo_thumbnail_url?: string | null;
           youtube_video_id?: string | null;
+          exercise_type?: 'rep_based' | 'duration_based';
         };
         Relationships: [];
       };
@@ -138,6 +141,7 @@ export interface Database {
           days_per_week: number;
           split_type: string;
           fatigue_score: number;
+          session_duration_minutes: number | null;
           created_at: string;
           started_at: string | null;
           completed_at: string | null;
@@ -153,6 +157,7 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          session_duration_minutes?: number | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -168,6 +173,7 @@ export interface Database {
           days_per_week?: number;
           split_type?: string;
           fatigue_score?: number;
+          session_duration_minutes?: number | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -564,6 +570,7 @@ export interface Database {
       set_quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
       progression_type: 'load' | 'reps' | 'sets' | 'technique';
       volume_status: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';
+      exercise_type: 'rep_based' | 'duration_based';
     };
   };
 }

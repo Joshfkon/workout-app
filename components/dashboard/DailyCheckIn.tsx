@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
 import type { Rating, DailyCheckIn as DailyCheckInType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -12,7 +12,7 @@ interface DailyCheckInProps {
   onComplete?: () => void;
 }
 
-export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps) {
+export const DailyCheckIn = memo(function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps) {
   const [step, setStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState(false);
@@ -30,7 +30,7 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
   const [hungerLevel, setHungerLevel] = useState<Rating>(3);
   
   const isOnCut = userGoal === 'cut';
-  
+
   // Define questions based on user goal
   const baseQuestions = [
     {
@@ -430,5 +430,4 @@ export function DailyCheckIn({ userId, userGoal, onComplete }: DailyCheckInProps
       </div>
     </Card>
   );
-}
-
+});

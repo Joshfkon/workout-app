@@ -10,9 +10,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { getLocalDateString } from '@/lib/utils';
 import type { EnhancedTDEEEstimate, DailyActivityData, DailyTDEEResult } from '@/types/wearable';
 import { getDailyActivityData } from '@/lib/actions/wearable';
-import { getLocalDateString } from '@/lib/utils';
 
 interface EnhancedTDEEDashboardProps {
   tdeeEstimate: EnhancedTDEEEstimate | null;

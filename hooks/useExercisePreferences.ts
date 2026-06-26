@@ -14,9 +14,19 @@ import {
   setExerciseStatus as setExerciseStatusService,
   bulkSetExerciseStatus,
   resetAllPreferences as resetAllPreferencesService,
-  getPreferenceSummary,
   clearPreferencesCache,
 } from '@/lib/data/exercisePreferencesService';
+
+/** Compute summary counts from the preferences map */
+function computeSummaryFromPrefs(prefs: Map<string, UserExercisePreference>): ExercisePreferenceSummary {
+  let doNotSuggestCount = 0;
+  let archivedCount = 0;
+  prefs.forEach((pref) => {
+    if (pref.status === 'do_not_suggest') doNotSuggestCount++;
+    if (pref.status === 'archived') archivedCount++;
+  });
+  return { activeCount: 0, doNotSuggestCount, archivedCount };
+}
 
 // Global state to share preferences across components
 let globalPreferences: Map<string, UserExercisePreference> = new Map();
@@ -66,8 +76,7 @@ export function useExercisePreferences() {
             const prefs = await getUserExercisePreferences(user.id);
             notifyListeners(prefs);
 
-            const summaryData = await getPreferenceSummary(user.id);
-            setSummary(summaryData);
+            setSummary(computeSummaryFromPrefs(prefs));
           } catch (prefError: any) {
             // Handle missing table gracefully
             if (prefError?.code === 'PGRST205' || prefError?.message?.includes('Could not find the table')) {
@@ -157,8 +166,7 @@ export function useExercisePreferences() {
         const prefs = await getUserExercisePreferences(userId);
         notifyListeners(prefs);
 
-        const summaryData = await getPreferenceSummary(userId);
-        setSummary(summaryData);
+        setSummary(computeSummaryFromPrefs(prefs));
       }
 
       return success;
@@ -226,8 +234,7 @@ export function useExercisePreferences() {
         const prefs = await getUserExercisePreferences(userId);
         notifyListeners(prefs);
 
-        const summaryData = await getPreferenceSummary(userId);
-        setSummary(summaryData);
+        setSummary(computeSummaryFromPrefs(prefs));
       }
 
       return success;
@@ -265,8 +272,7 @@ export function useExercisePreferences() {
     const prefs = await getUserExercisePreferences(userId);
     notifyListeners(prefs);
 
-    const summaryData = await getPreferenceSummary(userId);
-    setSummary(summaryData);
+    setSummary(computeSummaryFromPrefs(prefs));
   }, [userId]);
 
   return {

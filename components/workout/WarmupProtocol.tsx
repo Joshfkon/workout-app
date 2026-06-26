@@ -13,6 +13,8 @@ interface WarmupProtocolProps {
   unit?: WeightUnit;
   /** Barbell weight in kg for bar-only warmups (defaults to 20kg for Olympic barbell) */
   barbellWeightKg?: number;
+  /** Equipment type for determining how to display empty/light weights */
+  equipmentType?: 'barbell' | 'dumbbell' | 'cable' | 'machine' | 'bodyweight' | 'kettlebell';
 }
 
 export function WarmupProtocol({
@@ -22,6 +24,7 @@ export function WarmupProtocol({
   onComplete,
   unit = 'kg',
   barbellWeightKg = 20,
+  equipmentType,
 }: WarmupProtocolProps) {
   const [completedSets, setCompletedSets] = useState<Set<number>>(new Set());
   const [isExpanded, setIsExpanded] = useState(true);
@@ -97,15 +100,19 @@ export function WarmupProtocol({
 
               // Determine warmup weight display
               let warmupWeight: string;
+              const isBarbell = equipmentType === 'barbell' || (!equipmentType && set.isBarOnly);
+
               if (set.percentOfWorking === 0) {
                 // General warmup with no weight specified
-                warmupWeight = 'Empty bar';
+                // Only show "Empty bar" for barbell exercises
+                warmupWeight = isBarbell ? 'Empty bar' : 'Empty';
               } else if (set.isBarOnly) {
                 // Bar-only warmup: show the barbell weight
                 const barDisplay = formatWeightValue(barbellWeightKg, unit);
                 warmupWeight = `Bar only (${barDisplay} ${unitLabel})`;
               } else if (roundedWeight === 0) {
-                warmupWeight = 'Empty bar';
+                // Very light warmup that rounds to 0
+                warmupWeight = isBarbell ? 'Empty bar' : 'Light';
               } else {
                 warmupWeight = `${displayWeight} ${unitLabel}`;
               }

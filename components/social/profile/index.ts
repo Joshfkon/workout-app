@@ -6,3 +6,5 @@ export type { AvatarUploadProps } from './AvatarUpload';
 
 export { ProfileCard } from './ProfileCard';
 export type { ProfileCardProps } from './ProfileCard';
+
+export { ProfilePromptModal } from './ProfilePromptModal';

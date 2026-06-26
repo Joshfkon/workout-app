@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Card, Button, Badge, Input, LoadingAnimation } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimerControlPanel } from '@/components/workout';
+import { RestTimerControlPanel, PauseOverlay } from '@/components/workout';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -20,6 +20,7 @@ const ExerciseCard = dynamic(
   }
 );
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
+import { useWorkoutEstimate } from '@/hooks/useWorkoutEstimate';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -27,52 +28,520 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType, ExerciseType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
-import { formatWeight, getLocalDateString } from '@/lib/utils';
+import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
-import {
-  getSafeAlternatives,
+import { 
+  getInjuryRisk, 
+  getSafeAlternatives, 
   autoSwapForInjuries,
   getInjuryDescription,
+  INJURY_LABELS,
   type InjuryArea,
   type InjuryContext,
+  type InjuryRisk
 } from '@/services/injuryAwareSwapper';
+import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
 import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
+import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
 
-import type {
-  WorkoutPhase,
-  ExerciseBlockWithExercise,
-  AvailableExercise,
-  CalibratedLift,
-  UserProfileForWeights,
-  UserContext,
-  ExerciseHistoryData,
-} from './_lib/types';
-import { getExerciseInjuryRisk } from './_lib/injuryRisk';
-import { calculateE1RM, generateCoachMessage } from './_lib/coachMessage';
-import { writePerformanceSnapshots, upsertWeeklyFatigueLog } from './_lib/sessionWrites';
-import { adjustWorkingWeightForReadiness } from './_lib/readinessAdjust';
-import { CoachMessageCard } from './_components/CoachMessageCard';
-import { AutoAdjustMessage } from './_components/AutoAdjustMessage';
-import { WorkoutErrorAlert } from './_components/WorkoutErrorAlert';
-import { UndoSetDeleteSnackbar } from './_components/UndoSetDeleteSnackbar';
-import { CalibrationResultOverlay } from './_components/CalibrationResultOverlay';
-import { FloatingDragPreview } from './_components/FloatingDragPreview';
-import { CancelWorkoutModal } from './_components/CancelWorkoutModal';
-import { CustomExerciseModal } from './_components/CustomExerciseModal';
-import { InjuryReportModal } from './_components/InjuryReportModal';
-import { PageLevelSwapModal } from './_components/PageLevelSwapModal';
-import { AddExerciseModal } from './_components/AddExerciseModal';
+type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
+
+interface ExerciseBlockWithExercise extends ExerciseBlock {
+  exercise: Exercise;
+}
+
+interface AvailableExercise {
+  id: string;
+  name: string;
+  primary_muscle: string;
+  secondary_muscles?: string[];
+  mechanic: 'compound' | 'isolation';
+  equipment_required?: string[];
+  default_rep_range?: [number, number];
+  default_rir?: number;
+  is_bodyweight?: boolean;
+}
+
+interface GymLocation {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+// Equipment mapping for filtering exercises based on available equipment at a location
+const EQUIPMENT_MAPPING: Record<string, string[]> = {
+  // Machines
+  leg_press: ['leg press', 'machine'],
+  leg_extension: ['leg extension', 'machine'],
+  leg_curl: ['leg curl', 'machine'],
+  hack_squat: ['hack squat', 'machine'],
+  smith_machine: ['smith machine', 'smith'],
+  chest_press: ['chest press machine', 'machine'],
+  pec_deck: ['pec deck', 'fly machine', 'machine'],
+  shoulder_press_machine: ['shoulder press machine', 'machine'],
+  lat_pulldown: ['lat pulldown', 'cable'],
+  seated_row: ['seated row', 'cable row', 'machine'],
+  cable_machine: ['cable', 'pulley'],
+  assisted_dip: ['assisted'],
+  preacher_curl: ['preacher'],
+  calf_raise: ['calf raise machine', 'machine'],
+  hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
+  glute_kickback: ['glute kickback', 'cable'],
+  reverse_hyper: ['reverse hyper'],
+  // Free Weights
+  barbell: ['barbell', 'bar', 'olympic bar'],
+  dumbbells: ['dumbbell', 'db'],
+  kettlebells: ['kettlebell', 'kb'],
+  ez_bar: ['ez bar', 'curl bar', 'ez curl bar'],
+  weight_plates: ['plate', 'weight plate'],
+  // Benches
+  flat_bench: ['flat bench', 'bench'],
+  adjustable_bench: ['adjustable bench', 'incline bench', 'decline bench', 'bench'],
+  preacher_bench: ['preacher bench', 'preacher'],
+  // Racks
+  squat_rack: ['squat rack', 'power rack', 'rack'],
+  power_rack: ['power rack', 'squat rack', 'rack', 'cage'],
+  // Stations
+  pull_up_bar: ['pull up bar', 'pullup bar', 'chin up bar', 'bar'],
+  dip_station: ['dip station', 'dip bars', 'parallel bars'],
+  // Other
+  resistance_bands: ['resistance band', 'band'],
+  trx: ['trx', 'suspension trainer'],
+  ab_wheel: ['ab wheel', 'ab roller'],
+  foam_roller: ['foam roller', 'roller'],
+};
+
+// Normalize exercise search terms for better matching
+// Handles variations like "situps" vs "sit up" vs "sit-up"
+function normalizeForSearch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[-\s]/g, '')  // Remove hyphens and spaces
+    .replace(/s$/, '');     // Remove trailing 's' for basic plural handling
+}
+
+interface CalibratedLift {
+  lift_name: string;
+  estimated_1rm: number;
+  tested_at: string;
+}
+
+interface UserProfileForWeights {
+  weightKg: number;
+  heightCm: number;
+  bodyFatPercent: number;
+  experience: 'novice' | 'intermediate' | 'advanced';
+  regionalData?: DexaRegionalData;
+  calibratedLifts?: CalibratedLift[];
+}
+
+interface UserContext {
+  goal?: 'bulk' | 'cut' | 'recomp' | 'maintain';
+  laggingAreas?: string[];  // From regional DEXA analysis
+  recentPlateaus?: string[];  // Exercise names with recent plateaus
+  weekInMesocycle?: number;
+  mesocycleName?: string;
+}
+
+interface ExerciseHistoryData {
+  lastWorkoutDate: string;
+  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
+  estimatedE1RM: number;
+  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
+  totalSessions: number;
+}
+
+// Wrapper to convert injuries array to get risk info using new intelligent swapper
+function getExerciseInjuryRisk(
+  exercise: Exercise, 
+  injuries: { area: string; severity: 1 | 2 | 3 }[]
+): { isRisky: boolean; severity: number; reasons: string[]; risk: InjuryRisk } {
+  if (injuries.length === 0) return { isRisky: false, severity: 0, reasons: [], risk: 'safe' };
+  
+  let worstRisk: InjuryRisk = 'safe';
+  let maxSeverity = 0;
+  const reasons: string[] = [];
+  
+  for (const injury of injuries) {
+    const risk = getInjuryRisk(exercise, injury.area as InjuryArea);
+    
+    if (risk === 'avoid') {
+      worstRisk = 'avoid';
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`May aggravate ${INJURY_LABELS[injury.area] || injury.area}`);
+    } else if (risk === 'caution' && worstRisk !== 'avoid') {
+      worstRisk = 'caution';
+      maxSeverity = Math.max(maxSeverity, injury.severity);
+      reasons.push(`Use caution (${INJURY_LABELS[injury.area] || injury.area})`);
+    }
+  }
+  
+  return {
+    isRisky: worstRisk !== 'safe',
+    severity: maxSeverity,
+    reasons: Array.from(new Set(reasons)),
+    risk: worstRisk
+  };
+}
+
+// Calculate E1RM using Brzycki formula
+// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
+function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
+  if (reps === 1 && rpe === 10) return weight;
+  // Account for reps in reserve when RPE < 10
+  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
+  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
+  return weight * (36 / (37 - effectiveReps));
+}
+
+/**
+ * Fetch exercise history for a specific exercise ID.
+ * Used when adding a new exercise mid-workout that wasn't in the original query.
+ */
+async function fetchExerciseHistory(
+  exerciseId: string,
+  userId: string
+): Promise<ExerciseHistoryData | null> {
+  const supabase = createUntypedClient();
+
+  const { data: historyBlocks, error } = await supabase
+    .from('exercise_blocks')
+    .select(`
+      id,
+      exercise_id,
+      workout_sessions!inner (
+        id,
+        completed_at,
+        state,
+        user_id
+      ),
+      set_logs (
+        weight_kg,
+        reps,
+        rpe,
+        is_warmup,
+        logged_at
+      )
+    `)
+    .eq('exercise_id', exerciseId)
+    .eq('workout_sessions.user_id', userId)
+    .eq('workout_sessions.state', 'completed')
+    .order('workout_sessions(completed_at)', { ascending: false })
+    .limit(10);
+
+  if (error || !historyBlocks || historyBlocks.length === 0) {
+    return null;
+  }
+
+  let bestE1RM = 0;
+  let personalRecord: ExerciseHistoryData['personalRecord'] = null;
+  let totalSessions = 0;
+  const seenSessions = new Set<string>();
+
+  // Get last workout data
+  const lastBlock = historyBlocks[0];
+  const lastSession = lastBlock.workout_sessions as any;
+  const lastSets = ((lastBlock.set_logs as any[]) || [])
+    .filter((s: any) => !s.is_warmup)
+    .map((s: any) => ({
+      weightKg: s.weight_kg,
+      reps: s.reps,
+      rpe: s.rpe,
+    }));
+
+  // Calculate best E1RM and PR
+  historyBlocks.forEach((block: any) => {
+    const session = block.workout_sessions;
+    if (session && !seenSessions.has(session.id)) {
+      seenSessions.add(session.id);
+      totalSessions++;
+    }
+
+    const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
+    sets.forEach((set: any) => {
+      const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
+      if (e1rm > bestE1RM) {
+        bestE1RM = e1rm;
+        personalRecord = {
+          weightKg: set.weight_kg,
+          reps: set.reps,
+          e1rm,
+          date: session?.completed_at || set.logged_at,
+        };
+      }
+    });
+  });
+
+  return {
+    lastWorkoutDate: lastSession?.completed_at || '',
+    lastWorkoutSets: lastSets,
+    estimatedE1RM: bestE1RM,
+    personalRecord,
+    totalSessions,
+  };
+}
+
+// Generate coach message based on workout structure and user context
+function generateCoachMessage(
+  blocks: ExerciseBlockWithExercise[],
+  userProfile?: UserProfileForWeights,
+  userContext?: UserContext,
+  unit: 'kg' | 'lb' = 'kg',
+  exerciseHistories?: Record<string, ExerciseHistoryData>
+): {
+  greeting: string;
+  overview: string;
+  personalizedInsight?: string;
+  exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[];
+  tips: string[];
+} {
+  if (blocks.length === 0) {
+    return {
+      greeting: "Let's get started!",
+      overview: "Your workout is ready.",
+      exerciseNotes: [],
+      tips: [],
+    };
+  }
+
+  // Analyze workout structure
+  const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
+  const compoundCount = blocks.filter(b => b.exercise.mechanic === 'compound').length;
+  const isolationCount = blocks.filter(b => b.exercise.mechanic === 'isolation').length;
+  const totalSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
+
+  // Determine workout type
+  let workoutType = '';
+  if (muscles.length >= 5) workoutType = 'Full Body';
+  else if (muscles.includes('chest') && muscles.includes('back')) workoutType = 'Upper Body';
+  else if (muscles.includes('quads') && muscles.includes('hamstrings')) workoutType = 'Lower Body';
+  else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) workoutType = 'Push';
+  else if (muscles.includes('back') && muscles.includes('biceps')) workoutType = 'Pull';
+  else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+
+  // Generate greeting based on time of day and goal
+  const hour = new Date().getHours();
+  let timeGreeting = 'Hey';
+  if (hour < 12) timeGreeting = 'Good morning';
+  else if (hour < 17) timeGreeting = 'Good afternoon';
+  else timeGreeting = 'Good evening';
+
+  // Personalize greeting based on goal
+  let goalPhrase = '';
+  if (userContext?.goal === 'bulk') {
+    goalPhrase = 'Time to build! 💪';
+  } else if (userContext?.goal === 'cut') {
+    goalPhrase = 'Stay strong in your cut! 🔥';
+  } else if (userContext?.goal === 'recomp') {
+    goalPhrase = 'Building while leaning out! 💎';
+  }
+
+  const greetings = goalPhrase
+    ? [`${timeGreeting}! ${goalPhrase} Today's ${workoutType} workout is ready.`]
+    : [
+        `${timeGreeting}! Ready to crush this ${workoutType} session? 💪`,
+        `${timeGreeting}! Today's ${workoutType} workout is designed for maximum gains.`,
+        `${timeGreeting}! Let's make this ${workoutType} session count!`,
+      ];
+
+  // Generate personalized insight based on context
+  let personalizedInsight: string | undefined;
+  const insights: string[] = [];
+
+  // Goal-specific insights
+  if (userContext?.goal === 'bulk') {
+    insights.push(`Since you're bulking, prioritize progressive overload—try to add a rep or small weight increase today.`);
+    if (totalSets > 20) {
+      insights.push(`High volume today (${totalSets} sets) is perfect for your bulk. Make sure you're eating enough to recover!`);
+    }
+  } else if (userContext?.goal === 'cut') {
+    insights.push(`During your cut, maintaining intensity is key to preserving muscle. Don't drop the weight—keep it heavy, just manage volume.`);
+    if (compoundCount > 2) {
+      insights.push(`The compound focus helps maintain strength while in a deficit. If energy is low, prioritize these over isolation work.`);
+    }
+  }
+
+  // Lagging area insights
+  if (userContext?.laggingAreas && userContext.laggingAreas.length > 0) {
+    const laggingMusclesInWorkout = userContext.laggingAreas.filter(area => {
+      const areaLower = area.toLowerCase();
+      return muscles.some(m => {
+        if (areaLower.includes('arm')) return m === 'biceps' || m === 'triceps';
+        if (areaLower.includes('leg')) return m === 'quads' || m === 'hamstrings' || m === 'glutes' || m === 'calves';
+        if (areaLower.includes('trunk')) return m === 'chest' || m === 'back' || m === 'shoulders';
+        return areaLower.includes(m);
+      });
+    });
+    
+    if (laggingMusclesInWorkout.length > 0) {
+      insights.push(`📊 Your DEXA showed ${laggingMusclesInWorkout.join(', ')} as areas to bring up. Focus on mind-muscle connection and full ROM on those exercises today.`);
+    }
+  }
+
+  // Plateau insights
+  if (userContext?.recentPlateaus && userContext.recentPlateaus.length > 0) {
+    const plateauExercisesInWorkout = userContext.recentPlateaus.filter(ex => 
+      blocks.some(b => b.exercise.name.toLowerCase().includes(ex.toLowerCase()))
+    );
+    
+    if (plateauExercisesInWorkout.length > 0) {
+      insights.push(`⚠️ You've hit a plateau on ${plateauExercisesInWorkout.join(', ')}. Today, try a slightly different rep range or tempo to break through.`);
+    }
+  }
+
+  // Week in mesocycle insights
+  if (userContext?.weekInMesocycle) {
+    if (userContext.weekInMesocycle === 1) {
+      insights.push(`Week 1 of your ${userContext.mesocycleName || 'mesocycle'}—find your working weights and focus on form. Leave 2-3 reps in reserve.`);
+    } else if (userContext.weekInMesocycle >= 4) {
+      insights.push(`Week ${userContext.weekInMesocycle}—you should be approaching peak intensity. Push close to failure on your last sets!`);
+    }
+  }
+
+  // Combine insights
+  if (insights.length > 0) {
+    personalizedInsight = insights.slice(0, 2).join(' ');  // Max 2 insights to avoid overwhelm
+  }
+
+  // Generate overview
+  let overviewBase = `${totalSets} total sets across ${blocks.length} exercises. `;
+  if (compoundCount > 0) {
+    overviewBase += `Starting with ${compoundCount} compound movement${compoundCount > 1 ? 's' : ''} for strength, `;
+  }
+  if (isolationCount > 0) {
+    overviewBase += `then ${isolationCount} isolation exercise${isolationCount > 1 ? 's' : ''} for targeted work.`;
+  }
+
+  const overviews = [overviewBase];
+
+  // Generate exercise-specific notes
+  const exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[] = [];
+  
+  blocks.forEach((block, idx) => {
+    const ex = block.exercise;
+    const repRange = block.targetRepRange;
+    const isFirst = idx === 0;
+    const isCompound = ex.mechanic === 'compound';
+    
+    let reason = '';
+    
+    if (isFirst && isCompound) {
+      reason = `Leading with this compound to maximize neural drive while fresh. ${repRange[0]}-${repRange[1]} reps keeps intensity high for strength gains.`;
+    } else if (isCompound) {
+      reason = `Heavy compound for overall ${ex.primaryMuscle} development. Rep range of ${repRange[0]}-${repRange[1]} balances strength and hypertrophy.`;
+    } else if (idx >= blocks.length - 2) {
+      reason = `Finishing with isolation to fully fatigue the ${ex.primaryMuscle}. Higher reps (${repRange[0]}-${repRange[1]}) for metabolic stress and pump.`;
+    } else {
+      reason = `Targeted ${ex.primaryMuscle} work. ${repRange[0]}-${repRange[1]} reps optimized for muscle fiber type.`;
+    }
+
+    // Add specific notes based on muscle
+    if (ex.primaryMuscle === 'calves') {
+      reason += ' Calves are slow-twitch dominant—higher reps with controlled tempo work best.';
+    } else if (ex.primaryMuscle === 'hamstrings') {
+      reason += ' Hamstrings are fast-twitch dominant—heavier loads with full stretch.';
+    }
+
+    // Get weight recommendation if user profile available
+    let weightRec: WorkingWeightRecommendation | undefined;
+    if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
+      try {
+        // Get known E1RM from exercise history if available
+        // This provides much more accurate suggestions than bodyweight-based estimation
+        const exerciseHistory = exerciseHistories?.[block.exerciseId];
+        const knownE1RM = exerciseHistory?.estimatedE1RM;
+
+        // Use calibration data if available for more accurate estimates
+        if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
+          weightRec = quickWeightEstimateWithCalibration(
+            ex.name,
+            { min: repRange[0], max: repRange[1] },
+            block.targetRir || 2,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent || 20,
+            userProfile.experience,
+            userProfile.calibratedLifts,
+            userProfile.regionalData,
+            unit,
+            knownE1RM
+          );
+        } else {
+          weightRec = quickWeightEstimate(
+            ex.name,
+            { min: repRange[0], max: repRange[1] },
+            block.targetRir || 2,
+            userProfile.weightKg,
+            userProfile.heightCm,
+            userProfile.bodyFatPercent || 20,
+            userProfile.experience,
+            userProfile.regionalData,
+            unit,
+            knownE1RM
+          );
+        }
+      } catch (e) {
+        // Silently fail if weight estimation fails
+      }
+    }
+
+    exerciseNotes.push({ name: ex.name, reason, weightRec });
+  });
+
+  // Generate tips based on goal and workout
+  const tips: string[] = [];
+  
+  // Goal-specific tips
+  if (userContext?.goal === 'cut') {
+    tips.push('💡 In a cut: Keep intensity high but listen to your body. Lower energy is normal—prioritize compounds if needed.');
+  } else if (userContext?.goal === 'bulk') {
+    tips.push('💡 In a bulk: Push for progressive overload—even one extra rep counts toward gains!');
+  }
+  
+  if (compoundCount > 0) {
+    tips.push('Take full rest (2-3 min) between compound sets to maintain strength.');
+  }
+  if (isolationCount > 0) {
+    tips.push('Shorter rest (60-90 sec) for isolation work to keep metabolic stress high.');
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'back')) {
+    tips.push('Focus on initiating pulls with your elbows, not your hands—better lat activation.');
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'chest')) {
+    tips.push('Squeeze at the top of each rep and control the eccentric for chest exercises.');
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'biceps' || b.exercise.primaryMuscle === 'triceps')) {
+    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('arm'))) {
+      tips.push('🎯 Arms are a focus area—slow eccentrics (3 sec) boost time under tension for growth.');
+    }
+  }
+  if (blocks.some(b => b.exercise.primaryMuscle === 'quads' || b.exercise.primaryMuscle === 'hamstrings')) {
+    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('leg'))) {
+      tips.push('🎯 Legs are a focus area—full depth and controlled negatives maximize stimulus.');
+    }
+  }
+  tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
+
+  return {
+    greeting: greetings[Math.floor(Math.random() * greetings.length)],
+    overview: overviews[0],  // Use the personalized overview
+    personalizedInsight,
+    exerciseNotes,
+    tips: tips.slice(0, 4), // Limit to 4 tips
+  };
+}
 
 export default function WorkoutPage() {
   const params = useParams();
@@ -91,6 +560,12 @@ export default function WorkoutPage() {
   const deleteSetFromStore = useWorkoutStore((state) => state.deleteSet);
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
 
+  // Toast notifications for errors
+  const { toasts, dismissToast, showError, showSuccess } = useToasts();
+
+  // Delete confirmation modal state for header row delete button
+  const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
+
   const [phase, setPhase] = useState<WorkoutPhase>('loading');
   const [isFirstWorkout, setIsFirstWorkout] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +574,6 @@ export default function WorkoutPage() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [completedSets, setCompletedSets] = useState<SetLog[]>([]);
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
-  // Deferred set-delete with undo: the DB delete only commits after the undo window elapses
-  const [pendingSetDelete, setPendingSetDelete] = useState<SetLog | null>(null);
-  const pendingDeleteTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
   const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(true);
@@ -115,6 +587,18 @@ export default function WorkoutPage() {
   const [isDraggingBlock, setIsDraggingBlock] = useState(false);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const preCollapseStateRef = useRef<{ allCollapsed: boolean; collapsedBlocks: Set<string> } | null>(null);
+
+  // Focus mode: keep only the current exercise expanded so you see just the
+  // sets you're working on. Re-focuses when you advance to the next exercise;
+  // manual per-card toggles between advances are preserved until the next move.
+  useEffect(() => {
+    if (blocks.length === 0) return;
+    const currentId = blocks[currentBlockIndex]?.id;
+    if (!currentId) return;
+    setCollapsedBlocks(new Set(blocks.filter((b) => b.id !== currentId).map((b) => b.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBlockIndex, blocks.length]);
+
   // Floating drag preview state
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
   const [dragTouchOffset, setDragTouchOffset] = useState<number>(0); // Offset from touch point to top of element
@@ -136,7 +620,14 @@ export default function WorkoutPage() {
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
-  
+
+  // Location filter state
+  const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [locationEquipment, setLocationEquipment] = useState<string[]>([]);
+  const [unavailableExerciseIds, setUnavailableExerciseIds] = useState<Set<string>>(new Set());
+
   // Share workout modal state
   const [showShareModal, setShowShareModal] = useState(false);
   
@@ -190,13 +681,6 @@ export default function WorkoutPage() {
     bodyweightKg?: number | null;
   } | null>(null);
   
-  // Readiness score (0-100) read back from pre_workout_check_in on load.
-  // When < 80 it scales SUGGESTED working weights down for un-logged sets.
-  const [readinessScore, setReadinessScore] = useState<number>(0);
-
-  // Mesocycle context for weekly_fatigue_logs writes (deload detection data)
-  const [mesoWeekNumber, setMesoWeekNumber] = useState<number | null>(null);
-
   // State for showing swap modal for a specific exercise due to injury
   const [showSwapForInjury, setShowSwapForInjury] = useState<string | null>(null);
   const [showPageLevelSwapModal, setShowPageLevelSwapModal] = useState(false);
@@ -259,6 +743,13 @@ export default function WorkoutPage() {
   const workoutTimer = useWorkoutTimer({
     sessionId,
     startedAt: session?.startedAt ?? null,
+  });
+
+  // Workout time estimate - calculates estimated duration based on sets/rest
+  const workoutEstimate = useWorkoutEstimate({
+    exerciseBlocks: blocks,
+    completedSets: completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length,
+    defaultRestSeconds: preferences?.restTimerDefault ?? 180,
   });
 
   // Clear timer when session changes or component unmounts
@@ -424,6 +915,8 @@ export default function WorkoutPage() {
               demoGifUrl: block.exercises.demo_gif_url as string | undefined,
               demoThumbnailUrl: block.exercises.demo_thumbnail_url as string | undefined,
               youtubeVideoId: block.exercises.youtube_video_id as string | undefined,
+              // Exercise type for duration-based exercises (planks, holds)
+              exerciseType: block.exercises.exercise_type as ExerciseType | undefined,
             },
           }));
 
@@ -485,13 +978,13 @@ export default function WorkoutPage() {
             
             // Set current set number based on existing sets for the first incomplete block
             const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
-              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup);
+              const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup && s.setType !== 'warmup');
               return blockSets.length < block.targetSets;
             });
             
             if (firstIncompleteBlock) {
               const blockIdx = transformedBlocks.findIndex((b: ExerciseBlockWithExercise) => b.id === firstIncompleteBlock.id);
-              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup);
+              const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup && s.setType !== 'warmup');
               setCurrentBlockIndex(blockIdx);
               setCurrentSetNumber(existingBlockSets.length + 1);
             }
@@ -615,7 +1108,6 @@ export default function WorkoutPage() {
           const now = new Date();
           const weeksSinceStart = Math.floor((now.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           userContext.weekInMesocycle = Math.min(weeksSinceStart, mesocycleData.total_weeks);
-          setMesoWeekNumber(userContext.weekInMesocycle);
         }
 
         setIsFirstWorkout(completedWorkoutsCount === 0);
@@ -624,22 +1116,10 @@ export default function WorkoutPage() {
         // to provide accurate weight suggestions based on user's training history
 
         // Check for existing injuries from session's pre_workout_check_in
-        const existingCheckIn = sessionData.pre_workout_check_in as {
-          temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }>;
-          readinessScore?: number;
-        } | null;
+        const existingCheckIn = sessionData.pre_workout_check_in as { temporaryInjuries?: Array<{ area: string; severity: 1 | 2 | 3 }> } | null;
         const existingInjuries = existingCheckIn?.temporaryInjuries || [];
         if (existingInjuries.length > 0) {
           setTemporaryInjuries(existingInjuries);
-        }
-
-        // Read back the readiness score so it can scale suggested target weights.
-        // Only applied while the workout is still in progress (not a completed view).
-        if (
-          typeof existingCheckIn?.readinessScore === 'number' &&
-          sessionData.state !== 'completed'
-        ) {
-          setReadinessScore(existingCheckIn.readinessScore);
         }
         
         // Check if AI coach notes are enabled in user preferences
@@ -738,10 +1218,12 @@ export default function WorkoutPage() {
                   seenSessions.add(session.id);
                   totalSessions++;
                 }
-                
+
                 const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
                 sets.forEach((set: any) => {
-                  const e1rm = calculateE1RM(set.weight_kg, set.reps);
+                  // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
+                  // which underestimates true strength for sets done with reps in reserve
+                  const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
                   if (e1rm > bestE1RM) {
                     bestE1RM = e1rm;
                     personalRecord = {
@@ -846,25 +1328,13 @@ export default function WorkoutPage() {
     setStoreBlockIndex(currentBlockIndex);
   }, [currentBlockIndex, setStoreBlockIndex]);
 
-  // Focus mode: by default only the current exercise is expanded so you just see
-  // the sets you're working on. Re-focuses when you advance to the next exercise.
-  // (Manual per-card expand/collapse and "expand all" still work between advances.)
-  useEffect(() => {
-    if (blocks.length === 0) return;
-    const currentId = blocks[currentBlockIndex]?.id;
-    if (!currentId) return;
-    setCollapsedBlocks(new Set(blocks.filter((b) => b.id !== currentId).map((b) => b.id)));
-    // Intentionally only re-run when the active exercise changes (or blocks load).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentBlockIndex, blocks.length]);
-
   // Fetch available exercises on mount for swap functionality
   useEffect(() => {
     async function loadAvailableExercises() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic')
+        .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -872,6 +1342,114 @@ export default function WorkoutPage() {
     }
     loadAvailableExercises();
   }, []);
+
+  // Load gym locations for the location filter
+  useEffect(() => {
+    async function loadGymLocations() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        const { data: locations, error } = await supabase
+          .from('gym_locations')
+          .select('id, name, is_default')
+          .eq('user_id', user.id);
+
+        if (!error && locations && locations.length > 0) {
+          setGymLocations(locations);
+        }
+      } catch (err) {
+        console.warn('Error loading gym locations:', err);
+      }
+    }
+    loadGymLocations();
+  }, []);
+
+  // Load equipment and exercise availability when location filter changes
+  useEffect(() => {
+    async function loadLocationEquipment() {
+      if (!selectedLocationFilter) {
+        setLocationEquipment([]);
+        setUnavailableExerciseIds(new Set());
+        return;
+      }
+
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        // Load user-specified unavailable exercises for this location
+        const { data: unavailableExercises } = await supabase
+          .from('exercise_location_availability')
+          .select('exercise_id')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationFilter)
+          .eq('is_available', false);
+
+        if (unavailableExercises) {
+          setUnavailableExerciseIds(new Set(unavailableExercises.map((e: { exercise_id: string }) => e.exercise_id)));
+        } else {
+          setUnavailableExerciseIds(new Set());
+        }
+
+        // Load available equipment for the selected location
+        const { data: locationEq, error: equipmentError } = await supabase
+          .from('user_equipment')
+          .select('equipment_id, is_available')
+          .eq('user_id', user.id)
+          .eq('location_id', selectedLocationFilter)
+          .eq('is_available', true);
+
+        if (!equipmentError && locationEq && locationEq.length > 0) {
+          // Get equipment type names from equipment_types table
+          const equipmentIds = locationEq.map((eq: { equipment_id: string }) => eq.equipment_id);
+          const { data: equipmentTypes, error: typesError } = await supabase
+            .from('equipment_types')
+            .select('id, name')
+            .in('id', equipmentIds);
+
+          if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
+            // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
+            const equipmentNames = new Set<string>();
+            equipmentTypes.forEach((et: { id: string; name: string }) => {
+              const name = et.name.toLowerCase();
+              equipmentNames.add(name);
+
+              // Also add mapped variations
+              const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
+              if (mapping) {
+                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+              }
+            });
+
+            setLocationEquipment(Array.from(equipmentNames));
+          } else {
+            // Fallback: use equipment_id directly with mapping
+            const equipmentNames = new Set<string>();
+            equipmentIds.forEach((id: string) => {
+              const idLower = id.toLowerCase();
+              equipmentNames.add(idLower);
+
+              const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
+              if (mapping) {
+                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
+              }
+            });
+
+            setLocationEquipment(Array.from(equipmentNames));
+          }
+        } else {
+          setLocationEquipment([]);
+        }
+      } catch (err) {
+        console.warn('Error loading location equipment:', err);
+        setLocationEquipment([]);
+      }
+    }
+    loadLocationEquipment();
+  }, [selectedLocationFilter]);
 
   // Load historical set logs for RPE calibration
   useEffect(() => {
@@ -1197,12 +1775,7 @@ export default function WorkoutPage() {
           readinessScore: checkInData.readinessScore,
           temporaryInjuries: checkInData.temporaryInjuries,
         };
-
-        // Apply readiness immediately so it scales the suggested target weights.
-        if (typeof checkInData.readinessScore === 'number') {
-          setReadinessScore(checkInData.readinessScore);
-        }
-
+        
         // Set temporary injuries in state so they carry over to workout
         if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
           setTemporaryInjuries(
@@ -1349,7 +1922,8 @@ export default function WorkoutPage() {
       if (insertError) {
         console.error('Failed to save set:', insertError);
         setError(`Failed to save set: ${insertError.message}`);
-        return; // Don't add to local state if save failed
+        showError('Failed to save set - please try again');
+        return null; // Don't add to local state if save failed
       }
       
       // Create the set object with the database-generated ID
@@ -1537,6 +2111,7 @@ export default function WorkoutPage() {
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
+      showError('Failed to save set - please try again');
       return null;
     }
   };
@@ -1658,100 +2233,9 @@ export default function WorkoutPage() {
     }
   };
 
-  // Commit a deferred set delete to the database (runs after the undo window elapses).
-  // Local UI state was already updated optimistically in handleDeleteSet.
-  const commitSetDelete = useCallback(async (setToDelete: SetLog) => {
-    try {
-      const supabase = createUntypedClient();
-      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setToDelete.id);
-
-      if (deleteError) {
-        console.error('Failed to delete set:', deleteError);
-        setError(`Failed to delete set: ${deleteError.message}`);
-      } else {
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Failed to delete set:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete set');
-    }
-  }, []);
-
-  // Undo a pending set delete: re-insert the set into local state, the store, and the DB.
-  const undoSetDelete = useCallback(async () => {
-    if (pendingDeleteTimerRef.current) {
-      clearTimeout(pendingDeleteTimerRef.current);
-      pendingDeleteTimerRef.current = null;
-    }
-    const restored = pendingSetDelete;
-    setPendingSetDelete(null);
-    if (!restored) return;
-
-    // Re-insert into local state and renumber the block's working sets immutably
-    setCompletedSets(prevSets => {
-      if (prevSets.some(s => s.id === restored.id)) return prevSets;
-      const merged = [...prevSets, restored];
-      let blockSetNumber = 1;
-      return merged.map(set => {
-        if (set.exerciseBlockId === restored.exerciseBlockId && !set.isWarmup) {
-          return { ...set, setNumber: blockSetNumber++ };
-        }
-        return set;
-      });
-    });
-
-    // Sync back to the store for resume functionality
-    logSetToStore(restored.exerciseBlockId, restored);
-
-    // Restore in the database, preserving the original id so references stay valid.
-    // Use upsert (not insert): the delete is DEFERRED, so on a quick undo the row
-    // usually still exists in the DB (re-inserting it would hit a primary-key
-    // violation). Upsert is idempotent whether or not the deferred delete fired.
-    try {
-      const supabase = createUntypedClient();
-      const { error: insertError } = await supabase.from('set_logs').upsert({
-        id: restored.id,
-        exercise_block_id: restored.exerciseBlockId,
-        set_number: restored.setNumber,
-        weight_kg: restored.weightKg,
-        reps: restored.reps,
-        set_type: restored.setType,
-        parent_set_id: restored.parentSetId || null,
-        rpe: restored.rpe,
-        is_warmup: restored.isWarmup,
-        quality: restored.quality,
-        quality_reason: restored.qualityReason,
-        note: restored.note || null,
-        logged_at: restored.loggedAt,
-        feedback: restored.feedback ? JSON.stringify(restored.feedback) : null,
-        bodyweight_data: restored.bodyweightData ? JSON.stringify(restored.bodyweightData) : null,
-      }, { onConflict: 'id' });
-
-      if (insertError) {
-        console.error('Failed to restore set:', insertError);
-        setError(`Failed to restore set: ${insertError.message}`);
-      } else {
-        setError(null);
-      }
-    } catch (err) {
-      console.error('Failed to restore set:', err);
-      setError(err instanceof Error ? err.message : 'Failed to restore set');
-    }
-  }, [pendingSetDelete, logSetToStore]);
-
   const handleDeleteSet = async (setId: string) => {
     // Find the set before deleting to get the blockId for store sync
     const setToDelete = completedSets.find(s => s.id === setId);
-
-    // If a previous delete is still pending its undo window, commit it now so we
-    // never lose track of more than one deferred delete at a time.
-    if (pendingDeleteTimerRef.current) {
-      clearTimeout(pendingDeleteTimerRef.current);
-      pendingDeleteTimerRef.current = null;
-    }
-    if (pendingSetDelete) {
-      void commitSetDelete(pendingSetDelete);
-    }
 
     // Remove from local state using functional update to avoid stale closure
     setCompletedSets(prevSets => {
@@ -1765,7 +2249,7 @@ export default function WorkoutPage() {
       // Renumber sets in the same block (immutably)
       let blockSetNumber = 1;
       return filteredSets.map(set => {
-        if (set.exerciseBlockId === blockId && !set.isWarmup) {
+        if (set.exerciseBlockId === blockId && !set.isWarmup && set.setType !== 'warmup') {
           return { ...set, setNumber: blockSetNumber++ };
         }
         return set;
@@ -1777,34 +2261,22 @@ export default function WorkoutPage() {
       deleteSetFromStore(setToDelete.exerciseBlockId, setId);
     }
 
-    if (!setToDelete) return;
-
-    // Defer the actual DB delete so the user can undo it within the toast window.
-    setPendingSetDelete(setToDelete);
-    pendingDeleteTimerRef.current = setTimeout(() => {
-      pendingDeleteTimerRef.current = null;
-      setPendingSetDelete(current => {
-        if (current && current.id === setToDelete.id) {
-          void commitSetDelete(setToDelete);
-          return null;
-        }
-        return current;
-      });
-    }, 5000);
-  };
-
-  // On unmount, flush any pending deferred delete so we don't silently lose it
-  useEffect(() => {
-    return () => {
-      if (pendingDeleteTimerRef.current) {
-        clearTimeout(pendingDeleteTimerRef.current);
-        pendingDeleteTimerRef.current = null;
-        if (pendingSetDelete) {
-          void commitSetDelete(pendingSetDelete);
-        }
+    // Delete from database
+    try {
+      const supabase = createUntypedClient();
+      const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
+      
+      if (deleteError) {
+        console.error('Failed to delete set:', deleteError);
+        setError(`Failed to delete set: ${deleteError.message}`);
+      } else {
+        setError(null);
       }
-    };
-  }, [pendingSetDelete, commitSetDelete]);
+    } catch (err) {
+      console.error('Failed to delete set:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete set');
+    }
+  };
 
   // State for adding extra sets beyond target
   const [addingExtraSet, setAddingExtraSet] = useState<string | null>(null);
@@ -1830,9 +2302,9 @@ export default function WorkoutPage() {
     if (exercisesToUse.length === 0) {
       const { data: allExercises } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
         .order('name');
-      
+
       if (allExercises) {
         exercisesToUse = allExercises;
         setAvailableExercises(allExercises);
@@ -1908,14 +2380,16 @@ export default function WorkoutPage() {
                 resistanceProfile: fullExData.resistance_profile || 3,
                 progressionEase: fullExData.progression_ease || 3,
               } : undefined,
+              // Exercise type for duration-based exercises (planks, holds)
+              exerciseType: fullExData.exercise_type as ExerciseType | undefined,
             };
-            
-            setBlocks(prevBlocks => prevBlocks.map(b => 
-              b.id === block.id 
+
+            setBlocks(prevBlocks => prevBlocks.map(b =>
+              b.id === block.id
                 ? { ...b, exerciseId: result.replacement!.id, exercise: completeExercise }
                 : b
             ));
-            
+
             adjustments.push(`${result.originalName} → ${result.replacement.name}`);
           }
         } catch (err) {
@@ -2270,9 +2744,12 @@ export default function WorkoutPage() {
   }, [isDraggingBlock, blocks.length, handleBlockDragEnd]);
 
   const handleExerciseSwap = async (blockId: string, newExercise: Exercise) => {
+    // Capture original exercise info before swap for override tracking
+    const originalBlock = blocks.find(b => b.id === blockId);
+
     try {
       const supabase = createUntypedClient();
-      
+
       // Fetch full exercise data from database (for hypertrophy scores, equipment, etc.)
       const { data: fullExerciseData, error: fetchError } = await supabase
         .from('exercises')
@@ -2310,11 +2787,13 @@ export default function WorkoutPage() {
             resistanceProfile: fullExerciseData.resistance_profile || 3,
             progressionEase: fullExerciseData.progression_ease || 3,
           } : undefined,
+          // Exercise type for duration-based exercises (planks, holds)
+          exerciseType: fullExerciseData.exercise_type as ExerciseType | undefined,
         };
-        
+
         // Update local state with complete exercise data
-        setBlocks(prevBlocks => prevBlocks.map(block => 
-          block.id === blockId 
+        setBlocks(prevBlocks => prevBlocks.map(block =>
+          block.id === blockId
             ? { ...block, exerciseId: completeExercise.id!, exercise: completeExercise }
             : block
         ));
@@ -2325,12 +2804,42 @@ export default function WorkoutPage() {
         .from('exercise_blocks')
         .update({ exercise_id: newExercise.id })
         .eq('id', blockId);
-      
+
       if (updateError) {
         console.error('Failed to swap exercise:', updateError);
         setError(`Failed to swap exercise: ${updateError.message}`);
       } else {
         setError(null);
+
+        // Save exercise override to mesocycle for future sessions
+        if (session?.mesocycleId && originalBlock) {
+          try {
+            // Fetch current mesocycle overrides
+            const { data: mesocycle } = await supabase
+              .from('mesocycles')
+              .select('exercise_overrides')
+              .eq('id', session.mesocycleId)
+              .single();
+
+            const currentOverrides = (mesocycle?.exercise_overrides || []) as ExerciseOverride[];
+            const updatedOverrides = addExerciseOverride(
+              currentOverrides,
+              originalBlock.exerciseId,
+              originalBlock.exercise.name,
+              newExercise.id!,
+              newExercise.name
+            );
+
+            // Save updated overrides
+            await supabase
+              .from('mesocycles')
+              .update({ exercise_overrides: updatedOverrides })
+              .eq('id', session.mesocycleId);
+          } catch (overrideErr) {
+            // Don't fail the swap if override save fails
+            console.error('Failed to save exercise override:', overrideErr);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to swap exercise:', err);
@@ -2340,31 +2849,38 @@ export default function WorkoutPage() {
 
   // Handle deleting an exercise from the workout
   const handleExerciseDelete = async (blockId: string) => {
+    // Find the exercise name for the toast message
+    const blockToDelete = blocks.find(b => b.id === blockId);
+    const exerciseName = blockToDelete?.exercise.name || 'Exercise';
+
     try {
       const supabase = createUntypedClient();
-      
+
       // First delete any set logs for this block
+      // Note: This is redundant since we have ON DELETE CASCADE, but kept for safety
       const { error: setsError } = await supabase
         .from('set_logs')
         .delete()
         .eq('exercise_block_id', blockId);
-      
+
       if (setsError) {
         console.error('Failed to delete set logs:', setsError);
+        // Don't fail the operation - cascade delete will handle it
       }
-      
+
       // Then delete the exercise block
       const { error: blockError } = await supabase
         .from('exercise_blocks')
         .delete()
         .eq('id', blockId);
-      
+
       if (blockError) {
         console.error('Failed to delete exercise block:', blockError);
+        showError(`Failed to remove ${exerciseName}: ${blockError.message}`);
         setError(`Failed to delete exercise: ${blockError.message}`);
         return;
       }
-      
+
       // Update local state - remove the block and update set logs
       setBlocks(prevBlocks => {
         const newBlocks = prevBlocks.filter(b => b.id !== blockId);
@@ -2374,13 +2890,16 @@ export default function WorkoutPage() {
         }
         return newBlocks;
       });
-      
+
       setCompletedSets(prevSets => prevSets.filter(s => s.exerciseBlockId !== blockId));
       setError(null);
-      
+      showSuccess(`${exerciseName} removed from workout`);
+
     } catch (err) {
       console.error('Failed to delete exercise:', err);
-      setError(err instanceof Error ? err.message : 'Failed to delete exercise');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete exercise';
+      showError(`Failed to remove ${exerciseName}: ${errorMessage}`);
+      setError(errorMessage);
     }
   };
 
@@ -2452,13 +2971,13 @@ export default function WorkoutPage() {
     const supabase = createUntypedClient();
     let query = supabase
       .from('exercises')
-      .select('id, name, primary_muscle, mechanic')
+      .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
       .order('name');
-    
+
     if (muscle) {
       query = query.eq('primary_muscle', muscle);
     }
-    
+
     const { data } = await query;
     if (data) {
       setAvailableExercises(data);
@@ -2482,20 +3001,38 @@ export default function WorkoutPage() {
   const handleAddExercise = async (exercise: AvailableExercise) => {
     setIsAddingExercise(true);
     setError(null);
-    
+
     try {
       const supabase = createUntypedClient();
       const isCompound = exercise.mechanic === 'compound';
-      
+
+      // Use exercise's configured defaults, with sensible fallbacks based on mechanic type
+      const exerciseRepRange = exercise.default_rep_range || (isCompound ? [6, 10] : [10, 15]) as [number, number];
+      const exerciseRir = exercise.default_rir ?? 2;
+
       // Get weight recommendation for the new exercise
       let suggestedWeight = 0;
-      if (userProfile) {
-        const repRange = isCompound ? { min: 6, max: 10 } : { min: 10, max: 15 };
-        const targetRir = 2;
+      if (userProfile && session?.userId) {
+        const repRange = { min: exerciseRepRange[0], max: exerciseRepRange[1] };
+        const targetRir = exerciseRir;
         let weightRec: WorkingWeightRecommendation;
 
         // Check if we have exercise history for this exercise (using exercise.id)
-        const exerciseHistory = exerciseHistories[exercise.id];
+        // If not in cache, fetch it from the database (for exercises added mid-workout)
+        let exerciseHistory: ExerciseHistoryData | undefined = exerciseHistories[exercise.id];
+        if (!exerciseHistory) {
+          // Fetch history for this exercise since it wasn't in the original query
+          const fetchedHistory = await fetchExerciseHistory(exercise.id, session.userId);
+          exerciseHistory = fetchedHistory ?? undefined;
+
+          // Cache the result for future use (even if null, to avoid re-fetching)
+          if (exerciseHistory) {
+            setExerciseHistories(prev => ({
+              ...prev,
+              [exercise.id]: exerciseHistory!,
+            }));
+          }
+        }
         const knownE1RM = exerciseHistory?.estimatedE1RM;
 
         // Use calibration data if available
@@ -2529,10 +3066,12 @@ export default function WorkoutPage() {
         }
 
         if (weightRec.confidence !== 'find_working_weight') {
-          suggestedWeight = weightRec.recommendedWeight;
+          // recommendedWeight is in display units (kg or lb based on user preference)
+          // Convert back to kg for storage since target_weight_kg expects kg
+          suggestedWeight = inputWeightToKg(weightRec.recommendedWeight, preferences.units);
         }
       }
-      
+
       // Check if this is the first exercise for this muscle group in the workout
       const muscleAlreadyWarmedUp = blocks.some(
         block => block.exercise.primaryMuscle === exercise.primary_muscle
@@ -2550,14 +3089,14 @@ export default function WorkoutPage() {
           primaryMuscle: exercise.primary_muscle,
           secondaryMuscles: [],
           mechanic: exercise.mechanic,
-          defaultRepRange: [8, 12],
-          defaultRir: 2,
+          defaultRepRange: exerciseRepRange,
+          defaultRir: exerciseRir,
           minWeightIncrementKg: 2.5,
           formCues: [],
           commonMistakes: [],
           setupNote: '',
           movementPattern: '',
-          equipmentRequired: [],
+          equipmentRequired: exercise.equipment_required || [],
         },
         isFirstExercise: blocks.length === 0, // First exercise overall gets general warmup
       }) : [];
@@ -2581,8 +3120,8 @@ export default function WorkoutPage() {
           exercise_id: exercise.id,
           order: newOrder,
           target_sets: isCompound ? 4 : 3,
-          target_rep_range: isCompound ? [6, 10] : [10, 15],
-          target_rir: 2,
+          target_rep_range: exerciseRepRange,
+          target_rir: exerciseRir,
           target_weight_kg: suggestedWeight,
           target_rest_seconds: isCompound ? 180 : 90,
           suggestion_reason: suggestedWeight > 0 ? `Added mid-workout • Suggested ${formatWeight(suggestedWeight, preferences.units)}` : 'Added mid-workout',
@@ -2643,6 +3182,8 @@ export default function WorkoutPage() {
           setupNote: exerciseData.setup_note || '',
           movementPattern: exerciseData.movement_pattern || '',
           equipmentRequired: exerciseData.equipment_required || [],
+          // Exercise type for duration-based exercises (planks, holds)
+          exerciseType: exerciseData.exercise_type as ExerciseType | undefined,
         },
       };
 
@@ -2709,7 +3250,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data: newExercise, error } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, default_rep_range, default_rir')
         .eq('id', exerciseId)
         .single();
 
@@ -2724,6 +3265,8 @@ export default function WorkoutPage() {
         primary_muscle: newExercise.primary_muscle,
         secondary_muscles: newExercise.secondary_muscles || [],
         mechanic: newExercise.mechanic,
+        default_rep_range: newExercise.default_rep_range,
+        default_rir: newExercise.default_rir,
       }]);
 
       // Now add it to the workout
@@ -2733,6 +3276,8 @@ export default function WorkoutPage() {
         primary_muscle: newExercise.primary_muscle,
         secondary_muscles: newExercise.secondary_muscles || [],
         mechanic: newExercise.mechanic,
+        default_rep_range: newExercise.default_rep_range,
+        default_rir: newExercise.default_rir,
       });
 
       // Close the custom exercise modal
@@ -2788,7 +3333,7 @@ export default function WorkoutPage() {
   const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
     try {
       const supabase = createUntypedClient();
-
+      
       // Update workout session
       await supabase
         .from('workout_sessions')
@@ -2802,40 +3347,6 @@ export default function WorkoutPage() {
         })
         .eq('id', sessionId);
 
-      // ---- Persist derived performance + fatigue data (previously had no writer) ----
-      if (session?.userId) {
-        const sessionDate = session.plannedDate || getLocalDateString();
-
-        // 1) Aggregate working sets per exercise into performance snapshots.
-        //    Read by useExerciseHistory.
-        const snapshotResult = await writePerformanceSnapshots(supabase, {
-          userId: session.userId,
-          sessionDate,
-          blocks,
-          sets: completedSets,
-        });
-        if (snapshotResult.errors.length > 0) {
-          console.error('Failed to write performance snapshots:', snapshotResult.errors);
-          setError(`Saved workout, but performance history failed: ${snapshotResult.errors[0]}`);
-        }
-
-        // 2) Upsert the weekly fatigue log so deload detection has data.
-        //    Derive metrics from the check-in + this session's RPE.
-        const checkIn = session.preWorkoutCheckIn;
-        const fatigueRes = await upsertWeeklyFatigueLog(supabase, {
-          userId: session.userId,
-          mesocycleId: session.mesocycleId ?? null,
-          weekNumber: mesoWeekNumber ?? 1,
-          readinessScore: checkIn?.readinessScore ?? readinessScore ?? 0,
-          sleepQuality: checkIn?.sleepQuality ?? null,
-          stressLevel: checkIn?.stressLevel ?? null,
-          sessionAvgRpe: data.sessionRpe,
-        });
-        if (!fatigueRes.ok) {
-          console.error('Failed to write weekly fatigue log:', fatigueRes.error);
-        }
-      }
-
       // Calculate and save workout calories (using set-based HyperTracker method)
       if (session?.plannedDate) {
         const { calculateAndSaveWorkoutCalories } = await import('@/lib/actions/workout-calories');
@@ -2843,25 +3354,24 @@ export default function WorkoutPage() {
         // Don't block on calorie calculation - it's okay if it fails
       }
 
-      // Clear store state and navigate to history
+      // Clear store state and navigate to dashboard to see weekly volume
       endWorkoutSession();
-      router.push('/dashboard/history');
+      router.push('/dashboard');
     } catch (err) {
       console.error('Failed to complete workout:', err);
       endWorkoutSession();
-      router.push('/dashboard/history');
+      router.push('/dashboard');
     }
   };
 
   if (phase === 'loading') {
-    // Skip showing loading screen if coming from quick workout page (already saw one)
-    if (fromCreate) {
-      return null;
-    }
+    // Show a minimal loading skeleton - even for fromCreate to prevent blank screen
     return (
       <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
         <LoadingAnimation type="spinner" size="lg" />
-        <p className="mt-4 text-surface-400">Loading workout...</p>
+        <p className="mt-4 text-surface-400">
+          {fromCreate ? 'Starting workout...' : 'Loading workout...'}
+        </p>
       </div>
     );
   }
@@ -2994,34 +3504,379 @@ export default function WorkoutPage() {
 
         {/* Add Exercise Modal */}
         {showAddExercise && (
-          <AddExerciseModal
-            variant="empty"
-            availableExercises={availableExercises}
-            frequentExerciseIds={frequentExerciseIds}
-            lastDoneExercises={lastDoneExercises}
-            selectedExercisesToAdd={selectedExercisesToAdd}
-            isAddingExercise={isAddingExercise}
-            exerciseSearch={exerciseSearch}
-            selectedMuscleFilter={selectedMuscleFilter}
-            showMuscleDropdown={showMuscleDropdown}
-            showSortDropdown={showSortDropdown}
-            exerciseSortOption={exerciseSortOption}
-            onClose={handleCloseAddExerciseModal}
-            onExerciseSearchChange={setExerciseSearch}
-            onSelectedMuscleFilterChange={setSelectedMuscleFilter}
-            onShowMuscleDropdownChange={setShowMuscleDropdown}
-            onShowSortDropdownChange={setShowSortDropdown}
-            onExerciseSortOptionChange={setExerciseSortOption}
-            onToggleExerciseSelection={toggleExerciseSelection}
-            onAddSelectedExercises={handleAddSelectedExercises}
-          />
+          <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
+            <div
+              className="absolute inset-0 bg-black/60"
+              onClick={handleCloseAddExerciseModal}
+            />
+            {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
+            <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
+                <button
+                  onClick={handleCloseAddExerciseModal}
+                  className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+                <button
+                  onClick={handleAddSelectedExercises}
+                  disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
+                  className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                    selectedExercisesToAdd.length > 0
+                      ? 'bg-primary-500 text-white hover:bg-primary-600'
+                      : 'bg-surface-700 text-surface-500 cursor-not-allowed'
+                  }`}
+                >
+                  {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
+                </button>
+              </div>
+              
+              {/* Search and Filters */}
+              <div className="p-4 border-b border-surface-800 space-y-3 flex-shrink-0">
+                <input
+                  type="text"
+                  value={exerciseSearch}
+                  onChange={(e) => setExerciseSearch(e.target.value)}
+                  placeholder="Search exercises..."
+                  className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
+                />
+
+                {/* Body Part and Location Dropdowns */}
+                <div className="flex gap-2">
+                  {/* Body Part Dropdown */}
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                    >
+                      <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                        {selectedMuscleFilter || 'Any Body Part'}
+                      </span>
+                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showMuscleDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Any Body Part</span>
+                          {!selectedMuscleFilter && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {(() => {
+                          const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                          return muscles.map(muscle => (
+                            <button
+                              key={muscle}
+                              onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                                selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                              }`}
+                            >
+                              <span>{muscle}</span>
+                              {selectedMuscleFilter === muscle && (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Location Dropdown */}
+                  {gymLocations.length > 0 && (
+                    <div className="relative flex-1">
+                      <button
+                        onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
+                        className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                      >
+                        <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
+                          {selectedLocationFilter
+                            ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
+                            : 'Any Location'}
+                        </span>
+                        <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+
+                      {/* Location Dropdown Menu */}
+                      {showLocationDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                          <button
+                            onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                              !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>Any Location</span>
+                            {!selectedLocationFilter && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                          {gymLocations.map(location => (
+                            <button
+                              key={location.id}
+                              onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
+                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                                selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
+                              }`}
+                            >
+                              <span>{location.name}</span>
+                              {selectedLocationFilter === location.id && (
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Sort Button */}
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
+                      className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                      title="Sort exercises"
+                    >
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                      </svg>
+                    </button>
+
+                    {/* Sort Dropdown */}
+                    {showSortDropdown && (
+                      <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
+                        <button
+                          onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Most Frequent</span>
+                          {exerciseSortOption === 'frequency' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Recently Done</span>
+                          {exerciseSortOption === 'recent' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Name (A-Z)</span>
+                          {exerciseSortOption === 'name' && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Exercise List */}
+              <div className="flex-1 overflow-y-auto">
+                {(() => {
+                  let filteredExercises = availableExercises;
+
+                  // Filter by muscle
+                  if (selectedMuscleFilter) {
+                    filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
+                  }
+
+                  // Filter by search
+                  if (exerciseSearch) {
+                    const normalizedSearch = normalizeForSearch(exerciseSearch);
+                    filteredExercises = filteredExercises.filter(ex =>
+                      normalizeForSearch(ex.name).includes(normalizedSearch)
+                    );
+                  }
+
+                  // Filter by location equipment
+                  if (selectedLocationFilter) {
+                    // First, filter out exercises the user explicitly marked as unavailable
+                    if (unavailableExerciseIds.size > 0) {
+                      filteredExercises = filteredExercises.filter(ex => !unavailableExerciseIds.has(ex.id));
+                    }
+
+                    const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
+
+                    // Machine brand prefixes and machine-specific terms that indicate machine exercises
+                    const machineBrands = ['mts', 'iso-lateral', 'iso lateral', 'hammer strength', 'nautilus', 'cybex', 'life fitness', 'technogym', 'matrix', 'precor', 'hoist', 'star trac', 'freemotion', 'prime', 'arsenal', 'atlantis', 'body-solid', 'icarian', 'strive', 'magnum', 'panatta'];
+                    const machineTerms = ['leg press', 'leg extension', 'leg curl', 'hack squat', 'pendulum', 'seated row', 'chest press', 'shoulder press machine', 'lat pulldown', 'pec deck', 'fly machine', 'hip abductor', 'hip adductor', 'glute drive', 'calf raise machine', 'reverse hyper', 'back extension machine', 'ab crunch machine', 'torso rotation', 'inner thigh', 'outer thigh', 'belt squat'];
+
+                    filteredExercises = filteredExercises.filter(ex => {
+                      const exerciseNameLower = ex.name.toLowerCase();
+
+                      // If location has no equipment, only allow bodyweight exercises
+                      if (normalizedAvailable.length === 0) {
+                        return ex.is_bodyweight === true;
+                      }
+
+                      // Check if exercise requires a machine (by brand or term)
+                      const isMachineExercise =
+                        machineBrands.some(brand => exerciseNameLower.includes(brand)) ||
+                        machineTerms.some(term => exerciseNameLower.includes(term));
+
+                      // If it's a machine exercise, check if user has machine equipment available
+                      if (isMachineExercise) {
+                        const hasMachineEquipment = normalizedAvailable.some(a =>
+                          a.includes('machine') || a.includes('press') || a.includes('pulldown') ||
+                          a.includes('leg extension') || a.includes('leg curl') || a.includes('hack') ||
+                          a.includes('cable') || a.includes('lat pulldown') || a.includes('seated row')
+                        );
+                        if (!hasMachineEquipment) return false;
+                      }
+
+                      // If exercise has no equipment requirement, check name for equipment hints
+                      if (!ex.equipment_required || ex.equipment_required.length === 0) {
+                        // Check if exercise name indicates specific equipment
+                        const requiresCable = exerciseNameLower.includes('cable');
+                        const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+                        const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
+                        const requiresMachine = exerciseNameLower.includes('machine');
+                        const requiresSmith = exerciseNameLower.includes('smith');
+                        const requiresKettlebell = exerciseNameLower.includes('kettlebell') || exerciseNameLower.includes('kb ');
+                        const requiresBand = exerciseNameLower.includes('band') || exerciseNameLower.includes('resistance band');
+
+                        if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
+                        if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
+                        if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
+                        if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
+                        if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
+                        if (requiresKettlebell && !normalizedAvailable.some(a => a.includes('kettlebell') || a.includes('kb'))) return false;
+                        if (requiresBand && !normalizedAvailable.some(a => a.includes('band'))) return false;
+
+                        return true;
+                      }
+
+                      // For exercises with equipment_required, check if ALL required equipment is available
+                      const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
+                      return requiredEquipment.every(reqEq => {
+                        if (normalizedAvailable.includes(reqEq)) return true;
+                        return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
+                      });
+                    });
+                  }
+
+                  // Sort based on selected option
+                  filteredExercises = [...filteredExercises].sort((a, b) => {
+                    switch (exerciseSortOption) {
+                      case 'frequency': {
+                        // Sort by frequency (highest first), then by name for ties
+                        const freqA = frequentExerciseIds.get(a.id) || 0;
+                        const freqB = frequentExerciseIds.get(b.id) || 0;
+                        if (freqB !== freqA) return freqB - freqA;
+                        return a.name.localeCompare(b.name);
+                      }
+                      case 'recent': {
+                        // Sort by most recently done first, then by name for ties
+                        const dateA = lastDoneExercises.get(a.id);
+                        const dateB = lastDoneExercises.get(b.id);
+                        // Exercises without a date go to the bottom
+                        if (!dateA && !dateB) return a.name.localeCompare(b.name);
+                        if (!dateA) return 1;
+                        if (!dateB) return -1;
+                        return dateB.getTime() - dateA.getTime();
+                      }
+                      case 'name':
+                      default:
+                        return a.name.localeCompare(b.name);
+                    }
+                  });
+                  
+                  if (availableExercises.length === 0) {
+                    return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
+                  }
+                  
+                  if (filteredExercises.length === 0) {
+                    return <p className="text-center text-surface-400 py-8">No exercises found</p>;
+                  }
+                  
+                  return filteredExercises.map((exercise) => {
+                    const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+                    return (
+                      <button
+                        key={exercise.id}
+                        onClick={() => toggleExerciseSelection(exercise)}
+                        disabled={isAddingExercise}
+                        className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
+                          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-surface-200">{exercise.name}</span>
+                          {frequentExerciseIds.has(exercise.id) && (
+                            <span className="text-amber-400 text-sm">★</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            exercise.mechanic === 'compound' 
+                              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                              : 'bg-surface-700 text-surface-400'
+                          }`}>
+                            {exercise.mechanic}
+                          </span>
+                          {isSelected && (
+                            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );
   }
 
   // Helper to get sets for a specific block
-  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId);
+  const getSetsForBlock = (blockId: string) => completedSets.filter(s => s.exerciseBlockId === blockId && !s.isWarmup && s.setType !== 'warmup');
 
   // Check if a block is complete
   const isBlockComplete = (block: ExerciseBlockWithExercise) => {
@@ -3033,14 +3888,36 @@ export default function WorkoutPage() {
   // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
   const pendingExtraSets = addingExtraSet ? 1 : 0;
   const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
-  const totalCompletedSets = completedSets.filter(s => !s.isWarmup).length;
+  const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-8">
-      {/* Auto-adjust message */}
-      <AutoAdjustMessage message={autoAdjustMessage} onDismiss={() => setAutoAdjustMessage(null)} />
+      {/* Pause overlay - shown when workout is paused */}
+      <PauseOverlay
+        isPaused={workoutTimer.isPaused}
+        elapsedTime={workoutTimer.formattedTime}
+        onResume={workoutTimer.resume}
+      />
 
+      {/* Auto-adjust message */}
+      {autoAdjustMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-4">
+          <div className="bg-primary-500/20 backdrop-blur-sm border border-primary-500/30 rounded-xl px-4 py-3 shadow-lg flex items-center gap-3">
+            <span className="text-primary-400 text-lg">🔄</span>
+            <p className="text-sm text-primary-200 flex-1">{autoAdjustMessage}</p>
+            <button 
+              onClick={() => setAutoAdjustMessage(null)}
+              className="text-primary-400 hover:text-primary-200"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+      
       {/* Workout header */}
       <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -3073,17 +3950,22 @@ export default function WorkoutPage() {
                   <span>{workoutTimer.formattedTime}</span>
                 </button>
               )}
+              {/* Estimated time remaining */}
+              {workoutEstimate.totalMinutes > 0 && (
+                <span
+                  className="text-sm text-surface-500"
+                  title={`Total estimated: ${workoutEstimate.formattedTotal}`}
+                >
+                  {workoutEstimate.completedSets > 0
+                    ? workoutEstimate.formattedRemaining
+                    : workoutEstimate.formattedTotal}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
             <button
-              onClick={() => setAllCollapsed((prev) => {
-                const next = !prev;
-                // "Expand all" should truly reveal every exercise, clearing the
-                // focus-mode per-block collapses.
-                if (!next) setCollapsedBlocks(new Set());
-                return next;
-              })}
+              onClick={() => setAllCollapsed(!allCollapsed)}
               className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
                 allCollapsed
                   ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
@@ -3121,11 +4003,7 @@ export default function WorkoutPage() {
             </button>
             <button
               onClick={() => setShowReadinessModal(true)}
-              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-                readinessScore > 0
-                  ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
-                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-              }`}
+              className="px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium bg-surface-800 hover:bg-surface-700 text-surface-400"
               title="Log readiness (sleep, stress, soreness) — optional"
             >
               <span>🔋</span>
@@ -3188,17 +4066,104 @@ export default function WorkoutPage() {
       )}
 
       {/* Error alert */}
-      <WorkoutErrorAlert error={error} onDismiss={() => setError(null)} />
+      {error && (
+        <div className="p-3 bg-danger-500/10 border border-danger-500/30 rounded-lg flex items-center gap-2">
+          <svg className="w-5 h-5 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm text-danger-300">{error}</span>
+          <button 
+            onClick={() => setError(null)} 
+            className="ml-auto p-1 hover:bg-danger-500/20 rounded"
+          >
+            <svg className="w-4 h-4 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Coach Message - only show if AI coach notes are enabled */}
-      <CoachMessageCard
-        coachMessage={coachMessage}
-        aiCoachNotesEnabled={aiCoachNotesEnabled}
-        showCoachMessage={showCoachMessage}
-        onToggle={() => setShowCoachMessage(!showCoachMessage)}
-        isLoadingAiNotes={isLoadingAiNotes}
-        aiCoachNotes={aiCoachNotes}
-      />
+      {coachMessage && aiCoachNotesEnabled && (
+        <Card className="overflow-hidden border-primary-500/20 bg-gradient-to-br from-primary-500/5 to-surface-900">
+          <button
+            onClick={() => setShowCoachMessage(!showCoachMessage)}
+            className="w-full p-4 flex items-center gap-3 text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+              <span className="text-lg">🏋️</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-surface-100">Coach&apos;s Notes</p>
+              <p className="text-sm text-surface-400 truncate">
+                {showCoachMessage ? 'Tap to collapse' : coachMessage.greeting}
+              </p>
+            </div>
+            <svg 
+              className={`w-5 h-5 text-surface-400 transition-transform ${showCoachMessage ? 'rotate-180' : ''}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {showCoachMessage && (
+            <div className="px-4 pb-4 space-y-4">
+              {/* Greeting & Overview */}
+              <div className="pl-13 space-y-2">
+                <p className="text-surface-200 font-medium">{coachMessage.greeting}</p>
+                <p className="text-sm text-surface-400">{coachMessage.overview}</p>
+              </div>
+
+              {/* AI-Powered Coach Notes - only show if enabled */}
+              {aiCoachNotesEnabled && (
+                <>
+                  {isLoadingAiNotes ? (
+                    <div className="ml-13 p-3 rounded-lg bg-surface-800 border border-surface-700">
+                      <div className="flex items-center gap-3">
+                        <LoadingAnimation type="dots" size="sm" />
+                        <p className="text-sm text-surface-400">Your coach is reviewing your session...</p>
+                      </div>
+                    </div>
+                  ) : aiCoachNotes ? (
+                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                      <div className="flex items-start gap-2">
+                        <span className="text-primary-400 text-lg mt-0.5">💬</span>
+                        <p className="text-sm text-primary-300 leading-relaxed">
+                          {aiCoachNotes}
+                        </p>
+                      </div>
+                    </div>
+                  ) : coachMessage.personalizedInsight && (
+                    <div className="ml-13 p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                      <p className="text-sm text-primary-300">
+                        {coachMessage.personalizedInsight}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Tips */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-surface-500 uppercase tracking-wider pl-13">
+                  Pro Tips
+                </p>
+                <div className="pl-13 space-y-1">
+                  {coachMessage.tips.map((tip, idx) => (
+                    <p key={idx} className="text-xs text-surface-400 flex gap-2">
+                      <span className="text-primary-400">•</span>
+                      {tip}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Rest timer control panel - fixed at bottom */}
       {showRestTimer && (
@@ -3371,9 +4336,7 @@ export default function WorkoutPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`Remove "${block.exercise.name}" from this workout?`)) {
-                      handleExerciseDelete(block.id);
-                    }
+                    setDeleteConfirmBlock({ id: block.id, name: block.exercise.name });
                   }}
                   className="p-2 text-surface-500 hover:text-error-400 transition-colors"
                   title="Remove exercise"
@@ -3407,22 +4370,13 @@ export default function WorkoutPage() {
                 const exerciseNote = coachMessage?.exerciseNotes.find(
                   n => n.name === block.exercise.name
                 );
-                const baseAiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
-
-                // Apply pre-workout readiness to the SUGGESTED seed weight only.
-                // Targets coming from the program (block.targetWeightKg) are left
-                // as-is; we only scale the AI suggestion that seeds un-logged sets.
-                const readinessAdjusted = adjustWorkingWeightForReadiness(
-                  baseAiRecommendedWeight,
-                  readinessScore,
-                  block.targetRepRange,
-                  block.targetRir ?? 2,
-                  block.exercise.minWeightIncrementKg ?? 2.5
-                );
-                const aiRecommendedWeight = readinessAdjusted.weightKg;
-                const showReadinessNote = readinessAdjusted.wasReduced && block.targetWeightKg <= 0;
-                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeight;
-
+                // recommendedWeight is in display units (kg or lb), convert to kg for calculations
+                const aiRecommendedWeight = exerciseNote?.weightRec?.recommendedWeight || 0;
+                const aiRecommendedWeightKg = aiRecommendedWeight > 0
+                  ? inputWeightToKg(aiRecommendedWeight, preferences.units)
+                  : 0;
+                const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeightKg;
+                
                 return (
                   // Exercise group container - visually connects name with card
                   <div className={`mt-4 mb-6 rounded-xl border-l-4 ${
@@ -3479,63 +4433,6 @@ export default function WorkoutPage() {
                     
                     {/* Card content area */}
                     <div className="px-4 py-3 space-y-3">
-                  {/* AMRAP Suggestion Banner */}
-                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
-                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
-                            <span className="text-primary-400 text-lg">🎯</span>
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
-                            AMRAP Set Suggestion
-                          </h3>
-                          <p className="text-xs text-surface-300 mb-3">
-                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>. 
-                            Push to failure (RPE 9.5+) to calibrate your RPE perception. 
-                            This helps us adjust your future RIR prescriptions.
-                          </p>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => {
-                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
-                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
-                                // The user will complete the set normally, but we'll track it as AMRAP
-                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
-                                setAmrapSuggestion(null);
-                              }}
-                              className="text-xs"
-                            >
-                              Got it - I&apos;ll push hard
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setAmrapSuggestion(null)}
-                              className="text-xs"
-                            >
-                              Dismiss
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  )}
-
-                    {/* Readiness-reduced suggestion note (only when scaling the AI seed) */}
-                    {showReadinessNote && (
-                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300">
-                        <span aria-hidden>🛟</span>
-                        <span>
-                          Suggested weight reduced for readiness ({readinessScore}%). Logged sets are unchanged — adjust up if you feel strong.
-                        </span>
-                      </div>
-                    )}
-
                     {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
                     <ExerciseCard
                       hideHeader
@@ -3593,7 +4490,7 @@ export default function WorkoutPage() {
                     )}
                     isActive={isCurrent}
                     unit={preferences.units}
-                    recommendedWeight={aiRecommendedWeight}
+                    recommendedWeight={aiRecommendedWeightKg}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     adjustedTargetRir={
@@ -3674,6 +4571,53 @@ export default function WorkoutPage() {
                       setShowPlateCalculator(true);
                     }}
                   />
+
+                  {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
+                  {amrapSuggestion && amrapSuggestion.blockId === block.id && (
+                    <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 mt-0.5">
+                          <div className="w-8 h-8 rounded-full bg-primary-500/20 flex items-center justify-center">
+                            <span className="text-primary-400 text-lg">🎯</span>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-surface-100 mb-1">
+                            AMRAP Set Suggestion
+                          </h3>
+                          <p className="text-xs text-surface-300 mb-3">
+                            This is your last set on <strong>{amrapSuggestion.exerciseName}</strong>.
+                            Push to failure (RPE 9.5+) to calibrate your RPE perception.
+                            This helps us adjust your future RIR prescriptions.
+                          </p>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => {
+                                // Track that user accepted AMRAP for this block (persists for RPE prefill)
+                                setAmrapAcceptedBlockId(amrapSuggestion.blockId);
+                                // The user will complete the set normally, but we'll track it as AMRAP
+                                // The set completion handler will detect RPE >= 9.5 and mark it as AMRAP
+                                setAmrapSuggestion(null);
+                              }}
+                              className="text-xs"
+                            >
+                              Got it - I&apos;ll push hard
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setAmrapSuggestion(null)}
+                              className="text-xs"
+                            >
+                              Dismiss
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
 
                     {/* Exercise complete actions - only show for current exercise */}
                     {isCurrent && isComplete && addingExtraSet !== block.id && (
@@ -3789,14 +4733,40 @@ export default function WorkoutPage() {
       </div>
 
       {/* Floating drag preview */}
-      <FloatingDragPreview
-        isDraggingBlock={isDraggingBlock}
-        draggedBlockIndex={draggedBlockIndex}
-        dragPosition={dragPosition}
-        draggedBlockRect={draggedBlockRect}
-        blocks={blocks}
-        getSetsForBlock={getSetsForBlock}
-      />
+      {isDraggingBlock && draggedBlockIndex !== null && dragPosition && (
+        <div
+          className="fixed pointer-events-none z-50 transition-transform duration-75"
+          style={{
+            left: dragPosition.x,
+            top: dragPosition.y,
+            width: draggedBlockRect?.width ?? 'auto',
+          }}
+        >
+          <div className="bg-surface-900 rounded-xl p-3 shadow-2xl shadow-black/50 ring-2 ring-primary-500 scale-[1.02]">
+            <div className="flex items-center gap-3">
+              {/* Drag handle */}
+              <div className="flex flex-col gap-0.5 text-surface-400 p-1">
+                <div className="w-4 h-0.5 bg-current rounded" />
+                <div className="w-4 h-0.5 bg-current rounded" />
+                <div className="w-4 h-0.5 bg-current rounded" />
+              </div>
+              {/* Exercise number circle */}
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold bg-primary-500 text-white">
+                {draggedBlockIndex + 1}
+              </div>
+              {/* Exercise name */}
+              <div className="flex-1">
+                <p className="font-medium text-surface-100">
+                  {blocks[draggedBlockIndex]?.exercise?.name}
+                </p>
+                <p className="text-xs text-surface-500">
+                  {getSetsForBlock(blocks[draggedBlockIndex]?.id).length}/{blocks[draggedBlockIndex]?.targetSets} sets
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Finish workout button at bottom */}
       <Card className="text-center py-6 mt-8">
@@ -3817,39 +4787,396 @@ export default function WorkoutPage() {
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
-        <AddExerciseModal
-          variant="main"
-          availableExercises={availableExercises}
-          frequentExerciseIds={frequentExerciseIds}
-          lastDoneExercises={lastDoneExercises}
-          selectedExercisesToAdd={selectedExercisesToAdd}
-          isAddingExercise={isAddingExercise}
-          exerciseSearch={exerciseSearch}
-          selectedMuscleFilter={selectedMuscleFilter}
-          showMuscleDropdown={showMuscleDropdown}
-          showSortDropdown={showSortDropdown}
-          exerciseSortOption={exerciseSortOption}
-          error={error}
-          onClose={handleCloseAddExerciseModal}
-          onExerciseSearchChange={setExerciseSearch}
-          onSelectedMuscleFilterChange={setSelectedMuscleFilter}
-          onShowMuscleDropdownChange={setShowMuscleDropdown}
-          onShowSortDropdownChange={setShowSortDropdown}
-          onExerciseSortOptionChange={setExerciseSortOption}
-          onToggleExerciseSelection={toggleExerciseSelection}
-          onAddSelectedExercises={handleAddSelectedExercises}
-          onCreateCustomExercise={() => setShowCustomExercise(true)}
-        />
+        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={handleCloseAddExerciseModal}
+          />
+
+          {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
+          <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
+              <button
+                onClick={handleCloseAddExerciseModal}
+                className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
+              <button
+                onClick={handleAddSelectedExercises}
+                disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
+                className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+                  selectedExercisesToAdd.length > 0
+                    ? 'bg-primary-500 text-white hover:bg-primary-600'
+                    : 'bg-surface-700 text-surface-500 cursor-not-allowed'
+                }`}
+              >
+                {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
+              </button>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="p-4 space-y-3 border-b border-surface-800 flex-shrink-0">
+              <Input
+                placeholder="Search exercises..."
+                value={exerciseSearch}
+                onChange={(e) => setExerciseSearch(e.target.value)}
+              />
+
+              {/* Body Part and Location Dropdowns */}
+              <div className="flex gap-2">
+                {/* Body Part Dropdown */}
+                <div className="relative flex-1">
+                  <button
+                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
+                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                  >
+                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
+                      {selectedMuscleFilter || 'Any Body Part'}
+                    </span>
+                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showMuscleDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Any Body Part</span>
+                        {!selectedMuscleFilter && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      {(() => {
+                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
+                        return muscles.map(muscle => (
+                          <button
+                            key={muscle}
+                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
+                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>{muscle}</span>
+                            {selectedMuscleFilter === muscle && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Location Dropdown */}
+                {gymLocations.length > 0 && (
+                  <div className="relative flex-1">
+                    <button
+                      onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
+                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
+                    >
+                      <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
+                        {selectedLocationFilter
+                          ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
+                          : 'Any Location'}
+                      </span>
+                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Location Dropdown Menu */}
+                    {showLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                        <button
+                          onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
+                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                            !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
+                          }`}
+                        >
+                          <span>Any Location</span>
+                          {!selectedLocationFilter && (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                        {gymLocations.map(location => (
+                          <button
+                            key={location.id}
+                            onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
+                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                              selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
+                            }`}
+                          >
+                            <span>{location.name}</span>
+                            {selectedLocationFilter === location.id && (
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Sort Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
+                    className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                    title="Sort exercises"
+                  >
+                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                  </button>
+
+                  {/* Sort Dropdown */}
+                  {showSortDropdown && (
+                    <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
+                      <button
+                        onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Most Frequent</span>
+                        {exerciseSortOption === 'frequency' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Recently Done</span>
+                        {exerciseSortOption === 'recent' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
+                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
+                          exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
+                        }`}
+                      >
+                        <span>Name (A-Z)</span>
+                        {exerciseSortOption === 'name' && (
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Create custom exercise button */}
+              <button
+                onClick={() => setShowCustomExercise(true)}
+                className="w-full p-3 bg-surface-800/50 hover:bg-surface-800 rounded-lg border border-dashed border-surface-600 hover:border-primary-500/50 transition-all flex items-center justify-center gap-2 text-surface-400 hover:text-primary-400"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="text-sm font-medium">Create Custom Exercise</span>
+              </button>
+              
+              {/* Error display */}
+              {error && (
+                <div className="mt-2 p-2 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-xs">
+                  {error}
+                </div>
+              )}
+            </div>
+
+            {/* Exercise list */}
+            <div className="flex-1 overflow-y-auto">
+              {(() => {
+                let filteredExercises = availableExercises;
+
+                // Filter by muscle
+                if (selectedMuscleFilter) {
+                  filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
+                }
+
+                // Filter by search
+                if (exerciseSearch) {
+                  const normalizedSearch = normalizeForSearch(exerciseSearch);
+                  filteredExercises = filteredExercises.filter(ex =>
+                    normalizeForSearch(ex.name).includes(normalizedSearch)
+                  );
+                }
+
+                // Filter by location equipment
+                if (selectedLocationFilter && locationEquipment.length > 0) {
+                  const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
+                  filteredExercises = filteredExercises.filter(ex => {
+                    // If exercise has no equipment requirement, check name for equipment hints
+                    if (!ex.equipment_required || ex.equipment_required.length === 0) {
+                      const exerciseNameLower = ex.name.toLowerCase();
+
+                      // Check if exercise name indicates specific equipment
+                      const requiresCable = exerciseNameLower.includes('cable');
+                      const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
+                      const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
+                      const requiresMachine = exerciseNameLower.includes('machine');
+                      const requiresSmith = exerciseNameLower.includes('smith');
+
+                      if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
+                      if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
+                      if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
+                      if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
+                      if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
+
+                      return true;
+                    }
+
+                    // For exercises with equipment_required, check if ALL required equipment is available
+                    const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
+                    return requiredEquipment.every(reqEq => {
+                      if (normalizedAvailable.includes(reqEq)) return true;
+                      return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
+                    });
+                  });
+                }
+
+                // Sort based on selected option
+                filteredExercises = [...filteredExercises].sort((a, b) => {
+                  switch (exerciseSortOption) {
+                    case 'frequency': {
+                      // Sort by frequency (highest first), then by name for ties
+                      const freqA = frequentExerciseIds.get(a.id) || 0;
+                      const freqB = frequentExerciseIds.get(b.id) || 0;
+                      if (freqB !== freqA) return freqB - freqA;
+                      return a.name.localeCompare(b.name);
+                    }
+                    case 'recent': {
+                      // Sort by most recently done first, then by name for ties
+                      const dateA = lastDoneExercises.get(a.id);
+                      const dateB = lastDoneExercises.get(b.id);
+                      // Exercises without a date go to the bottom
+                      if (!dateA && !dateB) return a.name.localeCompare(b.name);
+                      if (!dateA) return 1;
+                      if (!dateB) return -1;
+                      return dateB.getTime() - dateA.getTime();
+                    }
+                    case 'name':
+                    default:
+                      return a.name.localeCompare(b.name);
+                  }
+                });
+
+                if (availableExercises.length === 0) {
+                  return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
+                }
+                
+                if (filteredExercises.length === 0) {
+                  return <p className="text-center text-surface-500 py-8">No exercises found</p>;
+                }
+                
+                return filteredExercises.map((exercise) => {
+                  const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+                  return (
+                    <button
+                      key={exercise.id}
+                      onClick={() => toggleExerciseSelection(exercise)}
+                      disabled={isAddingExercise}
+                      className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
+                        isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-surface-200">{exercise.name}</span>
+                        {frequentExerciseIds.has(exercise.id) && (
+                          <span className="text-amber-400 text-sm">★</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          exercise.mechanic === 'compound' 
+                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
+                            : 'bg-surface-700 text-surface-400'
+                        }`}>
+                          {exercise.mechanic}
+                        </span>
+                        {isSelected && (
+                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Custom Exercise Creation Modal with AI */}
-      {session && (
-        <CustomExerciseModal
-          isOpen={showCustomExercise}
-          userId={session.userId}
-          onClose={() => setShowCustomExercise(false)}
-          onSuccess={handleCustomExerciseSuccess}
-        />
+      {showCustomExercise && session && (
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowCustomExercise(false)}
+          />
+          
+          {/* Modal */}
+          <div className="relative w-full max-w-lg max-h-[90vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowCustomExercise(false)}
+                  className="p-1 text-surface-400 hover:text-surface-200"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <h2 className="text-lg font-semibold text-surface-100">Create Custom Exercise</h2>
+              </div>
+            </div>
+
+            {/* AI-Powered Exercise Creation Component */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <CreateCustomExercise
+                userId={session.userId}
+                onSuccess={handleCustomExerciseSuccess}
+                onCancel={() => setShowCustomExercise(false)}
+                initialName={exerciseSearch}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Optional readiness logger (no longer gates the workout) */}
@@ -3875,18 +5202,189 @@ export default function WorkoutPage() {
       )}
 
       {/* Injury Report Modal */}
-      <InjuryReportModal
-        isOpen={showInjuryModal}
-        blocks={blocks}
-        temporaryInjuries={temporaryInjuries}
-        selectedInjuryArea={selectedInjuryArea}
-        selectedInjurySeverity={selectedInjurySeverity}
-        onClose={() => setShowInjuryModal(false)}
-        onSelectedInjuryAreaChange={setSelectedInjuryArea}
-        onSelectedInjurySeverityChange={setSelectedInjurySeverity}
-        onTemporaryInjuriesChange={setTemporaryInjuries}
-        onApply={handleApplyInjuries}
-      />
+      {showInjuryModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowInjuryModal(false)}
+          />
+          
+          <div className="relative w-full max-w-md max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-surface-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🤕</span>
+                <h2 className="text-lg font-semibold text-surface-100">Report Pain/Injury</h2>
+              </div>
+              <button
+                onClick={() => setShowInjuryModal(false)}
+                className="p-2 text-surface-400 hover:text-surface-200"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <p className="text-sm text-surface-400">
+                Tell us about any pain or discomfort. We&apos;ll suggest exercise swaps to avoid aggravating it.
+              </p>
+
+              {/* Current injuries */}
+              {temporaryInjuries.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-surface-300">Currently reported:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {temporaryInjuries.map(injury => {
+                      const areaLabels: Record<string, string> = {
+                        lower_back: '🔻 Lower Back', upper_back: '🔺 Upper Back', neck: '🦴 Neck',
+                        shoulder_left: '💪 Left Shoulder', shoulder_right: '💪 Right Shoulder',
+                        elbow_left: '🦾 Left Elbow', elbow_right: '🦾 Right Elbow',
+                        wrist_left: '🤚 Left Wrist', wrist_right: '🤚 Right Wrist',
+                        hip_left: '🦵 Left Hip', hip_right: '🦵 Right Hip',
+                        knee_left: '🦿 Left Knee', knee_right: '🦿 Right Knee',
+                        ankle_left: '🦶 Left Ankle', ankle_right: '🦶 Right Ankle',
+                        chest: '❤️ Chest', other: '⚠️ Other'
+                      };
+                      const severityLabels = ['Mild', 'Moderate', 'Significant'];
+                      return (
+                        <div 
+                          key={injury.area}
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                            injury.severity === 3 
+                              ? 'bg-danger-500/20 text-danger-400' 
+                              : injury.severity === 2 
+                                ? 'bg-warning-500/20 text-warning-400'
+                                : 'bg-surface-700 text-surface-300'
+                          }`}
+                        >
+                          <span>{areaLabels[injury.area] || injury.area}</span>
+                          <span className="text-xs opacity-70">({severityLabels[injury.severity - 1]})</span>
+                          <button
+                            onClick={() => setTemporaryInjuries(temporaryInjuries.filter(i => i.area !== injury.area))}
+                            className="ml-1 p-0.5 hover:bg-surface-600 rounded-full"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Add new injury */}
+              <div className="space-y-3 p-4 bg-surface-800/50 rounded-lg">
+                <p className="text-xs font-medium text-surface-300">Add an issue:</p>
+                
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">Area affected</label>
+                  <select
+                    value={selectedInjuryArea}
+                    onChange={(e) => setSelectedInjuryArea(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-700 border border-surface-600 rounded-lg text-surface-100 text-sm"
+                  >
+                    <option value="">Select area...</option>
+                    <optgroup label="Back & Core">
+                      <option value="lower_back">🔻 Lower Back</option>
+                      <option value="upper_back">🔺 Upper Back</option>
+                      <option value="neck">🦴 Neck</option>
+                      <option value="chest">❤️ Chest</option>
+                    </optgroup>
+                    <optgroup label="Upper Body">
+                      <option value="shoulder_left">💪 Left Shoulder</option>
+                      <option value="shoulder_right">💪 Right Shoulder</option>
+                      <option value="elbow_left">🦾 Left Elbow</option>
+                      <option value="elbow_right">🦾 Right Elbow</option>
+                      <option value="wrist_left">🤚 Left Wrist</option>
+                      <option value="wrist_right">🤚 Right Wrist</option>
+                    </optgroup>
+                    <optgroup label="Lower Body">
+                      <option value="hip_left">🦵 Left Hip</option>
+                      <option value="hip_right">🦵 Right Hip</option>
+                      <option value="knee_left">🦿 Left Knee</option>
+                      <option value="knee_right">🦿 Right Knee</option>
+                      <option value="ankle_left">🦶 Left Ankle</option>
+                      <option value="ankle_right">🦶 Right Ankle</option>
+                    </optgroup>
+                    <option value="other">⚠️ Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-surface-400 mb-1">Severity</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(level => (
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setSelectedInjurySeverity(level as 1 | 2 | 3)}
+                        className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                          selectedInjurySeverity === level
+                            ? level === 3 
+                              ? 'bg-danger-500 text-white'
+                              : level === 2
+                                ? 'bg-warning-500 text-black'
+                                : 'bg-primary-500 text-white'
+                            : 'bg-surface-700 text-surface-400 hover:bg-surface-600'
+                        }`}
+                      >
+                        {level === 1 ? 'Mild' : level === 2 ? 'Moderate' : 'Significant'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    if (selectedInjuryArea && !temporaryInjuries.some(i => i.area === selectedInjuryArea)) {
+                      setTemporaryInjuries([...temporaryInjuries, { area: selectedInjuryArea, severity: selectedInjurySeverity }]);
+                      setSelectedInjuryArea('');
+                      setSelectedInjurySeverity(1);
+                    }
+                  }}
+                  disabled={!selectedInjuryArea || temporaryInjuries.some(i => i.area === selectedInjuryArea)}
+                  className="w-full"
+                >
+                  + Add to List
+                </Button>
+              </div>
+
+              {/* What will happen info */}
+              {temporaryInjuries.length > 0 && (
+                <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+                  <p className="text-xs text-primary-400 font-medium mb-1">What happens now?</p>
+                  <p className="text-xs text-surface-400">
+                    We&apos;ll flag exercises that could aggravate these areas. You can easily swap them for safer alternatives.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-surface-800 space-y-2">
+              {/* Show risky exercises count */}
+              {temporaryInjuries.length > 0 && (
+                <div className="text-center text-sm text-surface-400 mb-2">
+                  {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).isRisky).length > 0 ? (
+                    <span className="text-warning-400">
+                      ⚠️ {blocks.filter(b => getExerciseInjuryRisk(b.exercise, temporaryInjuries).severity >= 2).length} exercise(s) may need swapping
+                    </span>
+                  ) : (
+                    <span className="text-success-400">✓ All exercises look safe!</span>
+                  )}
+                </div>
+              )}
+              <Button onClick={handleApplyInjuries} className="w-full">
+                {temporaryInjuries.length > 0 ? 'Apply & Continue Workout' : 'Close'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Plate Calculator Modal */}
       <PlateCalculatorModal
@@ -3900,32 +5398,221 @@ export default function WorkoutPage() {
       />
 
       {/* Page-level Swap Modal for injury-related swaps */}
-      <PageLevelSwapModal
-        isOpen={showPageLevelSwapModal}
-        swapTargetBlockId={swapTargetBlockId}
-        blocks={blocks}
-        availableExercises={availableExercises}
-        temporaryInjuries={temporaryInjuries}
-        swapSearchQuery={swapSearchQuery}
-        onSwapSearchQueryChange={setSwapSearchQuery}
-        onClose={() => setShowPageLevelSwapModal(false)}
-        onExerciseSwap={handleExerciseSwap}
-        onExerciseDelete={handleExerciseDelete}
-        onAutoAdjustMessage={(message) => {
-          setAutoAdjustMessage(message);
-          setTimeout(() => setAutoAdjustMessage(null), 5000);
-        }}
-      />
+      {showPageLevelSwapModal && swapTargetBlockId && (() => {
+        const targetBlock = blocks.find(b => b.id === swapTargetBlockId);
+        if (!targetBlock) return null;
+        
+        // Get safe alternatives using the intelligent injury swapper
+        const safeAlternatives = availableExercises
+          .filter(ex => {
+            // Must target same muscle
+            if (ex.primary_muscle !== targetBlock.exercise.primaryMuscle) return false;
+            // Must not be the current exercise
+            if (ex.id === targetBlock.exercise.id) return false;
+            // Must not already be in workout
+            if (blocks.some(b => b.exercise.id === ex.id)) return false;
+            // Check search filter
+            if (swapSearchQuery && !ex.name.toLowerCase().includes(swapSearchQuery.toLowerCase())) return false;
+            // Check if safe for injuries
+            const risk = getExerciseInjuryRisk(
+              { ...targetBlock.exercise, id: ex.id, name: ex.name, primaryMuscle: ex.primary_muscle },
+              temporaryInjuries
+            );
+            return !risk.isRisky || risk.risk === 'caution';
+          })
+          .map(ex => {
+            const risk = getExerciseInjuryRisk(
+              { ...targetBlock.exercise, id: ex.id, name: ex.name, primaryMuscle: ex.primary_muscle },
+              temporaryInjuries
+            );
+            return { exercise: ex, risk };
+          })
+          .sort((a, b) => {
+            // Safe first, then caution
+            if (a.risk.risk === 'safe' && b.risk.risk !== 'safe') return -1;
+            if (a.risk.risk !== 'safe' && b.risk.risk === 'safe') return 1;
+            return a.exercise.name.localeCompare(b.exercise.name);
+          });
+        
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+            <div 
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setShowPageLevelSwapModal(false)}
+            />
+            
+            <div className="relative w-full max-w-lg max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-surface-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-surface-100">Swap Exercise</h3>
+                    <p className="text-sm text-surface-400">
+                      Replace <span className="text-warning-400 font-medium">{targetBlock.exercise.name}</span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPageLevelSwapModal(false)}
+                    className="p-2 text-surface-400 hover:text-surface-200"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                {/* Search */}
+                <div className="mt-3">
+                  <Input
+                    placeholder="Search exercises..."
+                    value={swapSearchQuery}
+                    onChange={(e) => setSwapSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-3">
+                {/* Info banner */}
+                <div className={`mb-3 p-3 rounded-lg ${
+                  safeAlternatives.length > 0 
+                    ? 'bg-success-500/10 border border-success-500/20' 
+                    : 'bg-warning-500/10 border border-warning-500/20'
+                }`}>
+                  {safeAlternatives.length > 0 ? (
+                    <p className="text-xs text-success-400">
+                      ✓ <span className="font-medium">{safeAlternatives.filter(a => a.risk.risk === 'safe').length} safe alternative(s)</span> found for {targetBlock.exercise.primaryMuscle}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-warning-400">
+                      ⚠️ No safe alternatives found. Consider skipping this exercise.
+                    </p>
+                  )}
+                </div>
+                
+                {/* Exercise list */}
+                <div className="space-y-1">
+                  {safeAlternatives.map(({ exercise: alt, risk }) => (
+                    <button
+                      key={alt.id}
+                      onClick={async () => {
+                        // Perform the swap
+                        await handleExerciseSwap(swapTargetBlockId, {
+                          id: alt.id,
+                          name: alt.name,
+                          primaryMuscle: alt.primary_muscle,
+                          secondaryMuscles: alt.secondary_muscles || [],
+                          mechanic: alt.mechanic,
+                          defaultRepRange: [8, 12] as [number, number],
+                          defaultRir: 2,
+                          minWeightIncrementKg: 2.5,
+                          formCues: [],
+                          commonMistakes: [],
+                          setupNote: '',
+                          movementPattern: '',
+                          equipmentRequired: [],
+                        });
+                        setShowPageLevelSwapModal(false);
+                        setAutoAdjustMessage(`✓ Swapped ${targetBlock.exercise.name} → ${alt.name}`);
+                        setTimeout(() => setAutoAdjustMessage(null), 5000);
+                      }}
+                      className="w-full p-3 text-left rounded-lg hover:bg-surface-800 transition-colors flex items-center gap-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-surface-100 truncate">{alt.name}</p>
+                          {risk.risk === 'safe' && temporaryInjuries.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-success-500/20 text-success-400">
+                              ✓ Safe
+                            </span>
+                          )}
+                          {risk.risk === 'caution' && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning-500/20 text-warning-400">
+                              ⚠️ Caution
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-surface-500 capitalize">
+                          {alt.primary_muscle} • {alt.mechanic}
+                        </p>
+                      </div>
+                      <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  ))}
+                  
+                  {safeAlternatives.length === 0 && (
+                    <p className="py-8 text-center text-surface-500">
+                      No safe alternatives found for {targetBlock.exercise.primaryMuscle}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Skip option */}
+              <div className="p-3 border-t border-surface-800 bg-surface-800/50">
+                <button
+                  onClick={async () => {
+                    await handleExerciseDelete(swapTargetBlockId);
+                    setShowPageLevelSwapModal(false);
+                    setAutoAdjustMessage(`Removed ${targetBlock.exercise.name} from workout`);
+                    setTimeout(() => setAutoAdjustMessage(null), 5000);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Skip this exercise
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Cancel Workout Confirmation Modal */}
-      <CancelWorkoutModal
-        isOpen={showCancelModal}
-        isCancelling={isCancelling}
-        totalCompletedSets={totalCompletedSets}
-        onClose={() => setShowCancelModal(false)}
-        onConfirm={handleCancelWorkout}
-      />
-
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !isCancelling && setShowCancelModal(false)}
+          />
+          <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
+                <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
+              <p className="text-sm text-surface-400 mb-6">
+                {totalCompletedSets > 0
+                  ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
+                  : 'This will reset the workout so you can start fresh later.'}
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowCancelModal(false)}
+                  disabled={isCancelling}
+                  className="flex-1"
+                >
+                  Keep Going
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCancelWorkout}
+                  disabled={isCancelling}
+                  className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+                >
+                  {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Exercise Details Modal */}
       <ExerciseDetailsModal
         exercise={selectedExerciseForDetails}
@@ -3942,16 +5629,36 @@ export default function WorkoutPage() {
         />
       )}
 
-      {/* Undo set-delete snackbar */}
-      <UndoSetDeleteSnackbar
-        visible={!!pendingSetDelete}
-        onUndo={() => { void undoSetDelete(); }}
-      />
-
       {/* Calibration Result Card (modal overlay) */}
-      <CalibrationResultOverlay
-        result={calibrationResult}
-        onDismiss={() => setCalibrationResult(null)}
+      {calibrationResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="max-w-md w-full">
+            <CalibrationResultCard
+              result={calibrationResult}
+              onDismiss={() => setCalibrationResult(null)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Toast Container for notifications */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Delete Exercise Confirmation Modal (for header row delete button) */}
+      <ConfirmModal
+        isOpen={deleteConfirmBlock !== null}
+        onClose={() => setDeleteConfirmBlock(null)}
+        onConfirm={() => {
+          if (deleteConfirmBlock) {
+            handleExerciseDelete(deleteConfirmBlock.id);
+            setDeleteConfirmBlock(null);
+          }
+        }}
+        title="Remove Exercise"
+        message={deleteConfirmBlock ? `Remove "${deleteConfirmBlock.name}" from this workout? This will delete any logged sets for this exercise.` : ''}
+        confirmText="Remove"
+        cancelText="Keep"
+        variant="danger"
       />
     </div>
   );

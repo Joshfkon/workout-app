@@ -84,8 +84,12 @@ export function formatDistanceToNow(date: string | Date): string {
  * Format time duration in seconds to mm:ss format
  */
 export function formatDuration(seconds: number): string {
+  // Handle negative, NaN, or invalid values
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return '0:00';
+  }
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
@@ -93,6 +97,10 @@ export function formatDuration(seconds: number): string {
  * Convert weight between kg and lb
  */
 export function convertWeight(weight: number, from: 'kg' | 'lb', to: 'kg' | 'lb'): number {
+  // Handle invalid input values
+  if (!Number.isFinite(weight) || weight < 0) {
+    return 0;
+  }
   if (from === to) return weight;
   if (from === 'kg' && to === 'lb') return weight * 2.20462;
   return weight / 2.20462;
@@ -173,7 +181,13 @@ export function inputWeightToKg(weight: number, fromUnit: 'kg' | 'lb'): number {
  * 0 min increment) which would otherwise divide by zero and produce NaN.
  */
 export function roundToIncrement(value: number, increment: number): number {
-  if (increment <= 0) return value;
+  // Guard against zero or invalid increment to prevent NaN
+  if (!Number.isFinite(increment) || increment <= 0) {
+    return value;
+  }
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
   return Math.round(value / increment) * increment;
 }
 
@@ -608,3 +622,84 @@ export function getPlateColor(weight: number, unit: 'kg' | 'lb'): string {
   return '#9E9E9E'; // Gray - smaller plates
 }
 
+// ============ STREAK CALCULATION ============
+
+export interface StreakResult {
+  /** Current consecutive day streak (ending today or yesterday) */
+  currentStreak: number;
+  /** Longest consecutive day streak ever */
+  longestStreak: number;
+}
+
+/**
+ * Calculate workout streaks from an array of workout completion dates.
+ * A streak is consecutive days with at least one workout.
+ *
+ * @param dates - Array of workout completion dates (Date objects or ISO strings)
+ * @returns Object with currentStreak and longestStreak
+ */
+export function calculateStreaks(dates: (Date | string)[]): StreakResult {
+  if (dates.length === 0) {
+    return { currentStreak: 0, longestStreak: 0 };
+  }
+
+  // Convert all dates to YYYY-MM-DD strings in local timezone and get unique dates
+  const dateStrings = new Set<string>();
+  for (const date of dates) {
+    const d = typeof date === 'string' ? new Date(date) : date;
+    dateStrings.add(getLocalDateString(d));
+  }
+
+  // Sort unique dates in ascending order
+  const sortedDates = Array.from(dateStrings).sort();
+
+  // Calculate longest streak
+  let longestStreak = 1;
+  let currentRunLength = 1;
+
+  for (let i = 1; i < sortedDates.length; i++) {
+    const prevDate = new Date(sortedDates[i - 1] + 'T00:00:00');
+    const currDate = new Date(sortedDates[i] + 'T00:00:00');
+
+    // Check if dates are consecutive (difference of 1 day)
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentRunLength++;
+      longestStreak = Math.max(longestStreak, currentRunLength);
+    } else {
+      currentRunLength = 1;
+    }
+  }
+
+  // Calculate current streak (must end today or yesterday)
+  const today = getLocalDateString();
+  const yesterday = getLocalDateString(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+  // Check if there's a workout today or yesterday to start counting
+  const lastWorkoutDate = sortedDates[sortedDates.length - 1];
+  if (lastWorkoutDate !== today && lastWorkoutDate !== yesterday) {
+    // No recent workout, current streak is 0
+    return { currentStreak: 0, longestStreak };
+  }
+
+  // Count backwards from the most recent workout date
+  let currentStreak = 1;
+  for (let i = sortedDates.length - 2; i >= 0; i--) {
+    const currDate = new Date(sortedDates[i + 1] + 'T00:00:00');
+    const prevDate = new Date(sortedDates[i] + 'T00:00:00');
+
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 1) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+
+  return { currentStreak, longestStreak };
+}
+
+// Re-export E1RM calculations for convenient use by UI components
+export { estimate1RM, estimateE1RMSimple } from '@/services/shared/strengthCalculations';

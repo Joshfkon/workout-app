@@ -13,18 +13,16 @@ import type {
   WorkoutSession,
   ProgressionTargets,
 } from '@/types/schema';
+import {
+  EQUIPMENT_FATIGUE_MULTIPLIER,
+  FATIGUE_RECOVERY_RATE,
+  READINESS_WEIGHTS,
+  DELOAD_THRESHOLDS,
+} from '@/services/shared/fatigueConstants';
 
 // ============================================
-// CONSTANTS
+// CONSTANTS (local to this engine)
 // ============================================
-
-/** Weight factors for readiness calculation */
-const READINESS_WEIGHTS = {
-  sleep: 0.35,
-  stress: 0.25,
-  nutrition: 0.20,
-  recovery: 0.20,
-};
 
 /** Fatigue accumulation rates per session RPE */
 const FATIGUE_ACCUMULATION: Record<number, number> = {
@@ -36,15 +34,25 @@ const FATIGUE_ACCUMULATION: Record<number, number> = {
   10: 14,
 };
 
-/** Fatigue recovery rate per day of rest */
-const FATIGUE_RECOVERY_RATE = 3;
-
-/** Thresholds for deload recommendation */
-const DELOAD_THRESHOLDS = {
-  fatigueScore: 75,        // Recommend deload if fatigue >= 75
-  missedTargets: 3,        // If missed targets 3+ sessions in a row
-  rpeCreep: 1.5,           // If average RPE increased by 1.5 over 2 weeks
+/**
+ * Fatigue multipliers based on movement pattern
+ * Heavy compound movements (squats, deadlifts) cause significantly more systemic fatigue
+ * than isolation movements (curls, lateral raises)
+ */
+const MOVEMENT_FATIGUE_MULTIPLIERS: Record<string, number> = {
+  squat: 1.4,
+  hip_hinge: 1.5,
+  horizontal_push: 1.1,
+  horizontal_pull: 1.1,
+  vertical_push: 1.0,
+  vertical_pull: 1.0,
+  lunge: 0.9,
+  isolation: 0.6,
+  carry: 0.8,
 };
+
+/** Local alias for equipment multipliers (string-keyed for flexible lookup) */
+const EQUIPMENT_FATIGUE_MULTIPLIERS: Record<string, number> = EQUIPMENT_FATIGUE_MULTIPLIER;
 
 // ============================================
 // READINESS CALCULATION
@@ -81,13 +89,22 @@ export function calculateReadinessScore(input: ReadinessInput): number {
 
   // Sleep score (0-100)
   // Optimal: 7-9 hours
+  // Note: Oversleeping (10+ hours) can be a warning sign of:
+  // - Depression or health issues
+  // - Poor sleep quality (not restorative)
+  // - Overtraining and need for extra recovery
   let sleepScore: number;
+  let isOversleeping = false;
+
   if (sleep >= 7 && sleep <= 9) {
     sleepScore = 100;
   } else if (sleep >= 6 && sleep < 7) {
     sleepScore = 70;
   } else if (sleep > 9 && sleep <= 10) {
-    sleepScore = 85;
+    sleepScore = 80; // Slightly penalize - occasional long sleep is fine
+  } else if (sleep > 10) {
+    sleepScore = 60; // Significant penalty - oversleeping is a warning sign
+    isOversleeping = true;
   } else if (sleep >= 5 && sleep < 6) {
     sleepScore = 50;
   } else {
@@ -129,6 +146,98 @@ export function calculateReadinessScore(input: ReadinessInput): number {
 
   // Clamp to 0-100
   return Math.round(Math.max(0, Math.min(100, totalScore)));
+}
+
+/**
+ * Warning types for readiness analysis
+ */
+export type ReadinessWarningType =
+  | 'oversleeping'
+  | 'undersleeping'
+  | 'high_stress'
+  | 'poor_nutrition'
+  | 'insufficient_recovery';
+
+export interface ReadinessWarning {
+  type: ReadinessWarningType;
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  recommendation: string;
+}
+
+/**
+ * Analyze readiness input and return any warnings
+ * Separate from score calculation to maintain backwards compatibility
+ */
+export function getReadinessWarnings(input: ReadinessInput): ReadinessWarning[] {
+  const warnings: ReadinessWarning[] = [];
+  const sleep = input.sleepHours ?? 7;
+  const stress = input.stressLevel ?? 3;
+  const nutrition = input.nutritionRating ?? 3;
+  const daysSinceLastSession = input.daysSinceLastSession ?? 1;
+
+  // Oversleeping warning (10+ hours)
+  if (sleep > 10) {
+    warnings.push({
+      type: 'oversleeping',
+      severity: 'warning',
+      message: `You slept ${sleep} hours, which is more than optimal.`,
+      recommendation:
+        'Regular oversleeping (10+ hours) can indicate overtraining, poor sleep quality, or health issues. ' +
+        'If this is frequent, consider: reducing training volume, checking for sleep disorders, ' +
+        'or consulting a healthcare provider.',
+    });
+  }
+
+  // Undersleeping warning (less than 6 hours)
+  if (sleep < 6) {
+    warnings.push({
+      type: 'undersleeping',
+      severity: sleep < 5 ? 'critical' : 'warning',
+      message: `You only slept ${sleep} hours.`,
+      recommendation:
+        'Sleep is critical for recovery and muscle growth. ' +
+        'Aim for 7-9 hours. Consider a lighter session today or focusing on technique.',
+    });
+  }
+
+  // High stress warning
+  if (stress >= 4) {
+    warnings.push({
+      type: 'high_stress',
+      severity: stress === 5 ? 'warning' : 'info',
+      message: 'Your stress level is elevated.',
+      recommendation:
+        'High stress impairs recovery. Consider reducing volume or intensity today, ' +
+        'or focus on exercises you enjoy.',
+    });
+  }
+
+  // Poor nutrition warning
+  if (nutrition <= 2) {
+    warnings.push({
+      type: 'poor_nutrition',
+      severity: nutrition === 1 ? 'warning' : 'info',
+      message: 'Your nutrition has been suboptimal.',
+      recommendation:
+        'Proper nutrition is essential for performance and recovery. ' +
+        'Ensure adequate protein and carbohydrates before and after training.',
+    });
+  }
+
+  // Insufficient recovery (training same day or consecutive days after hard session)
+  if (daysSinceLastSession === 0 && (input.previousSessionRpe ?? 7) >= 8) {
+    warnings.push({
+      type: 'insufficient_recovery',
+      severity: 'warning',
+      message: 'Training twice on the same day after a hard session.',
+      recommendation:
+        'Allow at least 24 hours between intense sessions for the same muscle groups. ' +
+        'Consider targeting different muscles or doing a recovery session.',
+    });
+  }
+
+  return warnings;
 }
 
 /**
@@ -177,6 +286,77 @@ export function updateMesocycleFatigue(input: FatigueUpdateInput): number {
 }
 
 /**
+ * Exercise information for fatigue calculation
+ */
+export interface ExerciseFatigueInfo {
+  movementPattern: string;
+  equipment: string;
+  mechanic: 'compound' | 'isolation';
+  sets: number;
+}
+
+/**
+ * Enhanced fatigue input with exercise type information
+ */
+export interface EnhancedFatigueUpdateInput extends FatigueUpdateInput {
+  exercises?: ExerciseFatigueInfo[];
+}
+
+/**
+ * Calculate fatigue multiplier for an exercise based on its characteristics
+ */
+export function getExerciseFatigueMultiplier(exercise: ExerciseFatigueInfo): number {
+  const movementMultiplier = MOVEMENT_FATIGUE_MULTIPLIERS[exercise.movementPattern] ?? 1.0;
+  const equipmentMultiplier = EQUIPMENT_FATIGUE_MULTIPLIERS[exercise.equipment] ?? 1.0;
+  const mechanicMultiplier = exercise.mechanic === 'compound' ? 1.0 : 0.7;
+
+  // Combine multipliers (geometric mean to avoid extreme values)
+  return Math.pow(movementMultiplier * equipmentMultiplier * mechanicMultiplier, 1 / 2);
+}
+
+/**
+ * Update mesocycle fatigue score with exercise type awareness
+ * Different exercises contribute different amounts of systemic fatigue
+ *
+ * Example: A session of heavy squats at RPE 9 causes more fatigue than
+ * a session of cable flies at RPE 9, even though the RPE is the same.
+ */
+export function updateMesocycleFatigueEnhanced(input: EnhancedFatigueUpdateInput): number {
+  const { currentFatigue, sessionRpe, daysSinceLastSession, exercises } = input;
+
+  // Recovery: subtract based on days since last session
+  const recovery = daysSinceLastSession * FATIGUE_RECOVERY_RATE;
+
+  // Base accumulation from RPE
+  const roundedRpe = Math.round(sessionRpe);
+  let baseAccumulation = FATIGUE_ACCUMULATION[roundedRpe] ?? (sessionRpe * 1.2);
+
+  // If exercise info provided, calculate weighted fatigue based on exercise types
+  if (exercises && exercises.length > 0) {
+    const totalSets = exercises.reduce((sum, ex) => sum + ex.sets, 0);
+
+    if (totalSets > 0) {
+      // Weight each exercise's fatigue contribution by its proportion of total sets
+      let weightedMultiplier = 0;
+      for (const exercise of exercises) {
+        const exerciseMultiplier = getExerciseFatigueMultiplier(exercise);
+        const proportion = exercise.sets / totalSets;
+        weightedMultiplier += exerciseMultiplier * proportion;
+      }
+
+      // Apply the weighted multiplier to base accumulation
+      baseAccumulation *= weightedMultiplier;
+    }
+  }
+
+  // New fatigue score
+  const newFatigue = currentFatigue - recovery + baseAccumulation;
+
+  // Clamp to 0-100
+  return Math.round(Math.max(0, Math.min(100, newFatigue)));
+}
+
+/**
  * Calculate fatigue recovery over a rest period
  */
 export function calculateFatigueAfterRest(
@@ -203,12 +383,60 @@ export interface DeloadCheckInput {
 }
 
 /**
+ * Calculate mesocycle-aware fatigue threshold
+ * Early in meso: lower threshold (high fatigue is unexpected)
+ * Late in meso: higher threshold (some fatigue is expected as part of planned overreach)
+ */
+function getMesocycleAwareFatigueThreshold(weekInMeso: number, totalWeeks: number): number {
+  const baseThreshold = DELOAD_THRESHOLDS.fatigueScore; // 75
+  const progressRatio = weekInMeso / totalWeeks;
+
+  // Weeks 1-2: Lower threshold (65-70) - early fatigue is concerning
+  // Weeks 3-4: Normal threshold (75) - moderate accumulation expected
+  // Week 5+: Higher threshold (80-85) - planned overreach before deload
+  if (progressRatio <= 0.33) {
+    return baseThreshold - 10; // 65 - early fatigue is a warning sign
+  } else if (progressRatio <= 0.66) {
+    return baseThreshold; // 75 - normal accumulation
+  } else {
+    return baseThreshold + 10; // 85 - tolerance for planned overreach
+  }
+}
+
+/**
+ * Get mesocycle-aware recommendation based on fatigue and timing
+ */
+function getMesocycleContextualRecommendation(
+  fatigue: number,
+  weekInMeso: number,
+  totalWeeks: number
+): string {
+  const progressRatio = weekInMeso / totalWeeks;
+
+  if (progressRatio <= 0.33) {
+    // Early in meso - high fatigue is unexpected
+    return `Unexpectedly high fatigue (${fatigue}/100) in week ${weekInMeso}. ` +
+           'Consider: reducing volume, improving recovery factors, or checking for overtraining.';
+  } else if (progressRatio <= 0.66) {
+    // Mid meso - fatigue accumulation is normal
+    return `Moderate fatigue accumulation (${fatigue}/100) in week ${weekInMeso}. ` +
+           'This is normal for mid-mesocycle. Monitor recovery and adjust if needed.';
+  } else {
+    // Late in meso - fatigue is expected, near planned deload
+    return `High fatigue (${fatigue}/100) in week ${weekInMeso} - planned overreach phase. ` +
+           'Deload is approaching. Push through if recovery supports it, or deload early if needed.';
+  }
+}
+
+/**
  * Determine if a deload should be triggered
+ * Now includes mesocycle context for smarter recommendations
  */
 export function shouldTriggerDeload(input: DeloadCheckInput): {
   shouldDeload: boolean;
   reason: string;
   urgency: 'low' | 'medium' | 'high';
+  mesocycleContext?: string;
 } {
   const { fatigue, weekInMeso, totalWeeks, deloadWeek, recentSessions } = input;
 
@@ -218,15 +446,24 @@ export function shouldTriggerDeload(input: DeloadCheckInput): {
       shouldDeload: true,
       reason: 'Scheduled deload week in mesocycle',
       urgency: 'medium',
+      mesocycleContext: `Week ${weekInMeso} of ${totalWeeks} - planned deload timing.`,
     };
   }
 
-  // High fatigue score
-  if (fatigue >= DELOAD_THRESHOLDS.fatigueScore) {
+  // Mesocycle-aware fatigue threshold
+  const fatigueThreshold = getMesocycleAwareFatigueThreshold(weekInMeso, totalWeeks);
+  const mesocycleContext = getMesocycleContextualRecommendation(fatigue, weekInMeso, totalWeeks);
+
+  // High fatigue score (adjusted for mesocycle position)
+  if (fatigue >= fatigueThreshold) {
+    const progressRatio = weekInMeso / totalWeeks;
+    const urgency = progressRatio <= 0.33 ? 'high' : progressRatio <= 0.66 ? 'medium' : 'low';
+
     return {
       shouldDeload: true,
-      reason: `High accumulated fatigue (${fatigue}/100)`,
-      urgency: 'high',
+      reason: `Fatigue (${fatigue}/100) exceeds threshold (${fatigueThreshold}) for week ${weekInMeso}`,
+      urgency,
+      mesocycleContext,
     };
   }
 
@@ -267,6 +504,7 @@ export function shouldTriggerDeload(input: DeloadCheckInput): {
     shouldDeload: false,
     reason: '',
     urgency: 'low',
+    mesocycleContext: getMesocycleContextualRecommendation(fatigue, weekInMeso, totalWeeks),
   };
 }
 
@@ -288,6 +526,9 @@ export function adjustTargetsForReadiness(
 ): ProgressionTargets {
   const { baseTargets, readinessScore, minWeightIncrement } = input;
 
+  // Guard against invalid minWeightIncrement (prevent division by zero)
+  const safeIncrement = minWeightIncrement > 0 ? minWeightIncrement : 2.5;
+
   // High readiness (80+): No adjustment needed
   if (readinessScore >= 80) {
     return baseTargets;
@@ -305,10 +546,10 @@ export function adjustTargetsForReadiness(
 
   // Low readiness (40-59): Significant adjustments
   if (readinessScore >= 40) {
-    const weightReduction = Math.round(baseTargets.weightKg * 0.1 / minWeightIncrement) * minWeightIncrement;
+    const weightReduction = Math.round(baseTargets.weightKg * 0.1 / safeIncrement) * safeIncrement;
     return {
       ...baseTargets,
-      weightKg: baseTargets.weightKg - weightReduction,
+      weightKg: Math.max(0, baseTargets.weightKg - weightReduction),
       targetRir: baseTargets.targetRir + 2,
       sets: Math.max(2, baseTargets.sets - 1),
       restSeconds: baseTargets.restSeconds + 60,
@@ -317,10 +558,10 @@ export function adjustTargetsForReadiness(
   }
 
   // Very low readiness (<40): Consider skipping or light session
-  const weightReduction = Math.round(baseTargets.weightKg * 0.2 / minWeightIncrement) * minWeightIncrement;
+  const weightReduction = Math.round(baseTargets.weightKg * 0.2 / safeIncrement) * safeIncrement;
   return {
     ...baseTargets,
-    weightKg: baseTargets.weightKg - weightReduction,
+    weightKg: Math.max(0, baseTargets.weightKg - weightReduction),
     targetRir: 4,
     sets: 2,
     restSeconds: baseTargets.restSeconds + 90,
@@ -344,13 +585,13 @@ export function forecastWeeklyFatigue(
   projectedFatigue: number;
   recommendation: string;
 } {
-  // Guard against zero/negative planned sessions (no training -> just recover).
+  // Guard against zero or negative sessions
   if (plannedSessions <= 0) {
-    const recovered = Math.max(0, currentFatigue - 7 * FATIGUE_RECOVERY_RATE);
+    // No sessions = pure recovery
+    const recoveredFatigue = Math.max(0, currentFatigue - (7 * FATIGUE_RECOVERY_RATE));
     return {
-      projectedFatigue: Math.round(recovered),
-      recommendation:
-        'No sessions planned: expect full recovery and fresh capacity next week',
+      projectedFatigue: Math.round(recoveredFatigue),
+      recommendation: 'No sessions planned - good time for recovery',
     };
   }
 

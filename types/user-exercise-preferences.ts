@@ -94,3 +94,89 @@ export interface BulkArchiveByEquipmentInput {
   /** Optional reason for the archive */
   reason?: ExerciseHideReason;
 }
+
+// ============================================
+// EXERCISE VARIETY PREFERENCES
+// ============================================
+
+/** Variety level - how much exercise rotation the user wants */
+export type ExerciseVarietyLevel = 'low' | 'medium' | 'high';
+
+/** User's exercise variety preferences */
+export interface ExerciseVarietyPreferences {
+  id: string;
+  userId: string;
+  /** How much variety: low = 2-3 exercises, medium = 5-6, high = 8-10+ */
+  varietyLevel: ExerciseVarietyLevel;
+  /** Sessions to wait before repeating an exercise for same muscle (0 = no limit) */
+  rotationFrequency: number;
+  /** Minimum exercises to rotate between per muscle group */
+  minPoolSize: number;
+  /** Whether to still prioritize S/A tier within the variety pool */
+  prioritizeTopTier: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Database row representation for variety preferences */
+export interface ExerciseVarietyPreferencesRow {
+  id: string;
+  user_id: string;
+  variety_level: ExerciseVarietyLevel;
+  rotation_frequency: number;
+  min_pool_size: number;
+  prioritize_top_tier: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Exercise usage history record */
+export interface ExerciseUsageRecord {
+  id: string;
+  userId: string;
+  exerciseId: string;
+  muscleGroup: string;
+  usedAt: Date;
+  sessionId?: string;
+}
+
+/** Database row representation for exercise usage */
+export interface ExerciseUsageRow {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  muscle_group: string;
+  used_at: string;
+  session_id?: string | null;
+}
+
+/** Default variety preferences by level */
+export const VARIETY_LEVEL_DEFAULTS: Record<ExerciseVarietyLevel, {
+  rotationFrequency: number;
+  minPoolSize: number;
+  description: string;
+}> = {
+  low: {
+    rotationFrequency: 0,
+    minPoolSize: 3,
+    description: 'Stick to your top 2-3 exercises per muscle. Consistent and familiar.',
+  },
+  medium: {
+    rotationFrequency: 2,
+    minPoolSize: 5,
+    description: 'Rotate through 5-6 exercises. Good balance of variety and consistency.',
+  },
+  high: {
+    rotationFrequency: 3,
+    minPoolSize: 8,
+    description: 'Maximum variety with 8-10+ exercises. Each session feels fresh.',
+  },
+};
+
+/** Input for updating variety preferences */
+export interface UpdateVarietyPreferencesInput {
+  varietyLevel?: ExerciseVarietyLevel;
+  rotationFrequency?: number;
+  minPoolSize?: number;
+  prioritizeTopTier?: boolean;
+}

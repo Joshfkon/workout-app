@@ -91,7 +91,7 @@ export function CustomExerciseBasicForm({
   initialData,
 }: CustomExerciseBasicFormProps) {
   const [name, setName] = useState(initialData?.name || '');
-  const [primaryMuscle, setPrimaryMuscle] = useState<MuscleGroup | ''>(
+  const [primaryMuscle, setPrimaryMuscle] = useState<string>(
     initialData?.primaryMuscle || ''
   );
   const [equipment, setEquipment] = useState<Equipment | ''>(
@@ -102,7 +102,7 @@ export function CustomExerciseBasicForm({
   const [variationOf, setVariationOf] = useState(initialData?.variationOf || '');
 
   // Optional detailed fields
-  const [secondaryMuscles, setSecondaryMuscles] = useState<MuscleGroup[]>(initialData?.secondaryMuscles || []);
+  const [secondaryMuscles, setSecondaryMuscles] = useState<string[]>(initialData?.secondaryMuscles || []);
   const [pattern, setPattern] = useState<MovementPattern | 'isolation' | 'carry' | ''>(initialData?.pattern || '');
   const [mechanic, setMechanic] = useState<'compound' | 'isolation' | ''>(initialData?.mechanic || '');
   const [difficulty, setDifficulty] = useState<ExerciseDifficulty | ''>(initialData?.difficulty || '');
@@ -117,7 +117,7 @@ export function CustomExerciseBasicForm({
   const [mistakeInput, setMistakeInput] = useState('');
   const [setupNote, setSetupNote] = useState(initialData?.setupNote || '');
   const [spinalLoading, setSpinalLoading] = useState<SpinalLoading | ''>(initialData?.spinalLoading || '');
-  const [stabilizers, setStabilizers] = useState<MuscleGroup[]>(initialData?.stabilizers || []);
+  const [stabilizers, setStabilizers] = useState<string[]>(initialData?.stabilizers || []);
   const [requiresBackArch, setRequiresBackArch] = useState(initialData?.requiresBackArch || false);
   const [requiresSpinalFlexion, setRequiresSpinalFlexion] = useState(initialData?.requiresSpinalFlexion || false);
   const [requiresSpinalExtension, setRequiresSpinalExtension] = useState(initialData?.requiresSpinalExtension || false);
@@ -148,10 +148,10 @@ export function CustomExerciseBasicForm({
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Load exercises for variation selection
+  // Load exercises for variation selection (include custom exercises)
   useEffect(() => {
     async function loadExercises() {
-      const allExercises = await getExercises(false); // Exclude custom
+      const allExercises = await getExercises(true);
       setExercises(allExercises);
     }
     loadExercises();
@@ -195,7 +195,7 @@ export function CustomExerciseBasicForm({
     setContraindications(contraindications.filter((_, i) => i !== index));
   };
 
-  const toggleMuscleSelection = (muscle: MuscleGroup, list: MuscleGroup[], setter: (list: MuscleGroup[]) => void) => {
+  const toggleMuscleSelection = (muscle: string, list: string[], setter: (list: string[]) => void) => {
     if (list.includes(muscle)) {
       setter(list.filter(m => m !== muscle));
     } else {
@@ -764,7 +764,7 @@ export function CustomExerciseBasicForm({
           isLoading={isLoading}
           className="flex-1"
         >
-          {isLoading ? 'Analyzing...' : 'Continue'}
+          Continue
         </Button>
       </div>
     </form>

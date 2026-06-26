@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getErrorMessage } from '@/lib/errors';
 import type { ExercisePerformanceSnapshot } from '@/types/schema';
 import type { ExercisePerformanceSnapshotRow } from '@/types/database-queries';
 import { calculateE1RM } from '@/services/plateauDetector';
@@ -54,9 +55,9 @@ export function useExerciseHistory({ exerciseId, limit = 20 }: UseExerciseHistor
       }));
 
       setSnapshots(mappedData);
-    } catch (err) {
+    } catch (err: unknown) {
       if (requestId !== requestIdRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to fetch history');
+      setError(getErrorMessage(err));
     } finally {
       if (requestId === requestIdRef.current) {
         setIsLoading(false);

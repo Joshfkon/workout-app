@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { SetInputRow } from '../workout/SetInputRow';
 import { formatWeight, formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
@@ -10,6 +10,12 @@ jest.mock('@/services/progressionEngine', () => ({
     quality: 'effective',
     reason: 'Good set within target range',
   })),
+}));
+
+// Mock InfoTooltip to prevent rendering issues
+jest.mock('@/components/ui', () => ({
+  ...jest.requireActual('@/components/ui'),
+  InfoTooltip: () => null,
 }));
 
 describe('Unit Preference Integration', () => {
@@ -65,14 +71,48 @@ describe('Unit Preference Integration', () => {
       fireEvent.change(weightInput, { target: { value: '100' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
 
-      // Advance to the feedback phase (proceed button is labelled "Log set N")
-      fireEvent.click(screen.getByRole('button', { name: /log set/i }));
+      // Click proceed to go to feedback phase
+      const proceedButton = screen.getByRole('button', { name: /log set/i });
+      expect(proceedButton).toBeTruthy();
+      fireEvent.click(proceedButton!);
 
-      // Feedback (RIR/form) is optional now — Save Set is always enabled and falls
-      // back to neutral defaults (repsInTank: 2 -> RPE 7.5, form: 'clean').
-      const saveButton = await screen.findByRole('button', { name: /save set/i });
+      // Wait for feedback phase to render - use waitFor for more reliable waiting
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
+
+      // Now we're in feedback phase - find RIR selector buttons
+      // RIRSelector shows buttons with labels like "2-3", "1", "4+", "Maxed"
+      const allButtons = screen.getAllByRole('button');
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
+        btn.textContent?.includes('Good')
+      );
+
+      expect(rirButton).toBeTruthy();
+      if (rirButton) {
+        fireEvent.click(rirButton);
+      }
+
+      // Find form selector button (Clean, Some Breakdown, Ugly)
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') &&
+        !btn.textContent?.includes('Save')
+      );
+
+      expect(formButton).toBeTruthy();
+      if (formButton) {
+        fireEvent.click(formButton);
+      }
+
+      // Find and click Save Set button
+      const saveButton = allButtons.find(btn =>
+        btn.textContent?.includes('Save Set')
+      );
+
+      expect(saveButton).toBeTruthy();
       expect(saveButton).not.toBeDisabled();
-      fireEvent.click(saveButton);
+      fireEvent.click(saveButton!);
 
       // Verify submission - weight should be stored in kg
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -87,7 +127,7 @@ describe('Unit Preference Integration', () => {
           }),
         })
       );
-      
+
       // Verify weightKg is a number, not a string
       const submittedData = onSubmit.mock.calls[0][0];
       expect(typeof submittedData.weightKg).toBe('number');
@@ -104,13 +144,49 @@ describe('Unit Preference Integration', () => {
       fireEvent.change(weightInput, { target: { value: '225' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
 
-      // Advance to the feedback phase (proceed button is labelled "Log set N")
-      fireEvent.click(screen.getByRole('button', { name: /log set/i }));
+      // Click proceed to go to feedback phase
+      const proceedButton = screen.getByRole('button', { name: /log set/i });
+      expect(proceedButton).toBeTruthy();
+      fireEvent.click(proceedButton!);
 
-      // Feedback optional — Save Set always enabled, falls back to neutral defaults.
-      const saveButton = await screen.findByRole('button', { name: /save set/i });
+      // Wait for feedback phase to render - use waitFor for more reliable waiting
+      await waitFor(() => {
+        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
+      });
+
+      // Now we're in feedback phase - find RIR and Form selectors
+      const allButtons = screen.getAllByRole('button');
+
+      // Find RIR selector button (shows "2-3" or "Good")
+      const rirButton = allButtons.find(btn =>
+        btn.textContent?.includes('2-3') ||
+        btn.textContent?.includes('Good')
+      );
+
+      expect(rirButton).toBeTruthy();
+      if (rirButton) {
+        fireEvent.click(rirButton);
+      }
+
+      // Find form selector button (shows "Clean")
+      const formButton = allButtons.find(btn =>
+        btn.textContent?.includes('Clean') &&
+        !btn.textContent?.includes('Save')
+      );
+
+      expect(formButton).toBeTruthy();
+      if (formButton) {
+        fireEvent.click(formButton);
+      }
+
+      // Find and click Save Set button
+      const saveButton = allButtons.find(btn => 
+        btn.textContent?.includes('Save Set')
+      );
+      
+      expect(saveButton).toBeTruthy();
       expect(saveButton).not.toBeDisabled();
-      fireEvent.click(saveButton);
+      fireEvent.click(saveButton!);
 
       // Verify the conversion is correct (225lbs ~= 102.06kg)
       expect(onSubmit).toHaveBeenCalledTimes(1);

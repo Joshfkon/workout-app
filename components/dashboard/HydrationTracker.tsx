@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
@@ -17,7 +17,7 @@ const QUICK_ADD_OPTIONS = [
   { ml: 1000, label: '1L', labelOz: '32oz' },
 ];
 
-export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps) {
+export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps) {
   const [todayTotal, setTodayTotal] = useState(0);
   const [target, setTarget] = useState(2500); // Default 2.5L
   const [isAdding, setIsAdding] = useState(false);
@@ -233,5 +233,5 @@ export function HydrationTracker({ userId, unit = 'ml' }: HydrationTrackerProps)
       </CardContent>
     </Card>
   );
-}
+});
 

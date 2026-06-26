@@ -1,5 +1,10 @@
 /**
  * Types for AI-Assisted Custom Exercise Completion
+ *
+ * Uses the two-tier muscle group system:
+ * - User input: Legacy MuscleGroup (13 muscles) for simplicity
+ * - AI output: DetailedMuscleGroup (33 muscles) for precision
+ * - Volume tracking: StandardMuscleGroup (20 muscles) for display
  */
 
 import type {
@@ -10,8 +15,11 @@ import type {
   FatigueRating,
   HypertrophyTier,
   HypertrophyRating,
+  StandardMuscleGroup,
+  DetailedMuscleGroup,
 } from '@/types/schema';
 
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { SpinalLoading, PositionStress } from '@/services/exerciseService';
 
 // ============================================
@@ -21,8 +29,8 @@ import type { SpinalLoading, PositionStress } from '@/services/exerciseService';
 export interface BasicExerciseInput {
   /** Exercise name (required) */
   name: string;
-  /** Primary muscle targeted (required) */
-  primaryMuscle: MuscleGroup;
+  /** Primary muscle targeted (required) - can be MuscleGroup or DetailedMuscleGroup */
+  primaryMuscle: string;
   /** Equipment used (required) */
   equipment: Equipment;
   /** Optional description to help AI understand the movement */
@@ -31,11 +39,11 @@ export interface BasicExerciseInput {
   variationOf?: string;
   /** Name of the base exercise if this is a variation */
   variationOfName?: string;
-  
+
   // === Optional Detailed Fields ===
-  
-  /** Secondary muscles worked */
-  secondaryMuscles?: MuscleGroup[];
+
+  /** Secondary muscles worked (can be MuscleGroup[] or DetailedMuscleGroup[]) */
+  secondaryMuscles?: string[];
   /** Movement pattern */
   pattern?: MovementPattern | 'isolation' | 'carry';
   /** Exercise mechanic type */
@@ -44,25 +52,25 @@ export interface BasicExerciseInput {
   difficulty?: ExerciseDifficulty;
   /** Fatigue rating (1-3) */
   fatigueRating?: FatigueRating;
-  
+
   /** Default rep range [min, max] */
   defaultRepRange?: [number, number];
   /** Default RIR target */
   defaultRir?: number;
   /** Minimum weight increment in kg */
   minWeightIncrementKg?: number;
-  
+
   /** Form cues for proper execution */
   formCues?: string[];
   /** Common mistakes to avoid */
   commonMistakes?: string[];
   /** Setup instructions or notes */
   setupNote?: string;
-  
+
   /** Spinal loading level */
   spinalLoading?: SpinalLoading;
-  /** Muscles used for stability */
-  stabilizers?: MuscleGroup[];
+  /** Muscles used for stability (can be MuscleGroup[] or DetailedMuscleGroup[]) */
+  stabilizers?: string[];
   /** Requires back arch */
   requiresBackArch?: boolean;
   /** Requires spinal flexion */
@@ -100,14 +108,18 @@ export interface HypertrophyScoreData {
 export interface CompletedExerciseData {
   // === User Provided ===
   name: string;
-  primaryMuscle: MuscleGroup;
+  primaryMuscle: string; // Can be MuscleGroup or DetailedMuscleGroup
   equipment: Equipment;
   description?: string;
   variationOf?: string;
 
   // === AI Completed ===
-  secondaryMuscles: MuscleGroup[];
-  stabilizers: MuscleGroup[];
+  /** AI's detailed classification of the primary muscle */
+  primaryMuscleDetailed: DetailedMuscleGroup;
+  /** Secondary muscles targeted (can be MuscleGroup or DetailedMuscleGroup) */
+  secondaryMuscles: string[];
+  /** Stabilizer muscles (can be MuscleGroup or DetailedMuscleGroup) */
+  stabilizers: string[];
   pattern: MovementPattern | 'isolation' | 'carry';
   mechanic: 'compound' | 'isolation';
   difficulty: ExerciseDifficulty;
@@ -321,3 +333,29 @@ export const EQUIPMENT_OPTIONS: { value: Equipment; label: string }[] = [
   { value: 'bodyweight', label: 'Bodyweight' },
   { value: 'kettlebell', label: 'Kettlebell' },
 ];
+
+// ============================================
+// STANDARD MUSCLE GROUP OPTIONS (for volume UI)
+// ============================================
+
+/**
+ * Standard muscle group options for volume tracking UI
+ * Uses the new 20-muscle system for granular volume display
+ */
+export const STANDARD_MUSCLE_GROUP_OPTIONS: { value: StandardMuscleGroup; label: string }[] =
+  STANDARD_MUSCLE_GROUPS.map((muscle) => ({
+    value: muscle,
+    label: STANDARD_MUSCLE_DISPLAY_NAMES[muscle],
+  }));
+
+/**
+ * Standard muscle groups organized by body region for UI display
+ */
+export const STANDARD_MUSCLE_GROUPS_BY_REGION: Record<string, StandardMuscleGroup[]> = {
+  'Chest': ['chest_upper', 'chest_lower'],
+  'Shoulders': ['front_delts', 'lateral_delts', 'rear_delts'],
+  'Back': ['lats', 'upper_back', 'traps'],
+  'Arms': ['biceps', 'triceps', 'forearms'],
+  'Legs': ['quads', 'hamstrings', 'glutes', 'glute_med', 'adductors', 'calves'],
+  'Core & Spine': ['abs', 'obliques', 'erectors'],
+};

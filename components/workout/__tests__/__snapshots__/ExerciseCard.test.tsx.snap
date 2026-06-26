@@ -294,7 +294,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -570,7 +570,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -846,7 +846,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -929,17 +929,21 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <td
               class="px-2 py-1.5"
             >
-              <input
-                class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                enterkeyhint="done"
-                id="pending-reps-0"
-                inputmode="numeric"
-                max="100"
-                min="0"
-                pattern="[0-9]*"
-                type="number"
-                value="10"
-              />
+              <div
+                class="relative"
+              >
+                <input
+                  class="w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent border-surface-700 text-surface-100"
+                  enterkeyhint="done"
+                  id="pending-reps-0"
+                  inputmode="numeric"
+                  max="100"
+                  min="0"
+                  pattern="[0-9]*"
+                  type="number"
+                  value="10"
+                />
+              </div>
             </td>
             <td
               class="px-2 py-1.5 text-center"
@@ -999,17 +1003,21 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <td
               class="px-2 py-1.5"
             >
-              <input
-                class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                enterkeyhint="done"
-                id="pending-reps-1"
-                inputmode="numeric"
-                max="100"
-                min="0"
-                pattern="[0-9]*"
-                type="number"
-                value="10"
-              />
+              <div
+                class="relative"
+              >
+                <input
+                  class="w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent border-surface-700 text-surface-100"
+                  enterkeyhint="done"
+                  id="pending-reps-1"
+                  inputmode="numeric"
+                  max="100"
+                  min="0"
+                  pattern="[0-9]*"
+                  type="number"
+                  value="10"
+                />
+              </div>
             </td>
             <td
               class="px-2 py-1.5 text-center"
@@ -1069,17 +1077,21 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <td
               class="px-2 py-1.5"
             >
-              <input
-                class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                enterkeyhint="done"
-                id="pending-reps-2"
-                inputmode="numeric"
-                max="100"
-                min="0"
-                pattern="[0-9]*"
-                type="number"
-                value="10"
-              />
+              <div
+                class="relative"
+              >
+                <input
+                  class="w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent border-surface-700 text-surface-100"
+                  enterkeyhint="done"
+                  id="pending-reps-2"
+                  inputmode="numeric"
+                  max="100"
+                  min="0"
+                  pattern="[0-9]*"
+                  type="number"
+                  value="10"
+                />
+              </div>
             </td>
             <td
               class="px-2 py-1.5 text-center"
@@ -1254,7 +1266,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -1346,7 +1358,16 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
                 <span
                   class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
                 >
-                  Stimulative
+                  <span
+                    class="sm:hidden"
+                  >
+                    Stim
+                  </span>
+                  <span
+                    class="hidden sm:inline"
+                  >
+                    Stimulative
+                  </span>
                 </span>
               </div>
             </td>
@@ -1407,7 +1428,16 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
                 <span
                   class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
                 >
-                  Stimulative
+                  <span
+                    class="sm:hidden"
+                  >
+                    Stim
+                  </span>
+                  <span
+                    class="hidden sm:inline"
+                  >
+                    Stimulative
+                  </span>
                 </span>
               </div>
             </td>
@@ -1468,7 +1498,16 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
                 <span
                   class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
                 >
-                  Stimulative
+                  <span
+                    class="sm:hidden"
+                  >
+                    Stim
+                  </span>
+                  <span
+                    class="hidden sm:inline"
+                  >
+                    Stimulative
+                  </span>
                 </span>
               </div>
             </td>
@@ -1632,7 +1671,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -1908,7 +1947,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -2184,7 +2223,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -2460,7 +2499,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -2753,7 +2792,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -2845,7 +2884,16 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
                 <span
                   class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
                 >
-                  Stimulative
+                  <span
+                    class="sm:hidden"
+                  >
+                    Stim
+                  </span>
+                  <span
+                    class="hidden sm:inline"
+                  >
+                    Stimulative
+                  </span>
                 </span>
               </div>
             </td>
@@ -2906,7 +2954,16 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
                 <span
                   class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
                 >
-                  Stimulative
+                  <span
+                    class="sm:hidden"
+                  >
+                    Stim
+                  </span>
+                  <span
+                    class="hidden sm:inline"
+                  >
+                    Stimulative
+                  </span>
                 </span>
               </div>
             </td>
@@ -3160,7 +3217,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -3457,7 +3514,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -3733,7 +3790,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -4009,7 +4066,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -4285,7 +4342,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"
@@ -4561,7 +4618,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
       class="overflow-hidden"
     >
       <table
-        class="w-full text-sm"
+        class="w-full text-sm table-fixed"
       >
         <thead
           class="bg-surface-800/50"

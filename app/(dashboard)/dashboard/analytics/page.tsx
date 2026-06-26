@@ -9,7 +9,8 @@ import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup } from '@/types/schema';
+import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup, StandardMuscleGroup } from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import {
   calculateFFMI,
   analyzeBodyCompTrend,
@@ -105,6 +106,12 @@ const HungerChart = dynamic(
 
 // Tab types
 type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
+
+/** Get display name for a muscle group */
+function getMuscleDisplayName(muscle: string): string {
+  return STANDARD_MUSCLE_DISPLAY_NAMES[muscle as StandardMuscleGroup]
+    ?? muscle.charAt(0).toUpperCase() + muscle.slice(1).replace(/_/g, ' ');
+}
 
 interface UserProfile {
   heightCm: number | null;
@@ -576,6 +583,8 @@ export default function AnalyticsPage() {
             daysPerWeek: meso.days_per_week,
             splitType: meso.split_type,
             fatigueScore: meso.fatigue_score || 0,
+            preferredWorkoutDays: meso.preferred_workout_days || null,
+            sessionDurationMinutes: meso.session_duration_minutes || null,
             createdAt: meso.created_at,
             startedAt: meso.started_at,
             completedAt: meso.completed_at,
@@ -2568,9 +2577,8 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
                     key={p.muscleGroup}
                     variant="info"
                     size="sm"
-                    className="capitalize"
                   >
-                    {p.muscleGroup} ({PRIORITY_LABELS[p.priority]})
+                    {getMuscleDisplayName(p.muscleGroup)} ({PRIORITY_LABELS[p.priority]})
                   </Badge>
                 ))}
               </div>
@@ -2588,9 +2596,8 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
                     key={p.muscleGroup}
                     variant="default"
                     size="sm"
-                    className="capitalize"
                   >
-                    {p.muscleGroup}
+                    {getMuscleDisplayName(p.muscleGroup)}
                   </Badge>
                 ))}
               </div>
@@ -2608,9 +2615,8 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
                     key={p.muscleGroup}
                     variant="outline"
                     size="sm"
-                    className="capitalize"
                   >
-                    {p.muscleGroup} ({PRIORITY_LABELS[p.priority]})
+                    {getMuscleDisplayName(p.muscleGroup)} ({PRIORITY_LABELS[p.priority]})
                   </Badge>
                 ))}
               </div>
@@ -2625,7 +2631,7 @@ function MusclePrioritiesDisplay({ userId }: { userId: string }) {
                   .filter(p => p.reason)
                   .map((p) => (
                     <div key={p.muscleGroup} className="text-xs text-surface-400">
-                      <span className="font-medium text-surface-300 capitalize">{p.muscleGroup}:</span>{' '}
+                      <span className="font-medium text-surface-300">{getMuscleDisplayName(p.muscleGroup)}:</span>{' '}
                       {p.reason}
                     </div>
                   ))}

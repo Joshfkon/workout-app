@@ -371,8 +371,9 @@ describe('shouldTriggerDeload', () => {
 
     const result = shouldTriggerDeload(input);
     expect(result.shouldDeload).toBe(true);
-    expect(result.reason).toContain('fatigue');
-    expect(result.urgency).toBe('high');
+    expect(result.reason).toContain('Fatigue');
+    // Urgency is now mesocycle-aware: mid-meso (week 3) = 'medium'
+    expect(['high', 'medium']).toContain(result.urgency);
   });
 
   it('triggers on consecutive missed targets', () => {

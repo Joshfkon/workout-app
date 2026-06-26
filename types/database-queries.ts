@@ -452,5 +452,5 @@ export interface MinimalUser {
   id: string;
   email?: string;
   experience?: 'novice' | 'intermediate' | 'advanced';
-  goal?: 'bulk' | 'cut' | 'maintenance';
+  goal?: 'bulk' | 'cut' | 'maintenance' | 'recomp';
 }

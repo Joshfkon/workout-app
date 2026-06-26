@@ -22,6 +22,8 @@ interface SetInputRowProps {
   }) => void;
   disabled?: boolean;
   unit?: WeightUnit;
+  /** If true, this is a duration-based exercise (plank, hold) - show seconds instead of reps */
+  isDurationBased?: boolean;
 }
 
 type InputPhase = 'weight_reps' | 'feedback';
@@ -37,6 +39,7 @@ export const SetInputRow = memo(function SetInputRow({
   onSubmit,
   disabled = false,
   unit = 'kg',
+  isDurationBased = false,
 }: SetInputRowProps) {
   // Convert from kg to display unit.
   // Seeding an EXISTING logged value (previousSet.weightKg) must preserve the user's
@@ -55,11 +58,14 @@ export const SetInputRow = memo(function SetInputRow({
   // For smart defaults - use previous set's feedback if available
   const defaultFeedback: SetFeedback | undefined = previousSet?.feedback;
 
+  // Duration-based exercises allow up to 600 seconds (10 minutes)
+  const maxValue = isDurationBased ? 600 : 100;
+
   const handleProceedToFeedback = () => {
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
 
-    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1) {
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1 || repsNum > maxValue) {
       return;
     }
 
@@ -70,7 +76,7 @@ export const SetInputRow = memo(function SetInputRow({
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
 
-    if (isNaN(weightNum) || isNaN(repsNum)) {
+    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1 || repsNum > maxValue) {
       return;
     }
 
@@ -100,6 +106,13 @@ export const SetInputRow = memo(function SetInputRow({
 
   const weightKg = inputWeightToKg(parseFloat(weight) || 0, unit);
   const repsNum = parseInt(reps) || 0;
+  const valueExceedsMax = repsNum > maxValue;
+
+  // Labels for duration vs rep-based exercises
+  const valueLabel = isDurationBased ? 'Seconds' : 'Reps';
+  const targetLabel = isDurationBased
+    ? `${targetRepRange[0]}-${targetRepRange[1]} sec @ RIR ${targetRir}`
+    : `${targetRepRange[0]}-${targetRepRange[1]} reps @ RIR ${targetRir}`;
 
   // Show feedback card phase
   if (phase === 'feedback') {
@@ -134,7 +147,7 @@ export const SetInputRow = memo(function SetInputRow({
           Set {setNumber}
         </span>
         <span className="flex items-center gap-1 text-xs text-surface-500" aria-label="Target">
-          Target: {targetRepRange[0]}-{targetRepRange[1]} reps @ RIR {targetRir}
+          Target: {targetLabel}
           <InfoTooltip term="RIR" size="sm" />
         </span>
       </div>
@@ -160,7 +173,7 @@ export const SetInputRow = memo(function SetInputRow({
         </div>
         <div className="flex-1">
           <label htmlFor={repsInputId} className="block text-xs text-surface-500 mb-1">
-            Reps
+            {valueLabel}
           </label>
           <input
             id={repsInputId}
@@ -171,14 +184,14 @@ export const SetInputRow = memo(function SetInputRow({
             onChange={(e) => setReps(e.target.value)}
             disabled={disabled}
             min="0"
-            max="100"
+            max={maxValue}
             aria-describedby={`set-${setNumber}-label`}
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 text-center font-mono focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:opacity-50"
           />
         </div>
         <Button
           onClick={handleProceedToFeedback}
-          disabled={disabled || !weight || !reps || parseInt(reps) < 1}
+          disabled={disabled || !weight || !reps || parseInt(reps) < 1 || parseInt(reps) > maxValue}
           size="md"
           className="shrink-0"
           aria-label={`Log set ${setNumber}`}
@@ -188,6 +201,13 @@ export const SetInputRow = memo(function SetInputRow({
           </svg>
         </Button>
       </div>
+
+      {/* Validation warning */}
+      {valueExceedsMax && (
+        <p className="text-xs text-red-400">
+          Maximum {maxValue} {isDurationBased ? 'seconds' : 'reps'} allowed
+        </p>
+      )}
 
       {/* Note toggle and input */}
       {!showNote ? (
@@ -225,7 +245,8 @@ export const SetInputRow = memo(function SetInputRow({
     prevProps.isLastSet === nextProps.isLastSet &&
     prevProps.disabled === nextProps.disabled &&
     prevProps.unit === nextProps.unit &&
-    prevProps.previousSet?.id === nextProps.previousSet?.id
+    prevProps.previousSet?.id === nextProps.previousSet?.id &&
+    prevProps.isDurationBased === nextProps.isDurationBased
   );
 });
 

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import {
   parseStrongCSV,
   parseLoseItCSV,
@@ -12,7 +13,6 @@ import {
   type ParsedLoseItEntry,
   type ImportResult,
 } from '@/services/importExport';
-import { getLocalDateString } from '@/lib/utils';
 
 type ImportSource = 'strong' | 'loseit' | null;
 

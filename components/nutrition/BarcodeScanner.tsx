@@ -88,8 +88,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           barcode: barcode,
         };
       }
-    } catch {
-      // No custom food found
+    } catch (error) {
+      // Log unexpected errors - "not found" is handled by returning null from query
+      console.debug('[BarcodeScanner] Custom food lookup error:', error);
     }
     return null;
   };
@@ -183,7 +184,6 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       const result = await lookupBarcode(barcode);
       
       if (!isMountedRef.current) {
-        console.log('[Scanner] Unmounted during lookup');
         isProcessingRef.current = false;
         return;
       }
@@ -333,8 +333,9 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       scannerRef.current = null;
       try {
         await scanner.stop();
-      } catch {
-        // Ignore
+      } catch (error) {
+        // Scanner stop can fail if already stopped or during cleanup - log for debugging
+        console.debug('[BarcodeScanner] Scanner stop error (usually safe to ignore):', error);
       }
     }
     if (isMountedRef.current) {
@@ -586,15 +587,17 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </div>
       </div>
 
-      {/* Debug info (always visible) */}
-      <div className="px-4 pb-4">
-        <div className="p-2 bg-black/50 rounded-lg border border-surface-700">
-          <p className="text-[10px] text-yellow-400 font-mono mb-1">🔍 DEBUG:</p>
-          <pre className="text-[10px] text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
-            {debugInfo}
-          </pre>
+      {/* Debug info (development only) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="px-4 pb-4">
+          <div className="p-2 bg-black/50 rounded-lg border border-surface-700">
+            <p className="text-[10px] text-yellow-400 font-mono mb-1">DEBUG:</p>
+            <pre className="text-[10px] text-green-400 font-mono overflow-x-auto whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+              {debugInfo}
+            </pre>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

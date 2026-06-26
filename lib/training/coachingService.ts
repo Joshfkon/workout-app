@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   Sex,
   BodyComposition,
@@ -17,7 +18,6 @@ import type {
 } from '@/types/training';
 import { BENCHMARK_LIFTS } from './constants';
 import { calculateBodyComposition, estimate1RM } from './programEngine';
-import { getLocalDateString } from '@/lib/utils';
 
 // ============================================================
 // COACHING SERVICE CLASS

@@ -121,7 +121,6 @@ export async function completeExerciseWithAI(
     // Check for API key
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      console.log('[Exercise AI] No API key, returning defaults');
       return {
         success: true,
         data: getDefaultsByEquipment(input),
@@ -233,7 +232,8 @@ export async function checkAIUsageAllowed(): Promise<{
         thisMonth: Math.max(0, MONTHLY_LIMIT - usage.thisMonth),
       },
     };
-  } catch {
+  } catch (error) {
+    console.error('[checkAIUsageAllowed] Failed to check AI usage:', error);
     return { allowed: false, remaining: { today: 0, thisMonth: 0 } };
   }
 }
@@ -291,7 +291,8 @@ export async function getIncompleteExercises(): Promise<
         };
       })
       .filter((e: any): e is { id: string; name: string; missingFields: string[] } => e !== null);
-  } catch {
+  } catch (error) {
+    console.error('[getIncompleteExercises] Failed to fetch incomplete exercises:', error);
     return [];
   }
 }

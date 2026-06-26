@@ -48,6 +48,10 @@ function AvatarUploadComponent({
       reader.onload = (event) => {
         setPreviewUrl(event.target?.result as string);
       };
+      reader.onerror = (event) => {
+        console.error('[AvatarUpload] FileReader error:', event.target?.error);
+        onUploadError?.('Failed to read image file');
+      };
       reader.readAsDataURL(file);
 
       // Upload to Supabase Storage

@@ -4,15 +4,15 @@
  * Muscle Group Multi-Selector
  *
  * Allows selecting multiple muscle groups with visual feedback.
+ * Supports both legacy MuscleGroup and DetailedMuscleGroup values.
  */
 
-import type { MuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUP_OPTIONS } from '@/lib/exercises/types';
 
 interface MuscleSelectorProps {
-  selected: MuscleGroup[];
-  onChange: (muscles: MuscleGroup[]) => void;
-  exclude?: MuscleGroup[];
+  selected: string[];
+  onChange: (muscles: string[]) => void;
+  exclude?: string[];
 }
 
 export function MuscleSelector({
@@ -24,7 +24,7 @@ export function MuscleSelector({
     (opt) => !exclude.includes(opt.value)
   );
 
-  const toggleMuscle = (muscle: MuscleGroup) => {
+  const toggleMuscle = (muscle: string) => {
     if (selected.includes(muscle)) {
       onChange(selected.filter((m) => m !== muscle));
     } else {

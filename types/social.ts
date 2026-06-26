@@ -250,7 +250,7 @@ export interface ActivityComment {
 // Workout Sharing
 // ============================================================================
 
-export type ShareType = 'single_workout' | 'program' | 'template' | 'crash_the_economy';
+export type ShareType = 'single_workout' | 'program' | 'template';
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced';
 
 export interface SharedWorkout {
@@ -308,10 +308,12 @@ export interface SavedWorkout {
 export type LeaderboardType =
   | 'total_volume_week'
   | 'total_volume_month'
+  | 'total_volume_alltime'
   | 'workout_streak'
   | 'exercise_1rm'
   | 'workouts_completed_week'
-  | 'workouts_completed_month';
+  | 'workouts_completed_month'
+  | 'workouts_completed_alltime';
 
 export interface LeaderboardEntry {
   id: string;

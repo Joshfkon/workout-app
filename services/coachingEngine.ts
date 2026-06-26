@@ -4,31 +4,14 @@
 // key benchmark lifts and comparing to population standards
 // ============================================================
 
-import type { Experience } from '@/types/schema';
+import type { Experience, Equipment } from '@/types/schema';
+import type { MovementPattern } from '@/types/training';
 
 // ============================================================
 // TYPES
 // ============================================================
 
-export type MovementPattern = 
-  | 'horizontal_push' 
-  | 'horizontal_pull' 
-  | 'vertical_push' 
-  | 'vertical_pull' 
-  | 'squat' 
-  | 'hip_hinge' 
-  | 'lunge'
-  | 'carry';
-
-export type Equipment = 
-  | 'barbell' 
-  | 'dumbbell' 
-  | 'machine' 
-  | 'cable' 
-  | 'bodyweight' 
-  | 'kettlebell';
-
-export type StrengthLevel = 
+export type StrengthLevel =
   | 'untrained' 
   | 'beginner' 
   | 'novice' 

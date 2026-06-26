@@ -13,6 +13,7 @@ import type {
   WearablePermission,
 } from '@/types/wearable';
 import { openExternalUrl } from './capacitor-stub';
+import { getLocalDateString } from '@/lib/utils';
 
 // === TYPES ===
 
@@ -458,7 +459,7 @@ class FitbitService {
 // === HELPER FUNCTIONS ===
 
 function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0];
+  return getLocalDateString(date);
 }
 
 // Export singleton instance

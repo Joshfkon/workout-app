@@ -69,8 +69,8 @@ describe('useWorkoutStore', () => {
       });
 
       const state = useWorkoutStore.getState();
-      expect(state.exercises.size).toBe(1);
-      expect(state.exercises.get('exercise-1')).toEqual(exercises[0]);
+      expect(Object.keys(state.exercises).length).toBe(1);
+      expect(state.exercises['exercise-1']).toEqual(exercises[0]);
     });
 
     it('clears previous set logs', () => {

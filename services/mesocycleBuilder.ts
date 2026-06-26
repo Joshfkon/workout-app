@@ -20,6 +20,7 @@ import type {
   ExerciseDifficulty,
   FatigueRating,
   MuscleGroup,
+  StandardMuscleGroup,
   MovementPattern,
   Rating,
   ExtendedUserProfile,
@@ -43,7 +44,7 @@ const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
 /** Look up the experience-specific MRV for a muscle, with a sane fallback */
 function getMuscleMRV(experience: Experience, muscle: string): number {
   return (
-    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle]?.mrv ??
+    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup]?.mrv ??
     FALLBACK_VOLUME_LANDMARK.mrv
   );
 }
@@ -229,14 +230,27 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
   
   // Training age adjustments
   if (profile.trainingAge < 1) {
-    volumeMultiplier *= 0.8;  // New lifters need less volume
-    baseDeloadWeeks = 8;      // But can go longer without deloads
+    volumeMultiplier *= 0.85;  // New lifters need slightly less volume to avoid overtraining
+    baseDeloadWeeks = 4;       // Novices need frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);  // Experienced lifters need more frequent deloads
   }
-  
-  // Compound adjustments - don't let it get too extreme
-  volumeMultiplier = Math.max(0.5, Math.min(1.3, volumeMultiplier));
+
+  // Compound adjustments - floor at 0.65 to prevent detraining
+  // Research shows that volume below ~65% of normal MEV may cause muscle loss.
+  // Even with poor recovery factors, we should maintain enough stimulus.
+  const volumeFloor = 0.65;
+  const volumeCeiling = 1.3;
+
+  if (volumeMultiplier < volumeFloor) {
+    warnings.push(
+      `Recovery factors are significantly limiting volume (${Math.round(volumeMultiplier * 100)}% recommended). ` +
+      `Using minimum ${Math.round(volumeFloor * 100)}% to prevent detraining. ` +
+      `Address sleep, stress, or other factors to improve recovery.`
+    );
+  }
+
+  volumeMultiplier = Math.max(volumeFloor, Math.min(volumeCeiling, volumeMultiplier));
   frequencyMultiplier = Math.max(0.7, Math.min(1.2, frequencyMultiplier));
   
   return {
@@ -245,6 +259,203 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
     deloadFrequencyWeeks: Math.round(baseDeloadWeeks),
     warnings
   };
+}
+
+// ============================================================
+// MESOCYCLE LENGTH GUIDANCE
+// ============================================================
+
+/**
+ * Guidance for mesocycle length selection
+ */
+export interface MesocycleLengthGuidance {
+  /** Whether the current selection is appropriate */
+  isOptimal: boolean;
+
+  /** The selected mesocycle length */
+  selectedWeeks: number;
+
+  /** Recommended mesocycle length range */
+  recommendedRange: { min: number; max: number };
+
+  /** Brief explanation of the guidance */
+  message: string;
+
+  /** More detailed reasoning */
+  reasoning: string;
+
+  /** Primary factor driving the recommendation */
+  primaryFactor: 'goal' | 'experience' | 'recovery' | 'variety';
+}
+
+/**
+ * Evaluate mesocycle length selection and provide guidance
+ *
+ * Decision factors:
+ * 1. Training goal - Hypertrophy benefits from longer cycles (5-8 weeks),
+ *    cutting/maintenance can use shorter cycles (3-5 weeks)
+ * 2. Training level - Beginners need more frequent deloads (3-4 weeks),
+ *    intermediates (5-6 weeks), advanced can push (6-8 weeks)
+ * 3. Recovery context - Poor sleep, high stress, age, caloric deficit
+ *    all bias toward shorter cycles
+ */
+export function evaluateMesocycleLength(
+  selectedWeeks: number,
+  goal: Goal,
+  experience: Experience,
+  recoveryFactors?: RecoveryFactors
+): MesocycleLengthGuidance {
+
+  // Calculate recommended range based on factors
+  let minRecommended = 4;
+  let maxRecommended = 8;
+  let primaryFactor: MesocycleLengthGuidance['primaryFactor'] = 'goal';
+
+  // Goal-based adjustments
+  switch (goal) {
+    case 'bulk':
+      // Hypertrophy: longer cycles allow more progressive overload on same movements
+      minRecommended = 5;
+      maxRecommended = 8;
+      break;
+    case 'cut':
+      // Cutting: recovery compromised, fatigue accumulates faster
+      minRecommended = 4;
+      maxRecommended = 5;
+      break;
+    case 'maintenance':
+      // Maintenance: shorter cycles acceptable
+      minRecommended = 4;
+      maxRecommended = 6;
+      break;
+  }
+
+  // Experience-based adjustments
+  switch (experience) {
+    case 'novice':
+      // Beginners: lower fatigue tolerance, need more frequent resets
+      maxRecommended = Math.min(maxRecommended, 5);
+      if (minRecommended > 4) minRecommended = 4;
+      primaryFactor = 'experience';
+      break;
+    case 'intermediate':
+      // Sweet spot: 5-6 weeks typical
+      minRecommended = Math.max(minRecommended, 5);
+      maxRecommended = Math.min(maxRecommended, 7);
+      break;
+    case 'advanced':
+      // Can push longer before requiring deload
+      minRecommended = Math.max(minRecommended, 5);
+      maxRecommended = Math.max(maxRecommended, 7);
+      break;
+  }
+
+  // Recovery-based adjustments (if available)
+  if (recoveryFactors) {
+    const deloadWeeks = recoveryFactors.deloadFrequencyWeeks;
+
+    // Recommended mesocycle = training weeks + 1 deload week
+    const recoveryBasedMax = deloadWeeks + 1;
+
+    // If recovery factors suggest shorter cycles, adjust
+    if (recoveryBasedMax < maxRecommended) {
+      maxRecommended = recoveryBasedMax;
+      // Also adjust min if it's now above max
+      if (minRecommended > maxRecommended) {
+        minRecommended = Math.max(4, maxRecommended - 1);
+      }
+
+      // If recovery is particularly limiting, note it
+      if (recoveryFactors.warnings.length > 0) {
+        primaryFactor = 'recovery';
+      }
+    }
+  }
+
+  // Ensure valid range
+  minRecommended = Math.max(4, minRecommended);
+  maxRecommended = Math.min(8, maxRecommended);
+  if (minRecommended > maxRecommended) {
+    minRecommended = maxRecommended;
+  }
+
+  // Determine if selection is optimal
+  const isOptimal = selectedWeeks >= minRecommended && selectedWeeks <= maxRecommended;
+
+  // Generate guidance message
+  let message = '';
+  let reasoning = '';
+
+  if (isOptimal) {
+    message = `${selectedWeeks} weeks is a good choice for your situation.`;
+    reasoning = getOptimalReasoning(selectedWeeks, goal, experience);
+  } else if (selectedWeeks < minRecommended) {
+    // Too short
+    message = `Consider extending to ${minRecommended}-${maxRecommended} weeks.`;
+    reasoning = getTooShortReasoning(selectedWeeks, minRecommended, goal, experience, primaryFactor);
+  } else {
+    // Too long
+    message = `Consider shortening to ${minRecommended}-${maxRecommended} weeks.`;
+    reasoning = getTooLongReasoning(selectedWeeks, maxRecommended, goal, experience, primaryFactor);
+  }
+
+  return {
+    isOptimal,
+    selectedWeeks,
+    recommendedRange: { min: minRecommended, max: maxRecommended },
+    message,
+    reasoning,
+    primaryFactor
+  };
+}
+
+function getOptimalReasoning(weeks: number, goal: Goal, experience: Experience): string {
+  if (goal === 'bulk') {
+    return `${weeks} weeks gives you enough time for progressive overload on the same movements, which is key for hypertrophy.`;
+  } else if (goal === 'cut') {
+    return `${weeks} weeks is sensible during a cut when recovery is compromised.`;
+  }
+  return `${weeks} weeks balances progressive overload with adequate recovery.`;
+}
+
+function getTooShortReasoning(
+  selected: number,
+  min: number,
+  goal: Goal,
+  experience: Experience,
+  factor: MesocycleLengthGuidance['primaryFactor']
+): string {
+  if (goal === 'bulk' && factor === 'goal') {
+    return `Longer mesocycles (${min}+ weeks) work better for hypertrophy — you get more weeks of progressive overload on the same movements before resetting, which drives more growth. Shorter cycles are better suited for cuts or if recovery is limited.`;
+  }
+
+  if (experience === 'intermediate' || experience === 'advanced') {
+    return `At your training level, you can typically handle ${min}+ weeks of progressive overload before needing a deload. Shorter cycles may mean you're resetting before maximizing adaptation.`;
+  }
+
+  return `${min}+ weeks allows more time for progressive overload on the same movements. Frequent rotation actually reduces hypertrophy stimulus because exercises don't get enough repeated exposure to drive adaptation.`;
+}
+
+function getTooLongReasoning(
+  selected: number,
+  max: number,
+  goal: Goal,
+  experience: Experience,
+  factor: MesocycleLengthGuidance['primaryFactor']
+): string {
+  if (factor === 'recovery') {
+    return `Your recovery profile suggests ${max} weeks is the upper limit before fatigue accumulates excessively. Listen to your body and prioritize recovery.`;
+  }
+
+  if (goal === 'cut') {
+    return `During a cut, recovery is compromised and fatigue accumulates faster. ${max} weeks is typically the upper limit to avoid excessive fatigue and muscle loss.`;
+  }
+
+  if (experience === 'novice') {
+    return `As a newer lifter, your fatigue tolerance is still developing. ${max} weeks is typically sufficient before your body needs a reset. Pushing longer may lead to excessive fatigue.`;
+  }
+
+  return `${selected} weeks is on the longer side. While advanced lifters can sometimes push 7-8 weeks, monitoring fatigue and being ready to deload early if needed is important.`;
 }
 
 // ============================================================
@@ -1015,11 +1226,35 @@ export function buildDetailedSession(
     }
   }
   
-  // Calculate time
+  // Calculate time with improved estimation
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
-  const totalRestMinutes = exercises.reduce((sum, e) => 
+
+  // Calculate rest time (already done well)
+  const totalRestMinutes = exercises.reduce((sum, e) =>
     sum + (e.sets * e.restSeconds / 60), 0);
-  const estimatedMinutes = Math.round(totalRestMinutes + (totalSets * 0.75) + 10); // Sets + warmup
+
+  // Calculate set execution time based on exercise type
+  // Compound exercises take longer per set than isolation
+  const setExecutionMinutes = exercises.reduce((sum, e) => {
+    const isIsolation = e.exercise.pattern === 'isolation';
+    const timePerSet = isIsolation ? 0.5 : 1.0; // 30 sec vs 1 min per set
+    return sum + (e.sets * timePerSet);
+  }, 0);
+
+  // Equipment transition time (2-3 min per exercise change)
+  const transitionTime = Math.max(0, (exercises.length - 1)) * 2;
+
+  // Warmup time based on exercise types
+  // More warmup needed for heavy compounds
+  const hasHeavyCompounds = exercises.some(e =>
+    e.exercise.pattern === 'squat' ||
+    e.exercise.pattern === 'hip_hinge'
+  );
+  const warmupMinutes = hasHeavyCompounds ? 15 : 10;
+
+  const estimatedMinutes = Math.round(
+    totalRestMinutes + setExecutionMinutes + transitionTime + warmupMinutes
+  );
   
   return {
     day: sessionTemplate.day,

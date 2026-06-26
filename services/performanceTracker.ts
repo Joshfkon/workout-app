@@ -1,8 +1,13 @@
 /**
- * Performance Tracker - Auto-Progression Logic
+ * Performance Tracker - Performance Signal Detection
  *
- * Tracks exercise performance over time and generates progression flags
- * when users are ready to increase weight or when stagnation is detected.
+ * Tracks exercise performance over time and generates informational signals
+ * when patterns are detected (overperformance, underperformance, stagnation).
+ *
+ * IMPORTANT: This module is ANALYSIS-ONLY. It does NOT produce authoritative
+ * weight recommendations. Weight/rep/set targets come exclusively from
+ * progressionEngine.ts via calculateNextTargets(). Signals from this module
+ * are advisory and displayed to users as informational banners.
  *
  * Pure functions - no database calls.
  */
@@ -29,20 +34,50 @@ export interface PerformanceSetLog {
 }
 
 /**
- * A flag indicating a recommended progression action
+ * Signal types emitted by the performance tracker.
+ * These are informational observations, NOT weight change directives.
+ */
+export type SignalType =
+  | 'stagnation_detected'
+  | 'consistent_overperformance'
+  | 'consistent_underperformance'
+  | 'recovery_concern';
+
+/**
+ * An informational signal indicating a detected performance pattern.
+ * Unlike the deprecated ProgressionFlag, signals do NOT include
+ * suggestedAdjustmentKg or authoritative weight change actions.
+ */
+export interface PerformanceSignal {
+  exerciseId: string;
+  exerciseName: string;
+  signal: SignalType;
+  reason: string;
+  /** How many weeks of data contributed to this signal */
+  dataWeeks: number;
+  createdAt: Date;
+  priority: 'high' | 'medium' | 'low';
+  /** Additional numeric data for downstream consumers */
+  metadata?: Record<string, number>;
+}
+
+/**
+ * A flag indicating a recommended progression action.
+ *
+ * @deprecated Use PerformanceSignal instead. ProgressionFlag included
+ * authoritative weight recommendations (suggestedAdjustmentKg) which
+ * could conflict with progressionEngine targets. PerformanceSignal is
+ * analysis-only and does not prescribe weight changes.
  */
 export interface ProgressionFlag {
   exerciseId: string;
   exerciseName: string;
   action: 'increase_weight' | 'decrease_weight' | 'hold' | 'investigate';
   reason: string;
-  /** Positive for increase, negative for decrease */
+  /** @deprecated Signals no longer include weight adjustments */
   suggestedAdjustmentKg: number;
-  /** How many weeks without progress (for stagnation) */
   weeksStagnant?: number;
-  /** When this flag was created */
   createdAt: Date;
-  /** Priority level */
   priority: 'high' | 'medium' | 'low';
 }
 
@@ -55,21 +90,55 @@ interface SessionGroup {
 }
 
 // ============================================
+// SIGNAL → FLAG CONVERSION (backward compat)
+// ============================================
+
+/**
+ * Map signal types to legacy flag actions for backward compatibility
+ */
+const SIGNAL_TO_ACTION: Record<SignalType, ProgressionFlag['action']> = {
+  consistent_overperformance: 'increase_weight',
+  consistent_underperformance: 'decrease_weight',
+  stagnation_detected: 'investigate',
+  recovery_concern: 'investigate',
+};
+
+/**
+ * Convert a PerformanceSignal to a deprecated ProgressionFlag
+ * for backward compatibility with consumers that haven't migrated yet.
+ */
+function signalToFlag(signal: PerformanceSignal): ProgressionFlag {
+  return {
+    exerciseId: signal.exerciseId,
+    exerciseName: signal.exerciseName,
+    action: SIGNAL_TO_ACTION[signal.signal],
+    reason: signal.reason,
+    suggestedAdjustmentKg: 0,  // Signals don't include weight adjustments
+    weeksStagnant: signal.metadata?.weeksStagnant,
+    createdAt: signal.createdAt,
+    priority: signal.priority,
+  };
+}
+
+// ============================================
 // PERFORMANCE TRACKER CLASS
 // ============================================
 
 /**
- * Tracks exercise performance and generates progression recommendations
+ * Tracks exercise performance and detects patterns worth surfacing to users.
  *
  * Usage:
  * 1. Create instance with historical data
  * 2. Call addSetResult() after each set
- * 3. getProgressionFlag() returns recommendations
- * 4. clearProgressionFlag() after user acknowledges
+ * 3. getPerformanceSignal() returns detected patterns
+ * 4. clearSignal() after user acknowledges
+ *
+ * NOTE: This class is for pattern detection only. For actual progression
+ * targets (weight, reps, sets), use progressionEngine.calculateNextTargets().
  */
 export class PerformanceTracker {
   private setHistory: PerformanceSetLog[] = [];
-  private progressionFlags: Map<string, ProgressionFlag> = new Map();
+  private performanceSignals: Map<string, PerformanceSignal> = new Map();
   private readonly maxHistorySize = 200;
 
   constructor(initialHistory: PerformanceSetLog[] = []) {
@@ -77,7 +146,7 @@ export class PerformanceTracker {
   }
 
   /**
-   * Add a set result and evaluate for progression
+   * Add a set result and evaluate for performance patterns
    */
   addSetResult(result: PerformanceSetLog): void {
     this.setHistory.push(result);
@@ -87,13 +156,13 @@ export class PerformanceTracker {
       this.setHistory = this.setHistory.slice(-this.maxHistorySize);
     }
 
-    // Evaluate progression opportunities
+    // Detect performance patterns
     this.evaluateProgression(result.exerciseName);
     this.checkForStagnation(result.exerciseName);
   }
 
   /**
-   * Evaluate if user is ready for weight increase or decrease
+   * Detect consistent over/under-performance patterns
    */
   private evaluateProgression(exerciseName: string): void {
     const key = exerciseName.toLowerCase();
@@ -109,6 +178,13 @@ export class PerformanceTracker {
 
     const recentSessions = sessions.slice(-sessionsRequired);
 
+    // Calculate data span in weeks
+    const firstDate = recentSessions[0].date;
+    const lastDate = recentSessions[recentSessions.length - 1].date;
+    const dataWeeks = Math.max(1, Math.ceil(
+      (lastDate.getTime() - firstDate.getTime()) / (7 * 24 * 60 * 60 * 1000)
+    ));
+
     // Over-performance: hitting top of range at low RIR consistently
     const isOverperforming = recentSessions.every(session =>
       session.sets.some(set =>
@@ -120,13 +196,12 @@ export class PerformanceTracker {
     );
 
     if (isOverperforming) {
-      const lastWeight = sets[sets.length - 1].weight;
-      this.progressionFlags.set(key, {
+      this.performanceSignals.set(key, {
         exerciseId: sets[0].exerciseId,
         exerciseName,
-        action: 'increase_weight',
+        signal: 'consistent_overperformance',
         reason: `Hit top of rep range ${sessionsRequired} sessions in a row with 3+ RIR`,
-        suggestedAdjustmentKg: this.getIncrement(exerciseName, lastWeight),
+        dataWeeks,
         createdAt: new Date(),
         priority: 'medium',
       });
@@ -147,13 +222,12 @@ export class PerformanceTracker {
     );
 
     if (isUnderperforming) {
-      const lastWeight = sets[sets.length - 1].weight;
-      this.progressionFlags.set(key, {
+      this.performanceSignals.set(key, {
         exerciseId: sets[0].exerciseId,
         exerciseName,
-        action: 'decrease_weight',
+        signal: 'consistent_underperformance',
         reason: 'Consistently missing rep targets or hitting failure',
-        suggestedAdjustmentKg: -this.getIncrement(exerciseName, lastWeight),
+        dataWeeks,
         createdAt: new Date(),
         priority: 'high',
       });
@@ -189,47 +263,88 @@ export class PerformanceTracker {
         (Date.now() - recentSets[0].timestamp.getTime()) / (7 * 24 * 60 * 60 * 1000)
       );
 
-      // Don't override existing weight adjustment flags
-      const existingFlag = this.progressionFlags.get(key);
-      if (existingFlag && existingFlag.action !== 'investigate') return;
+      // Don't override existing overperformance/underperformance signals
+      const existingSignal = this.performanceSignals.get(key);
+      if (existingSignal && existingSignal.signal !== 'stagnation_detected') return;
 
-      this.progressionFlags.set(key, {
+      this.performanceSignals.set(key, {
         exerciseId: sets[0].exerciseId,
         exerciseName,
-        action: 'investigate',
+        signal: 'stagnation_detected',
         reason: `No progression in ${weeksStagnant} weeks despite reporting ${avgRIR.toFixed(1)} avg RIR. Either push harder or there's a recovery issue.`,
-        suggestedAdjustmentKg: 0,
-        weeksStagnant,
+        dataWeeks: Math.min(weeksStagnant, 8),
         createdAt: new Date(),
         priority: weeksStagnant >= 6 ? 'high' : 'medium',
+        metadata: {
+          weeksStagnant,
+          avgRIR: Math.round(avgRIR * 10) / 10,
+          weightVariance: Math.round(variance * 1000) / 1000,
+        },
       });
     }
   }
 
+  // ==========================================
+  // SIGNAL-BASED API (preferred)
+  // ==========================================
+
   /**
-   * Get the current progression flag for an exercise
+   * Get the current performance signal for an exercise
    */
-  getProgressionFlag(exerciseName: string): ProgressionFlag | null {
-    return this.progressionFlags.get(exerciseName.toLowerCase()) || null;
+  getPerformanceSignal(exerciseName: string): PerformanceSignal | null {
+    return this.performanceSignals.get(exerciseName.toLowerCase()) || null;
   }
 
   /**
-   * Clear a progression flag after user acknowledges it
+   * Clear a signal after user acknowledges it
    */
-  clearProgressionFlag(exerciseName: string): void {
-    this.progressionFlags.delete(exerciseName.toLowerCase());
+  clearSignal(exerciseName: string): void {
+    this.performanceSignals.delete(exerciseName.toLowerCase());
   }
 
   /**
-   * Get all active progression flags
+   * Get all active performance signals, sorted by priority
    */
-  getAllFlags(): ProgressionFlag[] {
-    return Array.from(this.progressionFlags.values())
+  getAllSignals(): PerformanceSignal[] {
+    return Array.from(this.performanceSignals.values())
       .sort((a, b) => {
         const priorityOrder = { high: 0, medium: 1, low: 2 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];
       });
   }
+
+  // ==========================================
+  // DEPRECATED FLAG-BASED API (backward compat)
+  // ==========================================
+
+  /**
+   * Get the current progression flag for an exercise.
+   * @deprecated Use getPerformanceSignal() instead.
+   */
+  getProgressionFlag(exerciseName: string): ProgressionFlag | null {
+    const signal = this.getPerformanceSignal(exerciseName);
+    return signal ? signalToFlag(signal) : null;
+  }
+
+  /**
+   * Clear a progression flag after user acknowledges it.
+   * @deprecated Use clearSignal() instead.
+   */
+  clearProgressionFlag(exerciseName: string): void {
+    this.clearSignal(exerciseName);
+  }
+
+  /**
+   * Get all active progression flags.
+   * @deprecated Use getAllSignals() instead.
+   */
+  getAllFlags(): ProgressionFlag[] {
+    return this.getAllSignals().map(signalToFlag);
+  }
+
+  // ==========================================
+  // UTILITY METHODS
+  // ==========================================
 
   /**
    * Group sets by workout session (same day)
@@ -263,20 +378,6 @@ export class PerformanceTracker {
     }
 
     return sessions;
-  }
-
-  /**
-   * Get appropriate weight increment for an exercise
-   */
-  private getIncrement(exerciseName: string, currentWeight: number): number {
-    const smallMuscleKeywords = ['lateral', 'curl', 'tricep', 'calf', 'raise', 'fly', 'extension', 'isolation'];
-    const isSmallMuscle = smallMuscleKeywords.some(k =>
-      exerciseName.toLowerCase().includes(k)
-    );
-
-    if (isSmallMuscle || currentWeight < 15) return 1;
-    if (exerciseName.toLowerCase().includes('dumbbell') || exerciseName.toLowerCase().includes('db ')) return 2;
-    return 2.5;
   }
 
   /**
@@ -329,21 +430,62 @@ export class PerformanceTracker {
    */
   exportData(): {
     history: PerformanceSetLog[];
+    signals: PerformanceSignal[];
+    /** @deprecated Use signals instead */
     flags: ProgressionFlag[];
   } {
+    const signals = Array.from(this.performanceSignals.values());
     return {
       history: this.setHistory,
-      flags: Array.from(this.progressionFlags.values()),
+      signals,
+      flags: signals.map(signalToFlag),
     };
   }
 }
 
 // ============================================
-// HELPER FUNCTIONS
+// SIGNAL DISPLAY HELPERS (preferred)
 // ============================================
 
 /**
- * Get action display text
+ * Get display text for a performance signal type
+ */
+export function getSignalDisplayText(signal: SignalType): string {
+  switch (signal) {
+    case 'consistent_overperformance':
+      return 'Consistently Exceeding Targets';
+    case 'consistent_underperformance':
+      return 'Struggling With Current Targets';
+    case 'stagnation_detected':
+      return 'Stagnation Detected';
+    case 'recovery_concern':
+      return 'Recovery Concern';
+  }
+}
+
+/**
+ * Get display color for a performance signal type
+ */
+export function getSignalColor(signal: SignalType): 'green' | 'yellow' | 'red' | 'blue' {
+  switch (signal) {
+    case 'consistent_overperformance':
+      return 'green';
+    case 'consistent_underperformance':
+      return 'red';
+    case 'stagnation_detected':
+      return 'yellow';
+    case 'recovery_concern':
+      return 'yellow';
+  }
+}
+
+// ============================================
+// DEPRECATED DISPLAY HELPERS (backward compat)
+// ============================================
+
+/**
+ * Get action display text.
+ * @deprecated Use getSignalDisplayText() instead.
  */
 export function getActionDisplayText(action: ProgressionFlag['action']): string {
   switch (action) {
@@ -359,7 +501,8 @@ export function getActionDisplayText(action: ProgressionFlag['action']): string 
 }
 
 /**
- * Get action color
+ * Get action color.
+ * @deprecated Use getSignalColor() instead.
  */
 export function getActionColor(action: ProgressionFlag['action']): 'green' | 'yellow' | 'red' | 'blue' {
   switch (action) {
@@ -375,13 +518,18 @@ export function getActionColor(action: ProgressionFlag['action']): 'green' | 'ye
 }
 
 /**
- * Format weight adjustment for display
+ * Format weight adjustment for display.
+ * @deprecated Signals no longer include weight adjustment recommendations.
  */
 export function formatAdjustment(adjustmentKg: number): string {
   if (adjustmentKg === 0) return 'No change';
   const sign = adjustmentKg > 0 ? '+' : '';
   return `${sign}${adjustmentKg.toFixed(1)}kg`;
 }
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
 /**
  * Create a performance set log from workout data

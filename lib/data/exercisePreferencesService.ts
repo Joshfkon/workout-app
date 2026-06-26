@@ -3,9 +3,11 @@
  *
  * Manages user exercise preferences (active, do_not_suggest, archived).
  * Works alongside exerciseService to filter exercises based on user preferences.
+ *
+ * Pure functions only — no database calls.
+ * Use lib/actions/exercise-preferences.ts for DB operations.
  */
 
-import { createUntypedClient } from '@/lib/supabase/client';
 import type {
   ExerciseVisibilityStatus,
   ExerciseHideReason,
@@ -13,9 +15,16 @@ import type {
   UserExercisePreferenceRow,
   ExercisePreferenceSummary,
   SetExerciseStatusInput,
-  BulkArchiveByEquipmentInput,
 } from '@/types/user-exercise-preferences';
-import { getExercises, type Exercise } from '@/services/exerciseService';
+import type { Exercise } from '@/services/exerciseService';
+import {
+  fetchUserExercisePreferences,
+  deleteExercisePreference,
+  upsertExercisePreference,
+  bulkDeleteExercisePreferences,
+  bulkUpsertExercisePreferences,
+  deleteAllExercisePreferences,
+} from '@/lib/actions/exercise-preferences';
 
 // ============================================
 // CACHE
@@ -56,17 +65,11 @@ export async function getUserExercisePreferences(
   }
 
   try {
-    const supabase = createUntypedClient();
-    const { data, error } = await supabase
-      .from('user_exercise_preferences')
-      .select('*')
-      .eq('user_id', userId);
+    const { data, error } = await fetchUserExercisePreferences(userId);
 
     if (error) {
-      // If table doesn't exist (404/PGRST205), return empty map gracefully
       if (error.code === 'PGRST205' || error.message?.includes('Could not find the table') || error.code === '42P01') {
-        console.warn('Exercise preferences table not found - returning empty preferences. Run migration 20241221000001_user_exercise_preferences.sql to create table.');
-        // Cache empty result to avoid repeated errors
+        console.warn('Exercise preferences table not found - returning empty preferences.');
         preferencesCache.set(userId, new Map());
         cacheTimestamp.set(userId, Date.now());
         return new Map();
@@ -80,7 +83,6 @@ export async function getUserExercisePreferences(
       prefs.set(row.exercise_id, mapRowToPreference(row));
     });
 
-    // Update cache
     preferencesCache.set(userId, prefs);
     cacheTimestamp.set(userId, Date.now());
 
@@ -124,42 +126,20 @@ export async function setExerciseStatus(
   const { exerciseId, status, reason, reasonNote } = input;
 
   try {
-    const supabase = createUntypedClient();
-
-    // If setting to active, we can just delete the preference row
     if (status === 'active') {
-      const { error } = await supabase
-        .from('user_exercise_preferences')
-        .delete()
-        .eq('user_id', userId)
-        .eq('exercise_id', exerciseId);
-
+      const { error } = await deleteExercisePreference(userId, exerciseId);
       if (error) {
         console.error('Failed to delete exercise preference:', error);
         return false;
       }
     } else {
-      // Upsert the preference
-      const { error } = await supabase
-        .from('user_exercise_preferences')
-        .upsert(
-          {
-            user_id: userId,
-            exercise_id: exerciseId,
-            status,
-            reason: reason || null,
-            reason_note: reasonNote || null,
-          },
-          { onConflict: 'user_id,exercise_id' }
-        );
-
+      const { error } = await upsertExercisePreference(userId, exerciseId, status, reason, reasonNote);
       if (error) {
         console.error('Failed to set exercise preference:', error);
         return false;
       }
     }
 
-    // Clear cache
     clearPreferencesCache(userId);
     return true;
   } catch (err) {
@@ -180,33 +160,14 @@ export async function bulkSetExerciseStatus(
   if (exerciseIds.length === 0) return true;
 
   try {
-    const supabase = createUntypedClient();
-
     if (status === 'active') {
-      // Delete all preferences for these exercises
-      const { error } = await supabase
-        .from('user_exercise_preferences')
-        .delete()
-        .eq('user_id', userId)
-        .in('exercise_id', exerciseIds);
-
+      const { error } = await bulkDeleteExercisePreferences(userId, exerciseIds);
       if (error) {
         console.error('Failed to bulk delete exercise preferences:', error);
         return false;
       }
     } else {
-      // Upsert all preferences
-      const rows = exerciseIds.map((exerciseId) => ({
-        user_id: userId,
-        exercise_id: exerciseId,
-        status,
-        reason: reason || null,
-      }));
-
-      const { error } = await supabase
-        .from('user_exercise_preferences')
-        .upsert(rows, { onConflict: 'user_id,exercise_id' });
-
+      const { error } = await bulkUpsertExercisePreferences(userId, exerciseIds, status, reason);
       if (error) {
         console.error('Failed to bulk set exercise preferences:', error);
         return false;
@@ -222,19 +183,16 @@ export async function bulkSetExerciseStatus(
 }
 
 /**
- * Archive all exercises that require equipment the user doesn't have
+ * Archive all exercises that require equipment the user doesn't have.
+ * Requires pre-fetched exercise list.
  */
 export async function bulkArchiveByEquipment(
   userId: string,
-  input: BulkArchiveByEquipmentInput
+  allExercises: Exercise[],
+  availableEquipment: string[],
+  reason: ExerciseHideReason = 'no_equipment'
 ): Promise<{ archivedCount: number; success: boolean }> {
-  const { availableEquipment, reason = 'no_equipment' } = input;
-
   try {
-    // Get all exercises
-    const allExercises = await getExercises(true);
-
-    // Find exercises that require equipment not in the available list
     const toArchive = allExercises.filter(
       (ex) => !availableEquipment.includes(ex.equipment)
     );
@@ -262,13 +220,7 @@ export async function bulkArchiveByEquipment(
  */
 export async function resetAllPreferences(userId: string): Promise<boolean> {
   try {
-    const supabase = createUntypedClient();
-
-    const { error } = await supabase
-      .from('user_exercise_preferences')
-      .delete()
-      .eq('user_id', userId);
-
+    const { error } = await deleteAllExercisePreferences(userId);
     if (error) {
       console.error('Failed to reset exercise preferences:', error);
       return false;
@@ -283,14 +235,13 @@ export async function resetAllPreferences(userId: string): Promise<boolean> {
 }
 
 /**
- * Get summary counts of preferences
+ * Get summary counts of preferences.
+ * Requires pre-fetched exercise list.
  */
-export async function getPreferenceSummary(
-  userId: string
-): Promise<ExercisePreferenceSummary> {
-  const prefs = await getUserExercisePreferences(userId);
-  const allExercises = await getExercises(true);
-
+export function getPreferenceSummary(
+  prefs: Map<string, UserExercisePreference>,
+  totalExerciseCount: number
+): ExercisePreferenceSummary {
   let doNotSuggestCount = 0;
   let archivedCount = 0;
 
@@ -299,8 +250,7 @@ export async function getPreferenceSummary(
     if (pref.status === 'archived') archivedCount++;
   });
 
-  // Active count is total exercises minus the ones with preferences
-  const activeCount = allExercises.length - doNotSuggestCount - archivedCount;
+  const activeCount = totalExerciseCount - doNotSuggestCount - archivedCount;
 
   return {
     activeCount,
@@ -310,25 +260,21 @@ export async function getPreferenceSummary(
 }
 
 /**
- * Get all exercises with a specific status
+ * Filter exercises by status using pre-loaded preferences
  */
-export async function getExercisesWithStatus(
-  userId: string,
+export function filterExercisesByStatus(
+  exercises: Exercise[],
+  prefs: Map<string, UserExercisePreference>,
   status: ExerciseVisibilityStatus
-): Promise<Exercise[]> {
-  const prefs = await getUserExercisePreferences(userId);
-  const allExercises = await getExercises(true);
-
+): Exercise[] {
   if (status === 'active') {
-    // Return exercises that don't have a preference OR have active status
-    return allExercises.filter((ex) => {
+    return exercises.filter((ex) => {
       const pref = prefs.get(ex.id);
       return !pref || pref.status === 'active';
     });
   }
 
-  // Return exercises with the specific status
-  return allExercises.filter((ex) => {
+  return exercises.filter((ex) => {
     const pref = prefs.get(ex.id);
     return pref?.status === status;
   });
@@ -337,27 +283,25 @@ export async function getExercisesWithStatus(
 /**
  * Get exercises available for suggestions (excludes archived and do_not_suggest)
  */
-export async function getExercisesForSuggestion(userId: string): Promise<Exercise[]> {
-  const prefs = await getUserExercisePreferences(userId);
-  const allExercises = await getExercises(true);
-
-  return allExercises.filter((ex) => {
+export function getExercisesForSuggestion(
+  exercises: Exercise[],
+  prefs: Map<string, UserExercisePreference>
+): Exercise[] {
+  return exercises.filter((ex) => {
     const pref = prefs.get(ex.id);
-    // Only include if no preference (defaults to active) or explicitly active
     return !pref || pref.status === 'active';
   });
 }
 
 /**
- * Get exercises for the list view (excludes archived, includes do_not_suggest)
+ * Get exercises for list view (excludes archived, includes do_not_suggest)
  */
-export async function getExercisesForList(userId: string): Promise<Exercise[]> {
-  const prefs = await getUserExercisePreferences(userId);
-  const allExercises = await getExercises(true);
-
-  return allExercises.filter((ex) => {
+export function getExercisesForList(
+  exercises: Exercise[],
+  prefs: Map<string, UserExercisePreference>
+): Exercise[] {
+  return exercises.filter((ex) => {
     const pref = prefs.get(ex.id);
-    // Exclude only archived exercises
     return !pref || pref.status !== 'archived';
   });
 }
@@ -365,19 +309,18 @@ export async function getExercisesForList(userId: string): Promise<Exercise[]> {
 /**
  * Search exercises including archived (with status marked)
  */
-export async function searchExercisesWithPreferences(
-  userId: string,
+export function searchExercisesWithPreferences(
+  exercises: Exercise[],
+  prefs: Map<string, UserExercisePreference>,
   query: string
-): Promise<Array<Exercise & { status: ExerciseVisibilityStatus; isArchived: boolean }>> {
-  const prefs = await getUserExercisePreferences(userId);
-  const allExercises = await getExercises(true);
+): Array<Exercise & { status: ExerciseVisibilityStatus; isArchived: boolean }> {
   const lowerQuery = query.toLowerCase().trim();
 
   if (!lowerQuery) {
     return [];
   }
 
-  return allExercises
+  return exercises
     .filter((ex) => ex.name.toLowerCase().includes(lowerQuery))
     .map((ex) => {
       const pref = prefs.get(ex.id);

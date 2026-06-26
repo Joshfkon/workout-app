@@ -15,6 +15,7 @@ export { BodyweightDisplay, BodyweightDisplayInline, BodyweightPRBadge } from '.
 export { BodyweightSetInputRow } from './BodyweightSetInputRow';
 export { BodyweightSetEditRow } from './BodyweightSetEditRow';
 export { CompactSetRow } from './CompactSetRow';
+export { DurationTimerInput } from './DurationTimerInput';
 export { SegmentedControl } from './SegmentedControl';
 
 // Plate Calculator
@@ -23,4 +24,7 @@ export { PlateCalculatorModal } from './PlateCalculatorModal';
 
 // Resume Banner
 export { ResumeWorkoutBanner } from './ResumeWorkoutBanner';
+
+// Pause Overlay
+export { PauseOverlay } from './PauseOverlay';
 

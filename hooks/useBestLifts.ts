@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
-import type { UserLifts } from '@/services/measurementImbalanceEngine';
+import { getErrorMessage } from '@/lib/errors';
 import { estimateE1RM, getLocalDateString } from '@/lib/utils';
+import type { UserLifts } from '@/services/measurementImbalanceEngine';
 
 interface BestLiftRecord {
   exerciseName: string;
@@ -18,7 +19,7 @@ interface UseBestLiftsReturn {
   lifts: UserLifts;
   bestLiftRecords: BestLiftRecord[];
   isLoading: boolean;
-  error: Error | null;
+  error: string | null;
   refreshLifts: () => Promise<void>;
   updateLift: (exerciseName: string, weightKg: number, reps: number) => Promise<void>;
 }
@@ -66,7 +67,7 @@ const EXERCISE_NAME_MAPPING: Record<string, keyof UserLifts> = {
 export function useBestLifts(userId: string): UseBestLiftsReturn {
   const [bestLiftRecords, setBestLiftRecords] = useState<BestLiftRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadLifts = useCallback(async () => {
     if (!userId) {
@@ -196,8 +197,8 @@ export function useBestLifts(userId: string): UseBestLiftsReturn {
       }
 
       setBestLiftRecords(records);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to load lifts'));
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setIsLoading(false);
     }

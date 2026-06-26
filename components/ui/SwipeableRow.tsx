@@ -12,34 +12,60 @@ export function SwipeableRow({ children, onDelete, deleteLabel = 'Delete' }: Swi
   const [translateX, setTranslateX] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const startXRef = useRef(0);
+  const startYRef = useRef(0);
   const currentXRef = useRef(0);
   const isDraggingRef = useRef(false);
+  const swipeDirectionRef = useRef<'horizontal' | 'vertical' | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const DELETE_THRESHOLD = -80; // Pixels to swipe to reveal delete
   const DELETE_WIDTH = 80;
+  const DIRECTION_THRESHOLD = 10; // Pixels moved before determining direction
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     startXRef.current = e.touches[0].clientX;
+    startYRef.current = e.touches[0].clientY;
     currentXRef.current = translateX;
     isDraggingRef.current = true;
+    swipeDirectionRef.current = null; // Reset direction on new touch
   }, [translateX]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDraggingRef.current) return;
-    
-    const diff = e.touches[0].clientX - startXRef.current;
-    let newTranslate = currentXRef.current + diff;
-    
-    // Limit the swipe range
-    newTranslate = Math.max(-DELETE_WIDTH, Math.min(0, newTranslate));
-    
-    setTranslateX(newTranslate);
+
+    const diffX = e.touches[0].clientX - startXRef.current;
+    const diffY = e.touches[0].clientY - startYRef.current;
+
+    // Determine swipe direction on first significant movement
+    if (swipeDirectionRef.current === null) {
+      const absDiffX = Math.abs(diffX);
+      const absDiffY = Math.abs(diffY);
+
+      if (absDiffX > DIRECTION_THRESHOLD || absDiffY > DIRECTION_THRESHOLD) {
+        swipeDirectionRef.current = absDiffX > absDiffY ? 'horizontal' : 'vertical';
+      }
+    }
+
+    // If vertical scroll, don't capture the event - let it bubble for scrolling
+    if (swipeDirectionRef.current === 'vertical') {
+      return;
+    }
+
+    // Only handle horizontal swipes
+    if (swipeDirectionRef.current === 'horizontal') {
+      let newTranslate = currentXRef.current + diffX;
+
+      // Limit the swipe range
+      newTranslate = Math.max(-DELETE_WIDTH, Math.min(0, newTranslate));
+
+      setTranslateX(newTranslate);
+    }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
     isDraggingRef.current = false;
-    
+    swipeDirectionRef.current = null;
+
     // Snap to either open or closed position
     if (translateX < DELETE_THRESHOLD / 2) {
       setTranslateX(-DELETE_WIDTH);

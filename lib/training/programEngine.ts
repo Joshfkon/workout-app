@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createUntypedClient } from '@/lib/supabase/client';
+import { getLocalDateString } from '@/lib/utils';
 import type {
   UserProfile,
   BodyComposition,
@@ -35,7 +36,6 @@ import type {
   FFMIBracket,
 } from '@/types/training';
 import type { MuscleGroup } from '@/types/schema';
-import { getLocalDateString } from '@/lib/utils';
 import {
   EXERCISE_DATABASE,
   MUSCLE_FIBER_PROFILE,
@@ -517,7 +517,7 @@ export class ProgramEngine {
       cut: { compound: [4, 6], isolation: [8, 12] },
       bulk: { compound: [6, 10], isolation: [10, 15] },
       recomp: { compound: [5, 8], isolation: [8, 12] },
-      maintain: { compound: [5, 8], isolation: [8, 12] }
+      maintenance: { compound: [5, 8], isolation: [8, 12] }
     };
     
     const base = isCompound 

@@ -8,9 +8,10 @@ import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
-import type { MuscleGroup } from '@/types/schema';
+import type { MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
+import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 function VolumeProgressBar({
   muscle,
@@ -164,21 +165,29 @@ export default function VolumeProfilePage() {
 
   // Find muscles below MEV (for atrophy risk alert)
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
-    return volumeSummary
+    const results: MuscleVolumeData[] = [];
+    volumeSummary
       .filter(summary => summary.status === 'below_mev')
-      .map(summary => ({
-        muscleGroup: summary.muscle,
-        totalSets: summary.currentSets,
-        directSets: summary.currentSets,
-        indirectSets: 0,
-        landmarks: {
-          mev: summary.estimatedMEV,
-          mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
-          mrv: summary.estimatedMRV,
-        },
-        status: 'below_mev' as const,
-        percentOfMrv: summary.percentOfMRV,
-      }));
+      .forEach(summary => {
+        // Convert legacy muscle to standard for MuscleVolumeData compatibility
+        const standardMuscle = toStandardMuscleForVolume(summary.muscle);
+        if (standardMuscle) {
+          results.push({
+            muscleGroup: standardMuscle,
+            totalSets: summary.currentSets,
+            directSets: summary.currentSets,
+            indirectSets: 0,
+            landmarks: {
+              mev: summary.estimatedMEV,
+              mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
+              mrv: summary.estimatedMRV,
+            },
+            status: 'below_mev' as const,
+            percentOfMrv: summary.percentOfMRV,
+          });
+        }
+      });
+    return results;
   }, [volumeSummary]);
 
   if (isLoading) {

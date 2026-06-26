@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { useAuthUser } from '@/hooks/useAuthUser';
 import type { Goal, Experience, WeightUnit } from '@/types/schema';
 
 interface UserPreferences {
@@ -40,6 +41,7 @@ function notifyListeners(prefs: UserPreferences) {
 export function useUserPreferences() {
   const [preferences, setPreferences] = useState<UserPreferences>(globalPreferences);
   const [isLoading, setIsLoading] = useState(true);
+  const { user: authUser, isLoading: authLoading } = useAuthUser();
 
   // Subscribe to global updates
   useEffect(() => {
@@ -52,33 +54,37 @@ export function useUserPreferences() {
 
   // Load preferences on mount
   useEffect(() => {
+    if (authLoading) return;
+
     async function loadPreferences() {
       try {
+        if (!authUser) {
+          setIsLoading(false);
+          return;
+        }
+
         const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
 
-        if (user) {
-          const { data } = await supabase
-            .from('users')
-            .select('goal, experience, height_cm, weight_kg, preferences')
-            .eq('id', user.id)
-            .single();
+        const { data } = await supabase
+          .from('users')
+          .select('goal, experience, height_cm, weight_kg, preferences')
+          .eq('id', authUser.id)
+          .single();
 
-          if (data) {
-            const prefs = data.preferences as Record<string, unknown> || {};
-            const newPrefs: UserPreferences = {
-              goal: (data.goal as Goal) || 'maintenance',
-              experience: (data.experience as Experience) || 'intermediate',
-              units: (prefs.units as WeightUnit) || 'lb', // Default to imperial
-              heightCm: data.height_cm as number | null,
-              weightKg: data.weight_kg as number | null,
-              restTimerDefault: (prefs.restTimer as number) || 180,
-              showFormCues: (prefs.showFormCues as boolean) ?? true,
-              showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
-              skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
-            };
-            notifyListeners(newPrefs);
-          }
+        if (data) {
+          const prefs = data.preferences as Record<string, unknown> || {};
+          const newPrefs: UserPreferences = {
+            goal: (data.goal as Goal) || 'maintenance',
+            experience: (data.experience as Experience) || 'intermediate',
+            units: (prefs.units as WeightUnit) || 'lb', // Default to imperial
+            heightCm: data.height_cm as number | null,
+            weightKg: data.weight_kg as number | null,
+            restTimerDefault: (prefs.restTimer as number) || 180,
+            showFormCues: (prefs.showFormCues as boolean) ?? true,
+            showWarmupSuggestions: (prefs.showWarmupSuggestions as boolean) ?? true,
+            skipPreWorkoutCheckIn: (prefs.skipPreWorkoutCheckIn as boolean) ?? false,
+          };
+          notifyListeners(newPrefs);
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
@@ -88,17 +94,16 @@ export function useUserPreferences() {
     }
 
     loadPreferences();
-  }, []);
+  }, [authUser, authLoading]);
 
   // Update a single preference
   const updatePreference = useCallback(async <K extends keyof UserPreferences>(
     key: K,
     value: UserPreferences[K]
   ) => {
+    if (!authUser) return;
+
     const supabase = createUntypedClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) return;
 
     // Update local state immediately for responsiveness
     const newPrefs = { ...globalPreferences, [key]: value };
@@ -111,12 +116,12 @@ export function useUserPreferences() {
         const { data: currentUser } = await supabase
           .from('users')
           .select('preferences')
-          .eq('id', user.id)
+          .eq('id', authUser.id)
           .single();
 
         const currentPrefs = (currentUser?.preferences as Record<string, unknown>) || {};
         const dbKey = key === 'restTimerDefault' ? 'restTimer' : key;
-        
+
         await supabase
           .from('users')
           .update({
@@ -125,7 +130,7 @@ export function useUserPreferences() {
               [dbKey]: value
             }
           })
-          .eq('id', user.id);
+          .eq('id', authUser.id);
       } else {
         // Direct columns
         const columnMap: Record<string, string> = {
@@ -133,18 +138,18 @@ export function useUserPreferences() {
           weightKg: 'weight_kg',
         };
         const column = columnMap[key] || key;
-        
+
         await supabase
           .from('users')
           .update({ [column]: value })
-          .eq('id', user.id);
+          .eq('id', authUser.id);
       }
     } catch (err) {
       console.error('Failed to save preference:', err);
       // Revert on error
       notifyListeners(globalPreferences);
     }
-  }, []);
+  }, [authUser]);
 
   // Convenience method to toggle units
   const toggleUnits = useCallback(() => {
