@@ -253,7 +253,7 @@ export function WearableConnectionsScreen() {
               return (
                 <div
                   key={connection.id}
-                  className="flex items-center justify-between p-4 bg-surface-100 dark:bg-surface-800 rounded-lg"
+                  className="flex items-center justify-between p-4 bg-surface-800 rounded-lg"
                 >
                   <div className="flex items-center gap-4">
                     <div className="text-3xl">{option?.icon || '📱'}</div>
@@ -293,7 +293,7 @@ export function WearableConnectionsScreen() {
             {availableOptions.map((option) => (
               <div
                 key={option.source}
-                className="flex items-center justify-between p-4 bg-surface-50 dark:bg-surface-900 rounded-lg border border-surface-200 dark:border-surface-700"
+                className="flex items-center justify-between p-4 bg-surface-900 rounded-lg border border-surface-700"
               >
                 <div className="flex items-center gap-4">
                   <div className="text-3xl opacity-60">{option.icon}</div>
@@ -333,7 +333,7 @@ export function WearableConnectionsScreen() {
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <span className="text-xl">ℹ️</span>
-            <div className="text-sm text-surface-600 dark:text-surface-400">
+            <div className="text-sm text-surface-400">
               <p className="font-medium mb-1">About wearable connections</p>
               <p>
                 Automatic step sync from wearables isn&apos;t active yet - connecting an

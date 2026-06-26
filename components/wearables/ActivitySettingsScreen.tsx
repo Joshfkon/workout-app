@@ -116,7 +116,7 @@ export function ActivitySettingsScreen() {
           <CardTitle>Calorie Target Adjustment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-surface-50 dark:bg-surface-800 text-sm text-surface-600 dark:text-surface-400">
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-surface-800 text-sm text-surface-400">
             <span>ℹ️</span>
             <p>
               Your preference is saved, but automatic calorie adjustment based on daily
@@ -129,7 +129,7 @@ export function ActivitySettingsScreen() {
               className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                 settings.adjustmentMode === mode.value
                   ? 'border-primary-500 bg-primary-500/10'
-                  : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
+                  : 'border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800'
               }`}
             >
               <input
@@ -166,7 +166,7 @@ export function ActivitySettingsScreen() {
               max={1000}
               className="w-24"
             />
-            <span className="text-surface-600 dark:text-surface-400">calories</span>
+            <span className="text-surface-400">calories</span>
           </div>
           <p className="text-sm text-surface-500">
             Even on very active/inactive days, your target will not change by more than
@@ -193,7 +193,7 @@ export function ActivitySettingsScreen() {
                 max={1500}
                 className="w-24"
               />
-              <span className="text-surface-600 dark:text-surface-400">
+              <span className="text-surface-400">
                 calories below TDEE
               </span>
             </div>
@@ -264,7 +264,7 @@ export function ActivitySettingsScreen() {
                   (e.target.value as WearableSource) || null
                 )
               }
-              className="w-full p-2 rounded-lg border border-surface-300 dark:border-surface-600 bg-white dark:bg-surface-800"
+              className="w-full p-2 rounded-lg border border-surface-600 bg-surface-900"
             >
               <option value="">Auto (use priority order)</option>
               {connections.map((conn) => (
@@ -291,7 +291,7 @@ export function ActivitySettingsScreen() {
               {connections.map((conn) => (
                 <div
                   key={conn.id}
-                  className="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded"
+                  className="flex items-center justify-between p-2 bg-surface-800 rounded"
                 >
                   <span>{conn.deviceName || formatSourceName(conn.source)}</span>
                   <span className="text-green-500 text-sm">Connected</span>
