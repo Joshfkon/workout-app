@@ -232,6 +232,8 @@ async function fetchExerciseHistory(
         reps,
         rpe,
         is_warmup,
+        set_number,
+        set_type,
         logged_at
       )
     `)
@@ -254,7 +256,10 @@ async function fetchExerciseHistory(
   const lastBlock = historyBlocks[0];
   const lastSession = lastBlock.workout_sessions as any;
   const lastSets = ((lastBlock.set_logs as any[]) || [])
-    .filter((s: any) => !s.is_warmup)
+    // Only normal working sets, ordered by set_number — so previousSets[i] maps to
+    // the prior workout's i-th working set (not a dropset/rest-pause or DB-ordering quirk).
+    .filter((s: any) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+    .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
     .map((s: any) => ({
       weightKg: s.weight_kg,
       reps: s.reps,
@@ -1047,6 +1052,8 @@ export default function WorkoutPage() {
                     reps,
                     rpe,
                     is_warmup,
+                    set_number,
+                    set_type,
                     logged_at
                   )
                 `)
@@ -1204,7 +1211,9 @@ export default function WorkoutPage() {
               const lastBlock = historyBlocks[0];
               const lastSession = lastBlock.workout_sessions as any;
               const lastSets = ((lastBlock.set_logs as any[]) || [])
-                .filter((s: any) => !s.is_warmup)
+                // Only normal working sets, ordered by set_number (see above).
+                .filter((s: any) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
+                .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
                 .map((s: any) => ({
                   weightKg: s.weight_kg,
                   reps: s.reps,
