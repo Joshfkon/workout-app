@@ -19,6 +19,14 @@ import { SegmentedControl } from './SegmentedControl';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
+// Read an exercise's primary muscle defensively: different call sites feed
+// ExerciseCard either camelCase (primaryMuscle, mapped) or raw snake_case
+// (primary_muscle) data, and DB casing can vary — normalize to lowercase so the
+// swap muscle filter matches reliably.
+function exercisePrimaryMuscle(ex: { primaryMuscle?: string; primary_muscle?: string }): string {
+  return String(ex.primaryMuscle ?? ex.primary_muscle ?? '').toLowerCase();
+}
+
 // Get color classes for hypertrophy tier badge (compact version for workouts)
 function getTierBadgeClasses(tier: string): string {
   switch (tier) {
@@ -710,9 +718,11 @@ export const ExerciseCard = memo(function ExerciseCard({
     
     // If set was easy (low RPE), suggest more reps
     if (rpeDiff > 0.3) {
-      // Easy set - increase reps by 1-2 depending on how easy
+      // Easy set - aim for a couple more reps, but NEVER recommend fewer than the
+      // user just performed. (When lastReps already exceeds the range top, the
+      // range-cap alone would otherwise suggest a regression, e.g. 20 -> 13.)
       const repIncrease = Math.min(2, Math.floor(rpeDiff));
-      return Math.min(targetRepRange[1], lastReps + repIncrease);
+      return Math.max(lastReps, Math.min(targetRepRange[1], lastReps + repIncrease));
     } else if (rpeDiff < -0.3) {
       // Hard set - decrease reps slightly
       const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
@@ -2538,8 +2548,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       if (ex.id === exercise.id) return false;
                       // Search filter
                       if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
-                      // Muscle filter
-                      if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
+                      // Muscle filter (normalized: tolerate camel/snake + casing)
+                      if (swapMuscleFilter && exercisePrimaryMuscle(ex) !== swapMuscleFilter.toLowerCase()) return false;
                       return true;
                     })
                     .sort((a, b) => {
@@ -2591,7 +2601,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                               )}
                             </div>
                             <p className="text-xs text-surface-500 capitalize">
-                              {alt.primaryMuscle} • {alt.mechanic}
+                              {exercisePrimaryMuscle(alt)} • {alt.mechanic}
                             </p>
                           </div>
                           <svg className="w-4 h-4 text-surface-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -2603,7 +2613,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {availableExercises.filter(ex => {
                     if (ex.id === exercise.id) return false;
                     if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
-                    if (swapMuscleFilter && ex.primaryMuscle !== swapMuscleFilter) return false;
+                    if (swapMuscleFilter && exercisePrimaryMuscle(ex) !== swapMuscleFilter.toLowerCase()) return false;
                     return true;
                   }).length === 0 && (
                     <p className="p-8 text-center text-surface-500">
