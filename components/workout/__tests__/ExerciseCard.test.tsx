@@ -111,6 +111,8 @@ jest.mock('@/lib/utils', () => ({
   convertWeightForDisplay: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205 * 10) / 10 : w),
   inputWeightToKg: jest.fn((w, unit) => unit === 'lb' ? w / 2.205 : w),
   roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
+  roundToIncrement: jest.fn((w, inc) => (inc > 0 ? Math.round(w / inc) * inc : w)),
+  clamp: jest.fn((v, min, max) => Math.max(min, Math.min(max, v))),
   formatDuration: jest.fn((s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`),
   generateId: jest.fn(() => 'generated-id-' + Math.random().toString(36).substr(2, 9)),
 }));
