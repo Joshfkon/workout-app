@@ -13,7 +13,7 @@ import type {
 } from '@/types/schema';
 import { formatWeightValue, convertWeightForDisplay, inputWeightToKg } from '@/lib/utils';
 import { calculateEffectiveLoad } from '@/types/schema';
-import { suggestReps, suggestWeight } from '@/services/setSuggestionEngine';
+import { recommendSet } from '@/services/setRecommender';
 
 interface CompactSetRowProps {
   setNumber: number;
@@ -92,15 +92,29 @@ export const CompactSetRow = memo(function CompactSetRow({
   exerciseId,
 }: CompactSetRowProps) {
   // Use RPE-aware logic when previous set exists
-  const suggestionContext = { targetRepRange, targetRir };
+  // Within-session next-set recommendation (services/setRecommender.ts).
+  // CompactSetRow only knows the previous set, so the set count comes from
+  // setNumber and there's no cross-set E1RM anchor (the engine falls back to the
+  // previous set's E1RM).
+  const nextSetRec =
+    previousSet && previousSet.rpe !== undefined
+      ? recommendSet({
+          lastWeightKg: previousSet.weightKg,
+          lastReps: previousSet.reps,
+          lastRir: Math.max(0, 10 - previousSet.rpe),
+          setsCompletedThisExercise: Math.max(0, setNumber - 1),
+          targetRepRange,
+          targetRir,
+        })
+      : null;
 
   const getInitialReps = (): string => {
     if (!previousSet) {
       return String(Math.round((targetRepRange[0] + targetRepRange[1]) / 2));
     }
-    // Use RPE-adjusted reps if we have RPE data
-    if (previousSet.rpe !== undefined) {
-      return String(suggestReps(previousSet, suggestionContext));
+    // Use the recommender when we have RPE data
+    if (nextSetRec) {
+      return String(nextSetRec.reps);
     }
     // Fallback to previous reps, clamped to target range
     return String(Math.max(targetRepRange[0], Math.min(targetRepRange[1], previousSet.reps)));
@@ -108,10 +122,9 @@ export const CompactSetRow = memo(function CompactSetRow({
 
   const getInitialWeight = (): string => {
     if (previousSet?.weightKg) {
-      // Use RPE-adjusted weight if we have RPE data
-      if (previousSet.rpe !== undefined) {
-        const adjustedWeightKg = suggestWeight(previousSet, suggestionContext);
-        return formatWeightValue(adjustedWeightKg, unit).toString();
+      // Use the recommender when we have RPE data
+      if (nextSetRec) {
+        return formatWeightValue(nextSetRec.weightKg, unit).toString();
       }
       return formatWeightValue(previousSet.weightKg, unit).toString();
     }

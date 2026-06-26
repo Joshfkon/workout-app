@@ -6,7 +6,8 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality } from '@/services/progressionEngine';
-import { suggestReps, suggestWeight, estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
+import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
+import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
@@ -350,6 +351,33 @@ export const ExerciseCard = memo(function ExerciseCard({
   const pendingSetsCount = Math.max(0, block.targetSets - completedSets.length);
   const progressPercent = Math.round((completedSets.length / block.targetSets) * 100);
 
+  // Within-session next-set recommendation (services/setRecommender.ts).
+  // Anchor on the freshest/strongest E1RM this exercise so late-set predictions
+  // aren't double-fatigued.
+  const sessionBestE1RM = useMemo(() => {
+    let best = 0;
+    for (const s of completedSets) {
+      if (s.weightKg > 0 && s.reps > 0) {
+        const rir = s.rpe != null ? Math.max(0, 10 - s.rpe) : effectiveTargetRir;
+        const e = s.weightKg * (1 + (s.reps + rir) / 30);
+        if (e > best) best = e;
+      }
+    }
+    return best > 0 ? best : undefined;
+  }, [completedSets, effectiveTargetRir]);
+
+  const recommendNext = (last: { weightKg: number; reps: number; rpe?: number }) =>
+    recommendSet({
+      lastWeightKg: last.weightKg,
+      lastReps: last.reps,
+      lastRir: last.rpe != null ? Math.max(0, 10 - last.rpe) : effectiveTargetRir,
+      setsCompletedThisExercise: completedSets.length,
+      sessionBestE1RMKg: sessionBestE1RM,
+      targetRepRange: block.targetRepRange,
+      targetRir: effectiveTargetRir,
+      minIncrementKg: exercise.minWeightIncrementKg,
+    });
+
   // Check if this is a bodyweight exercise
   // Use type assertion to access bodyweight properties that may exist on the exercise
   const exerciseWithBodyweight = exercise as any;
@@ -409,10 +437,11 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     if (!lastCompleted) return;
 
-    // Calculate smart defaults using the shared suggestion engine
+    // Calculate smart defaults using the within-session recommender
     const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-    const smartWeight = suggestWeight(lastSetData, suggestionCtx);
-    const smartReps = suggestReps(lastSetData, suggestionCtx);
+    const rec = recommendNext(lastSetData);
+    const smartWeight = rec.weightKg;
+    const smartReps = rec.reps;
 
     // Update all pending inputs
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
@@ -456,8 +485,9 @@ export const ExerciseCard = memo(function ExerciseCard({
 
       if (lastCompleted) {
         const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-        smartWeight = suggestWeight(lastSetData, suggestionCtx);
-        smartReps = suggestReps(lastSetData, suggestionCtx);
+        const rec = recommendNext(lastSetData);
+        smartWeight = rec.weightKg;
+        smartReps = rec.reps;
       } else {
         smartWeight = suggestedWeight;
         smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -519,8 +549,9 @@ export const ExerciseCard = memo(function ExerciseCard({
         
         if (lastCompleted) {
           const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-          defaultWeight = suggestWeight(lastSetData, suggestionCtx);
-          defaultReps = suggestReps(lastSetData, suggestionCtx);
+          const rec = recommendNext(lastSetData);
+          defaultWeight = rec.weightKg;
+          defaultReps = rec.reps;
         } else if (prevSet) {
           defaultWeight = prevSet.weightKg;
           defaultReps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
