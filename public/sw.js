@@ -10,7 +10,8 @@
  * - HTML pages: Network-first with offline fallback
  */
 
-const CACHE_NAME = 'hypertrack-v1';
+// Bump this version on releases to invalidate old caches and trigger an update.
+const CACHE_NAME = 'hypertrack-v2';
 
 // Assets to cache on install (app shell)
 const PRECACHE_ASSETS = [
