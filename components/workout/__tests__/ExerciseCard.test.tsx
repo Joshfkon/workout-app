@@ -78,6 +78,12 @@ jest.mock('@/services/progressionEngine', () => ({
     quality: 'stimulative' as SetQuality,
     reason: 'Good effort',
   })),
+  recommendNextSet: jest.fn((input: { lastWeightKg: number; lastReps: number; targetRir: number }) => ({
+    weightKg: input.lastWeightKg,
+    reps: input.lastReps,
+    rpe: 10 - input.targetRir,
+    rationale: 'maintain',
+  })),
 }));
 
 // Mock exerciseSwapper
@@ -132,11 +138,19 @@ const createMockBlock = (overrides: Partial<ExerciseBlock> = {}): ExerciseBlock 
   workoutSessionId: 'session-1',
   exerciseId: 'exercise-1',
   order: 1,
+  supersetGroupId: null,
+  supersetOrder: null,
   targetSets: 3,
   targetRepRange: [8, 12] as [number, number],
   targetRir: 2,
-  restSeconds: 180,
+  targetWeightKg: 60,
+  targetRestSeconds: 180,
+  progressionType: null,
+  suggestionReason: '',
+  warmupProtocol: [],
   note: null,
+  dropsetsPerSet: 0,
+  dropPercentage: 0,
   ...overrides,
 });
 

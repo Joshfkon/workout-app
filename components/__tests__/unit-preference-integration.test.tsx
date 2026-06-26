@@ -66,15 +66,13 @@ describe('Unit Preference Integration', () => {
       const onSubmit = jest.fn();
       render(<SetInputRow {...defaultProps} unit="kg" onSubmit={onSubmit} />);
 
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
+      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
 
       fireEvent.change(weightInput, { target: { value: '100' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
 
       // Click proceed to go to feedback phase
+      const proceedButton = screen.getByRole('button', { name: /log set/i });
       expect(proceedButton).toBeTruthy();
       fireEvent.click(proceedButton!);
 
@@ -114,9 +112,7 @@ describe('Unit Preference Integration', () => {
 
       expect(saveButton).toBeTruthy();
       expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      fireEvent.click(saveButton!);
 
       // Verify submission - weight should be stored in kg
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -124,10 +120,10 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: 100, // 100kg stored as 100kg
           reps: 10,
-          rpe: 7.5, // RIR 2 converts to RPE 7.5
+          rpe: 7.5, // default RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
-            repsInTank: 2, // Selected "2-3" RIR
-            form: 'clean', // Selected "Clean" form
+            repsInTank: 2, // default feedback
+            form: 'clean', // default feedback
           }),
         })
       );
@@ -143,15 +139,13 @@ describe('Unit Preference Integration', () => {
       const onSubmit = jest.fn();
       render(<SetInputRow {...defaultProps} unit="lb" onSubmit={onSubmit} />);
 
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const [weightInput, repsInput] = inputs;
-      const buttons = screen.getAllByRole('button');
-      const proceedButton = buttons.find(btn => btn.querySelector('svg')); // Button with arrow icon
+      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
 
       fireEvent.change(weightInput, { target: { value: '225' } });
       fireEvent.change(repsInput, { target: { value: '10' } });
 
       // Click proceed to go to feedback phase
+      const proceedButton = screen.getByRole('button', { name: /log set/i });
       expect(proceedButton).toBeTruthy();
       fireEvent.click(proceedButton!);
 
@@ -192,9 +186,7 @@ describe('Unit Preference Integration', () => {
       
       expect(saveButton).toBeTruthy();
       expect(saveButton).not.toBeDisabled();
-      if (saveButton) {
-        fireEvent.click(saveButton);
-      }
+      fireEvent.click(saveButton!);
 
       // Verify the conversion is correct (225lbs ~= 102.06kg)
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -202,10 +194,10 @@ describe('Unit Preference Integration', () => {
         expect.objectContaining({
           weightKg: expect.any(Number), // 225lbs converted to kg
           reps: 10,
-          rpe: 7.5, // RIR 2 converts to RPE 7.5
+          rpe: 7.5, // default RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
-            repsInTank: 2, // Selected "2-3" RIR
-            form: 'clean', // Selected "Clean" form
+            repsInTank: 2, // default feedback
+            form: 'clean', // default feedback
           }),
         })
       );
@@ -249,8 +241,9 @@ describe('Unit Preference Integration', () => {
 
       const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
       const weightInput = inputs[0];
-      // 100kg = 220.46 lbs, should show ~220lbs
-      expect(parseFloat(weightInput.value)).toBeCloseTo(220, 0);
+      // 100kg = 220.46 lbs. The seed preserves the EXACT converted value (220.5)
+      // rather than snapping to a plate increment (the old, lossy behavior).
+      expect(parseFloat(weightInput.value)).toBeCloseTo(220.5, 1);
     });
   });
 

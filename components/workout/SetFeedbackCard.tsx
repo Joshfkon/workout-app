@@ -39,8 +39,10 @@ interface SetFeedbackCardProps {
 
 /**
  * Set feedback card component
- * Shows after weight/reps are entered, requires RIR and Form selection
- * before the set can be saved
+ * Shows after weight/reps are entered. RIR and Form are OPTIONAL refinements:
+ * the set can always be saved, falling back to the provided defaultFeedback (or a
+ * neutral default) when the user hasn't picked them. This matches the fast non-bodyweight
+ * table path so logging never blocks on feedback.
  */
 export const SetFeedbackCard = memo(function SetFeedbackCard({
   setNumber,
@@ -76,13 +78,14 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
     }
   }, [repsInTank, form, defaultFeedback]);
 
-  const canSave = repsInTank !== null && form !== null;
+  // Feedback is optional: the set can always be saved. RIR/Form are refinements that
+  // fall back to the previous set's feedback, then to a neutral default, when unspecified.
+  const hasFeedback = repsInTank !== null || form !== null;
 
   const handleSave = () => {
-    if (!canSave) return;
     onSave({
-      repsInTank: repsInTank!,
-      form: form!,
+      repsInTank: repsInTank ?? defaultFeedback?.repsInTank ?? 2,
+      form: form ?? defaultFeedback?.form ?? 'clean',
       discomfort,
     });
   };
@@ -143,37 +146,31 @@ export const SetFeedbackCard = memo(function SetFeedbackCard({
         )}
         <Button
           onClick={handleSave}
-          disabled={!canSave || disabled}
+          disabled={disabled}
           className="flex-1"
           size="lg"
         >
-          {canSave ? (
-            <>
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              Save Set
-            </>
-          ) : (
-            'Select RIR & Form'
-          )}
+          <svg
+            className="w-5 h-5 mr-2"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          Save Set
         </Button>
       </div>
 
-      {/* Validation hint */}
-      {!canSave && (
+      {/* Optional-feedback hint */}
+      {!hasFeedback && (
         <p className="text-xs text-surface-500 text-center">
-          Please select both reps in tank and form quality to save the set
+          RIR &amp; form are optional — tap Save Set to log, or rate it first.
         </p>
       )}
     </div>

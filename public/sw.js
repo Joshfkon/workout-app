@@ -16,6 +16,7 @@
  * - Aggressive caching of Next.js static chunks
  */
 
+// Bump this version on releases to invalidate old caches and trigger an update.
 const CACHE_NAME = 'hypertrack-v3';
 
 // Critical assets to cache on install (app shell + key routes)

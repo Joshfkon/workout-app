@@ -7,7 +7,7 @@ import { Card, Input, Badge, Button, LoadingAnimation, SkeletonExercise } from '
 import { createUntypedClient } from '@/lib/supabase/client';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
-import { formatWeight, convertWeight } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM } from '@/lib/utils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useExercisePreferences } from '@/hooks/useExercisePreferences';
 import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu';
@@ -98,13 +98,6 @@ interface ExerciseHistory {
   personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
   totalSessions: number;
   chartData: SessionData[];
-}
-
-// Calculate E1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
 }
 
 export default function ExercisesPage() {
@@ -251,7 +244,7 @@ export default function ExercisesPage() {
             const reps = set.reps || 0;
             sessionVolume += weight * reps;
             
-            const e1rm = calculateE1RM(weight, reps);
+            const e1rm = estimateE1RM(weight, reps);
             if (e1rm > sessionBestE1RM) {
               sessionBestE1RM = e1rm;
               sessionBestWeight = weight;

@@ -102,10 +102,20 @@ export const useExerciseStore = create<ExerciseState>()(
     }),
     {
       name: 'exercise-storage',
+      version: 1,
       partialize: (state) => ({
         exercises: state.exercises,
         lastFetched: state.lastFetched,
       }),
+      // Migrate stale persisted shapes forward. Any pre-versioned (version 0)
+      // payload may not match the current Exercise shape, so we discard the
+      // cached library and force a refetch rather than risk corrupt data.
+      migrate: (persistedState, version) => {
+        if (version === 0) {
+          return { exercises: [], lastFetched: null };
+        }
+        return persistedState as { exercises: Exercise[]; lastFetched: number | null };
+      },
     }
   )
 );

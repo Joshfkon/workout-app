@@ -1,4 +1,9 @@
 import { type ClassValue, clsx } from 'clsx';
+import {
+  rirToRpe as rirToRpeDiscrete,
+  rpeToRir as rpeToRirDiscrete,
+  type RepsInTank,
+} from '@/types/schema';
 
 /**
  * Utility for merging class names conditionally
@@ -172,6 +177,8 @@ export function inputWeightToKg(weight: number, fromUnit: 'kg' | 'lb'): number {
 
 /**
  * Round to nearest increment (for weights)
+ * Guards against a non-positive increment (e.g. bodyweight equipment has a
+ * 0 min increment) which would otherwise divide by zero and produce NaN.
  */
 export function roundToIncrement(value: number, increment: number): number {
   // Guard against zero or invalid increment to prevent NaN
@@ -215,17 +222,61 @@ export function roundToPlateIncrement(weightKg: number, unit: 'kg' | 'lb'): numb
 }
 
 /**
- * Calculate RPE from RIR (Reps In Reserve)
+ * Calculate RPE from RIR (Reps In Reserve).
+ *
+ * Canonical, non-linear mapping. Re-exported from `types/schema.ts` so that the
+ * whole app shares a single source of truth (RIR 2 -> RPE 7.5, not 8). Use this
+ * for any user-facing RIR/RPE conversion.
  */
 export function rirToRpe(rir: number): number {
+  return rirToRpeDiscrete(rir as RepsInTank);
+}
+
+/**
+ * Calculate RIR from RPE. Canonical, non-linear mapping (see `rirToRpe`).
+ */
+export function rpeToRir(rpe: number): number {
+  return rpeToRirDiscrete(rpe);
+}
+
+/**
+ * Linear RIR -> RPE mapping (RPE = 10 - RIR). Kept only for callers that need a
+ * continuous 1:1 relationship; prefer the canonical {@link rirToRpe} for
+ * training logic.
+ */
+export function rirToRpeLinear(rir: number): number {
   return 10 - rir;
 }
 
 /**
- * Calculate RIR from RPE
+ * Linear RPE -> RIR mapping (RIR = 10 - RPE). See {@link rirToRpeLinear}.
  */
-export function rpeToRir(rpe: number): number {
+export function rpeToRirLinear(rpe: number): number {
   return 10 - rpe;
+}
+
+/**
+ * Canonical estimated 1-rep-max (Epley formula with RIR adjustment).
+ *
+ * Effective reps = reps + RIR, clamped to a ceiling (12) so very high-rep sets
+ * don't wildly inflate the estimate. This is the single source of truth for
+ * E1RM; service-layer code should import this rather than re-implementing it.
+ *
+ * @param weightKg Load in kg (or effective load for bodyweight exercises)
+ * @param reps Reps completed
+ * @param rir Reps in reserve (defaults to 0 = taken to failure)
+ */
+export function estimateE1RM(weightKg: number, reps: number, rir: number = 0): number {
+  if (reps <= 0 || weightKg <= 0) return 0;
+
+  const safeRir = Math.max(0, rir);
+  // Clamp effective reps so high-rep sets don't over-inflate the estimate.
+  const effectiveReps = Math.min(reps + safeRir, 12);
+
+  if (effectiveReps === 1) return weightKg;
+
+  // Epley: weight * (1 + reps/30)
+  return Math.round(weightKg * (1 + effectiveReps / 30) * 100) / 100;
 }
 
 /**

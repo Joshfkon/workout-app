@@ -452,9 +452,9 @@ describe('sessionBuilderWithFatigue', () => {
       const program = generateFullMesocycleWithFatigue(4, profile, 60);
 
       expect(program.mesocycleWeeks).toBeDefined();
-      expect(program.mesocycleWeeks.length).toBeGreaterThan(0);
+      expect(program.mesocycleWeeks!.length).toBeGreaterThan(0);
 
-      program.mesocycleWeeks.forEach((week) => {
+      program.mesocycleWeeks!.forEach((week) => {
         expect(week.weekNumber).toBeGreaterThan(0);
         expect(week.sessions.length).toBeGreaterThan(0);
       });
@@ -510,7 +510,7 @@ describe('sessionBuilderWithFatigue', () => {
     it('last week is a deload week', () => {
       const program = generateFullMesocycleWithFatigue(4, profile, 60);
 
-      const lastWeek = program.mesocycleWeeks[program.mesocycleWeeks.length - 1];
+      const lastWeek = program.mesocycleWeeks![program.mesocycleWeeks!.length - 1];
       expect(lastWeek.isDeload).toBe(true);
     });
 

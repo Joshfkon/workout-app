@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { WearableConnectionsScreen } from '@/components/wearables/WearableConnectionsScreen';
 import { ActivitySettingsScreen } from '@/components/wearables/ActivitySettingsScreen';
+import { getLocalDateString } from '@/lib/utils';
 import {
   getActiveWearableConnections,
   getDailyActivityData,
 } from '@/lib/actions/wearable';
-import { getLocalDateString } from '@/lib/utils';
+import { saveManualSteps } from '@/lib/actions/steps';
 import type { WearableConnection, DailyActivityData } from '@/types/wearable';
 
 interface ActivityCardProps {
@@ -36,6 +37,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [manualSteps, setManualSteps] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
+  const [savingSteps, setSavingSteps] = useState(false);
 
   const loadData = useCallback(async () => {
     const today = getLocalDateString();
@@ -133,6 +135,36 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
     setManualSteps(e.target.value);
   }, []);
 
+  const handleSaveManualSteps = useCallback(async () => {
+    const stepsNum = parseInt(manualSteps, 10);
+    if (isNaN(stepsNum) || stepsNum < 0) return;
+
+    setSavingSteps(true);
+    try {
+      // Weight is only used for an approximate calorie-per-step estimate.
+      // 70kg is the engine's reference weight, so it's a safe neutral default here.
+      const result = await saveManualSteps(getLocalDateString(), stepsNum, 70);
+      if (result.success) {
+        // Invalidate the cache so reloaded data reflects the new entry.
+        try {
+          sessionStorage.removeItem(ACTIVITY_CACHE_KEY);
+        } catch {
+          // Non-critical
+        }
+        setManualSteps('');
+        setShowManualInput(false);
+        await loadData();
+      } else {
+        alert(result.error || 'Failed to save steps');
+      }
+    } catch (error) {
+      console.error('Failed to save manual steps:', error);
+      alert('Failed to save steps');
+    } finally {
+      setSavingSteps(false);
+    }
+  }, [manualSteps, loadData]);
+
   if (loading) {
     return (
       <Card>
@@ -181,7 +213,33 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
           </div>
         </CardHeader>
         <CardContent className="pt-2">
-          {hasWearable && steps > 0 ? (
+          {showManualInput ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                placeholder="Enter steps"
+                value={manualSteps}
+                onChange={handleManualStepsChange}
+                className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                autoFocus
+              />
+              <Button
+                size="sm"
+                disabled={!manualSteps || savingSteps}
+                onClick={handleSaveManualSteps}
+              >
+                {savingSteps ? 'Saving...' : 'Save'}
+              </Button>
+              <button
+                onClick={handleCloseManualInput}
+                className="p-2 text-surface-400 hover:text-surface-300"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ) : hasWearable && steps > 0 ? (
             <div className="space-y-3">
               {/* Steps Display */}
               <div className="flex items-center justify-between">
@@ -239,60 +297,41 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <p className="text-surface-400 text-sm">Waiting for activity data...</p>
+              <p className="text-surface-400 text-sm">No steps logged today</p>
               <p className="text-surface-500 text-xs mt-1">
-                Steps will sync from your {connections[0]?.deviceName || 'wearable'}
+                Automatic sync from your {connections[0]?.deviceName || 'wearable'} isn&apos;t
+                available yet. Enter your steps manually below.
               </p>
+              <button
+                onClick={handleOpenManualInput}
+                className="mt-3 text-xs text-primary-400 hover:text-primary-300 transition-colors"
+              >
+                Enter steps manually
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Manual Step Input */}
-              {showManualInput ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    placeholder="Enter steps"
-                    value={manualSteps}
-                    onChange={handleManualStepsChange}
-                    className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    autoFocus
-                  />
-                  <Button size="sm" disabled={!manualSteps}>
-                    Save
-                  </Button>
-                  <button
-                    onClick={handleCloseManualInput}
-                    className="p-2 text-surface-400 hover:text-surface-300"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+              <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
+                <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-2xl">⌚</span>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 rounded-lg border border-primary-500/20">
-                    <div className="w-12 h-12 rounded-xl bg-primary-500/20 flex items-center justify-center flex-shrink-0">
-                      <span className="text-2xl">⌚</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-surface-200">Connect Your Wearable</p>
-                      <p className="text-xs text-surface-400 mt-0.5">
-                        Track steps for activity-adjusted calorie targets
-                      </p>
-                    </div>
-                    <Button size="sm" onClick={handleOpenConnectModal}>
-                      Connect
-                    </Button>
-                  </div>
-                  <button
-                    onClick={handleOpenManualInput}
-                    className="w-full text-center text-xs text-surface-500 hover:text-surface-400 transition-colors py-2"
-                  >
-                    Or enter steps manually
-                  </button>
-                </>
-              )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-surface-200">Track Your Steps</p>
+                  <p className="text-xs text-surface-400 mt-0.5">
+                    Log steps to improve your TDEE estimate. Wearable sync is coming
+                    soon; enter steps manually for now.
+                  </p>
+                </div>
+                <Button size="sm" onClick={handleOpenConnectModal}>
+                  Connect
+                </Button>
+              </div>
+              <button
+                onClick={handleOpenManualInput}
+                className="w-full text-center text-xs text-surface-500 hover:text-surface-400 transition-colors py-2"
+              >
+                Or enter steps manually
+              </button>
             </div>
           )}
         </CardContent>

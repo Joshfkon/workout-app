@@ -125,6 +125,33 @@ describe('analyzeExerciseTrend', () => {
     const result = analyzeExerciseTrend(snapshots);
     expect(result.exerciseId).toBe('bench-press');
   });
+
+  it('does not produce NaN when all data points share the same date (zero denominator)', () => {
+    const snapshots: ExercisePerformanceSnapshot[] = [
+      createSnapshot('2024-01-01', 100),
+      createSnapshot('2024-01-01', 105),
+      createSnapshot('2024-01-01', 110),
+      createSnapshot('2024-01-01', 115),
+    ];
+
+    const result = analyzeExerciseTrend(snapshots);
+    expect(Number.isNaN(result.weeklyChange)).toBe(false);
+    expect(result.weeklyChange).toBe(0);
+  });
+
+  it('does not divide by zero when the baseline E1RM is zero', () => {
+    const snapshots: ExercisePerformanceSnapshot[] = [
+      createSnapshot('2024-01-01', 0),
+      createSnapshot('2024-01-08', 0),
+      createSnapshot('2024-01-15', 0),
+      createSnapshot('2024-01-22', 0),
+    ];
+
+    const result = analyzeExerciseTrend(snapshots);
+    expect(Number.isNaN(result.weeklyChange)).toBe(false);
+    // Zero baseline + zero progress => treated as plateaued, not NaN.
+    expect(result.isPlateaued).toBe(true);
+  });
 });
 
 // ============================================

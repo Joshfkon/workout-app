@@ -9,7 +9,8 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
-import { buildCoachingContext, formatCoachingContext } from '@/services/coachingContextService';
+import { buildCoachingContext } from '@/lib/data/coachingContext';
+import { formatCoachingContext } from '@/services/coachingContextService';
 import {
   AuthenticationError,
   ServerError,
@@ -17,6 +18,7 @@ import {
   getErrorMessage,
 } from '@/lib/errors';
 import type { CoachingMessage, CoachingResponse } from '@/types/coaching';
+import type { Database, Json } from '@/types/database';
 
 // System prompt for AI coaching
 const SYSTEM_PROMPT = `You are an AI strength and physique coach embedded in a training app. You have access to this user's actual data — use it. Never give generic advice when their specific numbers tell a clearer story.
@@ -181,27 +183,37 @@ export async function sendCoachingMessage(
   };
   messages.push(assistantMessage);
 
-  // Save or update conversation
+  // Save or update conversation.
+  // NOTE: payloads are typed against the generated table types below. The
+  // trailing `as never` works around a generic mismatch between
+  // @supabase/ssr@0.5.2 and @supabase/supabase-js@2.87.1 (the ssr client
+  // passes the schema object into a slot supabase-js now reads as a schema
+  // *name*, collapsing write builders to `never`). It is NOT a missing-type
+  // workaround — reads are fully typed.
   if (conversation) {
-    await (supabase
-      .from('ai_coaching_conversations') as any)
-      .update({
-        messages,
-        last_message_at: new Date().toISOString(),
-      })
+    const update: Database['public']['Tables']['ai_coaching_conversations']['Update'] = {
+      // CoachingMessage[] is JSON-serializable; cast to the jsonb column's Json type.
+      messages: messages as unknown as Json,
+      last_message_at: new Date().toISOString(),
+    };
+    await supabase
+      .from('ai_coaching_conversations')
+      .update(update as never)
       .eq('id', conversationId as string);
   } else {
     // Create new conversation with a generated title
     const title = message.slice(0, 50) + (message.length > 50 ? '...' : '');
-    const { data, error } = await (supabase
-      .from('ai_coaching_conversations') as any)
-      .insert({
-        user_id: user.id,
-        title,
-        messages,
-        started_at: new Date().toISOString(),
-        last_message_at: new Date().toISOString(),
-      })
+    const insert: Database['public']['Tables']['ai_coaching_conversations']['Insert'] = {
+      user_id: user.id,
+      title,
+      // CoachingMessage[] is JSON-serializable; cast to the jsonb column's Json type.
+      messages: messages as unknown as Json,
+      started_at: new Date().toISOString(),
+      last_message_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('ai_coaching_conversations')
+      .insert(insert as never)
       .select()
       .single();
 

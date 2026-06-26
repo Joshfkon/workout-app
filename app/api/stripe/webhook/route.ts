@@ -17,6 +17,26 @@ async function getSupabaseAdmin() {
   );
 }
 
+/**
+ * Re-fetch the subscription from Stripe so we always write the current state,
+ * regardless of the order webhook events were delivered in. Stripe does not
+ * guarantee ordered delivery, so an older `customer.subscription.updated` event
+ * could otherwise clobber newer state. Retrieving the live object before
+ * writing makes Stripe the source of truth and neutralizes out-of-order events.
+ */
+async function fetchAuthoritativeSubscription(
+  subscription: Stripe.Subscription
+): Promise<Stripe.Subscription> {
+  try {
+    return await stripe.subscriptions.retrieve(subscription.id);
+  } catch (err) {
+    // If the re-fetch fails (e.g. subscription already deleted), fall back to
+    // the event payload rather than dropping the update entirely.
+    console.error('Failed to re-fetch subscription, using event payload:', err);
+    return subscription;
+  }
+}
+
 async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   const supabase = await getSupabaseAdmin();
 
@@ -179,35 +199,80 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Handle the event
-    switch (event.type) {
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-        await handleSubscriptionChange(event.data.object as Stripe.Subscription);
-        break;
-        
-      case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
-        break;
-        
-      case 'invoice.payment_failed':
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
-        
-      case 'invoice.payment_succeeded':
-        // Payment successful - subscription update will handle status
-        const invoice = event.data.object as unknown as Record<string, unknown>;
-        const invoiceSubscription = invoice.subscription as string | null;
-        if (invoiceSubscription) {
-          const subscription = await stripe.subscriptions.retrieve(invoiceSubscription);
-          await handleSubscriptionChange(subscription);
-        }
-        break;
-        
-      default:
-        // Unhandled event types are silently ignored
+    // Idempotency guard: Stripe delivers events at-least-once, so the same
+    // event.id can arrive multiple times. Atomically claim the event by
+    // inserting its id; if it already exists, we've processed it before and
+    // can safely skip. This uses the insert-then-process pattern so a duplicate
+    // can never re-run side effects.
+    const supabaseAdmin = await getSupabaseAdmin();
+    const { error: claimError } = await supabaseAdmin
+      .from('stripe_processed_events')
+      .insert({ id: event.id, type: event.type });
+
+    if (claimError) {
+      // Unique-violation (23505) means this event was already processed.
+      if (claimError.code === '23505') {
+        console.log(`Skipping already-processed Stripe event: ${event.id}`);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      // Any other error means we couldn't record the claim. Fail loudly so
+      // Stripe retries rather than risk silently double-processing.
+      console.error('Failed to record Stripe event for idempotency:', claimError);
+      return NextResponse.json(
+        { error: 'Failed to record event' },
+        { status: 500 }
+      );
     }
-    
+
+    try {
+      // Handle the event
+      switch (event.type) {
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated': {
+          // Re-fetch as source of truth to defend against out-of-order delivery.
+          const authoritative = await fetchAuthoritativeSubscription(
+            event.data.object as Stripe.Subscription
+          );
+          await handleSubscriptionChange(authoritative);
+          break;
+        }
+
+        case 'customer.subscription.deleted':
+          await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+          break;
+
+        case 'invoice.payment_failed':
+          await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+          break;
+
+        case 'invoice.payment_succeeded': {
+          // Payment successful - subscription update will handle status
+          const invoice = event.data.object as unknown as Record<string, unknown>;
+          const invoiceSubscription = invoice.subscription as string | null;
+          if (invoiceSubscription) {
+            const subscription = await stripe.subscriptions.retrieve(invoiceSubscription);
+            await handleSubscriptionChange(subscription);
+          }
+          break;
+        }
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
+    } catch (handlerError) {
+      // Processing failed after we claimed the event. Remove the claim so
+      // Stripe's retry can re-attempt instead of being deduped away.
+      console.error('Webhook handler failed, releasing idempotency claim:', handlerError);
+      await supabaseAdmin
+        .from('stripe_processed_events')
+        .delete()
+        .eq('id', event.id);
+      return NextResponse.json(
+        { error: 'Webhook handler failed' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error('Webhook error:', error);

@@ -54,7 +54,7 @@ describe('repRangeEngine', () => {
     const baseFactors: RepRangeFactors = {
       goal: 'bulk',
       experience: 'intermediate',
-      exercisePattern: 'compound',
+      exercisePattern: 'horizontal_push',
       muscleGroup: 'chest',
       positionInWorkout: 'early',
       weekInMesocycle: 1,
@@ -89,7 +89,7 @@ describe('repRangeEngine', () => {
 
     describe('exercise type adjustments', () => {
       it('uses higher reps for isolation exercises', () => {
-        const compoundResult = calculateRepRange({ ...baseFactors, exercisePattern: 'compound' });
+        const compoundResult = calculateRepRange({ ...baseFactors, exercisePattern: 'horizontal_push' });
         const isolationResult = calculateRepRange({ ...baseFactors, exercisePattern: 'isolation' });
 
         expect(isolationResult.max).toBeGreaterThan(compoundResult.max);

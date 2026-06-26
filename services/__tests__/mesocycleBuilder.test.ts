@@ -19,7 +19,9 @@ import {
   calculateWeeklyVolumePerMuscle,
   generateMesocycleRecommendation,
 } from '../mesocycleBuilder';
-import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
+import type { ExtendedUserProfile, RecoveryFactors, Rating, Goal, Experience, MuscleGroup, StandardMuscleGroup, Split, Equipment, SessionTemplate } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { makeDexaScan } from '@/test-utils/factories';
 
 // Helper to create a profile with defaults
 function createProfile(overrides: Partial<ExtendedUserProfile> = {}): ExtendedUserProfile {
@@ -411,7 +413,7 @@ describe('mesocycleBuilder', () => {
     });
 
     it('slightly increases volume during bulk', () => {
-      const maintenanceVolume = recommendVolume('intermediate', 'maintain', 'chest');
+      const maintenanceVolume = recommendVolume('intermediate', 'maintenance', 'chest');
       const bulkVolume = recommendVolume('intermediate', 'bulk', 'chest');
 
       expect(bulkVolume).toBeGreaterThanOrEqual(maintenanceVolume);
@@ -559,6 +561,34 @@ describe('mesocycleBuilder', () => {
 
       expect(ppl6.chest.frequency).toBeGreaterThan(ppl3.chest.frequency);
     });
+
+    it('never starts week-1 volume above the muscle MRV, even with max multipliers', () => {
+      // High recovery (bulk goal already applies x1.1) + lagging boost would
+      // otherwise push volumes well past MRV. Clamp must hold.
+      const highRecovery: RecoveryFactors = {
+        volumeMultiplier: 1.3, // max allowed
+        frequencyMultiplier: 1.2,
+        deloadFrequencyWeeks: 5,
+        warnings: [],
+      };
+
+      const experiences: Experience[] = ['novice', 'intermediate', 'advanced'];
+      for (const experience of experiences) {
+        const distribution = calculateVolumeDistribution(
+          'Full Body',
+          6,
+          experience,
+          'bulk',
+          highRecovery,
+          ['Arms', 'Legs', 'Trunk'] // boost every muscle
+        );
+
+        for (const muscle of Object.keys(distribution) as MuscleGroup[]) {
+          const mrv = DEFAULT_VOLUME_LANDMARKS[experience][muscle as unknown as StandardMuscleGroup]?.mrv ?? 16;
+          expect(distribution[muscle].sets).toBeLessThanOrEqual(mrv);
+        }
+      }
+    });
   });
 
   describe('generateWarmup', () => {
@@ -665,6 +695,15 @@ describe('mesocycleBuilder', () => {
       const result = selectExercises('chest', 9, baseProfile, 15);
       const totalSets = result.setsPerExercise.reduce((sum, s) => sum + s, 0);
       expect(totalSets).toBeGreaterThanOrEqual(9);
+    });
+
+    it('never exceeds the per-exercise set cap (3 isolation / 4 compound)', () => {
+      // Request a large number of sets to force the leftover-distribution path.
+      const result = selectExercises('chest', 40, baseProfile, 100);
+      for (let i = 0; i < result.exercises.length; i++) {
+        const cap = result.exercises[i].pattern === 'isolation' ? 3 : 4;
+        expect(result.setsPerExercise[i]).toBeLessThanOrEqual(cap);
+      }
     });
   });
 
@@ -800,12 +839,11 @@ describe('mesocycleBuilder', () => {
         availableEquipment: ['barbell', 'dumbbell', 'cable', 'machine'] as Equipment[],
         injuryHistory: [],
         heightCm: 180,
-        latestDexa: {
-          date: new Date().toISOString(),
+        latestDexa: makeDexaScan({
           bodyFatPercent: 25,
           leanMassKg: 65,
           fatMassKg: 22,
-        },
+        }),
         goal: 'bulk',
       });
 
@@ -1049,12 +1087,11 @@ describe('mesocycleBuilder', () => {
         goal: 'bulk' as Goal,
         experience: 'intermediate' as Experience,
         heightCm: 180,
-        latestDexa: {
-          date: new Date().toISOString(),
+        latestDexa: makeDexaScan({
           bodyFatPercent: 25,
           leanMassKg: 65,
           fatMassKg: 22,
-        },
+        }),
       };
 
       const recommendation = generateMesocycleRecommendation(profile, 4);
@@ -1078,7 +1115,7 @@ describe('mesocycleBuilder', () => {
 
     it('handles maintenance goal', () => {
       const maintainProfile = {
-        goal: 'maintain' as Goal,
+        goal: 'maintenance' as Goal,
         experience: 'intermediate' as Experience,
         heightCm: 180,
         latestDexa: null,

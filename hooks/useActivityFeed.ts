@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuthUser } from '@/hooks/useAuthUser';
 import { fetchUserProfiles } from '@/lib/profiles';
@@ -43,8 +43,15 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
   const [cursor, setCursor] = useState<string | null>(null);
   const { user: authUser } = useAuthUser();
 
+  // Monotonic request id. Only the latest in-flight fetch is allowed to commit
+  // results, so out-of-order responses and post-unmount responses are ignored.
+  const requestIdRef = useRef(0);
+
   const fetchActivities = useCallback(async (loadMore = false) => {
     if (loadMore && !hasMore) return;
+
+    const requestId = ++requestIdRef.current;
+    const isCurrent = () => requestId === requestIdRef.current;
 
     setIsLoading(true);
     setError(null);
@@ -100,6 +107,9 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
       }
 
       const { data: activitiesData, error: fetchError } = await query as { data: any[] | null; error: any };
+
+      // Ignore stale/out-of-order responses before doing any further work.
+      if (!isCurrent()) return;
 
       if (fetchError) {
         console.error('[useActivityFeed] Query error:', fetchError);
@@ -195,6 +205,10 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
           user_reaction: userReactions[activity.id],
         }));
 
+        // A later request may have superseded this one while we fetched
+        // profiles/reactions; bail before committing if so.
+        if (!isCurrent()) return;
+
         if (loadMore) {
           setActivities(prev => [...prev, ...transformed]);
         } else {
@@ -209,6 +223,7 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         }
       } else {
         // No activities found
+        if (!isCurrent()) return;
         if (loadMore) {
           setHasMore(false);
         } else {
@@ -217,17 +232,25 @@ export function useActivityFeed({ feedType, userId, limit = 20 }: FeedOptions) {
         }
       }
     } catch (err) {
+      if (!isCurrent()) return;
       console.error('[useActivityFeed] Error loading activities:', err);
       const message = err instanceof Error ? err.message : 'Failed to load activities';
       setError(message);
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+      }
     }
   }, [feedType, userId, limit, hasMore, cursor, authUser]);
 
   // Initial load
   useEffect(() => {
     fetchActivities(false);
+    // Invalidate any in-flight request on unmount / dependency change so its
+    // response is discarded and never sets state on an unmounted component.
+    return () => {
+      requestIdRef.current++;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedType, userId]);
 

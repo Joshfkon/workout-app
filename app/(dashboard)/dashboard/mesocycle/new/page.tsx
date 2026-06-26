@@ -12,7 +12,6 @@ import { useEducationStore } from '@/hooks/useEducationPreferences';
 import { UpgradePrompt } from '@/components/subscription';
 import { formatWeight, getLocalDateString } from '@/lib/utils';
 import type { Goal, Experience, DexaScan, Equipment, MuscleGroup, Rating, ExtendedUserProfile, FullProgramRecommendation, DexaRegionalData, WorkoutDay } from '@/types/schema';
-import { WEEKDAYS } from '@/types/schema';
 import { WorkoutDaySelector, MesocycleLengthGuidance } from '@/components/mesocycle';
 import {
   generateMesocycleRecommendation,
@@ -362,6 +361,20 @@ export default function NewMesocyclePage() {
       };
       const recoveryFactors = calculateRecoveryFactors(userProfile);
 
+      // Reconcile the stored week count with the program actually generated.
+      // If program_data has fewer weeks than the chosen total_weeks, prefer the
+      // program's length so current_week indexing can't run out of bounds.
+      const programWeekCount = fullProgram?.mesocycleWeeks?.length ?? 0;
+      const effectiveTotalWeeks =
+        programWeekCount > 0 ? Math.min(totalWeeks, programWeekCount) : totalWeeks;
+
+      // Deload week = the program's actual deload week if marked, else last week.
+      const programDeloadWeek = fullProgram?.mesocycleWeeks?.find((w) => w.isDeload)?.weekNumber;
+      const effectiveDeloadWeek =
+        programDeloadWeek && programDeloadWeek <= effectiveTotalWeeks
+          ? programDeloadWeek
+          : effectiveTotalWeeks;
+
       // Create mesocycle with full program data
       const { data: mesocycle, error: insertError } = await supabase
         .from('mesocycles')
@@ -370,8 +383,8 @@ export default function NewMesocyclePage() {
           name: name || `${splitType} - ${new Date().toLocaleDateString()}`,
           split_type: splitType,
           days_per_week: daysPerWeek,
-          total_weeks: totalWeeks,
-          deload_week: totalWeeks,
+          total_weeks: effectiveTotalWeeks,
+          deload_week: effectiveDeloadWeek,
           current_week: 1,
           state: 'active',
           fatigue_score: 0,
@@ -385,7 +398,8 @@ export default function NewMesocyclePage() {
           periodization_model: fullProgram?.periodization?.model || 'linear',
           program_data: fullProgram,
           fatigue_budget_config: fullProgram?.fatigueBudget || null,
-          volume_per_muscle: recommendation?.volumePerMuscle || null,
+          // Use the volume targets from the program actually generated (not legacy rec).
+          volume_per_muscle: fullProgram?.volumePerMuscle || recommendation?.volumePerMuscle || null,
           recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
         })
         .select()

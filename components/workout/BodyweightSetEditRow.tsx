@@ -152,6 +152,8 @@ export function BodyweightSetEditRow({
               <label className="block text-xs text-surface-500 mb-1">Reps</label>
               <input
                 type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={reps}
                 onChange={(e) => setReps(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -165,6 +167,7 @@ export function BodyweightSetEditRow({
               <label className="block text-xs text-surface-500 mb-1">RPE</label>
               <input
                 type="number"
+                inputMode="decimal"
                 value={rpe}
                 onChange={(e) => setRpe(e.target.value)}
                 onKeyDown={handleKeyDown}

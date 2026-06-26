@@ -3,8 +3,37 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@/components/ui';
 import { formatDuration } from '@/lib/utils';
+import {
+  scheduleRestCompleteNotification,
+  cancelRestCompleteNotification,
+  restCompleteHaptic,
+} from '@/lib/integrations/notifications';
 
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
+
+// Single shared AudioContext, created/resumed on a user gesture (timer start).
+// On iOS WKWebView an AudioContext created without a recent user gesture stays
+// suspended, so creating it lazily at alarm time never plays. We create it once
+// here and reuse it for every beep.
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!sharedAudioContext) {
+      sharedAudioContext = new Ctor();
+    }
+    if (sharedAudioContext.state === 'suspended') {
+      // Resume must be triggered from a user gesture to succeed on iOS.
+      void sharedAudioContext.resume();
+    }
+    return sharedAudioContext;
+  } catch {
+    return null;
+  }
+}
 
 interface TimerState {
   endTime: number; // Unix timestamp when timer should complete
@@ -64,7 +93,10 @@ export function RestTimer({
     const playBeep = (frequency: number, delay: number) => {
       setTimeout(() => {
         try {
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          // Reuse the shared AudioContext created on the startTimer() gesture.
+          const audioContext = getAudioContext();
+          if (!audioContext) return;
+
           const oscillator = audioContext.createOscillator();
           const gainNode = audioContext.createGain();
 
@@ -77,8 +109,8 @@ export function RestTimer({
 
           oscillator.start();
           setTimeout(() => {
+            // Don't close the shared context - we reuse it for later alarms.
             oscillator.stop();
-            audioContext.close();
           }, 250);
         } catch (e) {
           console.log('Audio not supported');
@@ -90,9 +122,8 @@ export function RestTimer({
     playBeep(800, 350);
     playBeep(1000, 700);
 
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200, 100, 400]);
-    }
+    // Native haptics (with web navigator.vibrate fallback inside).
+    void restCompleteHaptic();
   }, []);
 
   const saveTimerState = useCallback((running: boolean, endTime: number, duration: number) => {
@@ -123,6 +154,9 @@ export function RestTimer({
 
     if (!hasPlayedAlarm.current) {
       hasPlayedAlarm.current = true;
+      // Foreground completion: in-app alarm fires, so cancel the redundant
+      // native notification scheduled at startTimer().
+      void cancelRestCompleteNotification();
       playAlarm();
       onCompleteRef.current?.();
     }
@@ -156,6 +190,14 @@ export function RestTimer({
     hasPlayedAlarm.current = false;
     saveTimerState(true, endTime, duration);
 
+    // Create/resume the shared AudioContext now, while inside a user gesture,
+    // so the foreground beep can actually play later (esp. on iOS).
+    getAudioContext();
+
+    // Schedule a native local notification at endTime - the only reliable alert
+    // when the app is backgrounded / screen locked. No-op on web.
+    void scheduleRestCompleteNotification(endTime);
+
     intervalRef.current = setInterval(tick, 1000);
   }, [clearTimerInterval, saveTimerState, tick]);
 
@@ -175,6 +217,10 @@ export function RestTimer({
           setIsRunning(true);
           hasPlayedAlarm.current = false;
           intervalRef.current = setInterval(tick, 1000);
+          // Re-ensure a native notification is scheduled for the restored
+          // endTime (it may have been lost across an app relaunch). Same id
+          // replaces any existing one. No-op on web.
+          void scheduleRestCompleteNotification(state.endTime);
         } else if (state.isRunning && remaining <= 0) {
           setSeconds(0);
           setInitialSeconds(state.duration);
@@ -185,6 +231,7 @@ export function RestTimer({
           localStorage.removeItem(TIMER_STORAGE_KEY);
           if (!hasPlayedAlarm.current) {
             hasPlayedAlarm.current = true;
+            void cancelRestCompleteNotification();
             playAlarm();
             onCompleteRef.current?.();
           }
@@ -215,6 +262,7 @@ export function RestTimer({
       clearTimerInterval();
       endTimeRef.current = null;
       localStorage.removeItem(TIMER_STORAGE_KEY);
+      void cancelRestCompleteNotification();
     } else {
       startTimer(secondsRef.current);
     }
@@ -230,6 +278,7 @@ export function RestTimer({
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     localStorage.removeItem(TIMER_STORAGE_KEY);
+    void cancelRestCompleteNotification();
   };
 
   const addTime = (amount: number) => {
@@ -244,10 +293,15 @@ export function RestTimer({
         endTimeRef.current = now + 1000;
         setSeconds(1);
         saveTimerState(true, now + 1000, initialSeconds);
+        // Reschedule native notification for the (near-immediate) new endTime.
+        void scheduleRestCompleteNotification(now + 1000);
       } else {
         endTimeRef.current = newEndTime;
         setSeconds(newRemaining);
         saveTimerState(true, newEndTime, initialSeconds);
+        // Reschedule native notification at the adjusted endTime (same id
+        // replaces the prior one).
+        void scheduleRestCompleteNotification(newEndTime);
       }
     } else {
       const currentSeconds = secondsRef.current;
@@ -407,7 +461,9 @@ export function RestTimer({
               setIsRunning(false);
               setIsFinished(false);
               hasPlayedAlarm.current = false;
+              endTimeRef.current = null;
               localStorage.removeItem(TIMER_STORAGE_KEY);
+              void cancelRestCompleteNotification();
             }}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               initialSeconds === preset

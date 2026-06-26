@@ -5,7 +5,7 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/compon
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight, getLocalDateString } from '@/lib/utils';
+import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
@@ -60,13 +60,6 @@ interface ExerciseHistoryData {
   allTimeBestReps: number;
   totalSetsAllTime: number;
   progressPercent: number;
-}
-
-// Calculate estimated 1RM using Brzycki formula
-function calculateE1RM(weight: number, reps: number): number {
-  if (reps === 1) return weight;
-  if (reps > 12) return weight * (1 + reps / 30);
-  return weight * (36 / (37 - reps));
 }
 
 function HistoryPageContent() {
@@ -250,11 +243,11 @@ function HistoryPageContent() {
 
         // Calculate E1RM from the previous workout's best set for this exercise
         const bestSet = exercise.sets.reduce((best, set) => {
-          const e1rm = calculateE1RM(set.weight_kg, set.reps);
-          const bestE1rm = best ? calculateE1RM(best.weight_kg, best.reps) : 0;
+          const e1rm = estimateE1RM(set.weight_kg, set.reps);
+          const bestE1rm = best ? estimateE1RM(best.weight_kg, best.reps) : 0;
           return e1rm > bestE1rm ? set : best;
         }, null as SetDetail | null);
-        const knownE1RM = bestSet ? calculateE1RM(bestSet.weight_kg, bestSet.reps) : undefined;
+        const knownE1RM = bestSet ? estimateE1RM(bestSet.weight_kg, bestSet.reps) : undefined;
 
         // Use weight estimation service to get recommended weight
         const weightEstimate = quickWeightEstimate(
@@ -376,7 +369,7 @@ function HistoryPageContent() {
         const sets: { weight: number; reps: number; rpe: number | null }[] = [];
 
         workingSets.forEach((set: any) => {
-          const e1rm = calculateE1RM(set.weight_kg, set.reps);
+          const e1rm = estimateE1RM(set.weight_kg, set.reps);
           sets.push({ weight: set.weight_kg, reps: set.reps, rpe: set.rpe });
           sessionVolume += set.weight_kg * set.reps;
           

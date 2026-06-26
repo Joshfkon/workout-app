@@ -334,11 +334,12 @@ export function WearableConnectionsScreen() {
           <div className="flex items-start gap-3">
             <span className="text-xl">ℹ️</span>
             <div className="text-sm text-surface-600 dark:text-surface-400">
-              <p className="font-medium mb-1">Why connect your wearable?</p>
+              <p className="font-medium mb-1">About wearable connections</p>
               <p>
-                We use step data to improve your TDEE estimate and adjust daily calorie
-                targets based on activity. Your metabolism is not the same every day - on
-                active days you burn more, and we can account for that difference.
+                Automatic step sync from wearables isn&apos;t active yet - connecting an
+                account links it for when sync ships, but it won&apos;t pull data into the
+                app today. In the meantime you can enter your steps manually, which already
+                feeds into your TDEE estimate.
               </p>
             </div>
           </div>

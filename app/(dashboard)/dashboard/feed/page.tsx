@@ -213,8 +213,8 @@ export default function FeedPage() {
 
       // Calculate workout streaks from completed workout dates
       const workoutDates = workoutStats
-        ?.filter((w) => w.completed_at)
-        .map((w) => w.completed_at as string) ?? [];
+        ?.filter((w) => (w as { completed_at: string | null }).completed_at)
+        .map((w) => (w as { completed_at: string | null }).completed_at as string) ?? [];
       const { currentStreak, longestStreak } = calculateStreaks(workoutDates);
 
       setStats({

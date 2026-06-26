@@ -15,7 +15,7 @@ import {
   bulkSetExerciseStatus,
   resetAllPreferences as resetAllPreferencesService,
   clearPreferencesCache,
-} from '@/services/exercisePreferencesService';
+} from '@/lib/data/exercisePreferencesService';
 
 /** Compute summary counts from the preferences map */
 function computeSummaryFromPrefs(prefs: Map<string, UserExercisePreference>): ExercisePreferenceSummary {

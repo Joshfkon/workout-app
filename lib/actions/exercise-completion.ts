@@ -9,6 +9,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@/lib/supabase/server';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
+import type { Database } from '@/types/database';
 import {
   renderPrompt,
   parseAIResponse,
@@ -37,8 +38,8 @@ async function getAIUsage(userId: string): Promise<UsageRecord> {
   const monthStartStr = getLocalDateString(monthStart);
 
   // Check for existing usage record
-  const { data } = await (supabase
-    .from('ai_exercise_completions') as any)
+  const { data } = await supabase
+    .from('ai_exercise_completions')
     .select('created_at')
     .eq('user_id', userId)
     .gte('created_at', monthStartStr);
@@ -57,11 +58,15 @@ async function getAIUsage(userId: string): Promise<UsageRecord> {
 async function recordAIUsage(userId: string, exerciseName: string): Promise<void> {
   const supabase = await createClient();
 
-  await (supabase.from('ai_exercise_completions') as any).insert({
+  // Payload typed against the generated table type; `as never` works around
+  // the @supabase/ssr@0.5.2 / @supabase/supabase-js@2.87.1 generic skew that
+  // collapses write builders to `never` (not a missing-type workaround).
+  const insert: Database['public']['Tables']['ai_exercise_completions']['Insert'] = {
     user_id: userId,
     exercise_name: exerciseName,
     created_at: new Date().toISOString(),
-  });
+  };
+  await supabase.from('ai_exercise_completions').insert(insert as never);
 }
 
 // Default limits

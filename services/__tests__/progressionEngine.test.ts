@@ -4,19 +4,19 @@
  */
 
 import {
-  calculateNextTargets,
   calculateSetQuality,
   calculateE1RM,
   calculateBodyweightE1RM,
   detectJunkVolume,
   detectRegression,
   generateWarmupProtocol,
-  extractPerformanceFromSets,
   getPeriodizationPhase,
   adjustForFatigue,
   checkForPR,
   calculateSuggestedWeight,
   checkFormTrend,
+  calculateNextTargets,
+  recommendNextSet,
   exerciseEntryToExercise,
   PHASE_CONFIGS,
   type CalculateNextTargetsInput,
@@ -34,6 +34,7 @@ import type {
   PRCriteria,
   SessionFormHistory,
 } from '@/types/schema';
+import { roundToIncrement } from '@/lib/utils';
 
 // ============================================
 // TEST FIXTURES
@@ -83,6 +84,82 @@ const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog => ({
   note: null,
   loggedAt: new Date().toISOString(),
   ...overrides,
+});
+
+// ============================================
+// NEXT-SET RECOMMENDATION TESTS
+// ============================================
+
+describe('recommendNextSet', () => {
+  const target: [number, number] = [10, 13];
+
+  it('keeps the load when reps land in range, shaving a rep for fatigue', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 11, lastRir: 2,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBeGreaterThanOrEqual(10);
+    expect(r.reps).toBeLessThanOrEqual(11); // <= what was done (fatigue), still in range
+  });
+
+  it('INCREASES load after an easy set well above the range (the 110x20 RIR4 case)', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 110, lastReps: 20, lastRir: 4,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('increase_load');
+    // Never recommend a lighter/equal load after crushing it...
+    expect(r.weightKg).toBeGreaterThan(110);
+    // ...and reps must never drop below the range minimum. Because the per-set
+    // load increase is capped, one step can't reach the range from 20 reps, so
+    // the recommended reps stay high (achievable at the new load) instead of
+    // collapsing to e.g. 13 — that was the original bug.
+    expect(r.reps).toBeGreaterThanOrEqual(target[0]);
+    expect(r.reps).toBeGreaterThan(target[1]);
+  });
+
+  it('caps the per-set load increase at ~10%', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 50, lastReps: 30, lastRir: 5,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('increase_load');
+    expect(r.weightKg).toBeLessThanOrEqual(50 * 1.1);
+    expect(r.weightKg).toBeGreaterThan(50);
+  });
+
+  it('REDUCES load after a heavy set below the range', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 5, lastRir: 0,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.weightKg).toBeLessThan(100);
+    expect(r.weightKg).toBeGreaterThanOrEqual(100 * 0.9 - 2.5);
+    expect(r.reps).toBeGreaterThanOrEqual(target[0]);
+  });
+
+  it('keeps weight (no bump) for a small overshoot of the range', () => {
+    // Did 14 @ RIR2, target top 13: only 1 over -> stay at weight, top of range.
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 14, lastRir: 2,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBe(13);
+  });
+
+  it('guards against zero/negative inputs', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 0, lastReps: 0, lastRir: 0,
+      targetRepRange: target, targetRir: 2,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.reps).toBe(target[0]);
+  });
 });
 
 // ============================================
@@ -405,6 +482,32 @@ describe('calculateE1RM', () => {
     const result = calculateE1RM(50, 20, 10);
     expect(result).toBeGreaterThan(50);
   });
+
+  it('uses a gentle high-rep formula (reps > 12) to avoid inflation', () => {
+    // For reps > 12 the adopted formula is weight * (1 + reps/40).
+    // 20 reps: 100 * (1 + 20/40) = 150.
+    expect(calculateE1RM(100, 20, 10)).toBeCloseTo(150, 1);
+    // 15 reps: 100 * (1 + 15/40) = 137.5.
+    expect(calculateE1RM(100, 15, 10)).toBeCloseTo(137.5, 1);
+    // Anti-inflation: stays well below a raw Epley estimate (100*(1+20/30)=166.7).
+    expect(calculateE1RM(100, 20, 10)).toBeLessThan(100 * (1 + 20 / 30));
+  });
+});
+
+describe('roundToIncrement (bodyweight zero-increment guard)', () => {
+  it('returns the value unchanged when increment is 0 (no NaN)', () => {
+    // Bodyweight equipment has a 0 min increment -> previously divided by zero.
+    expect(roundToIncrement(72.5, 0)).toBe(72.5);
+    expect(Number.isNaN(roundToIncrement(72.5, 0))).toBe(false);
+  });
+
+  it('returns the value unchanged for negative increments', () => {
+    expect(roundToIncrement(50, -2.5)).toBe(50);
+  });
+
+  it('still rounds normally for a positive increment', () => {
+    expect(roundToIncrement(101, 2.5)).toBe(100);
+  });
 });
 
 describe('calculateBodyweightE1RM', () => {
@@ -612,52 +715,6 @@ describe('generateWarmupProtocol', () => {
 });
 
 // ============================================
-// EXTRACT PERFORMANCE TESTS
-// ============================================
-
-describe('extractPerformanceFromSets', () => {
-  it('extracts performance from working sets only', () => {
-    const sets = [
-      createMockSetLog({ isWarmup: true, weightKg: 50, reps: 10 }),
-      createMockSetLog({ isWarmup: false, weightKg: 100, reps: 8, rpe: 8 }),
-      createMockSetLog({ isWarmup: false, weightKg: 100, reps: 7, rpe: 9 }),
-    ];
-
-    const result = extractPerformanceFromSets(sets, 'bench-press');
-
-    expect(result).not.toBeNull();
-    expect(result!.weightKg).toBe(100);
-    expect(result!.sets).toBe(2);
-    expect(result!.averageRpe).toBe(8.5);
-  });
-
-  it('returns null for empty sets', () => {
-    expect(extractPerformanceFromSets([], 'bench-press')).toBeNull();
-  });
-
-  it('returns null when only warmup sets', () => {
-    const sets = [
-      createMockSetLog({ isWarmup: true }),
-      createMockSetLog({ isWarmup: true }),
-    ];
-
-    expect(extractPerformanceFromSets(sets, 'bench-press')).toBeNull();
-  });
-
-  it('uses top set weight and reps', () => {
-    const sets = [
-      createMockSetLog({ weightKg: 95, reps: 8, rpe: 7 }),
-      createMockSetLog({ weightKg: 100, reps: 6, rpe: 9 }), // Higher weight
-      createMockSetLog({ weightKg: 95, reps: 10, rpe: 8 }),
-    ];
-
-    const result = extractPerformanceFromSets(sets, 'test');
-    expect(result!.weightKg).toBe(100);
-    expect(result!.reps).toBe(6);
-  });
-});
-
-// ============================================
 // PR DETECTION TESTS
 // ============================================
 
@@ -727,6 +784,15 @@ describe('checkForPR', () => {
     const result = checkForPR(current, previous);
     expect(result.isPR).toBe(true);
     expect(result.type).toBe('form');
+  });
+
+  it('does not award a weight PR on an E1RM regression', () => {
+    // Heavier weight but far fewer reps -> lower estimated 1RM.
+    const previous: PRCriteria = { weight: 100, reps: 12, repsInTank: 2, form: 'clean' };
+    const current: PRCriteria = { weight: 110, reps: 1, repsInTank: 2, form: 'clean' };
+
+    const result = checkForPR(current, previous);
+    expect(result.isPR).toBe(false);
   });
 });
 

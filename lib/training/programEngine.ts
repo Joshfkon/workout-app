@@ -92,12 +92,12 @@ export function estimate1RM(weight: number, reps: number, rpe?: number): number 
   if (reps > 12) {
     return weight * (1 + reps / 40);
   }
-  
+
   const effectiveReps = rpe ? reps + (10 - rpe) : reps;
   const brzycki = weight * (36 / (37 - effectiveReps));
   const epley = weight * (1 + effectiveReps / 30);
   const lombardi = weight * Math.pow(effectiveReps, 0.10);
-  
+
   return Math.round(((brzycki + epley + lombardi) / 3) * 10) / 10;
 }
 

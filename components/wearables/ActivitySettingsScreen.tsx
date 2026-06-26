@@ -35,8 +35,9 @@ const ADJUSTMENT_MODES: {
   },
   {
     value: 'activity_adjusted',
-    label: 'Activity-adjusted',
-    description: 'Eat more on active days, less on rest days',
+    label: 'Activity-adjusted (coming soon)',
+    description:
+      'Eat more on active days, less on rest days. Not active yet - requires step data.',
   },
   {
     value: 'deficit_locked',
@@ -115,6 +116,13 @@ export function ActivitySettingsScreen() {
           <CardTitle>Calorie Target Adjustment</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-surface-50 dark:bg-surface-800 text-sm text-surface-600 dark:text-surface-400">
+            <span>ℹ️</span>
+            <p>
+              Your preference is saved, but automatic calorie adjustment based on daily
+              activity isn&apos;t active yet. Your target stays fixed for now.
+            </p>
+          </div>
           {ADJUSTMENT_MODES.map((mode) => (
             <label
               key={mode.value}

@@ -158,7 +158,7 @@ describe('userStore', () => {
       useUserStore.getState().updateVolumeLandmark('chest', newLandmarks);
 
       const { user } = useUserStore.getState();
-      expect(user?.volumeLandmarks.back).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.back);
+      expect(user?.volumeLandmarks.back).toEqual((DEFAULT_VOLUME_LANDMARKS.intermediate as any).back);
     });
 
     it('adds new muscle landmarks', () => {

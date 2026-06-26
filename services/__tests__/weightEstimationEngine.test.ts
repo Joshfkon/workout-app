@@ -18,6 +18,7 @@ import {
   type EstimatedMax,
 } from '../weightEstimationEngine';
 import type { Experience } from '@/types/schema';
+import { makeRegionalAnalysis, makeBodyPartAnalysis } from '@/test-utils/factories';
 
 // ============================================
 // TEST HELPERS
@@ -387,18 +388,17 @@ describe('WeightEstimationEngine', () => {
 
     it('adjusts for arm asymmetry on arm exercises', () => {
       const profile = createTestProfile({
-        regionalAnalysis: {
+        regionalAnalysis: makeRegionalAnalysis({
           parts: [
-            { name: 'Arms', leanMassKg: 8, percentOfTotal: 12 },
-            { name: 'Legs', leanMassKg: 25, percentOfTotal: 37 },
-            { name: 'Trunk', leanMassKg: 35, percentOfTotal: 51 },
+            makeBodyPartAnalysis({ name: 'Arms', leanMassKg: 8, percentOfTotal: 12 }),
+            makeBodyPartAnalysis({ name: 'Legs', leanMassKg: 25, percentOfTotal: 37 }),
+            makeBodyPartAnalysis({ name: 'Trunk', leanMassKg: 35, percentOfTotal: 51 }),
           ],
           asymmetries: {
             arms: 8, // Right arm is 8% stronger
             legs: 2,
           },
-          recommendations: [],
-        },
+        }),
       });
 
       const engine = new WeightEstimationEngine(profile);
@@ -411,18 +411,17 @@ describe('WeightEstimationEngine', () => {
 
     it('adjusts for leg asymmetry on leg exercises', () => {
       const profile = createTestProfile({
-        regionalAnalysis: {
+        regionalAnalysis: makeRegionalAnalysis({
           parts: [
-            { name: 'Arms', leanMassKg: 8, percentOfTotal: 12 },
-            { name: 'Legs', leanMassKg: 25, percentOfTotal: 37 },
-            { name: 'Trunk', leanMassKg: 35, percentOfTotal: 51 },
+            makeBodyPartAnalysis({ name: 'Arms', leanMassKg: 8, percentOfTotal: 12 }),
+            makeBodyPartAnalysis({ name: 'Legs', leanMassKg: 25, percentOfTotal: 37 }),
+            makeBodyPartAnalysis({ name: 'Trunk', leanMassKg: 35, percentOfTotal: 51 }),
           ],
           asymmetries: {
             arms: 2,
             legs: -6, // Left leg is 6% stronger
           },
-          recommendations: [],
-        },
+        }),
       });
 
       const engine = new WeightEstimationEngine(profile);
@@ -434,11 +433,10 @@ describe('WeightEstimationEngine', () => {
 
     it('returns no adjustment for non-unilateral exercises', () => {
       const profile = createTestProfile({
-        regionalAnalysis: {
+        regionalAnalysis: makeRegionalAnalysis({
           parts: [],
           asymmetries: { arms: 10, legs: 10 },
-          recommendations: [],
-        },
+        }),
       });
 
       const engine = new WeightEstimationEngine(profile);

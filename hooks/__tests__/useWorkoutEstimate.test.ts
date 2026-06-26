@@ -14,7 +14,7 @@ function createMockBlock(targetSets: number, targetRestSeconds?: number): Exerci
     targetRir: 2,
     targetWeightKg: 50,
     targetRestSeconds,
-  };
+  } as unknown as ExerciseBlock;
 }
 
 describe('useWorkoutEstimate', () => {

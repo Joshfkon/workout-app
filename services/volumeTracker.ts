@@ -30,6 +30,13 @@ import {
 } from '@/types/schema';
 
 // ============================================
+// CONSTANTS / HELPERS
+// ============================================
+
+/** Fractional set credit given to a secondary (indirect) muscle per working set. */
+export const SECONDARY_MUSCLE_CREDIT = 0.5;
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -146,6 +153,12 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
       const data = volumeMap.get(primaryStandard)!;
       data.directSets += setCount;
       data.totalSets += setCount;
+    } else if (process.env.NODE_ENV !== 'production') {
+      // A primary muscle that doesn't map to a canonical group silently drops
+      // volume; surface it in dev so the exercise data can be corrected.
+      console.warn(
+        `[volumeTracker] Unmatched primary muscle "${exercise.primaryMuscle}" - volume not counted`
+      );
     }
 
     // Secondary muscles: convert to standard, partial credit

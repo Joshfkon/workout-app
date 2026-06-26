@@ -110,7 +110,11 @@ function calculateWeeklyChange(
   const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
   const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
 
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  // Guard against a zero denominator (e.g. all points share the same x / week).
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return 0;
+
+  const slope = (n * sumXY - sumX * sumY) / denominator;
 
   return Math.round(slope * 100) / 100;
 }
@@ -127,6 +131,12 @@ function checkForPlateau(
   const recentPoints = dataPoints.slice(-MIN_WEEKS_FOR_ANALYSIS);
   const firstE1RM = recentPoints[0].e1rm;
   const lastE1RM = recentPoints[recentPoints.length - 1].e1rm;
+
+  // Guard against a zero (or invalid) baseline to avoid divide-by-zero.
+  if (firstE1RM <= 0) {
+    // No meaningful baseline: treat any positive improvement as not plateaued.
+    return lastE1RM <= 0;
+  }
 
   // Calculate percent change
   const percentChange = (lastE1RM - firstE1RM) / firstE1RM;

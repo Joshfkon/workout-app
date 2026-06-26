@@ -1,173 +1,12 @@
 /**
- * Coaching Context Service
+ * Coaching Context Formatting
  *
- * Aggregates user data to build a comprehensive coaching context
- * for AI-powered personalized training advice.
- *
- * Pure functions only — DB calls delegated to lib/actions/coaching-context.ts.
+ * Pure formatting helper that turns a CoachingContext into a human-readable
+ * string for the AI prompt. The DB-aggregation that builds the context lives
+ * in lib/data/coachingContext.ts (impure / server-only).
  */
 
-import type { CoachingContext, RecentLift, PhaseType } from '@/types/coaching';
-import type {
-  CalibratedLiftRow,
-  SetLogRow,
-} from '@/types/database-queries';
-import { fetchCoachingContextData, type RawCoachingData } from '@/lib/actions/coaching-context';
-
-/** Convert database phase type to PhaseType (maintenance -> maintain) */
-function toPhaseType(dbPhaseType: string): PhaseType {
-  if (dbPhaseType === 'maintenance') return 'maintain';
-  return dbPhaseType as PhaseType;
-}
-
-/**
- * Build coaching context from raw database data (pure function)
- */
-export function buildCoachingContextFromData(raw: RawCoachingData): CoachingContext {
-  const { user, phase, latestWeight, recentWeights, dexa, mesocycle, calibrations, prefs, sessions, authEmail } = raw;
-
-  // Calculate age from birth_date
-  const age = user.birth_date
-    ? new Date().getFullYear() - new Date(user.birth_date).getFullYear()
-    : 30;
-
-  // Calculate weight trend
-  let weightTrend: 'increasing' | 'stable' | 'decreasing' | undefined;
-  if (recentWeights && recentWeights.length >= 3) {
-    const firstWeight = recentWeights[0].weight_kg;
-    const lastWeight = recentWeights[recentWeights.length - 1].weight_kg;
-    const diff = lastWeight - firstWeight;
-    const percentChange = (diff / firstWeight) * 100;
-
-    if (percentChange > 0.5) weightTrend = 'increasing';
-    else if (percentChange < -0.5) weightTrend = 'decreasing';
-    else weightTrend = 'stable';
-  }
-
-  // Process recent lifts to get top sets per exercise
-  const recentLifts: RecentLift[] = [];
-  const exerciseTopSets = new Map<string, RecentLift>();
-
-  if (sessions) {
-    for (const session of sessions) {
-      if (!session.exercise_blocks) continue;
-
-      for (const block of session.exercise_blocks) {
-        if (!block.set_logs || block.set_logs.length === 0) continue;
-
-        type SetLogSubset = Pick<SetLogRow, 'weight_kg' | 'reps' | 'rpe' | 'is_warmup'>;
-        const workingSets = block.set_logs.filter(
-          (set: SetLogSubset) => !set.is_warmup &&
-            set.weight_kg != null &&
-            set.weight_kg > 0 &&
-            set.reps != null &&
-            set.reps > 0
-        );
-
-        if (workingSets.length === 0) continue;
-
-        const topSet = workingSets.reduce((best: SetLogSubset, current: SetLogSubset) => {
-          const currentWeight = current.weight_kg || 0;
-          const currentReps = current.reps || 0;
-          const bestWeight = best.weight_kg || 0;
-          const bestReps = best.reps || 0;
-          const currentE1RM = currentWeight * (1 + currentReps / 30);
-          const bestE1RM = bestWeight * (1 + bestReps / 30);
-          return currentE1RM > bestE1RM ? current : best;
-        });
-
-        if (!topSet.weight_kg || !topSet.reps) continue;
-
-        const estimated1RM = topSet.weight_kg * (1 + topSet.reps / 30);
-
-        const lift: RecentLift = {
-          exerciseName: block.exercise_name,
-          date: session.planned_date,
-          topSetWeight: topSet.weight_kg,
-          topSetReps: topSet.reps,
-          topSetRpe: topSet.rpe || 0,
-          estimated1RM,
-        };
-
-        const existing = exerciseTopSets.get(block.exercise_name);
-        if (!existing || new Date(lift.date) > new Date(existing.date)) {
-          exerciseTopSets.set(block.exercise_name, lift);
-        }
-      }
-    }
-
-    recentLifts.push(...Array.from(exerciseTopSets.values()));
-    recentLifts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }
-
-  // Process calibrated lifts
-  const calibratedLifts = calibrations.map((cal: CalibratedLiftRow) => ({
-    liftName: cal.lift_name,
-    estimated1RM: cal.estimated_1rm,
-    testedWeight: cal.tested_weight_kg,
-    testedReps: cal.tested_reps,
-    percentileVsTrained: cal.percentile_vs_trained ?? undefined,
-    strengthLevel: cal.strength_level ?? undefined,
-    testedAt: cal.tested_at,
-  }));
-
-  // Calculate FFMI if we have the data
-  let ffmi: number | undefined;
-  if (dexa?.lean_mass_kg && user.height_cm) {
-    const heightM = user.height_cm / 100;
-    ffmi = dexa.lean_mass_kg / (heightM * heightM);
-  }
-
-  return {
-    user: {
-      name: authEmail?.split('@')[0] || 'User',
-      age,
-      sex: user.sex || 'male',
-      height: user.height_cm || 175,
-      trainingAge: user.training_age_years || 1,
-      goal: prefs?.coaching?.primaryGoal || user.goal || undefined,
-      experience: user.experience || undefined,
-    },
-    phase: phase
-      ? {
-          type: toPhaseType(phase.phase_type),
-          weekNumber: phase.current_week,
-          startWeight: phase.start_weight_kg,
-          targetWeight: phase.target_weight_kg ?? undefined,
-        }
-      : undefined,
-    currentStats: {
-      weight: latestWeight?.weight_kg || user.weight_kg || 75,
-      weightTrend,
-      bodyFat: dexa?.body_fat_percent,
-      leanMass: dexa?.lean_mass_kg,
-      ffmi,
-      lastDexaDate: dexa?.scan_date,
-    },
-    training: {
-      currentBlock: mesocycle?.name,
-      weekInBlock: mesocycle?.current_week,
-      daysPerWeek: mesocycle?.days_per_week,
-      recentLifts: recentLifts.slice(0, 15),
-    },
-    strength: calibratedLifts.length > 0
-      ? {
-          calibratedLifts: calibratedLifts.slice(0, 6),
-          overallLevel: calibrations[0]?.strength_level ?? undefined,
-        }
-      : undefined,
-  };
-}
-
-/**
- * Builds a complete coaching context for the current user.
- * Fetches data via server action and transforms it.
- */
-export async function buildCoachingContext(): Promise<CoachingContext | null> {
-  const rawData = await fetchCoachingContextData();
-  if (!rawData) return null;
-  return buildCoachingContextFromData(rawData);
-}
+import type { CoachingContext } from '@/types/coaching';
 
 /**
  * Formats coaching context as a human-readable string for the AI prompt
@@ -175,6 +14,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
 export function formatCoachingContext(context: CoachingContext): string {
   let formatted = `## User Context\n\n`;
 
+  // User info
   formatted += `**User:** ${context.user.name}\n`;
   formatted += `**Age:** ${context.user.age} years\n`;
   formatted += `**Sex:** ${context.user.sex}\n`;
@@ -188,6 +28,7 @@ export function formatCoachingContext(context: CoachingContext): string {
   }
   formatted += `\n`;
 
+  // Phase info
   if (context.phase) {
     formatted += `**Current Phase:** ${context.phase.type} (Week ${context.phase.weekNumber})\n`;
     formatted += `**Starting Weight:** ${context.phase.startWeight} kg\n`;
@@ -197,6 +38,7 @@ export function formatCoachingContext(context: CoachingContext): string {
     formatted += `\n`;
   }
 
+  // Current stats
   formatted += `**Current Weight:** ${context.currentStats.weight} kg`;
   if (context.currentStats.weightTrend) {
     formatted += ` (trend: ${context.currentStats.weightTrend})`;
@@ -217,6 +59,7 @@ export function formatCoachingContext(context: CoachingContext): string {
   }
   formatted += `\n`;
 
+  // Strength calibrations
   if (context.strength && context.strength.calibratedLifts.length > 0) {
     formatted += `**Calibrated Strength (Estimated 1RMs):**\n`;
     if (context.strength.overallLevel) {
@@ -232,6 +75,7 @@ export function formatCoachingContext(context: CoachingContext): string {
     formatted += `\n`;
   }
 
+  // Training info
   if (context.training.currentBlock) {
     formatted += `**Current Training Block:** ${context.training.currentBlock}\n`;
     if (context.training.weekInBlock) {
@@ -243,10 +87,11 @@ export function formatCoachingContext(context: CoachingContext): string {
     formatted += `\n`;
   }
 
+  // Recent lifts - only include valid data
   const validLifts = context.training.recentLifts.filter(
     lift => lift.topSetWeight != null && lift.topSetWeight > 0 && lift.topSetReps != null && lift.topSetReps > 0
   );
-
+  
   if (validLifts.length > 0) {
     formatted += `**Recent Lift Performance (last 30 days):**\n`;
     for (const lift of validLifts.slice(0, 10)) {

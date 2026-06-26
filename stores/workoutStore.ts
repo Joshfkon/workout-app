@@ -208,6 +208,56 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'workout-storage',
+      version: 1,
+      partialize: (state) => ({
+        activeSession: state.activeSession,
+        exerciseBlocks: state.exerciseBlocks,
+        setLogs: state.setLogs,
+        currentBlockIndex: state.currentBlockIndex,
+        isPaused: state.isPaused,
+        pausedAt: state.pausedAt,
+        exercises: state.exercises,
+        // Persist the rest-timer end timestamp so a page refresh / app restart
+        // doesn't drop an in-flight timer. It's an absolute epoch-ms value, so
+        // remaining time is recomputed from Date.now() on rehydrate.
+        restTimerEnd: state.restTimerEnd,
+      }),
+      // Migrate stale persisted shapes forward. A pre-versioned (version 0)
+      // payload predates restTimerEnd persistence; default it so old data
+      // can't corrupt new code.
+      migrate: (persistedState, version) => {
+        const state = (persistedState ?? {}) as Record<string, unknown>;
+        if (version === 0) {
+          // restTimerEnd was never persisted before v1; default it.
+          if (!('restTimerEnd' in state)) {
+            state.restTimerEnd = null;
+          }
+        }
+        return state;
+      },
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+
+        // Recompute the rest timer from the absolute end timestamp. If it has
+        // already elapsed (timer finished while the app was closed), clear it
+        // so the UI doesn't show a phantom expired timer.
+        if (typeof state.restTimerEnd === 'number' && state.restTimerEnd <= Date.now()) {
+          state.restTimerEnd = null;
+        }
+
+        // Clear/clamp a stale pause. If we were paused but the timestamp is
+        // missing or in the future (clock skew / corruption), reset pause state
+        // so the session resumes cleanly rather than getting stuck.
+        if (state.isPaused) {
+          if (typeof state.pausedAt !== 'number' || state.pausedAt > Date.now()) {
+            state.isPaused = false;
+            state.pausedAt = null;
+          }
+        } else if (state.pausedAt != null) {
+          // Not paused but a stale pausedAt lingered — drop it.
+          state.pausedAt = null;
+        }
+      },
     }
   )
 );

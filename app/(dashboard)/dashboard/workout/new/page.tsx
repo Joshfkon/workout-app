@@ -10,7 +10,7 @@ import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleR
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString } from '@/lib/utils';
-import { getUserExercisePreferences } from '@/services/exercisePreferencesService';
+import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
 import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
 import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';

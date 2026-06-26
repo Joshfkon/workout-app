@@ -5,80 +5,26 @@
 
 import { act } from '@testing-library/react';
 import { useWorkoutStore } from '../workoutStore';
-import type { WorkoutSession, ExerciseBlock, SetLog, Exercise } from '@/types/schema';
+import type { SetLog } from '@/types/schema';
+import {
+  makeWorkoutSession,
+  makeExerciseBlock,
+  makeExercise,
+  makeSetLog,
+  makePreWorkoutCheckIn,
+} from '@/test-utils/factories';
 
 // Mock zustand persist middleware
 jest.mock('zustand/middleware', () => ({
   persist: (fn: any) => fn,
 }));
 
-// Test fixtures
-const createMockSession = (overrides: Partial<WorkoutSession> = {}): WorkoutSession => ({
-  id: 'session-1',
-  userId: 'user-1',
-  mesocycleId: 'meso-1',
-  weekNumber: 1,
-  dayNumber: 1,
-  name: 'Push Day',
-  state: 'planned',
-  scheduledDate: '2024-01-15',
-  startedAt: null,
-  completedAt: null,
-  sessionRpe: null,
-  pumpRating: null,
-  sessionNotes: null,
-  completionPercent: 0,
-  preWorkoutCheckIn: null,
-  ...overrides,
-});
-
-const createMockBlock = (overrides: Partial<ExerciseBlock> = {}): ExerciseBlock => ({
-  id: 'block-1',
-  workoutSessionId: 'session-1',
-  exerciseId: 'exercise-1',
-  order: 1,
-  targetSets: 3,
-  targetRepRange: [8, 12],
-  targetRir: 2,
-  restSeconds: 180,
-  note: null,
-  ...overrides,
-});
-
-const createMockExercise = (overrides: Partial<Exercise> = {}): Exercise => ({
-  id: 'exercise-1',
-  name: 'Bench Press',
-  primaryMuscle: 'chest',
-  secondaryMuscles: ['triceps', 'shoulders'],
-  mechanic: 'compound',
-  defaultRepRange: [6, 10],
-  defaultRir: 2,
-  minWeightIncrementKg: 2.5,
-  formCues: [],
-  commonMistakes: [],
-  setupNote: '',
-  movementPattern: 'horizontal_push',
-  equipmentRequired: ['barbell'],
-  ...overrides,
-});
-
-const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog => ({
-  id: 'set-1',
-  exerciseBlockId: 'block-1',
-  setNumber: 1,
-  reps: 10,
-  weightKg: 100,
-  rpe: 8,
-  restSeconds: null,
-  isWarmup: false,
-  setType: 'normal',
-  parentSetId: null,
-  quality: 'stimulative',
-  qualityReason: 'Good effort',
-  note: null,
-  loggedAt: new Date().toISOString(),
-  ...overrides,
-});
+// Test fixtures (delegate to shared schema-aligned factories)
+const createMockSession = makeWorkoutSession;
+const createMockBlock = makeExerciseBlock;
+const createMockExercise = makeExercise;
+const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog =>
+  makeSetLog(overrides);
 
 describe('useWorkoutStore', () => {
   beforeEach(() => {
@@ -178,13 +124,11 @@ describe('useWorkoutStore', () => {
       const blocks = [createMockBlock()];
       const exercises = [createMockExercise()];
 
-      const checkIn = {
-        sleep: 4 as const,
-        stress: 2 as const,
-        soreness: 3 as const,
-        nutrition: 4 as const,
-        motivation: 5 as const,
-      };
+      const checkIn = makePreWorkoutCheckIn({
+        sleepQuality: 4,
+        stressLevel: 2,
+        nutritionRating: 4,
+      });
 
       act(() => {
         useWorkoutStore.getState().startSession(session, blocks, exercises);
@@ -196,13 +140,7 @@ describe('useWorkoutStore', () => {
     });
 
     it('does nothing if no active session', () => {
-      const checkIn = {
-        sleep: 4 as const,
-        stress: 2 as const,
-        soreness: 3 as const,
-        nutrition: 4 as const,
-        motivation: 5 as const,
-      };
+      const checkIn = makePreWorkoutCheckIn();
 
       act(() => {
         useWorkoutStore.getState().setCheckIn(checkIn);
@@ -513,7 +451,7 @@ describe('Workout Flow Integration', () => {
 
   it('completes a full workout flow: start → log sets → navigate → stats', () => {
     // Setup
-    const session = createMockSession({ name: 'Push Day' });
+    const session = createMockSession({ sessionNotes: 'Push Day' });
     const blocks = [
       createMockBlock({ id: 'block-1', exerciseId: 'bench', targetSets: 3 }),
       createMockBlock({ id: 'block-2', exerciseId: 'ohp', targetSets: 3 }),
@@ -529,17 +467,15 @@ describe('Workout Flow Integration', () => {
     });
 
     let state = useWorkoutStore.getState();
-    expect(state.activeSession?.name).toBe('Push Day');
+    expect(state.activeSession?.sessionNotes).toBe('Push Day');
     expect(state.exerciseBlocks).toHaveLength(2);
 
     // Submit check-in
-    const checkIn = {
-      sleep: 4 as const,
-      stress: 2 as const,
-      soreness: 2 as const,
-      nutrition: 4 as const,
-      motivation: 4 as const,
-    };
+    const checkIn = makePreWorkoutCheckIn({
+      sleepQuality: 4,
+      stressLevel: 2,
+      nutritionRating: 4,
+    });
 
     act(() => {
       useWorkoutStore.getState().setCheckIn(checkIn);

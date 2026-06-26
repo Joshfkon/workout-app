@@ -456,17 +456,21 @@ Note: We'll convert this to estimate your free weight squat potential.`,
 // 1RM ESTIMATION
 // ============================================================
 
+// The COACHING estimator: Brzycki base with a per-RIR capacity adjustment.
+// Intentionally distinct from the display `estimateE1RM` (lib/utils) and the
+// programming estimator (weightEstimationEngine) — different model for coaching
+// context messaging.
 export function estimate1RM(weight: number, reps: number, rpe?: number): number {
   // Brzycki formula as base
   let baseEstimate = weight * (36 / (37 - reps));
-  
+
   // Adjust for RPE if provided (each RPE point below 10 = ~2.5% more capacity)
   if (rpe !== undefined && rpe < 10) {
     const rirsRemaining = 10 - rpe;
     const adjustmentFactor = 1 + (rirsRemaining * 0.025);
     baseEstimate = baseEstimate * adjustmentFactor;
   }
-  
+
   return Math.round(baseEstimate * 10) / 10;
 }
 

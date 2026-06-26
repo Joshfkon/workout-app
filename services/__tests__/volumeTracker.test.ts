@@ -15,8 +15,8 @@ import {
   type MuscleVolumeData,
 } from '../volumeTracker';
 
-import type { Exercise, ExerciseBlock, SetLog, VolumeLandmarks } from '@/types/schema';
-import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, VolumeLandmarks, StandardMuscleGroup } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, STANDARD_MUSCLE_GROUPS } from '@/types/schema';
 
 // ============================================
 // TEST FIXTURES
@@ -89,6 +89,34 @@ const createLandmarks = (mev: number, mav: number, mrv: number): VolumeLandmarks
 
 // Use the actual DEFAULT_VOLUME_LANDMARKS from schema for tests
 const defaultLandmarks = DEFAULT_VOLUME_LANDMARKS.intermediate;
+
+// ============================================
+// DEFAULT LANDMARK COMPLETENESS
+// ============================================
+
+describe('DEFAULT_VOLUME_LANDMARKS', () => {
+  const tiers = ['novice', 'intermediate', 'advanced'] as const;
+
+  it('defines landmarks for every canonical muscle group in every tier', () => {
+    for (const tier of tiers) {
+      for (const muscle of STANDARD_MUSCLE_GROUPS) {
+        const lm = DEFAULT_VOLUME_LANDMARKS[tier][muscle as StandardMuscleGroup];
+        expect(lm).toBeDefined();
+        // mev < mav < mrv ordering must hold.
+        expect(lm.mev).toBeLessThan(lm.mav);
+        expect(lm.mav).toBeLessThan(lm.mrv);
+      }
+    }
+  });
+
+  it('includes the previously-missing adductors/forearms/traps', () => {
+    for (const tier of tiers) {
+      expect(DEFAULT_VOLUME_LANDMARKS[tier].adductors).toBeDefined();
+      expect(DEFAULT_VOLUME_LANDMARKS[tier].forearms).toBeDefined();
+      expect(DEFAULT_VOLUME_LANDMARKS[tier].traps).toBeDefined();
+    }
+  });
+});
 
 // ============================================
 // VOLUME CALCULATION TESTS
@@ -248,6 +276,61 @@ describe('calculateWeeklyVolume', () => {
 
     const result = calculateWeeklyVolume(input);
     expect(result.get('chest_upper')!.percentOfMrv).toBe(50);
+  });
+
+  it('accumulates fractional secondary credit across exercises before rounding', () => {
+    // Two exercises each contributing 1 set of triceps secondary credit.
+    // Old per-exercise Math.round(1*0.5)=1 each -> 2 (over-credited).
+    // Correct: accumulate 0.5 + 0.5 = 1.0, rounded once -> 1.
+    const ex1 = createMockExercise('chest', ['triceps']);
+    const ex2 = createMockExercise('shoulders', ['triceps']);
+    const block1 = createMockBlock(ex1.id);
+    const block2 = createMockBlock(ex2.id);
+
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        { block: block1, exercise: ex1, completedSets: [createMockSetLog(block1.id)] },
+        { block: block2, exercise: ex2, completedSets: [createMockSetLog(block2.id)] },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    expect(result.get('triceps')!.indirectSets).toBe(1);
+  });
+
+  it('rounds leftover fractional secondary credit at the end', () => {
+    // Single exercise, 1 working set -> 0.5 triceps credit accumulated.
+    // Rounded once at the end: Math.round(0.5) = 1.
+    const ex = createMockExercise('chest', ['triceps']);
+    const block = createMockBlock(ex.id);
+
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [
+        { block, exercise: ex, completedSets: [createMockSetLog(block.id)] },
+      ],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    expect(result.get('triceps')!.indirectSets).toBe(1);
+  });
+
+  it('resolves muscle names case-insensitively', () => {
+    // The resolver lowercases before matching, so capitalized canonical names
+    // ("Quads"/"Hamstrings") map to quads/hamstrings.
+    const ex = createMockExercise('Quads', ['Hamstrings']);
+    const block = createMockBlock(ex.id);
+    const sets = Array.from({ length: 4 }, () => createMockSetLog(block.id));
+
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [{ block, exercise: ex, completedSets: sets }],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    expect(result.get('quads')!.directSets).toBe(4);
+    expect(result.get('hamstrings')!.indirectSets).toBe(2); // Math.round(4 * 0.5) = 2
   });
 });
 
@@ -525,6 +608,13 @@ describe('getVolumeSummary', () => {
     const summary = getVolumeSummary(volumeData as Map<never, MuscleVolumeData>);
 
     expect(summary.totalSets).toBe(45);
+  });
+
+  it('returns 0 average for an empty map (no divide-by-zero)', () => {
+    const summary = getVolumeSummary(new Map<string, MuscleVolumeData>() as any);
+    expect(summary.totalSets).toBe(0);
+    expect(summary.averagePercentMrv).toBe(0);
+    expect(Number.isNaN(summary.averagePercentMrv)).toBe(false);
   });
 
   it('identifies muscles below MEV', () => {

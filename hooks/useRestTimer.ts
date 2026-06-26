@@ -1,8 +1,37 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  scheduleRestCompleteNotification,
+  cancelRestCompleteNotification,
+  restCompleteHaptic,
+} from '@/lib/integrations/notifications';
 
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
+
+// Single shared AudioContext, created/resumed on a user gesture (timer start).
+// On iOS WKWebView an AudioContext created without a recent user gesture stays
+// suspended, so creating it lazily at alarm time never plays. We create it once
+// here and reuse it for every beep.
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return null;
+    if (!sharedAudioContext) {
+      sharedAudioContext = new Ctor();
+    }
+    if (sharedAudioContext.state === 'suspended') {
+      // Resume must be triggered from a user gesture to succeed on iOS.
+      void sharedAudioContext.resume();
+    }
+    return sharedAudioContext;
+  } catch {
+    return null;
+  }
+}
 
 interface TimerState {
   endTime: number;
@@ -66,7 +95,10 @@ export function useRestTimer({
     const playBeep = (frequency: number, delay: number) => {
       setTimeout(() => {
         try {
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          // Reuse the shared AudioContext created on the start() user gesture.
+          const audioContext = getAudioContext();
+          if (!audioContext) return;
+
           const oscillator = audioContext.createOscillator();
           const gainNode = audioContext.createGain();
 
@@ -79,8 +111,8 @@ export function useRestTimer({
 
           oscillator.start();
           setTimeout(() => {
+            // Don't close the shared context - we reuse it for later alarms.
             oscillator.stop();
-            audioContext.close();
           }, 250);
         } catch {
           // Audio not supported
@@ -92,9 +124,8 @@ export function useRestTimer({
     playBeep(800, 350);
     playBeep(1000, 700);
 
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200, 100, 400]);
-    }
+    // Native haptics (with web navigator.vibrate fallback inside).
+    void restCompleteHaptic();
   }, []);
 
   const saveTimerState = useCallback((endTime: number, duration: number) => {
@@ -170,6 +201,9 @@ export function useRestTimer({
         
         if (!hasPlayedAlarm.current) {
           hasPlayedAlarm.current = true;
+          // Foreground completion: in-app alarm fires, so cancel the redundant
+          // native notification we scheduled at start().
+          void cancelRestCompleteNotification();
           playAlarm();
           onCompleteRef.current?.();
         }
@@ -245,6 +279,15 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     saveTimerState(endTime, durationToUse);
 
+    // Create/resume the shared AudioContext now, while we're inside a user
+    // gesture, so the foreground beep can actually play later (esp. on iOS).
+    getAudioContext();
+
+    // Schedule a native local notification to fire at endTime. This is the
+    // ONLY reliable alert when the app is backgrounded / screen locked, since
+    // the JS interval and Web Audio are suspended then. No-op on web.
+    void scheduleRestCompleteNotification(endTime);
+
     // Create the countdown interval immediately
     intervalRef.current = setInterval(() => {
       const currentEndTime = endTimeRef.current;
@@ -273,6 +316,9 @@ export function useRestTimer({
 
         if (!hasPlayedAlarm.current) {
           hasPlayedAlarm.current = true;
+          // Foreground completion: in-app alarm fires, so cancel the redundant
+          // native notification we scheduled at start().
+          void cancelRestCompleteNotification();
           playAlarm();
           onCompleteRef.current?.();
         }
@@ -292,6 +338,7 @@ export function useRestTimer({
       setIsRunning(false);
       endTimeRef.current = null;
       clearTimerState();
+      void cancelRestCompleteNotification();
     } else {
       // Resume/Start
       const restartSeconds = secondsRef.current > 0
@@ -313,6 +360,7 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     clearTimerState();
+    void cancelRestCompleteNotification();
   }, [initialSeconds, clearTimerState, defaultSeconds]);
 
   const addTime = useCallback((amount: number) => {
@@ -330,6 +378,14 @@ export function useRestTimer({
 
       // Update localStorage
       saveTimerState(newEndTime, initialSeconds);
+
+      // Reschedule the native notification at the new endTime (same id replaces
+      // the prior one). If we ran the clock down to <= 0, just cancel it.
+      if (newRemaining > 0) {
+        void scheduleRestCompleteNotification(newEndTime);
+      } else {
+        void cancelRestCompleteNotification();
+      }
     } else {
       // When not running, just update the seconds state
       const newSeconds = Math.max(0, seconds + amount);
@@ -349,6 +405,7 @@ export function useRestTimer({
     setRestedSeconds(rested > 0 ? rested : 0);
     endTimeRef.current = null;
     clearTimerState();
+    void cancelRestCompleteNotification();
     onCompleteRef.current?.();
   }, [seconds, initialSeconds, clearTimerState]);
 
@@ -361,6 +418,7 @@ export function useRestTimer({
     hasPlayedAlarm.current = false;
     endTimeRef.current = null;
     clearTimerState();
+    void cancelRestCompleteNotification();
   }, [defaultSeconds, clearTimerState]);
 
   // Mark timer as complete without playing alarm (used when starting dropsets)
@@ -377,6 +435,7 @@ export function useRestTimer({
     setRestedSeconds(0);
     endTimeRef.current = null;
     clearTimerState();
+    void cancelRestCompleteNotification();
   }, [clearTimerState]);
 
   const progressPercent = initialSeconds > 0

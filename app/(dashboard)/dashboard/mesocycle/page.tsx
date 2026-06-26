@@ -488,7 +488,15 @@ export default function MesocyclePage() {
             .eq('name', exercise.exerciseName)
             .single();
 
-          const exerciseId = exercise.exerciseId || dbExercise?.id;
+          // Use program_data's exerciseId ONLY if it's a real UUID. Older
+          // mesocycles stored placeholder ids (e.g. "db-row") in program_data,
+          // which fail the exercise_blocks.exercise_id UUID/FK constraint and
+          // reject the WHOLE insert (every block) -> an empty workout. Fall back
+          // to the id we just looked up by name.
+          const isUuid = (v: unknown): v is string =>
+            typeof v === 'string' &&
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+          const exerciseId = isUuid(exercise.exerciseId) ? exercise.exerciseId : dbExercise?.id;
           if (!exerciseId) continue; // Skip if exercise not found
 
           // Get weight estimate using the WeightEstimationEngine
@@ -549,12 +557,21 @@ export default function MesocyclePage() {
             warmup_protocol: { sets: warmupSets },
           });
         }
-      } else {
+      }
+
+      // Fallback: if program_data yielded no usable blocks — either there was no
+      // program session, or it had exercises whose names didn't match the library
+      // so every lookup above was skipped — build the session from today's target
+      // muscles. This guarantees we never start an EMPTY workout when the day's
+      // muscles are known. Matches primary_muscle case-insensitively so taxonomy
+      // casing differences don't drop everything.
+      if (blocks.length === 0 && todayWorkout?.muscles?.length) {
         // FALLBACK: Query exercises and use default logic (legacy behavior)
+        const muscleList = todayWorkout.muscles.map((m) => m.toLowerCase());
         const { data: exercises } = await supabase
           .from('exercises')
           .select('*')
-          .in('primary_muscle', todayWorkout.muscles);
+          .in('primary_muscle', muscleList);
 
         if (exercises && exercises.length > 0) {
           type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
@@ -646,7 +663,8 @@ export default function MesocyclePage() {
       }
 
       if (blocks.length > 0) {
-        await supabase.from('exercise_blocks').insert(blocks);
+        const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
+        if (blocksError) console.error('Failed to insert exercise blocks:', blocksError);
       }
 
       router.push(`/dashboard/workout/${session.id}`);

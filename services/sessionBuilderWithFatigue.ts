@@ -8,6 +8,7 @@ import type {
   Goal,
   Experience,
   MuscleGroup,
+  StandardMuscleGroup,
   MovementPattern,
   Equipment,
   PeriodizationModel,
@@ -26,6 +27,18 @@ import type {
   FullProgramRecommendation,
   Split,
 } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+
+/** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
+const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
+
+/** Look up the experience-specific MRV for a muscle, with a sane fallback */
+function getMuscleMRV(experience: Experience, muscle: string): number {
+  return (
+    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup]?.mrv ??
+    FALLBACK_VOLUME_LANDMARK.mrv
+  );
+}
 
 import { filterExercisesByEquipment } from './equipmentFilter';
 import type { ExerciseVarietyPreferences } from '@/types/user-exercise-preferences';
@@ -309,6 +322,23 @@ function selectExercisesWithFatigue(
 
     selected.push({ exercise, sets: setsForThis });
     remainingSets -= setsForThis;
+  }
+
+  // Second pass: distribute any leftover sets onto already-selected exercises
+  // that are still under their per-exercise cap (3 isolation / 4 compound),
+  // instead of silently dropping them and under-delivering target volume.
+  while (remainingSets > 0 && selected.length > 0) {
+    let addedThisPass = false;
+    for (let i = 0; i < selected.length && remainingSets > 0; i++) {
+      const maxSetsForExercise = selected[i].exercise.pattern === 'isolation' ? 3 : 4;
+      if (selected[i].sets >= maxSetsForExercise) continue;
+      selected[i].sets++;
+      remainingSets--;
+      addedThisPass = true;
+    }
+    // If every selected exercise is at its cap, accept the shortfall rather
+    // than looping forever (no more room without exceeding per-exercise caps).
+    if (!addedThisPass) break;
   }
 
   return selected;
@@ -971,7 +1001,12 @@ function calculateVolumeDistribution(
     }
 
     // Recovery adjustment
-    const adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
+    let adjustedVolume = Math.round(baseVolume * recoveryFactors.volumeMultiplier);
+
+    // Clamp to the muscle's experience-specific MRV so week-1 volume never
+    // starts above the maximum recoverable volume after all multipliers.
+    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle));
+
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
 
     result[muscle] = {

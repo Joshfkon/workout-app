@@ -16,7 +16,7 @@ import type {
   ExercisePreferenceSummary,
   SetExerciseStatusInput,
 } from '@/types/user-exercise-preferences';
-import type { Exercise } from './exerciseService';
+import type { Exercise } from '@/services/exerciseService';
 import {
   fetchUserExercisePreferences,
   deleteExercisePreference,

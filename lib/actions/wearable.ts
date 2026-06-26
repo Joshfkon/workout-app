@@ -613,6 +613,12 @@ export async function getEnhancedDailyDataPoints(
 // === HELPER FUNCTIONS ===
 
 function mapConnectionFromRow(row: WearableConnectionRow): WearableConnection {
+  // SECURITY: access_token / refresh_token are deliberately NOT mapped here.
+  // Every caller of this function (getWearableConnections,
+  // getActiveWearableConnections, upsertWearableConnection) returns its result
+  // to the client. OAuth tokens must never leave the server. Token use happens
+  // server-side in API routes that query wearable_connections directly.
+  // (NOTE: at-rest encryption is still TODO; this only prevents exfiltration.)
   return {
     id: row.id,
     userId: row.user_id,
@@ -622,8 +628,7 @@ function mapConnectionFromRow(row: WearableConnectionRow): WearableConnection {
     permissions: row.permissions as WearableConnection['permissions'],
     deviceName: row.device_name || undefined,
     stepCalibrationFactor: row.step_calibration_factor,
-    accessToken: row.access_token || undefined,
-    refreshToken: row.refresh_token || undefined,
+    // accessToken / refreshToken intentionally omitted (server-only).
     tokenExpiresAt: row.token_expires_at ? new Date(row.token_expires_at) : undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
