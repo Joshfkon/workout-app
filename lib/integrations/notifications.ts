@@ -150,3 +150,22 @@ export async function restCompleteHaptic(): Promise<void> {
     navigator.vibrate([200, 100, 200, 100, 400]);
   }
 }
+
+/**
+ * A single subtle haptic "tick" — e.g. when a set is logged. Light impact on
+ * native; a short single vibration on web (no-op on iOS WKWebView). Best-effort.
+ */
+export async function lightHaptic(): Promise<void> {
+  if (isNativePlatform()) {
+    try {
+      await Haptics.impact({ style: ImpactStyle.Light });
+      return;
+    } catch {
+      // fall through to web vibrate
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+    navigator.vibrate(15);
+  }
+}

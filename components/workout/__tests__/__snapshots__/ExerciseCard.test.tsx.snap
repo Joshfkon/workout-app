@@ -933,6 +933,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="next"
+                id="pending-weight-0"
                 inputmode="decimal"
                 min="0"
                 placeholder="60"
@@ -946,6 +948,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="done"
+                id="pending-reps-0"
                 inputmode="numeric"
                 max="100"
                 min="0"
@@ -999,6 +1003,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="next"
+                id="pending-weight-1"
                 inputmode="decimal"
                 min="0"
                 placeholder="60"
@@ -1012,6 +1018,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="done"
+                id="pending-reps-1"
                 inputmode="numeric"
                 max="100"
                 min="0"
@@ -1065,6 +1073,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="next"
+                id="pending-weight-2"
                 inputmode="decimal"
                 min="0"
                 placeholder="60"
@@ -1078,6 +1088,8 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             >
               <input
                 class="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                enterkeyhint="done"
+                id="pending-reps-2"
                 inputmode="numeric"
                 max="100"
                 min="0"

@@ -7,6 +7,7 @@ import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQ
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
 import { calculateSetQuality, recommendNextSet } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
+import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
@@ -753,6 +754,9 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     // Lock to prevent double-clicks
     setIsCompletingSet(true);
+
+    // Subtle haptic tick the moment a set is committed (native; no-op on web/iOS WKWebView).
+    void lightHaptic();
 
     // Convert from display unit to kg
     const weightKg = inputWeightToKg(weightNum, unit);
@@ -1867,11 +1871,19 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-2 py-2 text-surface-400 font-medium">{setNumber}</td>
                     <td className="px-2 py-1.5">
                       <input
+                        id={`pending-weight-${index}`}
                         type="number"
                         inputMode="decimal"
+                        enterKeyHint="next"
                         value={input.weight || ''}
                         onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
                         onFocus={(e) => e.target.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            document.getElementById(`pending-reps-${index}`)?.focus();
+                          }
+                        }}
                         step="0.5"
                         min="0"
                         placeholder={(() => {
@@ -1888,12 +1900,23 @@ export const ExerciseCard = memo(function ExerciseCard({
                     </td>
                     <td className="px-2 py-1.5">
                       <input
+                        id={`pending-reps-${index}`}
                         type="number"
                         inputMode="numeric"
                         pattern="[0-9]*"
+                        enterKeyHint="done"
                         value={input.reps}
                         onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
                         onFocus={(e) => e.target.select()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            (e.target as HTMLInputElement).blur();
+                            if (input.weight && input.reps && parseInt(input.reps) >= 1) {
+                              completeSetImmediately(index);
+                            }
+                          }
+                        }}
                         min="0"
                         max="100"
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
