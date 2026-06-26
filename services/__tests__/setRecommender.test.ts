@@ -72,6 +72,16 @@ describe('recommendSet', () => {
       expect(r.weightKg).toBeGreaterThan(100);
     });
 
+    it('increases on a big rep-overshoot even when RIR sits inside the deadband', () => {
+      // 18 reps in a 3-6 range, RIR 3 vs target 3 (dev 0, inside deadband). The reps
+      // alone prove the load is too light — caught in live QA.
+      const r = recommendSet(
+        base({ lastWeightKg: 35, lastReps: 18, lastRir: 3, targetRepRange: [3, 6], targetRir: 3 })
+      );
+      expect(r.rationale).toBe('increase_load');
+      expect(r.weightKg).toBeGreaterThan(35);
+    });
+
     it('requires BOTH top-of-range and >= deadband reserve (not just easy)', () => {
       // At the top of range but only 1 RIR reserve -> hold, not increase.
       const r = recommendSet(base({ lastReps: 12, lastRir: 3 }));

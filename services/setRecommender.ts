@@ -37,6 +37,13 @@ const FATIGUE_PER_SET = 0.05;
 const FATIGUE_FLOOR = 0.6;
 /** Max reps shown above repMax (prevents absurd "30 reps", keeps honest under-load). */
 const OVERSHOOT_CEILING = 5;
+/**
+ * Reps beyond repMax that objectively prove the load is too light, regardless of
+ * self-reported RIR. Hitting this many reps over the top of the range is an
+ * unambiguous under-load signal even if the RIR rating sits inside the deadband
+ * (e.g. 18 reps in a 3-6 range).
+ */
+const REP_OVERSHOOT = 2;
 
 // ============================================
 // TYPES
@@ -117,8 +124,9 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
     weightKg = roundToIncrement(Math.max(ideal, lastWeightKg * (1 - MAX_STEP_PCT)), inc);
     if (weightKg >= lastWeightKg) weightKg = Math.max(inc, lastWeightKg - inc);
     rationale = 'reduce_load';
-  } else if (lastReps >= repMax && dev >= DEADBAND_RIR) {
-    // Cleared the top of the range AND still had >= DEADBAND in reserve → too light.
+  } else if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
+    // Too light — either an unambiguous rep-overshoot (reps prove it regardless of
+    // RIR) OR cleared the top of the range with >= DEADBAND reserve.
     const ideal = weightForReps(e1rm, repMax, targetRir);
     weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + MAX_STEP_PCT)), inc);
     if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;

@@ -81,6 +81,7 @@ The two **new** inputs vs `recommendNextSet` today:
 | `FATIGUE_PER_SET` | `0.05` | Rep de-rating per already-completed set, used only when the weight changed (§6). |
 | `FATIGUE_FLOOR` | `0.60` | Lower bound on the fatigue factor (never predict below 60% of fresh). |
 | `OVERSHOOT_CEILING` | `5` | Max reps shown above `repMax` (so you never see "30 reps", but honest under-load still shows, e.g., 16 for an 8–12 range). |
+| `REP_OVERSHOOT` | `2` | Reps beyond `repMax` that **objectively** prove too-light and trigger an increase regardless of the RIR deadband (e.g. 18 in a 3–6 range). Added after live QA found a high-rep set holding when it should bump. |
 
 These are the dials. The defaults are conservative and evidence-aligned (rep drop-off
 at a fixed load with ~2–3 min rest is typically 5–10% per set), but they're exactly
