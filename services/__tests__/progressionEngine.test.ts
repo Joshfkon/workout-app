@@ -15,6 +15,7 @@ import {
   checkForPR,
   calculateSuggestedWeight,
   checkFormTrend,
+  recommendNextSet,
   exerciseEntryToExercise,
   type CalculateSetQualityInput,
   type GenerateWarmupInput,
@@ -78,6 +79,79 @@ const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog => ({
   note: null,
   loggedAt: new Date().toISOString(),
   ...overrides,
+});
+
+// ============================================
+// NEXT-SET RECOMMENDATION TESTS
+// ============================================
+
+describe('recommendNextSet', () => {
+  const target: [number, number] = [10, 13];
+
+  it('keeps the load when reps land in range, shaving a rep for fatigue', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 11, lastRir: 2,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBeGreaterThanOrEqual(10);
+    expect(r.reps).toBeLessThanOrEqual(11); // <= what was done (fatigue), still in range
+  });
+
+  it('INCREASES load after an easy set well above the range (the 110x20 RIR4 case)', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 110, lastReps: 20, lastRir: 4,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('increase_load');
+    // Never recommend a lighter/equal load after crushing it...
+    expect(r.weightKg).toBeGreaterThan(110);
+    // ...and reps should land in the target range, not below it.
+    expect(r.reps).toBeGreaterThanOrEqual(target[0]);
+    expect(r.reps).toBeLessThanOrEqual(target[1]);
+  });
+
+  it('caps the per-set load increase at ~10%', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 50, lastReps: 30, lastRir: 5,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('increase_load');
+    expect(r.weightKg).toBeLessThanOrEqual(50 * 1.1);
+    expect(r.weightKg).toBeGreaterThan(50);
+  });
+
+  it('REDUCES load after a heavy set below the range', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 5, lastRir: 0,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.weightKg).toBeLessThan(100);
+    expect(r.weightKg).toBeGreaterThanOrEqual(100 * 0.9 - 2.5);
+    expect(r.reps).toBeGreaterThanOrEqual(target[0]);
+  });
+
+  it('keeps weight (no bump) for a small overshoot of the range', () => {
+    // Did 14 @ RIR2, target top 13: only 1 over -> stay at weight, top of range.
+    const r = recommendNextSet({
+      lastWeightKg: 100, lastReps: 14, lastRir: 2,
+      targetRepRange: target, targetRir: 2, minIncrementKg: 2.5,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBe(13);
+  });
+
+  it('guards against zero/negative inputs', () => {
+    const r = recommendNextSet({
+      lastWeightKg: 0, lastReps: 0, lastRir: 0,
+      targetRepRange: target, targetRir: 2,
+    });
+    expect(r.rationale).toBe('maintain');
+    expect(r.reps).toBe(target[0]);
+  });
 });
 
 // ============================================

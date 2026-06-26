@@ -78,6 +78,12 @@ jest.mock('@/services/progressionEngine', () => ({
     quality: 'stimulative' as SetQuality,
     reason: 'Good effort',
   })),
+  recommendNextSet: jest.fn((input: { lastWeightKg: number; lastReps: number; targetRir: number }) => ({
+    weightKg: input.lastWeightKg,
+    reps: input.lastReps,
+    rpe: 10 - input.targetRir,
+    rationale: 'maintain',
+  })),
 }));
 
 // Mock exerciseSwapper

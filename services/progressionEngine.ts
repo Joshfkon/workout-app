@@ -16,7 +16,7 @@ import type {
   MovementPattern,
   Equipment,
 } from '@/types/schema';
-import { roundToIncrement, estimateE1RM } from '@/lib/utils';
+import { roundToIncrement, estimateE1RM, clamp } from '@/lib/utils';
 
 // ============================================
 // TYPE ADAPTERS
@@ -119,6 +119,124 @@ const SET_QUALITY_THRESHOLDS = {
   stimulative: { minRpe: 7.5, maxRpe: 9.5 }, // RPE 7.5-9.5 is stimulative
   excessive: { minRpe: 10 },     // RPE 10 (failure) may be excessive
 };
+
+// ============================================
+// NEXT-SET RECOMMENDATION (within a session)
+// ============================================
+
+export interface NextSetInput {
+  /** The last completed set's load (kg). */
+  lastWeightKg: number;
+  /** The last completed set's reps. */
+  lastReps: number;
+  /** Reps in reserve on the last set (>= 0; i.e. 10 - RPE). */
+  lastRir: number;
+  /** Target working rep range [min, max]. */
+  targetRepRange: [number, number];
+  /** Target reps in reserve for working sets. */
+  targetRir: number;
+  /** Smallest load increment for this exercise (kg). */
+  minIncrementKg?: number;
+}
+
+export interface NextSetRecommendation {
+  weightKg: number;
+  reps: number;
+  rpe: number;
+  /** Why the load was changed (or kept). */
+  rationale: 'maintain' | 'increase_load' | 'reduce_load';
+}
+
+/**
+ * Recommend the next working set within a session, given the set just completed.
+ *
+ * Principles (replaces the old ad-hoc per-RPE nudges that could recommend FEWER
+ * reps at the same weight after an easy set):
+ *  - Anchor on the demonstrated capacity (E1RM from the last set).
+ *  - Estimate the reps the user could do at the TARGET effort (RIR), then apply
+ *    a small within-session fatigue drop for the next set.
+ *  - If that lands in the rep range (with a small overshoot band) keep the load
+ *    — straight sets shouldn't change weight every set.
+ *  - If it's well above the range, the load is too light: add weight (double
+ *    progression) and land near the top of the range — never recommend fewer
+ *    reps at the same weight.
+ *  - If it's below the range, the load is too heavy: reduce weight toward the
+ *    middle of the range.
+ *  - Per-set load changes are capped at +/-10% so suggestions stay sane.
+ *
+ * Uses an UNCLAMPED Epley for prescription (the display E1RM clamps effective
+ * reps to 12, which would collapse high-rep prescriptions).
+ */
+export function recommendNextSet(input: NextSetInput): NextSetRecommendation {
+  const { lastWeightKg, lastReps, lastRir, targetRepRange, targetRir } = input;
+  const [lo, hi] = targetRepRange;
+  const targetRpe = 10 - targetRir;
+  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+
+  // Guard bad inputs: just keep the last set's shape.
+  if (lastWeightKg <= 0 || lastReps <= 0) {
+    return {
+      weightKg: Math.max(0, lastWeightKg),
+      reps: Math.max(lo, lastReps || lo),
+      rpe: targetRpe,
+      rationale: 'maintain',
+    };
+  }
+
+  const safeRir = Math.max(0, lastRir);
+
+  // Reps at the TARGET effort, fresh: if the user left more in reserve than the
+  // target they could have done more reps (and vice-versa).
+  const repsAtTargetEffort = lastReps + (safeRir - targetRir);
+
+  // Within-session fatigue: ~5% (min 1) fewer reps on the next set at the same load.
+  const fatigueLoss = Math.max(1, Math.round(repsAtTargetEffort * 0.05));
+  const expectedReps = Math.max(1, repsAtTargetEffort - fatigueLoss);
+
+  // Capacity anchor (UNCLAMPED Epley so high-rep sets still scale the load).
+  const e1rm = lastWeightKg * (1 + (lastReps + safeRir) / 30);
+  const predictReps = (w: number): number => Math.round(30 * (e1rm / w - 1) - targetRir);
+
+  // Small overshoot band so a set or two above the top doesn't trigger a weight
+  // bump every single set (keeps straight sets stable).
+  const OVERSHOOT_BAND = 2;
+
+  if (expectedReps >= lo && expectedReps <= hi + OVERSHOOT_BAND) {
+    return {
+      weightKg: lastWeightKg,
+      reps: clamp(expectedReps, lo, hi),
+      rpe: targetRpe,
+      rationale: 'maintain',
+    };
+  }
+
+  if (expectedReps > hi + OVERSHOOT_BAND) {
+    // Too light -> add load, aim for the top of the range.
+    const ideal = e1rm / (1 + (hi + targetRir) / 30);
+    const capped = Math.min(ideal, lastWeightKg * 1.1);
+    let weightKg = roundToIncrement(capped, inc);
+    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
+    return {
+      weightKg,
+      reps: clamp(predictReps(weightKg), lo, hi),
+      rpe: targetRpe,
+      rationale: 'increase_load',
+    };
+  }
+
+  // expectedReps < lo -> too heavy -> reduce load toward the middle of the range.
+  const mid = Math.round((lo + hi) / 2);
+  const ideal = e1rm / (1 + (mid + targetRir) / 30);
+  const capped = Math.max(ideal, lastWeightKg * 0.9);
+  let weightKg = roundToIncrement(capped, inc);
+  if (weightKg >= lastWeightKg) weightKg = Math.max(inc, lastWeightKg - inc);
+  return {
+    weightKg,
+    reps: clamp(predictReps(weightKg), lo, hi),
+    rpe: targetRpe,
+    rationale: 'reduce_load',
+  };
+}
 
 // ============================================
 // PERIODIZATION PHASES

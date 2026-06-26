@@ -5,7 +5,7 @@ import { Card, Badge, SetQualityBadge, Button, InfoTooltip } from '@/components/
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
-import { calculateSetQuality } from '@/services/progressionEngine';
+import { calculateSetQuality, recommendNextSet } from '@/services/progressionEngine';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { Input } from '@/components/ui';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
@@ -392,16 +392,16 @@ export const ExerciseCard = memo(function ExerciseCard({
     let smartWeight: number;
     let smartReps: number;
 
-    const lastRpe = lastCompleted.rpe || targetRpe;
-    // Adjust weight and reps based on RPE difference
-    if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-      smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-      smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-    } else {
-      // Close to target - keep same weight and reps
-      smartWeight = lastCompleted.weightKg;
-      smartReps = lastCompleted.reps;
-    }
+    const nextSet = recommendNextSet({
+      lastWeightKg: lastCompleted.weightKg,
+      lastReps: lastCompleted.reps,
+      lastRir: Math.max(0, 10 - (lastCompleted.rpe ?? targetRpe)),
+      targetRepRange: block.targetRepRange,
+      targetRir: effectiveTargetRir,
+      minIncrementKg: exercise.minWeightIncrementKg,
+    });
+    smartWeight = nextSet.weightKg;
+    smartReps = nextSet.reps;
 
     // Update all pending inputs
     const updatedInputs: { weight: string; reps: string; rpe: string }[] = [];
@@ -447,16 +447,16 @@ export const ExerciseCard = memo(function ExerciseCard({
       let smartReps: number;
       
       if (lastCompleted) {
-        const lastRpe = lastCompleted.rpe || targetRpe;
-        // Adjust weight and reps based on RPE difference (lower threshold: 0.3 instead of 0.5)
-        if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-          smartWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-          smartReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-        } else {
-          // Close to target - keep same weight and reps
-          smartWeight = lastCompleted.weightKg;
-          smartReps = lastCompleted.reps;
-        }
+        const nextSet = recommendNextSet({
+          lastWeightKg: lastCompleted.weightKg,
+          lastReps: lastCompleted.reps,
+          lastRir: Math.max(0, 10 - (lastCompleted.rpe ?? targetRpe)),
+          targetRepRange: block.targetRepRange,
+          targetRir: effectiveTargetRir,
+          minIncrementKg: exercise.minWeightIncrementKg,
+        });
+        smartWeight = nextSet.weightKg;
+        smartReps = nextSet.reps;
       } else {
         smartWeight = suggestedWeight;
         smartReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -518,16 +518,16 @@ export const ExerciseCard = memo(function ExerciseCard({
         let defaultRpe: number;
         
         if (lastCompleted) {
-          const lastRpe = lastCompleted.rpe || targetRpe;
-          // Adjust weight and reps based on RPE difference (lower threshold: 0.3 instead of 0.5)
-          if (lastRpe && Math.abs(lastRpe - targetRpe) > 0.3) {
-            defaultWeight = getRpeAdjustedWeight(lastRpe, targetRpe, lastCompleted.weightKg);
-            defaultReps = getRpeAdjustedReps(lastRpe, targetRpe, lastCompleted.reps, block.targetRepRange);
-          } else {
-            // Close to target - keep same weight and reps
-            defaultWeight = lastCompleted.weightKg;
-            defaultReps = lastCompleted.reps;
-          }
+          const nextSet = recommendNextSet({
+            lastWeightKg: lastCompleted.weightKg,
+            lastReps: lastCompleted.reps,
+            lastRir: Math.max(0, 10 - (lastCompleted.rpe ?? targetRpe)),
+            targetRepRange: block.targetRepRange,
+            targetRir: effectiveTargetRir,
+            minIncrementKg: exercise.minWeightIncrementKg,
+          });
+          defaultWeight = nextSet.weightKg;
+          defaultReps = nextSet.reps;
         } else if (prevSet) {
           defaultWeight = prevSet.weightKg;
           defaultReps = prevSet.reps;
@@ -692,46 +692,8 @@ export const ExerciseCard = memo(function ExerciseCard({
     return Math.max(1, Math.min(30, estimatedReps));
   };
 
-  // Get RPE adjustment for next set based on last set's RPE
-  const getRpeAdjustedWeight = (lastRpe: number, targetRpe: number, lastWeightKg: number): number => {
-    // If last RPE was higher than target, suggest slightly lower weight
-    // If last RPE was lower than target, suggest slightly higher weight
-    const rpeDiff = targetRpe - lastRpe;
-    
-    // More aggressive adjustment: 3-5% per RPE point
-    // For easy sets (negative rpeDiff), increase weight more aggressively
-    let adjustmentPercent: number;
-    if (rpeDiff > 0) {
-      // Set was easier than target - increase weight more aggressively
-      adjustmentPercent = rpeDiff * 0.04; // 4% per RPE point for easy sets
-    } else {
-      // Set was harder than target - decrease weight more conservatively
-      adjustmentPercent = rpeDiff * 0.03; // 3% per RPE point for hard sets
-    }
-    
-    return lastWeightKg * (1 + adjustmentPercent);
-  };
-  
-  // Get RPE-adjusted reps for next set
-  const getRpeAdjustedReps = (lastRpe: number, targetRpe: number, lastReps: number, targetRepRange: [number, number]): number => {
-    const rpeDiff = targetRpe - lastRpe;
-    
-    // If set was easy (low RPE), suggest more reps
-    if (rpeDiff > 0.3) {
-      // Easy set - aim for a couple more reps, but NEVER recommend fewer than the
-      // user just performed. (When lastReps already exceeds the range top, the
-      // range-cap alone would otherwise suggest a regression, e.g. 20 -> 13.)
-      const repIncrease = Math.min(2, Math.floor(rpeDiff));
-      return Math.max(lastReps, Math.min(targetRepRange[1], lastReps + repIncrease));
-    } else if (rpeDiff < -0.3) {
-      // Hard set - decrease reps slightly
-      const repDecrease = Math.max(1, Math.floor(Math.abs(rpeDiff)));
-      return Math.max(targetRepRange[0], lastReps - repDecrease);
-    }
-    
-    // On target - keep same reps
-    return lastReps;
-  };
+  // Next-set weight/reps come from the principled recommender in progressionEngine
+  // (recommendNextSet) — anchored on E1RM with double-progression + fatigue logic.
 
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
     setPendingInputs(prev => {
