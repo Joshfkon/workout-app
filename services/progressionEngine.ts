@@ -211,14 +211,19 @@ export function recommendNextSet(input: NextSetInput): NextSetRecommendation {
   }
 
   if (expectedReps > hi + OVERSHOOT_BAND) {
-    // Too light -> add load, aim for the top of the range.
+    // Too light -> add load, aim for the top of the range. The per-set load
+    // change is capped, so when the load is FAR too light one step won't reach
+    // the range — recommend the reps actually achievable at the new (capped)
+    // load (>= range min) rather than clamping down to the range top, which
+    // would understate the set. Successive sets/sessions keep adding load until
+    // reps settle into the range.
     const ideal = e1rm / (1 + (hi + targetRir) / 30);
     const capped = Math.min(ideal, lastWeightKg * 1.1);
     let weightKg = roundToIncrement(capped, inc);
     if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
     return {
       weightKg,
-      reps: clamp(predictReps(weightKg), lo, hi),
+      reps: clamp(predictReps(weightKg), lo, 50),
       rpe: targetRpe,
       rationale: 'increase_load',
     };

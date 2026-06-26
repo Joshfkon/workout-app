@@ -107,9 +107,12 @@ describe('recommendNextSet', () => {
     expect(r.rationale).toBe('increase_load');
     // Never recommend a lighter/equal load after crushing it...
     expect(r.weightKg).toBeGreaterThan(110);
-    // ...and reps should land in the target range, not below it.
+    // ...and reps must never drop below the range minimum. Because the per-set
+    // load increase is capped, one step can't reach the range from 20 reps, so
+    // the recommended reps stay high (achievable at the new load) instead of
+    // collapsing to e.g. 13 — that was the original bug.
     expect(r.reps).toBeGreaterThanOrEqual(target[0]);
-    expect(r.reps).toBeLessThanOrEqual(target[1]);
+    expect(r.reps).toBeGreaterThan(target[1]);
   });
 
   it('caps the per-set load increase at ~10%', () => {
