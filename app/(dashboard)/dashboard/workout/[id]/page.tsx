@@ -852,6 +852,18 @@ export default function WorkoutPage() {
     setStoreBlockIndex(currentBlockIndex);
   }, [currentBlockIndex, setStoreBlockIndex]);
 
+  // Focus mode: by default only the current exercise is expanded so you just see
+  // the sets you're working on. Re-focuses when you advance to the next exercise.
+  // (Manual per-card expand/collapse and "expand all" still work between advances.)
+  useEffect(() => {
+    if (blocks.length === 0) return;
+    const currentId = blocks[currentBlockIndex]?.id;
+    if (!currentId) return;
+    setCollapsedBlocks(new Set(blocks.filter((b) => b.id !== currentId).map((b) => b.id)));
+    // Intentionally only re-run when the active exercise changes (or blocks load).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBlockIndex, blocks.length]);
+
   // Fetch available exercises on mount for swap functionality
   useEffect(() => {
     async function loadAvailableExercises() {
@@ -3083,7 +3095,13 @@ export default function WorkoutPage() {
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
             <button
-              onClick={() => setAllCollapsed(!allCollapsed)}
+              onClick={() => setAllCollapsed((prev) => {
+                const next = !prev;
+                // "Expand all" should truly reveal every exercise, clearing the
+                // focus-mode per-block collapses.
+                if (!next) setCollapsedBlocks(new Set());
+                return next;
+              })}
               className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
                 allCollapsed
                   ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
