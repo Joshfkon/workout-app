@@ -333,7 +333,7 @@ export function QuickFoodLogger({
           onClick={() => { setMode('foods'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'foods'
-              ? 'bg-surface-700 text-white'
+              ? 'bg-surface-700 text-surface-100'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
@@ -343,7 +343,7 @@ export function QuickFoodLogger({
           onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'barcode'
-              ? 'bg-surface-700 text-white'
+              ? 'bg-surface-700 text-surface-100'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
@@ -353,7 +353,7 @@ export function QuickFoodLogger({
           onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
           className={`flex-1 py-2 text-xs font-medium rounded-md transition-colors flex items-center justify-center gap-1 ${
             mode === 'manual'
-              ? 'bg-surface-700 text-white'
+              ? 'bg-surface-700 text-surface-100'
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >

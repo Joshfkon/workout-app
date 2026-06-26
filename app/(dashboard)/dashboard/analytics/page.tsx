@@ -1150,7 +1150,7 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Analytics</h1>
+          <h1 className="text-2xl font-bold text-surface-100">Analytics</h1>
           <p className="text-surface-400">Track your body composition, strength, and training progress</p>
         </div>
         <div className="flex gap-2">
@@ -1188,7 +1188,7 @@ export default function AnalyticsPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
-                ? 'bg-surface-700 text-white shadow-sm'
+                ? 'bg-surface-700 text-surface-100 shadow-sm'
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
             }`}
           >
@@ -1465,7 +1465,7 @@ export default function AnalyticsPage() {
                         </defs>
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-3xl font-bold text-white">{strengthProfile.overallScore}</span>
+                        <span className="text-3xl font-bold text-surface-100">{strengthProfile.overallScore}</span>
                         <span className="text-xs text-surface-400">/ 100</span>
                       </div>
                     </div>
@@ -1481,15 +1481,15 @@ export default function AnalyticsPage() {
                       <div className="grid grid-cols-3 gap-3">
                         <div className="p-2 bg-surface-900/50 rounded-lg">
                           <p className="text-xs text-surface-500">Balance</p>
-                          <p className="text-lg font-bold text-white">{strengthProfile.balanceScore}%</p>
+                          <p className="text-lg font-bold text-surface-100">{strengthProfile.balanceScore}%</p>
                         </div>
                         <div className="p-2 bg-surface-900/50 rounded-lg">
                           <p className="text-xs text-surface-500">FFMI</p>
-                          <p className="text-lg font-bold text-white">{strengthProfile.bodyComposition.ffmi.toFixed(1)}</p>
+                          <p className="text-lg font-bold text-surface-100">{strengthProfile.bodyComposition.ffmi.toFixed(1)}</p>
                         </div>
                         <div className="p-2 bg-surface-900/50 rounded-lg">
                           <p className="text-xs text-surface-500">Lean Mass</p>
-                          <p className="text-lg font-bold text-white">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
+                          <p className="text-lg font-bold text-surface-100">{displayWeight(strengthProfile.bodyComposition.leanMassKg)} {weightUnit}</p>
                         </div>
                       </div>
                     </div>

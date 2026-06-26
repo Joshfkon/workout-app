@@ -318,30 +318,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -594,30 +571,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -870,30 +824,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -946,13 +877,9 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
             >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
+              —
             </td>
             <td
               class="px-2 py-1.5 relative"
@@ -1020,13 +947,9 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
             >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
+              —
             </td>
             <td
               class="px-2 py-1.5 relative"
@@ -1094,13 +1017,9 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center"
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
             >
-              <span
-                class="text-surface-600 text-xs"
-              >
-                —
-              </span>
+              —
             </td>
             <td
               class="px-2 py-1.5 relative"
@@ -1290,30 +1209,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -1330,8 +1226,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1 min-w-0"
+                class="flex items-center gap-1.5 min-w-0"
               >
+                <span
+                  class="block w-2 h-2 rounded-full flex-shrink-0 bg-success-400"
+                />
                 <span
                   class="truncate"
                 >
@@ -1350,26 +1249,9 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
             >
-              <div
-                class="flex justify-center"
-              >
-                <span
-                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-                >
-                  <span
-                    class="sm:hidden"
-                  >
-                    Stim
-                  </span>
-                  <span
-                    class="hidden sm:inline"
-                  >
-                    Stimulative
-                  </span>
-                </span>
-              </div>
+              —
             </td>
             <td
               class="px-2 py-2.5 relative"
@@ -1400,8 +1282,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1 min-w-0"
+                class="flex items-center gap-1.5 min-w-0"
               >
+                <span
+                  class="block w-2 h-2 rounded-full flex-shrink-0 bg-success-400"
+                />
                 <span
                   class="truncate"
                 >
@@ -1420,26 +1305,9 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
             >
-              <div
-                class="flex justify-center"
-              >
-                <span
-                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-                >
-                  <span
-                    class="sm:hidden"
-                  >
-                    Stim
-                  </span>
-                  <span
-                    class="hidden sm:inline"
-                  >
-                    Stimulative
-                  </span>
-                </span>
-              </div>
+              —
             </td>
             <td
               class="px-2 py-2.5 relative"
@@ -1470,8 +1338,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1 min-w-0"
+                class="flex items-center gap-1.5 min-w-0"
               >
+                <span
+                  class="block w-2 h-2 rounded-full flex-shrink-0 bg-success-400"
+                />
                 <span
                   class="truncate"
                 >
@@ -1490,26 +1361,9 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
             >
-              <div
-                class="flex justify-center"
-              >
-                <span
-                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-                >
-                  <span
-                    class="sm:hidden"
-                  >
-                    Stim
-                  </span>
-                  <span
-                    class="hidden sm:inline"
-                  >
-                    Stimulative
-                  </span>
-                </span>
-              </div>
+              —
             </td>
             <td
               class="px-2 py-2.5 relative"
@@ -1695,30 +1549,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -1971,30 +1802,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -2247,30 +2055,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -2523,30 +2308,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -2816,30 +2578,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -2856,8 +2595,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1 min-w-0"
+                class="flex items-center gap-1.5 min-w-0"
               >
+                <span
+                  class="block w-2 h-2 rounded-full flex-shrink-0 bg-success-400"
+                />
                 <span
                   class="truncate"
                 >
@@ -2876,26 +2618,9 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
             >
-              <div
-                class="flex justify-center"
-              >
-                <span
-                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-                >
-                  <span
-                    class="sm:hidden"
-                  >
-                    Stim
-                  </span>
-                  <span
-                    class="hidden sm:inline"
-                  >
-                    Stimulative
-                  </span>
-                </span>
-              </div>
+              —
             </td>
             <td
               class="px-2 py-2.5 relative"
@@ -2926,8 +2651,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               class="px-2 py-2.5 text-surface-300 font-medium"
             >
               <div
-                class="flex items-center gap-1 min-w-0"
+                class="flex items-center gap-1.5 min-w-0"
               >
+                <span
+                  class="block w-2 h-2 rounded-full flex-shrink-0 bg-success-400"
+                />
                 <span
                   class="truncate"
                 >
@@ -2946,26 +2674,9 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               9
             </td>
             <td
-              class="px-2 py-2.5 text-center"
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
             >
-              <div
-                class="flex justify-center"
-              >
-                <span
-                  class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-                >
-                  <span
-                    class="sm:hidden"
-                  >
-                    Stim
-                  </span>
-                  <span
-                    class="hidden sm:inline"
-                  >
-                    Stimulative
-                  </span>
-                </span>
-              </div>
+              —
             </td>
             <td
               class="px-2 py-2.5 relative"
@@ -3241,30 +2952,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -3538,30 +3226,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -3814,30 +3479,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -4090,30 +3732,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -4366,30 +3985,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"
@@ -4642,30 +4238,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              <span
-                class="inline-flex items-center justify-center"
-              >
-                Quality
-                <button
-                  aria-expanded="false"
-                  aria-label="Learn more about Stimulative Set"
-                  class="inline-flex items-center justify-center rounded-full text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-surface-900 w-3.5 h-3.5 ml-1"
-                >
-                  <svg
-                    class="w-full h-full"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-              </span>
+              Prev
             </th>
             <th
               class="px-2 py-2 w-10"

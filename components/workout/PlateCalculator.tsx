@@ -128,7 +128,7 @@ export const PlateCalculator = memo(function PlateCalculator({
               inputMode="decimal"
               value={startingWeight}
               onChange={handleStartingWeightChange}
-              className="w-full px-4 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white text-center focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2 bg-surface-800 border border-surface-600 rounded-lg text-surface-100 text-center focus:outline-none focus:border-primary-500"
               placeholder={`Enter starting weight in ${unit}`}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
@@ -155,7 +155,7 @@ export const PlateCalculator = memo(function PlateCalculator({
               inputMode="decimal"
               value={targetWeight}
               onChange={handleWeightChange}
-              className="w-full px-4 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white text-center text-lg font-semibold focus:outline-none focus:border-primary-500"
+              className="w-full px-4 py-2 bg-surface-800 border border-surface-600 rounded-lg text-surface-100 text-center text-lg font-semibold focus:outline-none focus:border-primary-500"
               placeholder={`Enter weight in ${unit}`}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 font-medium">
@@ -362,7 +362,7 @@ function BarbellVisualization({
 
       {/* Weight summary */}
       <div className="mt-3 text-center">
-        <p className="text-lg font-bold text-white">
+        <p className="text-lg font-bold text-surface-100">
           {calculation.actualTotal} {unit}
         </p>
         <p className="text-xs text-gray-400">
@@ -430,7 +430,7 @@ function PlateBreakdown({
         <p className="text-sm text-gray-400">
           Start with the {BARBELL_WEIGHTS[unit].olympic.label}
         </p>
-        <p className="text-sm text-white font-medium">
+        <p className="text-sm text-surface-100 font-medium">
           Load each side:{' '}
           {sortedPlates.map((p, i) => (
             <span key={p.weight}>

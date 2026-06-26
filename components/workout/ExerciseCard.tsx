@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, SetQualityBadge, Button, InfoTooltip, ConfirmModal } from '@/components/ui';
+import { Card, Badge, Button, InfoTooltip, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
 import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
@@ -990,6 +990,23 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   };
 
+  // Background-color class for the compact set-quality dot shown on the set number.
+  const qualityDotClass = (quality: SetQuality) => {
+    switch (quality) {
+      case 'junk': return 'bg-surface-500';
+      case 'effective': return 'bg-primary-400';
+      case 'stimulative': return 'bg-success-400';
+      case 'excessive': return 'bg-danger-400';
+      default: return 'bg-surface-600';
+    }
+  };
+
+  // Previous workout's set at a given index, formatted "weight × reps" (or null).
+  const prevSetLabel = (i: number): string | null => {
+    const p = previousSets[i];
+    return p ? `${displayWeight(p.weightKg)} × ${p.reps}` : null;
+  };
+
   return (
     <Card
       variant={isActive ? 'elevated' : 'default'}
@@ -1629,9 +1646,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <th className="px-2 py-2 text-left text-surface-400 font-medium">Set</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">
-                  <span className="inline-flex items-center justify-center">Quality<InfoTooltip term="STIMULATIVE_SET" size="sm" /></span>
-                </th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Prev</th>
                 <th className="px-2 py-2 w-10"></th>
               </tr>
             </thead>
@@ -1669,10 +1684,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
                     </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <div className="flex justify-center">
-                        <SetQualityBadge quality={set.quality} />
-                      </div>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(setIndex) ?? '—'}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex gap-1 justify-center">
@@ -1707,7 +1720,20 @@ export const ExerciseCard = memo(function ExerciseCard({
                       style={getSwipeTransform(set.id)}
                     >
                       <td className="px-2 py-2.5 text-surface-300 font-medium">
-                        <div className="flex items-center gap-1 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {onSetFeedbackUpdate ? (
+                            <button
+                              type="button"
+                              onClick={() => setPendingFeedbackSet({ setId: set.id, weightKg: set.weightKg, reps: set.reps, setNumber: set.setNumber })}
+                              title="Tap to rate effort (RIR)"
+                              aria-label="Rate set effort"
+                              className="flex-shrink-0 p-1 -m-1"
+                            >
+                              <span className={`block w-2 h-2 rounded-full ${qualityDotClass(set.quality)}`} />
+                            </button>
+                          ) : (
+                            <span className={`block w-2 h-2 rounded-full flex-shrink-0 ${qualityDotClass(set.quality)}`} />
+                          )}
                           {isDropset && <span className="text-purple-400 text-xs">↓</span>}
                           <span className="truncate">{set.setNumber}</span>
                         </div>
@@ -1726,21 +1752,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                       >
                         {set.reps}{isDurationBased ? 's' : ''}
                       </td>
-                      <td className="px-2 py-2.5 text-center">
-                        {onSetFeedbackUpdate ? (
-                          <button
-                            type="button"
-                            onClick={() => setPendingFeedbackSet({ setId: set.id, weightKg: set.weightKg, reps: set.reps, setNumber: set.setNumber })}
-                            className="inline-flex justify-center rounded hover:opacity-80 transition-opacity"
-                            title="Tap to rate effort (RIR)"
-                          >
-                            <SetQualityBadge quality={set.quality} />
-                          </button>
-                        ) : (
-                          <div className="flex justify-center">
-                            <SetQualityBadge quality={set.quality} />
-                          </div>
-                        )}
+                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
+                        {prevSetLabel(setIndex) ?? '—'}
                       </td>
                       <td className="px-2 py-2.5 relative">
                         {/* Delete reveal background for swipe */}
@@ -2038,8 +2051,8 @@ export const ExerciseCard = memo(function ExerciseCard({
                         );
                       })()}
                     </td>
-                    <td className="px-2 py-1.5 text-center">
-                      <span className="text-surface-600 text-xs">—</span>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(completedSets.length + index) ?? '—'}
                     </td>
                     <td className="px-2 py-1.5 relative">
                       {/* Delete reveal background for swipe */}

@@ -262,7 +262,7 @@ function CompleteContent() {
       </div>
       
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Your Strength Profile</h1>
+        <h1 className="text-3xl font-bold text-surface-100 mb-2">Your Strength Profile</h1>
         <p className="text-surface-400">
           Based on your calibration tests, here&apos;s your personalized profile. This data powers smart recommendations across the app.
         </p>
@@ -310,7 +310,7 @@ function CompleteContent() {
                 </defs>
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold text-white">{profile.overallScore}</span>
+                <span className="text-4xl font-bold text-surface-100">{profile.overallScore}</span>
                 <span className="text-sm text-surface-400">/ 100</span>
               </div>
             </div>
@@ -327,13 +327,13 @@ function CompleteContent() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-surface-900/50 rounded-lg">
                   <p className="text-xs text-surface-500">Balance Score</p>
-                  <p className="text-2xl font-bold text-white">{profile.balanceScore}%</p>
+                  <p className="text-2xl font-bold text-surface-100">{profile.balanceScore}%</p>
                 </div>
                 <div className="p-3 bg-surface-900/50 rounded-lg">
                   <p className="text-xs text-surface-500">
                     <ExplainedTerm term="FFMI" />
                   </p>
-                  <p className="text-2xl font-bold text-white">{profile.bodyComposition.ffmi.toFixed(1)}</p>
+                  <p className="text-2xl font-bold text-surface-100">{profile.bodyComposition.ffmi.toFixed(1)}</p>
                 </div>
               </div>
 
@@ -452,7 +452,7 @@ function CompleteContent() {
       {/* What's next */}
       <Card className="bg-surface-800/50">
         <CardContent className="p-6">
-          <h3 className="text-lg font-semibold text-white mb-2">You&apos;re All Set! 🎉</h3>
+          <h3 className="text-lg font-semibold text-surface-100 mb-2">You&apos;re All Set! 🎉</h3>
           <p className="text-surface-400 mb-4">
             Your calibration data is now powering personalized recommendations across the entire app. 
             Here&apos;s what you can do now:

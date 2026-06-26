@@ -33,12 +33,12 @@ export default async function Home({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
           </div>
-          <span className="text-lg font-bold text-white tracking-tight">HyperTrack</span>
+          <span className="text-lg font-bold text-surface-100 tracking-tight">HyperTrack</span>
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href="/login"
-            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface-300 hover:text-white transition-colors"
+            className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm font-medium text-surface-300 hover:text-surface-100 transition-colors"
           >
             Login
           </Link>
@@ -70,7 +70,7 @@ export default async function Home({
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 pt-16">
         {/* Hero content */}
         <div className="text-center max-w-2xl animate-fade-in">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-6 tracking-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-surface-100 mb-6 tracking-tight">
             Train <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-accent-400">Smarter</span>,
             <br />Grow Faster
           </h1>
@@ -207,7 +207,7 @@ function FeatureCard({
       }`}>
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
+      <h3 className="text-lg font-semibold text-surface-100 mb-2">{title}</h3>
       <p className="text-surface-400 text-sm leading-relaxed">{description}</p>
     </div>
   );

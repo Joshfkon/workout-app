@@ -175,7 +175,7 @@ export function DropsetPrompt({
 
             {/* Target weight display */}
             <div className="text-center mb-3">
-              <span className="text-3xl font-bold text-white">
+              <span className="text-3xl font-bold text-surface-100">
                 {displayTargetWeight} {unit}
               </span>
             </div>
@@ -197,7 +197,7 @@ export function DropsetPrompt({
                   onChange={(e) => setWeight(e.target.value)}
                   onKeyDown={handleKeyDown}
                   step="0.5"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
@@ -209,7 +209,7 @@ export function DropsetPrompt({
                   onChange={(e) => setReps(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="?"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-white placeholder-surface-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 placeholder-surface-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
               <div className="flex-1">
@@ -222,7 +222,7 @@ export function DropsetPrompt({
                   step="0.5"
                   min="1"
                   max="10"
-                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-surface-900 border border-purple-500/50 rounded-lg text-center font-mono text-lg text-surface-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                 />
               </div>
               <div className="pt-5">

@@ -536,7 +536,7 @@ function HowYouCompareWithTargets({
       <CardContent className="space-y-4">
         <div className="flex items-center gap-2 text-[10px] text-surface-500">
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full border-2 border-white" />
+            <div className="w-3 h-3 rounded-full border-2 border-surface-700" />
             <span>Current</span>
           </div>
           {targetMeasurements && (
