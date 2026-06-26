@@ -17,7 +17,6 @@ import { BodyweightDisplay } from './BodyweightDisplay';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
 import { CompactSetRow } from './CompactSetRow';
 import { SegmentedControl } from './SegmentedControl';
-import { SetFeedbackCard } from './SetFeedbackCard';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -2571,56 +2570,8 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Optional Feedback Overlay - appears after set completion */}
-      {pendingFeedbackSet && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm" onClick={skipFeedback}>
-          <div
-            className="w-full max-w-md bg-surface-900 border border-surface-700 rounded-t-2xl sm:rounded-xl shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-surface-700 bg-surface-800/50">
-              <div>
-                <h3 className="text-sm font-semibold text-surface-100">How was that set?</h3>
-                <p className="text-xs text-surface-400">
-                  Set {pendingFeedbackSet.setNumber}: {formatWeightValue(pendingFeedbackSet.weightKg, unit)} {unit} × {pendingFeedbackSet.reps} {isDurationBased ? 'sec' : 'reps'}
-                </p>
-              </div>
-              <button
-                onClick={skipFeedback}
-                className="p-1.5 text-surface-400 hover:text-surface-200 hover:bg-surface-700 rounded-lg transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Feedback Card Content */}
-            <div className="p-4">
-              <SetFeedbackCard
-                setNumber={pendingFeedbackSet.setNumber}
-                weightKg={pendingFeedbackSet.weightKg}
-                reps={pendingFeedbackSet.reps}
-                unit={unit}
-                onSave={submitFeedback}
-                onCancel={skipFeedback}
-                disabled={false}
-              />
-            </div>
-
-            {/* Skip button */}
-            <div className="px-4 pb-4">
-              <button
-                onClick={skipFeedback}
-                className="w-full py-2 text-sm text-surface-400 hover:text-surface-300 transition-colors"
-              >
-                Skip for now
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Post-set feedback is handled INLINE in the set table (the "Reps in
+          reserve?" sub-row), not as a modal — keeps logging low-friction. */}
 
       {/* RPE Guide Modal */}
       {showRpeGuide && (

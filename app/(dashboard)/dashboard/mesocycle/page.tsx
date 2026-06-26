@@ -549,12 +549,21 @@ export default function MesocyclePage() {
             warmup_protocol: { sets: warmupSets },
           });
         }
-      } else {
+      }
+
+      // Fallback: if program_data yielded no usable blocks — either there was no
+      // program session, or it had exercises whose names didn't match the library
+      // so every lookup above was skipped — build the session from today's target
+      // muscles. This guarantees we never start an EMPTY workout when the day's
+      // muscles are known. Matches primary_muscle case-insensitively so taxonomy
+      // casing differences don't drop everything.
+      if (blocks.length === 0 && todayWorkout?.muscles?.length) {
         // FALLBACK: Query exercises and use default logic (legacy behavior)
+        const muscleList = todayWorkout.muscles.map((m) => m.toLowerCase());
         const { data: exercises } = await supabase
           .from('exercises')
           .select('*')
-          .in('primary_muscle', todayWorkout.muscles);
+          .in('primary_muscle', muscleList);
 
         if (exercises && exercises.length > 0) {
           type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number };
