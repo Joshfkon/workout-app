@@ -18,6 +18,7 @@ import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
+import { ThemeToggle } from '@/components/settings/ThemeToggle';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -392,6 +393,22 @@ export default function SettingsPage() {
       {/* Profile Tab */}
       {activeTab === 'profile' && (
         <>
+      {/* Appearance */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Appearance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-surface-100">Theme</p>
+              <p className="text-xs text-surface-400">Choose light or dark.</p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Profile settings */}
       <Card>
         <CardHeader>
