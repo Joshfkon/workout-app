@@ -1012,7 +1012,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
       className={`overflow-hidden transition-all ${
-        isActive ? 'ring-2 ring-primary-500/50' : ''
+        isActive && !hideHeader ? 'ring-2 ring-primary-500/50' : ''
       } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
     >
       {/* Header - compact when hideHeader is true */}
