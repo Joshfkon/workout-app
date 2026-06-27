@@ -1066,35 +1066,8 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
             </div>
           )}
-          <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-between' : ''}`}>
-            {/* Set controls */}
-            {onTargetSetsChange && isActive && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    const newSets = Math.max(1, (Number(block.targetSets) || 1) - 1);
-                    onTargetSetsChange(newSets);
-                  }}
-                  disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Remove a set"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
-                  disabled={Number(block.targetSets) >= 10}
-                  className="min-w-[44px] min-h-[44px] p-2.5 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                  title="Add a set"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </button>
-              </div>
-            )}
+          <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-end' : ''}`}>
+            {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
             {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
             {isActive && (onExerciseSwap || onExerciseDelete || onPlateCalculatorOpen) && (
               <div className="relative">
@@ -2105,13 +2078,22 @@ export const ExerciseCard = memo(function ExerciseCard({
       {isActive && (
         <div className="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs">
           {onTargetSetsChange && (
-            <button
-              onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
-              disabled={Number(block.targetSets) >= 10}
-              className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
-            >
-              + Add Set
-            </button>
+            <>
+              <button
+                onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
+                disabled={Number(block.targetSets) >= 10}
+                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+              >
+                + Add Set
+              </button>
+              <button
+                onClick={() => onTargetSetsChange(Math.max(1, (Number(block.targetSets) || 1) - 1))}
+                disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
+                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+              >
+                − Remove Set
+              </button>
+            </>
           )}
           {onBlockNoteUpdate && (
             <button
