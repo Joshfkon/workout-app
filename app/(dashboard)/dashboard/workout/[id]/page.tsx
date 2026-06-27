@@ -1996,7 +1996,8 @@ export default function WorkoutPage() {
           // Final drop complete - NOW start rest timer
           setPendingDropset(null);
           setShowRestTimer(true);
-          setRestTimerPanelVisible(true);
+          // Inline rest bar is primary; keep the control panel collapsed (tap bar to reveal).
+          setRestTimerPanelVisible(false);
           setRestTimerDuration(null);
           restTimer.start(currentBlock?.targetRestSeconds ?? 180);
         }
@@ -2004,7 +2005,9 @@ export default function WorkoutPage() {
         // Normal flow - start rest timer
         setPendingDropset(null);
         setShowRestTimer(true);
-        setRestTimerPanelVisible(true);
+        // Inline rest bar (in the set table) is the primary display; keep the bulky
+        // control panel collapsed — tapping the inline bar reveals controls on demand.
+        setRestTimerPanelVisible(false);
         setRestTimerDuration(null);
         restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       }
@@ -4331,12 +4334,15 @@ export default function WorkoutPage() {
                   {isComplete && !isCurrent && (
                     <Badge variant="success" size="sm">Done</Badge>
                   )}
-                  {/* Exercise name - always visible even when collapsed */}
-                  <span className={`text-sm font-medium truncate ${
-                    isCurrent ? 'text-surface-100' : 'text-surface-300'
-                  }`}>
-                    {block.exercise.name}
-                  </span>
+                  {/* Exercise name — only in this list row when COLLAPSED; when expanded
+                      the richer group-container header below shows the name (avoids duplication) */}
+                  {(allCollapsed || isBlockCollapsed) && (
+                    <span className={`text-sm font-medium truncate ${
+                      isCurrent ? 'text-surface-100' : 'text-surface-300'
+                    }`}>
+                      {block.exercise.name}
+                    </span>
+                  )}
                   {/* Injury risk warning */}
                   {(() => {
                     const injuryRisk = getExerciseInjuryRisk(block.exercise, temporaryInjuries);
@@ -4482,7 +4488,7 @@ export default function WorkoutPage() {
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
                       setShowRestTimer(true);
-                      setRestTimerPanelVisible(true); // Show panel when timer starts
+                      setRestTimerPanelVisible(false); // Inline bar is primary; tap it for controls
                       restTimer.start(restSeconds);
                     }}
                     showRestTimer={showRestTimer && isCurrent}
