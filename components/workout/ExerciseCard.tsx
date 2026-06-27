@@ -1016,7 +1016,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
     >
       {/* Header - compact when hideHeader is true */}
-      <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800 sticky top-0 bg-surface-900 z-10`}>
+      <div className={`${hideHeader ? 'px-2 pt-2 pb-0 border-0 bg-transparent' : 'p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10'}`}>
         <div className="flex items-start justify-between gap-2">
           {/* Exercise name and info - hidden when hideHeader */}
           {!hideHeader && (
@@ -1614,7 +1614,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">Prev</th>
-                <th className="px-2 py-2 w-10"></th>
+                <th className="px-1 py-2 w-14"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -1722,7 +1722,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
                         {prevSetLabel(setIndex) ?? '—'}
                       </td>
-                      <td className="px-2 py-2.5 relative">
+                      <td className="px-1 py-2.5 relative">
                         {/* Delete reveal background for swipe */}
                         {swipeState.setId === set.id && swipeState.isSwiping && (
                           <div
@@ -2021,7 +2021,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                     <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
                       {prevSetLabel(completedSets.length + index) ?? '—'}
                     </td>
-                    <td className="px-2 py-1.5 relative">
+                    <td className="px-1 py-1.5 relative">
                       {/* Delete reveal background for swipe */}
                       {swipeState.setId === pendingId && swipeState.isSwiping && (
                         <div

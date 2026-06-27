@@ -321,7 +321,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -574,7 +574,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -827,7 +827,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -882,7 +882,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -952,7 +952,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1022,7 +1022,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1212,7 +1212,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -1254,7 +1254,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1310,7 +1310,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1366,7 +1366,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               —
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1552,7 +1552,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -1805,7 +1805,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2058,7 +2058,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2311,7 +2311,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2581,7 +2581,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2623,7 +2623,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               —
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -2679,7 +2679,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               —
             </td>
             <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -2947,7 +2947,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3221,7 +3221,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3474,7 +3474,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3727,7 +3727,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3980,7 +3980,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -4233,7 +4233,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
               Prev
             </th>
             <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>

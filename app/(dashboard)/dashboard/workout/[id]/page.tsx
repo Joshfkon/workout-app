@@ -4425,7 +4425,7 @@ export default function WorkoutPage() {
                         : 'border-surface-700 bg-surface-800/30'
                   } transition-all`}>
                     {/* Exercise name header - now visually connected to card */}
-                    <div className={`px-4 py-3 border-b ${
+                    <div className={`px-3 py-2.5 sm:px-4 sm:py-3 border-b ${
                       isCurrent 
                         ? 'border-primary-500/20' 
                         : isComplete
@@ -4470,7 +4470,7 @@ export default function WorkoutPage() {
                     </div>
                     
                     {/* Card content area */}
-                    <div className="px-4 py-3 space-y-3">
+                    <div className="px-2 py-3 sm:px-4 space-y-3">
                     {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
                     <ExerciseCard
                       hideHeader
