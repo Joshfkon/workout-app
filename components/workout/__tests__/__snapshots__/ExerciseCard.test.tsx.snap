@@ -1048,8 +1048,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
       </table>
     </div>
     <div
-      class="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs"
-    />
+      class="px-3 py-3 space-y-2"
+    >
+      <div
+        class="flex items-center gap-4 text-xs px-1"
+      />
+    </div>
     <div
       class="border-t border-surface-800"
     >

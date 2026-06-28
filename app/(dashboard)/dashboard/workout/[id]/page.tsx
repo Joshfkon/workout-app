@@ -4416,28 +4416,14 @@ export default function WorkoutPage() {
                 const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeightKg;
                 
                 return (
-                  // Exercise group container - visually connects name with card
-                  <div className={`mt-4 mb-6 rounded-xl border-l-4 ${
-                    isCurrent 
-                      ? 'border-primary-500 bg-primary-500/5' 
-                      : isComplete
-                        ? 'border-success-500/50 bg-success-500/5'
-                        : 'border-surface-700 bg-surface-800/30'
-                  } transition-all`}>
-                    {/* Exercise name header - now visually connected to card */}
-                    <div className={`px-3 py-2.5 sm:px-4 sm:py-3 border-b ${
-                      isCurrent 
-                        ? 'border-primary-500/20' 
-                        : isComplete
-                          ? 'border-success-500/20'
-                          : 'border-surface-700'
-                    }`}>
+                  // Exercise group container - single plain card (mockup style)
+                  <div className="mt-4 mb-6 rounded-2xl border border-surface-800 bg-surface-900 transition-all">
+                    {/* Exercise name header */}
+                    <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-surface-800">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => setSelectedExerciseForDetails(block.exercise)}
-                          className={`text-base font-semibold text-left hover:text-primary-400 transition-colors ${
-                            isCurrent ? 'text-surface-100' : 'text-surface-200'
-                          }`}
+                          className="text-base font-semibold text-left text-primary-400 hover:text-primary-300 transition-colors"
                         >
                           {block.exercise.name}
                           {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (

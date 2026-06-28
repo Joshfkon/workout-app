@@ -1149,10 +1149,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 )}
               </div>
             )}
-            {/* Progress badge */}
-            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
-              {completedSets.length}/{block.targetSets}
-            </Badge>
+            {/* Progress badge — hidden in the workout view (the workout header shows the
+                count and per-set dots/checks convey progress); keeps the header uncluttered */}
+            {!hideHeader && (
+              <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
+                {completedSets.length}/{block.targetSets}
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -2074,35 +2077,37 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Footer actions - NEW COMPACT DESIGN */}
+      {/* Footer actions - prominent "Add set" (mockup style) + quiet secondary links */}
       {isActive && (
-        <div className="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs">
+        <div className="px-3 py-3 space-y-2">
           {onTargetSetsChange && (
-            <>
-              <button
-                onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
-                disabled={Number(block.targetSets) >= 10}
-                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
-              >
-                + Add Set
-              </button>
+            <button
+              onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
+              disabled={Number(block.targetSets) >= 10}
+              className="w-full py-2.5 rounded-lg border border-dashed border-surface-700 text-sm text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors disabled:opacity-30"
+            >
+              + Add set
+            </button>
+          )}
+          <div className="flex items-center gap-4 text-xs px-1">
+            {onTargetSetsChange && (
               <button
                 onClick={() => onTargetSetsChange(Math.max(1, (Number(block.targetSets) || 1) - 1))}
                 disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+                className="text-surface-500 hover:text-surface-300 transition-colors disabled:opacity-30"
               >
-                − Remove Set
+                − Remove set
               </button>
-            </>
-          )}
-          {onBlockNoteUpdate && (
-            <button
-              onClick={() => setIsEditingNote(true)}
-              className="text-surface-400 hover:text-surface-200 transition-colors"
-            >
-              Notes
-            </button>
-          )}
+            )}
+            {onBlockNoteUpdate && (
+              <button
+                onClick={() => setIsEditingNote(true)}
+                className="text-surface-500 hover:text-surface-300 transition-colors"
+              >
+                Notes
+              </button>
+            )}
+          </div>
         </div>
       )}
 
