@@ -1181,23 +1181,21 @@ export const ExerciseCard = memo(function ExerciseCard({
               onClick={() => setShowHistory(!showHistory)}
               className="flex items-center justify-between w-full text-left"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-surface-400 flex-wrap">
                 {/* Estimated 1RM — hidden until there's a real estimate (avoid "0 lbs") */}
                 {exerciseHistory.estimatedE1RM > 0 && (
-                  <span className="text-xs text-surface-400">
-                    1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span>
-                  </span>
+                  <span>1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span></span>
                 )}
-                {/* PR indicator */}
-                {exerciseHistory.personalRecord && (
-                  <span className="text-xs text-surface-400">
-                    PR <span className="text-surface-300">{displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}</span>
-                  </span>
+                {/* Last workout's top set (mockup: "last 45 × 9") */}
+                {exerciseHistory.estimatedE1RM > 0 && exerciseHistory.lastWorkoutSets.length > 0 && (
+                  <span className="text-surface-600">·</span>
                 )}
-                {/* Sessions count */}
-                <span className="text-xs text-surface-500">
-                  {exerciseHistory.totalSessions} sessions
-                </span>
+                {exerciseHistory.lastWorkoutSets.length > 0 && (() => {
+                  const top = exerciseHistory.lastWorkoutSets.reduce((a, b) => (b.weightKg > a.weightKg ? b : a));
+                  return (
+                    <span>last <span className="text-surface-300">{displayWeight(top.weightKg, true)} × {top.reps}{isDurationBased ? 's' : ''}</span></span>
+                  );
+                })()}
               </div>
               <svg 
                 className={`w-4 h-4 text-surface-400 transition-transform ${showHistory ? 'rotate-180' : ''}`}
@@ -1614,9 +1612,9 @@ export const ExerciseCard = memo(function ExerciseCard({
             <thead className="bg-surface-800/50">
               <tr>
                 <th className="px-2 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Previous</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : weightLabel}</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">Prev</th>
                 <th className="px-1 py-2 w-14"></th>
               </tr>
             </thead>
@@ -1629,6 +1627,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                 return editingSetId === set.id ? (
                   <tr key={set.id} className="bg-primary-500/10">
                     <td className="px-2 py-2 text-surface-300 font-medium">{set.setNumber}</td>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(setIndex) ?? '—'}
+                    </td>
                     <td className="px-2 py-1.5">
                       <input
                         type="number"
@@ -1653,9 +1654,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onKeyDown={handleEditKeyDown}
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
-                    </td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(setIndex) ?? '—'}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex gap-1 justify-center">
@@ -1708,6 +1706,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                           <span className="truncate">{set.setNumber}</span>
                         </div>
                       </td>
+                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
+                        {prevSetLabel(setIndex) ?? '—'}
+                      </td>
                       <td
                         className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
@@ -1721,9 +1722,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onClick={() => onSetEdit && startEditing(set)}
                       >
                         {set.reps}{isDurationBased ? 's' : ''}
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
-                        {prevSetLabel(setIndex) ?? '—'}
                       </td>
                       <td className="px-1 py-2.5 relative">
                         {/* Delete reveal background for swipe */}
@@ -1950,6 +1948,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     style={getSwipeTransform(pendingId)}
                   >
                     <td className="px-2 py-2 text-surface-400 font-medium">{setNumber}</td>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(completedSets.length + index) ?? '—'}
+                    </td>
                     <td className="px-2 py-1.5">
                       <input
                         id={`pending-weight-${index}`}
@@ -2020,9 +2021,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                           </div>
                         );
                       })()}
-                    </td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(completedSets.length + index) ?? '—'}
                     </td>
                     <td className="px-1 py-1.5 relative">
                       {/* Delete reveal background for swipe */}

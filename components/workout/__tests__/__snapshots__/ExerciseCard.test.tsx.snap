@@ -308,17 +308,17 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -561,17 +561,17 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -814,17 +814,17 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -841,6 +841,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               1
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -877,11 +882,6 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
               class="px-1 py-1.5 relative"
             >
               <button
@@ -911,6 +911,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               2
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -947,11 +952,6 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
               class="px-1 py-1.5 relative"
             >
               <button
@@ -981,6 +981,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               3
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -1015,11 +1020,6 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
                   value="10"
                 />
               </div>
-            </td>
-            <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-1.5 relative"
@@ -1203,17 +1203,17 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -1243,6 +1243,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1251,11 +1256,6 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-2.5 relative"
@@ -1299,6 +1299,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1307,11 +1312,6 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-2.5 relative"
@@ -1355,6 +1355,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1363,11 +1368,6 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-2.5 relative"
@@ -1543,17 +1543,17 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -1796,17 +1796,17 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              lbs
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -2049,17 +2049,17 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -2302,17 +2302,17 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -2572,17 +2572,17 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -2612,6 +2612,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -2620,11 +2625,6 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               10
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-2.5 relative"
@@ -2668,6 +2668,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -2676,11 +2681,6 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               9
-            </td>
-            <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
             </td>
             <td
               class="px-1 py-2.5 relative"
@@ -2871,11 +2871,9 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           class="flex items-center justify-between w-full text-left"
         >
           <div
-            class="flex items-center gap-4"
+            class="flex items-center gap-2 text-xs text-surface-400 flex-wrap"
           >
-            <span
-              class="text-xs text-surface-400"
-            >
+            <span>
               1RM 
               <span
                 class="text-surface-300"
@@ -2886,22 +2884,19 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
               </span>
             </span>
             <span
-              class="text-xs text-surface-400"
+              class="text-surface-600"
             >
-              PR 
+              ·
+            </span>
+            <span>
+              last 
               <span
                 class="text-surface-300"
               >
-                120
+                100
                  × 
-                1
+                10
               </span>
-            </span>
-            <span
-              class="text-xs text-surface-500"
-            >
-              24
-               sessions
             </span>
           </div>
           <svg
@@ -2938,17 +2933,17 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -3212,17 +3207,17 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -3465,17 +3460,17 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -3718,17 +3713,17 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -3971,17 +3966,17 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
@@ -4224,17 +4219,17 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
               Reps
-            </th>
-            <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
             </th>
             <th
               class="px-1 py-2 w-14"
