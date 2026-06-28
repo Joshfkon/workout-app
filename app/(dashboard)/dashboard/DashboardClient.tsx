@@ -2050,9 +2050,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
       {!isEditMode && (muscleVolume.length > 0 || nutritionTargets || todaysWeight) && (
         <div className="space-y-3">
           {muscleVolume.length > 0 && (() => {
+            // muscleVolume only contains muscles that have working sets; untrained muscles
+            // (0 sets) are still below their target, so fold them in — otherwise the glance
+            // can read "all on target" while most muscles haven't been trained at all.
+            const trainedMuscles = new Set(muscleVolume.map((mv) => mv.muscle));
+            const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
             const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
-            const totalTarget = muscleVolume.reduce((s, mv) => s + mv.target, 0);
-            const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length;
+            const totalTarget =
+              muscleVolume.reduce((s, mv) => s + mv.target, 0) +
+              untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
+            const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length + untrained.length;
             return (
               <div className="bg-surface-900 border border-surface-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-1">
@@ -2090,8 +2097,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                 <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
                   <div className="text-xs text-surface-500 mb-1">Weight</div>
                   <div className="text-xl font-semibold text-surface-100">
-                    {todaysWeight.weight}
-                    <span className="text-sm text-surface-500 font-normal"> {todaysWeight.unit}</span>
+                    {getDisplayWeight(todaysWeight.weight, todaysWeight.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)}
+                    <span className="text-sm text-surface-500 font-normal"> {weightUnit}</span>
                   </div>
                 </div>
               )}
