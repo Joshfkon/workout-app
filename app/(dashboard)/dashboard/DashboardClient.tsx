@@ -332,16 +332,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
 
   // Recovery data for the glance "Recovery" tile (same source as the recovery card).
-  const { readyMuscles, recoveringMuscles } = useMuscleRecovery();
+  // While loading, the hook reports every muscle as ready (empty training map), so gate
+  // the tile on recoveryLoading and show a skeleton until real data arrives.
+  const { readyMuscles, recoveringMuscles, isLoading: recoveryLoading } = useMuscleRecovery();
 
-  // Time-based greeting + short date for the dashboard header.
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
-  })();
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  // Time-based greeting + date — computed client-side after mount so the server render
+  // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
+  // hydration mismatch / stale header.
+  const [clientNow, setClientNow] = useState<Date | null>(null);
+  useEffect(() => { setClientNow(new Date()); }, []);
+  const greeting = clientNow
+    ? clientNow.getHours() < 12 ? 'Good morning' : clientNow.getHours() < 18 ? 'Good afternoon' : 'Good evening'
+    : '';
+  const todayLabel = clientNow
+    ? clientNow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+    : '';
 
   // Weekly weight trend (latest vs the earliest entry within the last ~7 days), in the preferred unit.
   const weightTrend = (() => {
@@ -2080,11 +2085,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           Full detail cards render below; long-tail ones are collapsed. */}
       {!isEditMode && (
         <div className="space-y-4">
-          {/* Greeting */}
-          <div>
-            <h1 className="text-xl font-semibold text-surface-100">{greeting}</h1>
-            <p className="text-sm text-surface-500">{todayLabel}</p>
-          </div>
+          {/* Greeting (client-only — see clientNow above — to avoid SSR hydration mismatch) */}
+          {clientNow && (
+            <div>
+              <h1 className="text-xl font-semibold text-surface-100">{greeting}</h1>
+              <p className="text-sm text-surface-500">{todayLabel}</p>
+            </div>
+          )}
 
           {/* Today's workout hero — the primary daily action */}
           {todaysWorkout && (
@@ -2113,7 +2120,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           )}
 
           {/* 2x2 glance grid: Nutrition · Recovery · Weekly volume · Weight */}
-          {(muscleVolume.length > 0 || nutritionTargets || todaysWeight || readyMuscles.length > 0 || recoveringMuscles.length > 0) && (
+          {(muscleVolume.length > 0 || nutritionTargets || todaysWeight || recoveryLoading || readyMuscles.length > 0 || recoveringMuscles.length > 0) && (
             <div className="grid grid-cols-2 gap-3">
               {nutritionTargets && (
                 <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
@@ -2127,7 +2134,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                   </div>
                 </div>
               )}
-              {(readyMuscles.length > 0 || recoveringMuscles.length > 0) && (
+              {recoveryLoading ? (
+                <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">💪</span> Recovery</div>
+                  <div className="h-6 w-24 bg-surface-800 rounded animate-pulse mt-1" />
+                </div>
+              ) : (readyMuscles.length > 0 || recoveringMuscles.length > 0) ? (
                 <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
                   <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">💪</span> Recovery</div>
                   <div className="text-xl font-semibold text-success-400">
@@ -2140,7 +2152,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                     </div>
                   )}
                 </div>
-              )}
+              ) : null}
               {muscleVolume.length > 0 && (() => {
                 // Normalize to standard IDs and fold in untrained (0-set) muscles so the
                 // count isn't inflated/deflated by legacy names or missing muscles.
@@ -2185,12 +2197,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           <div>
             <div className="text-xs text-surface-500 mb-2">Quick log</div>
             <div className="grid grid-cols-4 gap-2">
-              {([
-                { label: 'Weight', emoji: '⚖️', target: 'dash-card-weight' },
-                { label: 'Water', emoji: '💧', target: 'dash-card-hydration' },
-                { label: 'Steps', emoji: '👟', target: 'dash-card-steps' },
-                { label: 'Cardio', emoji: '🏃', target: 'dash-card-cardio' },
-              ] as const).map((q) => (
+              {[
+                { label: 'Weight', emoji: '⚖️', target: 'dash-card-weight', show: true },
+                { label: 'Water', emoji: '💧', target: 'dash-card-hydration', show: !!userId },
+                { label: 'Steps', emoji: '👟', target: 'dash-card-steps', show: true },
+                // Cardio card only renders with an active cardio prescription — don't show a
+                // quick-log button that would scroll to a card that isn't in the DOM.
+                { label: 'Cardio', emoji: '🏃', target: 'dash-card-cardio', show: !!nutritionTargets?.cardio_prescription?.needed },
+              ].filter((q) => q.show).map((q) => (
                 <button
                   key={q.label}
                   onClick={() => {
