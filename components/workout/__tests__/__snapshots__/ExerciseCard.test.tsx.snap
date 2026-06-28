@@ -3,7 +3,7 @@
 exports[`ExerciseCard Different Exercise Types handles bodyweight exercise 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -54,7 +54,7 @@ exports[`ExerciseCard Different Exercise Types handles bodyweight exercise 1`] =
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -232,7 +232,7 @@ exports[`ExerciseCard Different Exercise Types handles bodyweight exercise 1`] =
 exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -278,7 +278,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -308,7 +308,12 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -316,12 +321,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -485,7 +485,7 @@ exports[`ExerciseCard Different Exercise Types handles cable exercise 1`] = `
 exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -531,7 +531,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -561,7 +561,12 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -569,12 +574,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -738,7 +738,7 @@ exports[`ExerciseCard Different Exercise Types handles machine exercise 1`] = `
 exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 shadow-lg shadow-black/20 overflow-hidden transition-all ring-2 ring-primary-500/50 "
+    class="rounded-xl bg-surface-900 border border-surface-800 shadow-lg shadow-black/20 relative overflow-hidden transition-all ring-2 ring-primary-500/50 "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -784,7 +784,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -814,7 +814,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -822,12 +827,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -841,6 +841,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               1
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -877,12 +882,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -911,6 +911,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               2
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -947,12 +952,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -981,6 +981,11 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               class="px-2 py-2 text-surface-400 font-medium"
             >
               3
+            </td>
+            <td
+              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
             </td>
             <td
               class="px-2 py-1.5"
@@ -1017,12 +1022,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
               </div>
             </td>
             <td
-              class="px-2 py-1.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-1.5 relative"
+              class="px-1 py-1.5 relative"
             >
               <button
                 class="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
@@ -1048,8 +1048,12 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
       </table>
     </div>
     <div
-      class="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs"
-    />
+      class="px-3 py-3 space-y-2"
+    >
+      <div
+        class="flex items-center gap-4 text-xs px-1"
+      />
+    </div>
     <div
       class="border-t border-surface-800"
     >
@@ -1123,7 +1127,7 @@ exports[`ExerciseCard Snapshot Tests renders active state 1`] = `
 exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -1169,7 +1173,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2.5 py-1 text-xs"
@@ -1199,7 +1203,12 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -1207,12 +1216,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -1239,6 +1243,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1249,12 +1258,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1295,6 +1299,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1305,12 +1314,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1351,6 +1355,11 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -1361,12 +1370,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -1463,7 +1467,7 @@ exports[`ExerciseCard Snapshot Tests renders all sets completed state 1`] = `
 exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -1509,7 +1513,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -1539,7 +1543,12 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -1547,12 +1556,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -1716,7 +1720,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
 exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -1762,7 +1766,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -1792,7 +1796,12 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              lbs
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -1800,12 +1809,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -1969,7 +1973,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
 exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -2015,7 +2019,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -2045,7 +2049,12 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -2053,12 +2062,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2222,7 +2226,7 @@ exports[`ExerciseCard Snapshot Tests renders isolation exercise 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -2268,7 +2272,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -2298,7 +2302,12 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -2306,12 +2315,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2492,7 +2496,7 @@ exports[`ExerciseCard Snapshot Tests renders with block note 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -2538,7 +2542,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -2568,7 +2572,12 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -2576,12 +2585,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -2608,6 +2612,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -2618,12 +2627,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               10
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -2664,6 +2668,11 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               </div>
             </td>
             <td
+              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
+            >
+              —
+            </td>
+            <td
               class="px-2 py-2.5 text-center font-mono text-surface-200 "
             >
               100
@@ -2674,12 +2683,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
               9
             </td>
             <td
-              class="px-2 py-2.5 text-center font-mono text-xs text-surface-500"
-            >
-              —
-            </td>
-            <td
-              class="px-2 py-2.5 relative"
+              class="px-1 py-2.5 relative"
             >
               <div
                 class="p-1.5 rounded-lg bg-success-500"
@@ -2803,7 +2807,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -2849,7 +2853,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -2867,11 +2871,9 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
           class="flex items-center justify-between w-full text-left"
         >
           <div
-            class="flex items-center gap-4"
+            class="flex items-center gap-2 text-xs text-surface-400 flex-wrap"
           >
-            <span
-              class="text-xs text-surface-400"
-            >
+            <span>
               1RM 
               <span
                 class="text-surface-300"
@@ -2882,22 +2884,19 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
               </span>
             </span>
             <span
-              class="text-xs text-surface-400"
+              class="text-surface-600"
             >
-              PR 
+              ·
+            </span>
+            <span>
+              last 
               <span
                 class="text-surface-300"
               >
-                120
+                100
                  × 
-                1
+                10
               </span>
-            </span>
-            <span
-              class="text-xs text-surface-500"
-            >
-              24
-               sessions
             </span>
           </div>
           <svg
@@ -2934,7 +2933,12 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -2942,12 +2946,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3111,7 +3110,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -3178,7 +3177,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -3208,7 +3207,12 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -3216,12 +3220,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3385,7 +3384,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -3431,7 +3430,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -3461,7 +3460,12 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -3469,12 +3473,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3638,7 +3637,7 @@ exports[`ExerciseCard Snapshot Tests renders with previous sets history 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -3684,7 +3683,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -3714,7 +3713,12 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -3722,12 +3726,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -3891,7 +3890,7 @@ exports[`ExerciseCard Snapshot Tests renders with recommended weight 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -3937,7 +3936,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -3967,7 +3966,12 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -3975,12 +3979,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>
@@ -4144,7 +4143,7 @@ exports[`ExerciseCard Snapshot Tests renders with rest timer showing 1`] = `
 exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
 <div>
   <div
-    class="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden transition-all  "
+    class="rounded-xl bg-surface-900 border border-surface-800 relative overflow-hidden transition-all  "
   >
     <div
       class="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10"
@@ -4190,7 +4189,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
           </p>
         </div>
         <div
-          class="flex items-center gap-1.5 "
+          class="flex items-center gap-1.5"
         >
           <span
             class="inline-flex items-center font-medium rounded-full bg-surface-700 text-surface-200 px-2.5 py-1 text-xs"
@@ -4220,7 +4219,12 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
             >
-              Weight
+              Previous
+            </th>
+            <th
+              class="px-2 py-2 text-center text-surface-400 font-medium"
+            >
+              kg
             </th>
             <th
               class="px-2 py-2 text-center text-surface-400 font-medium"
@@ -4228,12 +4232,7 @@ exports[`ExerciseCard Snapshot Tests renders with warmup sets 1`] = `
               Reps
             </th>
             <th
-              class="px-2 py-2 text-center text-surface-400 font-medium"
-            >
-              Prev
-            </th>
-            <th
-              class="px-2 py-2 w-10"
+              class="px-1 py-2 w-14"
             />
           </tr>
         </thead>

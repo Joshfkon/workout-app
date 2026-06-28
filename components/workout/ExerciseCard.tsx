@@ -1011,12 +1011,12 @@ export const ExerciseCard = memo(function ExerciseCard({
     <Card
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
-      className={`overflow-hidden transition-all ${
-        isActive ? 'ring-2 ring-primary-500/50' : ''
+      className={`relative overflow-hidden transition-all ${
+        isActive && !hideHeader ? 'ring-2 ring-primary-500/50' : ''
       } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
     >
       {/* Header - compact when hideHeader is true */}
-      <div className={`${hideHeader ? 'p-3' : 'p-4'} border-b border-surface-800 sticky top-0 bg-surface-900 z-10`}>
+      <div className={`${hideHeader ? 'px-2 pt-2 pb-0 border-0 bg-transparent' : 'p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10'}`}>
         <div className="flex items-start justify-between gap-2">
           {/* Exercise name and info - hidden when hideHeader */}
           {!hideHeader && (
@@ -1066,7 +1066,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
             </div>
           )}
-          <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-end' : ''}`}>
+          <div className={hideHeader ? 'absolute top-1.5 right-1.5 z-30 flex items-center gap-1.5' : 'flex items-center gap-1.5'}>
             {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
             {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
             {isActive && (onExerciseSwap || onExerciseDelete || onPlateCalculatorOpen) && (
@@ -1149,10 +1149,13 @@ export const ExerciseCard = memo(function ExerciseCard({
                 )}
               </div>
             )}
-            {/* Progress badge */}
-            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
-              {completedSets.length}/{block.targetSets}
-            </Badge>
+            {/* Progress badge — hidden in the workout view (the workout header shows the
+                count and per-set dots/checks convey progress); keeps the header uncluttered */}
+            {!hideHeader && (
+              <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
+                {completedSets.length}/{block.targetSets}
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -1173,28 +1176,26 @@ export const ExerciseCard = memo(function ExerciseCard({
 
         {/* Exercise Stats & History */}
         {exerciseHistory && (
-          <div className="mt-3 pt-3 border-t border-surface-800">
+          <div className={hideHeader ? 'pr-9' : 'mt-3 pt-3 border-t border-surface-800'}>
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="flex items-center justify-between w-full text-left"
             >
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-xs text-surface-400 flex-wrap">
                 {/* Estimated 1RM — hidden until there's a real estimate (avoid "0 lbs") */}
                 {exerciseHistory.estimatedE1RM > 0 && (
-                  <span className="text-xs text-surface-400">
-                    1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span>
-                  </span>
+                  <span>1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span></span>
                 )}
-                {/* PR indicator */}
-                {exerciseHistory.personalRecord && (
-                  <span className="text-xs text-surface-400">
-                    PR <span className="text-surface-300">{displayWeight(exerciseHistory.personalRecord.weightKg)} × {exerciseHistory.personalRecord.reps}{isDurationBased ? 's' : ''}</span>
-                  </span>
+                {/* Last workout's top set (mockup: "last 45 × 9") */}
+                {exerciseHistory.estimatedE1RM > 0 && exerciseHistory.lastWorkoutSets.length > 0 && (
+                  <span className="text-surface-600">·</span>
                 )}
-                {/* Sessions count */}
-                <span className="text-xs text-surface-500">
-                  {exerciseHistory.totalSessions} sessions
-                </span>
+                {exerciseHistory.lastWorkoutSets.length > 0 && (() => {
+                  const top = exerciseHistory.lastWorkoutSets.reduce((a, b) => (b.weightKg > a.weightKg ? b : a));
+                  return (
+                    <span>last <span className="text-surface-300">{displayWeight(top.weightKg, true)} × {top.reps}{isDurationBased ? 's' : ''}</span></span>
+                  );
+                })()}
               </div>
               <svg 
                 className={`w-4 h-4 text-surface-400 transition-transform ${showHistory ? 'rotate-180' : ''}`}
@@ -1611,10 +1612,10 @@ export const ExerciseCard = memo(function ExerciseCard({
             <thead className="bg-surface-800/50">
               <tr>
                 <th className="px-2 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">Weight</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">Previous</th>
+                <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : weightLabel}</th>
                 <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">Prev</th>
-                <th className="px-2 py-2 w-10"></th>
+                <th className="px-1 py-2 w-14"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -1626,6 +1627,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                 return editingSetId === set.id ? (
                   <tr key={set.id} className="bg-primary-500/10">
                     <td className="px-2 py-2 text-surface-300 font-medium">{set.setNumber}</td>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(setIndex) ?? '—'}
+                    </td>
                     <td className="px-2 py-1.5">
                       <input
                         type="number"
@@ -1650,9 +1654,6 @@ export const ExerciseCard = memo(function ExerciseCard({
                         onKeyDown={handleEditKeyDown}
                         className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
                       />
-                    </td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(setIndex) ?? '—'}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex gap-1 justify-center">
@@ -1705,6 +1706,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                           <span className="truncate">{set.setNumber}</span>
                         </div>
                       </td>
+                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
+                        {prevSetLabel(setIndex) ?? '—'}
+                      </td>
                       <td
                         className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
                         onClick={() => onSetEdit && startEditing(set)}
@@ -1719,10 +1723,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       >
                         {set.reps}{isDurationBased ? 's' : ''}
                       </td>
-                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
-                        {prevSetLabel(setIndex) ?? '—'}
-                      </td>
-                      <td className="px-2 py-2.5 relative">
+                      <td className="px-1 py-2.5 relative">
                         {/* Delete reveal background for swipe */}
                         {swipeState.setId === set.id && swipeState.isSwiping && (
                           <div
@@ -1947,6 +1948,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     style={getSwipeTransform(pendingId)}
                   >
                     <td className="px-2 py-2 text-surface-400 font-medium">{setNumber}</td>
+                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
+                      {prevSetLabel(completedSets.length + index) ?? '—'}
+                    </td>
                     <td className="px-2 py-1.5">
                       <input
                         id={`pending-weight-${index}`}
@@ -2018,10 +2022,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         );
                       })()}
                     </td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(completedSets.length + index) ?? '—'}
-                    </td>
-                    <td className="px-2 py-1.5 relative">
+                    <td className="px-1 py-1.5 relative">
                       {/* Delete reveal background for swipe */}
                       {swipeState.setId === pendingId && swipeState.isSwiping && (
                         <div
@@ -2074,35 +2075,37 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Footer actions - NEW COMPACT DESIGN */}
+      {/* Footer actions - prominent "Add set" (mockup style) + quiet secondary links */}
       {isActive && (
-        <div className="px-3 py-2 border-t border-surface-800 flex items-center gap-4 text-xs">
+        <div className="px-3 py-3 space-y-2">
           {onTargetSetsChange && (
-            <>
-              <button
-                onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
-                disabled={Number(block.targetSets) >= 10}
-                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
-              >
-                + Add Set
-              </button>
+            <button
+              onClick={() => onTargetSetsChange(Number(block.targetSets) + 1)}
+              disabled={Number(block.targetSets) >= 10}
+              className="w-full py-2.5 rounded-lg border border-dashed border-surface-700 text-sm text-surface-400 hover:text-surface-200 hover:border-surface-500 transition-colors disabled:opacity-30"
+            >
+              + Add set
+            </button>
+          )}
+          <div className="flex items-center gap-4 text-xs px-1">
+            {onTargetSetsChange && (
               <button
                 onClick={() => onTargetSetsChange(Math.max(1, (Number(block.targetSets) || 1) - 1))}
                 disabled={Number(block.targetSets) <= completedSets.length || Number(block.targetSets) <= 1}
-                className="text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-30"
+                className="text-surface-500 hover:text-surface-300 transition-colors disabled:opacity-30"
               >
-                − Remove Set
+                − Remove set
               </button>
-            </>
-          )}
-          {onBlockNoteUpdate && (
-            <button
-              onClick={() => setIsEditingNote(true)}
-              className="text-surface-400 hover:text-surface-200 transition-colors"
-            >
-              Notes
-            </button>
-          )}
+            )}
+            {onBlockNoteUpdate && (
+              <button
+                onClick={() => setIsEditingNote(true)}
+                className="text-surface-500 hover:text-surface-300 transition-colors"
+              >
+                Notes
+              </button>
+            )}
+          </div>
         </div>
       )}
 
