@@ -1011,7 +1011,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     <Card
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
-      className={`overflow-hidden transition-all ${
+      className={`relative overflow-hidden transition-all ${
         isActive && !hideHeader ? 'ring-2 ring-primary-500/50' : ''
       } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
     >
@@ -1066,7 +1066,7 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
             </div>
           )}
-          <div className={`flex items-center gap-1.5 ${hideHeader ? 'flex-1 justify-end' : ''}`}>
+          <div className={hideHeader ? 'absolute top-1.5 right-1.5 z-30 flex items-center gap-1.5' : 'flex items-center gap-1.5'}>
             {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
             {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
             {isActive && (onExerciseSwap || onExerciseDelete || onPlateCalculatorOpen) && (
@@ -1176,7 +1176,7 @@ export const ExerciseCard = memo(function ExerciseCard({
 
         {/* Exercise Stats & History */}
         {exerciseHistory && (
-          <div className="mt-3 pt-3 border-t border-surface-800">
+          <div className={hideHeader ? 'pr-9' : 'mt-3 pt-3 border-t border-surface-800'}>
             <button
               onClick={() => setShowHistory(!showHistory)}
               className="flex items-center justify-between w-full text-left"
