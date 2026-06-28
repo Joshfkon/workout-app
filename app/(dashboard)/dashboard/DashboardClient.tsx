@@ -2053,7 +2053,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             // muscleVolume only contains muscles that have working sets; untrained muscles
             // (0 sets) are still below their target, so fold them in — otherwise the glance
             // can read "all on target" while most muscles haven't been trained at all.
-            const trainedMuscles = new Set(muscleVolume.map((mv) => mv.muscle));
+            // Normalize to standard muscle IDs first: the initialData path stores raw legacy
+            // names (e.g. "chest", "back") that won't match ALL_MUSCLE_GROUPS, which would
+            // mis-mark trained muscles as untrained and inflate the count.
+            const trainedMuscles = new Set(
+              muscleVolume.map((mv) => toStandardMuscleForVolume(mv.muscle))
+            );
             const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
             const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
             const totalTarget =
