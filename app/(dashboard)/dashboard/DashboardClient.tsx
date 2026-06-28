@@ -100,6 +100,18 @@ const DEFAULT_CARD_ORDER: DashboardCardId[] = [
   'weekly-volume',
 ];
 
+// Lower-frequency cards collapse into a tap-to-expand row by default (declutter).
+// Primary cards (workout, weekly volume, recovery, nutrition) stay full; these fold
+// into a titled row you open on demand. A card that renders null (no data) is skipped
+// entirely upstream, so no empty rows appear.
+const COLLAPSIBLE_CARDS: Partial<Record<DashboardCardId, { label: string; emoji: string }>> = {
+  weight: { label: 'Body weight', emoji: '⚖️' },
+  cardio: { label: 'Cardio', emoji: '🏃' },
+  hydration: { label: 'Hydration', emoji: '💧' },
+  activity: { label: 'Activity', emoji: '🔥' },
+  steps: { label: 'Steps', emoji: '👟' },
+};
+
 const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
 const HIDDEN_CARDS_STORAGE_KEY = 'dashboard-hidden-cards';
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
@@ -1959,6 +1971,24 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
     // In normal mode, don't render hidden cards
     if (!isEditMode && isHidden) return null;
+
+    // In normal mode, fold lower-frequency cards into a collapsed, tap-to-expand row
+    // (the value is summarized up top in the glance; full detail is one tap away).
+    const collapsibleMeta = COLLAPSIBLE_CARDS[cardId];
+    if (!isEditMode && collapsibleMeta) {
+      return (
+        <details key={cardId} className="group">
+          <summary className="cursor-pointer list-none flex items-center gap-2.5 px-4 py-3 bg-surface-900 border border-surface-800 rounded-xl transition-colors hover:bg-surface-800/50 group-open:rounded-b-none group-open:border-b-0">
+            <span className="text-base" aria-hidden="true">{collapsibleMeta.emoji}</span>
+            <span className="text-sm font-medium text-surface-200 flex-1">{collapsibleMeta.label}</span>
+            <svg className="w-4 h-4 text-surface-500 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
+          <div className="rounded-b-xl overflow-hidden [&>*]:rounded-t-none [&>*]:border-t-0">{cardContent}</div>
+        </details>
+      );
+    }
 
     return (
       <DashboardCard
