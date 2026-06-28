@@ -15,6 +15,7 @@ import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 
 // Loading placeholder for dashboard cards
 const CardSkeleton = () => (
@@ -329,6 +330,33 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [debugError, setDebugError] = useState<string | null>(null);
   const [completedWorkoutsCount, setCompletedWorkoutsCount] = useState<number>(initialData?.completedWorkoutsCount ?? 0);
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+
+  // Recovery data for the glance "Recovery" tile (same source as the recovery card).
+  const { readyMuscles, recoveringMuscles } = useMuscleRecovery();
+
+  // Time-based greeting + short date for the dashboard header.
+  const greeting = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+  })();
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  // Weekly weight trend (latest vs the earliest entry within the last ~7 days), in the preferred unit.
+  const weightTrend = (() => {
+    if (weightHistory.length < 2) return null;
+    const sorted = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    const weekAgoTs = Date.parse(latest.date) - 7 * 24 * 60 * 60 * 1000;
+    const baseline = sorted.find((w) => Date.parse(w.date) >= weekAgoTs) ?? sorted[0];
+    if (baseline === latest) return null;
+    const latestDisp = getDisplayWeight(latest.weight, latest.unit as 'lb' | 'kg' | null, weightUnit);
+    const baseDisp = getDisplayWeight(baseline.weight, baseline.unit as 'lb' | 'kg' | null, weightUnit);
+    const delta = latestDisp - baseDisp;
+    if (Math.abs(delta) < 0.05) return null;
+    return { delta, down: delta < 0 };
+  })();
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
@@ -1972,12 +2000,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     // In normal mode, don't render hidden cards
     if (!isEditMode && isHidden) return null;
 
+    // The active workout is rendered as the hero at the top of the glance, so skip the
+    // duplicate card in normal mode (only when there IS a today's workout to show as hero).
+    if (!isEditMode && cardId === 'todays-workout' && todaysWorkout) return null;
+
     // In normal mode, fold lower-frequency cards into a collapsed, tap-to-expand row
     // (the value is summarized up top in the glance; full detail is one tap away).
     const collapsibleMeta = COLLAPSIBLE_CARDS[cardId];
     if (!isEditMode && collapsibleMeta) {
       return (
-        <details key={cardId} className="group">
+        <details key={cardId} id={`dash-card-${cardId}`} className="group scroll-mt-20">
           <summary className="cursor-pointer list-none flex items-center gap-2.5 px-4 py-3 bg-surface-900 border border-surface-800 rounded-xl transition-colors hover:bg-surface-800/50 group-open:rounded-b-none group-open:border-b-0">
             <span className="text-base" aria-hidden="true">{collapsibleMeta.emoji}</span>
             <span className="text-sm font-medium text-surface-200 flex-1">{collapsibleMeta.label}</span>
@@ -2044,71 +2076,135 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         </button>
       </div>
 
-      {/* Today at a glance — surfaces the most-checked buried metrics up top (declutter).
-          Weekly volume is featured per user priority; calories + weight sit beside it.
-          The full cards still render below for detail. */}
-      {!isEditMode && (muscleVolume.length > 0 || nutritionTargets || todaysWeight) && (
-        <div className="space-y-3">
-          {muscleVolume.length > 0 && (() => {
-            // muscleVolume only contains muscles that have working sets; untrained muscles
-            // (0 sets) are still below their target, so fold them in — otherwise the glance
-            // can read "all on target" while most muscles haven't been trained at all.
-            // Normalize to standard muscle IDs first: the initialData path stores raw legacy
-            // names (e.g. "chest", "back") that won't match ALL_MUSCLE_GROUPS, which would
-            // mis-mark trained muscles as untrained and inflate the count.
-            const trainedMuscles = new Set(
-              muscleVolume.map((mv) => toStandardMuscleForVolume(mv.muscle))
-            );
-            const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
-            const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
-            const totalTarget =
-              muscleVolume.reduce((s, mv) => s + mv.target, 0) +
-              untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
-            const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length + untrained.length;
-            return (
-              <div className="bg-surface-900 border border-surface-800 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-surface-400">Weekly volume</span>
-                  <span className="text-xs text-surface-500">sets this week</span>
+      {/* Compact dashboard glance (mockup): greeting + 2x2 metric grid + quick log.
+          Full detail cards render below; long-tail ones are collapsed. */}
+      {!isEditMode && (
+        <div className="space-y-4">
+          {/* Greeting */}
+          <div>
+            <h1 className="text-xl font-semibold text-surface-100">{greeting}</h1>
+            <p className="text-sm text-surface-500">{todayLabel}</p>
+          </div>
+
+          {/* Today's workout hero — the primary daily action */}
+          {todaysWorkout && (
+            <Link href={`/dashboard/workout/${todaysWorkout.id}`} className="block">
+              <div className={`rounded-2xl p-4 border transition-colors ${
+                todaysWorkout.state === 'completed'
+                  ? 'bg-success-500/10 border-success-500/20'
+                  : todaysWorkout.state === 'in_progress'
+                  ? 'bg-warning-500/10 border-warning-500/20'
+                  : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
+              }`}>
+                <div className="flex items-center gap-2 text-sm mb-1 text-primary-400">
+                  <span aria-hidden="true">🏋️</span>
+                  <span>Today{activeMesocycle ? ` · ${activeMesocycle.name}` : ''}</span>
                 </div>
-                <div className="text-2xl font-semibold text-surface-100">
-                  {totalSets}
-                  <span className="text-base text-surface-500 font-normal"> / {totalTarget} sets</span>
+                <div className="text-base font-medium text-surface-100 mb-3">
+                  {todaysWorkout.exercises} exercises · {todaysWorkout.completedSets}/{todaysWorkout.totalSets} sets
                 </div>
-                <div className={`text-xs mt-1 ${lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
-                  {lowCount > 0 ? `${lowCount} muscle${lowCount === 1 ? '' : 's'} below target` : 'All muscles on target'}
+                <div className={`w-full py-2.5 rounded-lg text-center text-sm font-semibold text-white ${
+                  todaysWorkout.state === 'completed' ? 'bg-success-500' : 'bg-primary-500'
+                }`}>
+                  {todaysWorkout.state === 'completed' ? 'View workout' : todaysWorkout.state === 'in_progress' ? 'Continue workout' : 'Start workout'}
                 </div>
               </div>
-            );
-          })()}
-          {(nutritionTargets || todaysWeight) && (
+            </Link>
+          )}
+
+          {/* 2x2 glance grid: Nutrition · Recovery · Weekly volume · Weight */}
+          {(muscleVolume.length > 0 || nutritionTargets || todaysWeight || readyMuscles.length > 0 || recoveringMuscles.length > 0) && (
             <div className="grid grid-cols-2 gap-3">
               {nutritionTargets && (
                 <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
-                  <div className="text-xs text-surface-500 mb-1">Calories</div>
+                  <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">🍎</span> Nutrition</div>
                   <div className="text-xl font-semibold text-surface-100">
                     {Math.round(nutritionTotals.calories)}
                     <span className="text-sm text-surface-500 font-normal"> / {nutritionTargets.calories}</span>
                   </div>
                   <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="h-full bg-primary-500"
-                      style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }}
-                    />
+                    <div className="h-full bg-primary-500" style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }} />
                   </div>
                 </div>
               )}
+              {(readyMuscles.length > 0 || recoveringMuscles.length > 0) && (
+                <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+                  <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">💪</span> Recovery</div>
+                  <div className="text-xl font-semibold text-success-400">
+                    {readyMuscles.length} ready
+                    <span className="text-sm text-surface-500 font-normal"> · {recoveringMuscles.length} sore</span>
+                  </div>
+                  {readyMuscles.length > 0 && (
+                    <div className="text-xs text-surface-500 mt-1 truncate">
+                      {readyMuscles.slice(0, 3).map((m) => m.displayName).join(', ')} fresh
+                    </div>
+                  )}
+                </div>
+              )}
+              {muscleVolume.length > 0 && (() => {
+                // Normalize to standard IDs and fold in untrained (0-set) muscles so the
+                // count isn't inflated/deflated by legacy names or missing muscles.
+                const trainedMuscles = new Set(muscleVolume.map((mv) => toStandardMuscleForVolume(mv.muscle)));
+                const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
+                const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
+                const totalTarget =
+                  muscleVolume.reduce((s, mv) => s + mv.target, 0) +
+                  untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
+                const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length + untrained.length;
+                return (
+                  <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+                    <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">📊</span> Weekly volume</div>
+                    <div className="text-xl font-semibold text-surface-100">
+                      {totalSets}
+                      <span className="text-sm text-surface-500 font-normal"> / {totalTarget} sets</span>
+                    </div>
+                    <div className={`text-xs mt-1 ${lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
+                      {lowCount > 0 ? `${lowCount} below target` : 'On target'}
+                    </div>
+                  </div>
+                );
+              })()}
               {todaysWeight && (
                 <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
-                  <div className="text-xs text-surface-500 mb-1">Weight</div>
+                  <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><span aria-hidden="true">⚖️</span> Weight</div>
                   <div className="text-xl font-semibold text-surface-100">
                     {getDisplayWeight(todaysWeight.weight, todaysWeight.unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)}
                     <span className="text-sm text-surface-500 font-normal"> {weightUnit}</span>
                   </div>
+                  {weightTrend && (
+                    <div className={`text-xs mt-1 ${weightTrend.down ? 'text-success-400' : 'text-surface-400'}`}>
+                      {weightTrend.down ? '↓' : '↑'} {Math.abs(weightTrend.delta).toFixed(1)} this week
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
+
+          {/* Quick log row — taps scroll to and open the matching card below */}
+          <div>
+            <div className="text-xs text-surface-500 mb-2">Quick log</div>
+            <div className="grid grid-cols-4 gap-2">
+              {([
+                { label: 'Weight', emoji: '⚖️', target: 'dash-card-weight' },
+                { label: 'Water', emoji: '💧', target: 'dash-card-hydration' },
+                { label: 'Steps', emoji: '👟', target: 'dash-card-steps' },
+                { label: 'Cardio', emoji: '🏃', target: 'dash-card-cardio' },
+              ] as const).map((q) => (
+                <button
+                  key={q.label}
+                  onClick={() => {
+                    const el = document.getElementById(q.target) as HTMLDetailsElement | null;
+                    if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                  }}
+                  className="bg-surface-900 border border-surface-800 rounded-lg py-2.5 flex flex-col items-center gap-1 text-xs text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+                >
+                  <span className="text-base" aria-hidden="true">{q.emoji}</span>
+                  {q.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
