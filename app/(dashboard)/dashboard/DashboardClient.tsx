@@ -2014,6 +2014,62 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         </button>
       </div>
 
+      {/* Today at a glance — surfaces the most-checked buried metrics up top (declutter).
+          Weekly volume is featured per user priority; calories + weight sit beside it.
+          The full cards still render below for detail. */}
+      {!isEditMode && (muscleVolume.length > 0 || nutritionTargets || todaysWeight) && (
+        <div className="space-y-3">
+          {muscleVolume.length > 0 && (() => {
+            const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
+            const totalTarget = muscleVolume.reduce((s, mv) => s + mv.target, 0);
+            const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length;
+            return (
+              <div className="bg-surface-900 border border-surface-800 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm text-surface-400">Weekly volume</span>
+                  <span className="text-xs text-surface-500">sets this week</span>
+                </div>
+                <div className="text-2xl font-semibold text-surface-100">
+                  {totalSets}
+                  <span className="text-base text-surface-500 font-normal"> / {totalTarget} sets</span>
+                </div>
+                <div className={`text-xs mt-1 ${lowCount > 0 ? 'text-warning-400' : 'text-success-400'}`}>
+                  {lowCount > 0 ? `${lowCount} muscle${lowCount === 1 ? '' : 's'} below target` : 'All muscles on target'}
+                </div>
+              </div>
+            );
+          })()}
+          {(nutritionTargets || todaysWeight) && (
+            <div className="grid grid-cols-2 gap-3">
+              {nutritionTargets && (
+                <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+                  <div className="text-xs text-surface-500 mb-1">Calories</div>
+                  <div className="text-xl font-semibold text-surface-100">
+                    {Math.round(nutritionTotals.calories)}
+                    <span className="text-sm text-surface-500 font-normal"> / {nutritionTargets.calories}</span>
+                  </div>
+                  <div className="h-1 bg-surface-800 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="h-full bg-primary-500"
+                      style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {todaysWeight && (
+                <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+                  <div className="text-xs text-surface-500 mb-1">Weight</div>
+                  <div className="text-xl font-semibold text-surface-100">
+                    {todaysWeight.weight}
+                    <span className="text-sm text-surface-500 font-normal"> {todaysWeight.unit}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Render cards in order */}
       {cardOrder.map((cardId, index) => renderCard(cardId, index))}
     </div>
