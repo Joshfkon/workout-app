@@ -13,7 +13,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 
@@ -340,7 +340,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
   // hydration mismatch / stale header.
   const [clientNow, setClientNow] = useState<Date | null>(null);
-  useEffect(() => { setClientNow(new Date()); }, []);
+  useEffect(() => {
+    const update = () => setClientNow(new Date());
+    update();
+    // Keep the greeting/date fresh if the tab stays open across noon/midnight or is
+    // resumed from sleep — otherwise it would show a stale header until a remount.
+    const interval = setInterval(update, 60 * 1000);
+    const onVisible = () => { if (!document.hidden) update(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
   const greeting = clientNow
     ? clientNow.getHours() < 12 ? 'Good morning' : clientNow.getHours() < 18 ? 'Good afternoon' : 'Good evening'
     : '';
@@ -2160,7 +2169,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
                 // all of them — taking only the first would leave the rest counted as untrained.
                 const trainedMuscles = new Set<StandardMuscleGroup>(
                   muscleVolume.flatMap((mv) => {
-                    const expanded = legacyToStandardMuscles(mv.muscle);
+                    const key = mv.muscle.toLowerCase().trim();
+                    // Some standard ids ("glutes", "abs") are ALSO legacy-map keys, so check
+                    // standard first — expanding those would wrongly credit sibling muscles
+                    // (glute_med, obliques) and understate the below-target count.
+                    if (isStandardMuscle(key)) return [key];
+                    const expanded = legacyToStandardMuscles(key);
                     if (expanded.length > 0) return expanded;
                     const single = toStandardMuscleForVolume(mv.muscle);
                     return single ? [single] : [];
