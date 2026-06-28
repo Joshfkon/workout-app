@@ -13,7 +13,7 @@ import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 
@@ -2155,8 +2155,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               ) : null}
               {muscleVolume.length > 0 && (() => {
                 // Normalize to standard IDs and fold in untrained (0-set) muscles so the
-                // count isn't inflated/deflated by legacy names or missing muscles.
-                const trainedMuscles = new Set(muscleVolume.map((mv) => toStandardMuscleForVolume(mv.muscle)));
+                // count isn't inflated/deflated by legacy names or missing muscles. A legacy
+                // group (e.g. "shoulders") maps to MULTIPLE standard muscles, so expand it to
+                // all of them — taking only the first would leave the rest counted as untrained.
+                const trainedMuscles = new Set<StandardMuscleGroup>(
+                  muscleVolume.flatMap((mv) => {
+                    const expanded = legacyToStandardMuscles(mv.muscle);
+                    if (expanded.length > 0) return expanded;
+                    const single = toStandardMuscleForVolume(mv.muscle);
+                    return single ? [single] : [];
+                  })
+                );
                 const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
                 const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
                 const totalTarget =
