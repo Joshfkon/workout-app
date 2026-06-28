@@ -2573,7 +2573,9 @@ export default function WorkoutPage() {
       if (navigator.vibrate) {
         navigator.vibrate(50);
       }
-    }, 700); // 700ms long press to activate drag
+    }, 150); // short hold to activate drag — it's a dedicated touch-none handle, so a
+             // long delay isn't needed to disambiguate from scrolling; keep just enough
+             // to avoid a stray tap collapsing everything into drag mode
   }, [allCollapsed, collapsedBlocks]);
 
   const handleBlockLongPressEnd = useCallback(() => {
