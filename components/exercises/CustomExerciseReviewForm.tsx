@@ -98,7 +98,7 @@ export function CustomExerciseReviewForm({
       {/* Header */}
       <div className="text-center">
         <h2 className="text-xl font-semibold text-surface-100">
-          You're all set
+          You&apos;re all set
         </h2>
         <p className="text-sm text-surface-400 mt-1">
           AI filled in the details below. Save it, or fine-tune anything first.
