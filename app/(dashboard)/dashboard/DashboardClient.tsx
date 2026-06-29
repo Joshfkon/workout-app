@@ -343,6 +343,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // Local date string; bumping it on rollover re-keys the dashboard data fetch (below) so
   // the "Today" workout + nutrition refresh with the header instead of showing yesterday.
   const [dateKey, setDateKey] = useState(() => getLocalDateString());
+  // The date the server-provided initialData is for. initialData only covers the daily
+  // data (workout/nutrition/weight) for the mount date, so its fast path is valid only
+  // while dateKey still equals this; after midnight rollover we must do the full fetch.
+  const [initialDateKey] = useState(() => getLocalDateString());
   useEffect(() => {
     const update = () => {
       const now = new Date();
@@ -622,8 +626,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         if (!user) return;
 
         // If we have initial data from server, only fetch supplementary data
-        // (deferred queries, muscle volume - things not fetched server-side)
-        if (hasInitialData) {
+        // (deferred queries, muscle volume - things not fetched server-side).
+        // Skip this fast path after a midnight rollover (dateKey !== initialDateKey) so the
+        // full fetch below recomputes today's workout / nutrition / weight for the new day.
+        if (hasInitialData && dateKey === initialDateKey) {
           // Just fetch the deferred data that wasn't fetched server-side
           const today = new Date();
           const weekStart = new Date(today);
