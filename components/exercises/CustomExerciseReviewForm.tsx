@@ -44,6 +44,9 @@ export function CustomExerciseReviewForm({
   const [formData, setFormData] = useState<CompletedExerciseData>(data);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  // Only reveal the technical editing controls when the user asks for them
+  // (or when the AI wasn't confident and a look is warranted).
+  const [showDetails, setShowDetails] = useState(data.aiConfidence === 'low');
 
   // Determine which sections to open by default
   const defaultOpenSections =
@@ -70,15 +73,35 @@ export function CustomExerciseReviewForm({
 
   const confidenceInfo = CONFIDENCE_DISPLAY[formData.aiConfidence];
 
+  const cap = (s: string) =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ') : s;
+
+  // Plain-language summary of what the AI set up, so the user can confirm at a
+  // glance without opening the technical sections.
+  const summaryFacts: { label: string; value: string }[] = [
+    { label: 'Primary muscle', value: cap(formData.primaryMuscle) },
+    { label: 'Type', value: cap(formData.mechanic) },
+    {
+      label: 'Rep range',
+      value: `${formData.defaultRepRange[0]}–${formData.defaultRepRange[1]} reps`,
+    },
+    { label: 'Hypertrophy', value: `${formData.hypertrophyScore.tier}-tier` },
+    { label: 'Difficulty', value: cap(formData.difficulty) },
+  ];
+
+  // Force the details open when there's something the user must fix.
+  const hasErrors = (validation?.errors.length ?? 0) > 0;
+  const detailsVisible = showDetails || hasErrors;
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
         <h2 className="text-xl font-semibold text-surface-100">
-          Review Exercise Details
+          You're all set
         </h2>
         <p className="text-sm text-surface-400 mt-1">
-          AI has analyzed your exercise. Review and adjust if needed.
+          AI filled in the details below. Save it, or fine-tune anything first.
         </p>
       </div>
 
@@ -94,6 +117,16 @@ export function CustomExerciseReviewForm({
             <p className="text-surface-200 capitalize">{formData.equipment}</p>
           </div>
         </div>
+      </div>
+
+      {/* Plain-language summary */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {summaryFacts.map(({ label, value }) => (
+          <div key={label} className="bg-surface-800/60 rounded-lg px-3 py-2">
+            <p className="text-xs text-surface-500">{label}</p>
+            <p className="text-sm font-medium text-surface-200">{value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Confidence Indicator */}
@@ -128,7 +161,29 @@ export function CustomExerciseReviewForm({
         </div>
       )}
 
+      {/* Customize details — hidden by default so the common path is just
+          "confirm and save". Power users can open it to edit anything. */}
+      <button
+        type="button"
+        onClick={() => setShowDetails((prev) => !prev)}
+        disabled={hasErrors}
+        className="w-full flex items-center justify-between rounded-lg border border-surface-800
+          bg-surface-800/50 px-4 py-3 text-sm font-medium text-surface-200
+          hover:bg-surface-800 transition-colors disabled:opacity-60 disabled:cursor-default"
+      >
+        <span>{detailsVisible ? 'Hide details' : 'Customize details (optional)'}</span>
+        <svg
+          className={`w-5 h-5 text-surface-400 transition-transform ${detailsVisible ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
       {/* Accordion Sections */}
+      {detailsVisible && (
       <Accordion type="multiple" defaultOpen={defaultOpenSections}>
         {/* Muscles Section */}
         <AccordionItem id="muscles">
@@ -583,6 +638,7 @@ export function CustomExerciseReviewForm({
           </AccordionContent>
         </AccordionItem>
       </Accordion>
+      )}
 
       {/* Action Buttons */}
       <div className="flex gap-3 pt-4 border-t border-surface-800">

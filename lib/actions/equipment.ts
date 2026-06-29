@@ -1,12 +1,12 @@
 'use server';
 
-import { createUntypedClient } from '@/lib/supabase/client';
+import { createUntypedServerClient } from '@/lib/supabase/server';
 
 /**
  * Fetch equipment IDs marked as unavailable for a user
  */
 export async function fetchUnavailableEquipment(userId: string): Promise<string[]> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
 
   const { data } = await supabase
     .from('user_equipment')

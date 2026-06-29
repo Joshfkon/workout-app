@@ -1,6 +1,6 @@
 'use server';
 
-import { createUntypedClient } from '@/lib/supabase/client';
+import { createUntypedServerClient } from '@/lib/supabase/server';
 import type {
   ExerciseVarietyPreferencesRow,
   ExerciseUsageRow,
@@ -13,7 +13,7 @@ import type {
 export async function fetchVarietyPreferences(
   userId: string
 ): Promise<{ data: ExerciseVarietyPreferencesRow | null; error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { data, error } = await supabase
     .from('exercise_variety_preferences')
     .select('*')
@@ -31,7 +31,7 @@ export async function upsertVarietyPreferences(
   input: UpdateVarietyPreferencesInput,
   defaults: { varietyLevel: string; rotationFrequency: number; minPoolSize: number; prioritizeTopTier: boolean }
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('exercise_variety_preferences')
     .upsert(
@@ -54,7 +54,7 @@ export async function upsertVarietyPreferences(
 export async function deleteVarietyPreferences(
   userId: string
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('exercise_variety_preferences')
     .delete()
@@ -72,7 +72,7 @@ export async function insertExerciseUsage(
   muscleGroup: string,
   sessionId?: string
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('exercise_usage_history')
     .insert({
@@ -93,7 +93,7 @@ export async function upsertMultipleExerciseUsage(
   exercises: Array<{ exerciseId: string; muscleGroup: string }>,
   sessionId?: string
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const rows = exercises.map((ex) => ({
     user_id: userId,
     exercise_id: ex.exerciseId,
@@ -115,7 +115,7 @@ export async function fetchRecentExerciseUsage(
   userId: string,
   cutoffDate: Date
 ): Promise<{ data: ExerciseUsageRow[] | null; error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { data, error } = await supabase
     .from('exercise_usage_history')
     .select('*')
