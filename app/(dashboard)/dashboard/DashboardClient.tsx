@@ -340,8 +340,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
   // hydration mismatch / stale header.
   const [clientNow, setClientNow] = useState<Date | null>(null);
+  // Local date string; bumping it on rollover re-keys the dashboard data fetch (below) so
+  // the "Today" workout + nutrition refresh with the header instead of showing yesterday.
+  const [dateKey, setDateKey] = useState(() => getLocalDateString());
   useEffect(() => {
-    const update = () => setClientNow(new Date());
+    const update = () => {
+      const now = new Date();
+      setClientNow(now);
+      setDateKey(getLocalDateString(now)); // no-op (React bails) unless the local day changed
+    };
     update();
     // Keep the greeting/date fresh if the tab stays open across noon/midnight or is
     // resumed from sleep — otherwise it would show a stale header until a remount.
@@ -1135,7 +1142,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
 
     fetchDashboardData();
-  }, [hasInitialData]);
+  }, [hasInitialData, dateKey]);
 
   const handleAddFood = async (food: any) => {
     try {
