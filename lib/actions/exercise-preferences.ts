@@ -1,6 +1,6 @@
 'use server';
 
-import { createUntypedClient } from '@/lib/supabase/client';
+import { createUntypedServerClient } from '@/lib/supabase/server';
 import type {
   ExerciseVisibilityStatus,
   ExerciseHideReason,
@@ -13,7 +13,7 @@ import type {
 export async function fetchUserExercisePreferences(
   userId: string
 ): Promise<{ data: UserExercisePreferenceRow[] | null; error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { data, error } = await supabase
     .from('user_exercise_preferences')
     .select('*')
@@ -29,7 +29,7 @@ export async function deleteExercisePreference(
   userId: string,
   exerciseId: string
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('user_exercise_preferences')
     .delete()
@@ -49,7 +49,7 @@ export async function upsertExercisePreference(
   reason?: ExerciseHideReason | null,
   reasonNote?: string | null
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('user_exercise_preferences')
     .upsert(
@@ -73,7 +73,7 @@ export async function bulkDeleteExercisePreferences(
   userId: string,
   exerciseIds: string[]
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('user_exercise_preferences')
     .delete()
@@ -92,7 +92,7 @@ export async function bulkUpsertExercisePreferences(
   status: ExerciseVisibilityStatus,
   reason?: ExerciseHideReason | null
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const rows = exerciseIds.map((exerciseId) => ({
     user_id: userId,
     exercise_id: exerciseId,
@@ -113,7 +113,7 @@ export async function bulkUpsertExercisePreferences(
 export async function deleteAllExercisePreferences(
   userId: string
 ): Promise<{ error: { code?: string; message?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('user_exercise_preferences')
     .delete()

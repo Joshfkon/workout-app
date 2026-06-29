@@ -353,7 +353,9 @@ export async function createCustomExercise(
     return mapDbExercise(data);
   } catch (err) {
     console.error('Error creating custom exercise:', err);
-    return null;
+    // Re-throw so the caller can surface the real reason (e.g. duplicate
+    // name, auth error) instead of a generic "Failed to save exercise".
+    throw err;
   }
 }
 

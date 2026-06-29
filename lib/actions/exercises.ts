@@ -1,6 +1,6 @@
 'use server';
 
-import { createUntypedClient } from '@/lib/supabase/client';
+import { createUntypedServerClient } from '@/lib/supabase/server';
 
 /**
  * Fetch all exercises from the database, ordered by name
@@ -9,7 +9,7 @@ export async function fetchAllExercises(): Promise<{
   data: Record<string, unknown>[] | null;
   error: { message?: string } | null;
 }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { data, error } = await supabase
     .from('exercises')
     .select('*')
@@ -28,23 +28,13 @@ export async function insertCustomExercise(
   data: Record<string, unknown> | null;
   error: { message?: string; details?: string; hint?: string; code?: string } | null;
 }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
 
-  // Verify authentication
+  // Verify authentication. The server client reads the session from the
+  // request cookies; session refresh is handled by middleware.
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return { data: null, error: { message: 'Authentication error', code: 'AUTH_ERROR' } };
-  }
-
-  // Refresh session
-  let { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    return { data: null, error: { message: 'No active session', code: 'NO_SESSION' } };
-  }
-
-  const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
-  if (refreshedSession) {
-    session = refreshedSession;
   }
 
   // Use authenticated user's ID for security
@@ -70,7 +60,7 @@ export async function removeCustomExercise(
   exerciseId: string,
   userId: string
 ): Promise<{ error: { message?: string; code?: string } | null }> {
-  const supabase = createUntypedClient();
+  const supabase = await createUntypedServerClient();
   const { error } = await supabase
     .from('exercises')
     .delete()

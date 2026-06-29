@@ -929,7 +929,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               completedSets,
               totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
             });
+            setScheduledWorkout(null);
           } else {
+            // No session today — clear any stale workout from the previous day (rollover refetch)
+            setTodaysWorkout(null);
             const scheduled = getWorkoutForDay(
               mesocycle.split_type || 'Upper/Lower',
               dayOfWeek,
@@ -952,6 +955,9 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             { calories: 0, protein: 0, carbs: 0, fat: 0 }
           );
           setNutritionTotals(totals);
+        } else {
+          // No food logged today — reset stale totals from the previous day (rollover refetch)
+          setNutritionTotals({ calories: 0, protein: 0, carbs: 0, fat: 0 });
         }
 
         // Process nutrition targets
@@ -980,10 +986,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         // Process weight - use user's preferred unit as default if unit is missing
         if (weightResult.data) {
           const userPreferredUnit = (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb';
-          setTodaysWeight({ 
-            weight: weightResult.data.weight, 
+          setTodaysWeight({
+            weight: weightResult.data.weight,
             unit: weightResult.data.unit || userPreferredUnit
           });
+        } else {
+          // No weight logged today — clear yesterday's value (rollover refetch)
+          setTodaysWeight(null);
         }
 
         // Process weight history - simple pass-through, no guessing
