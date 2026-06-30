@@ -3362,11 +3362,17 @@ export default function WorkoutPage() {
         })
         .eq('id', sessionId);
 
-      // Calculate and save workout calories (using set-based HyperTracker method)
+      // Calculate and save workout calories (set-based HyperTracker method) in
+      // the background. It runs several sequential DB round-trips and the
+      // result isn't needed to leave the summary, so awaiting it here just
+      // stalls the "Finish" tap. Fire-and-forget; it's okay if it fails.
       if (session?.plannedDate) {
-        const { calculateAndSaveWorkoutCalories } = await import('@/lib/actions/workout-calories');
-        await calculateAndSaveWorkoutCalories(sessionId, session.plannedDate);
-        // Don't block on calorie calculation - it's okay if it fails
+        const plannedDate = session.plannedDate;
+        import('@/lib/actions/workout-calories')
+          .then(({ calculateAndSaveWorkoutCalories }) =>
+            calculateAndSaveWorkoutCalories(sessionId, plannedDate)
+          )
+          .catch((err) => console.error('Workout calorie calculation failed:', err));
       }
 
       // Clear store state and navigate to dashboard to see weekly volume
