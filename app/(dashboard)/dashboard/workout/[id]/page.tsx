@@ -35,6 +35,7 @@ import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { computeStapleExerciseIds, isDefaultVisibleExercise } from '@/services/exerciseStaples';
 import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
@@ -72,6 +73,7 @@ interface AvailableExercise {
   default_rep_range?: [number, number];
   default_rir?: number;
   is_bodyweight?: boolean;
+  hypertrophy_tier?: string | null;
 }
 
 interface GymLocation {
@@ -625,6 +627,10 @@ export default function WorkoutPage() {
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
   const [exerciseSortOption, setExerciseSortOption] = useState<'frequency' | 'name' | 'recent'>('frequency');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  // When false, the picker collapses the long tail of rarely-used exercises
+  // behind a "Show all" toggle (the default-visible set is staples + exercises
+  // the user has actually performed). Always expanded while searching.
+  const [showAllExercises, setShowAllExercises] = useState(false);
 
   // Location filter state
   const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
@@ -1344,7 +1350,7 @@ export default function WorkoutPage() {
       const supabase = createUntypedClient();
       const { data } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
+        .select('id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
         .order('name');
       if (data) {
         setAvailableExercises(data);
@@ -2315,7 +2321,7 @@ export default function WorkoutPage() {
     if (exercisesToUse.length === 0) {
       const { data: allExercises } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight')
+        .select('id, name, primary_muscle, secondary_muscles, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight, hypertrophy_tier')
         .order('name');
 
       if (allExercises) {
@@ -2999,8 +3005,24 @@ export default function WorkoutPage() {
     }
   };
 
+  // Top-tier staple exercises per muscle group, surfaced in the collapsed
+  // picker view even for users with no training history.
+  const stapleExerciseIds = useMemo(
+    () => computeStapleExerciseIds(
+      availableExercises.map((ex) => ({ id: ex.id, muscle: ex.primary_muscle, tier: ex.hypertrophy_tier }))
+    ),
+    [availableExercises]
+  );
+
+  // Re-collapse the long tail whenever the muscle filter changes, so each
+  // body-part view starts from the curated default.
+  useEffect(() => {
+    setShowAllExercises(false);
+  }, [selectedMuscleFilter]);
+
   const handleOpenAddExercise = () => {
     setShowAddExercise(true);
+    setShowAllExercises(false);
     fetchExercises();
   };
 
@@ -3295,8 +3317,14 @@ export default function WorkoutPage() {
         default_rir: newExercise.default_rir,
       });
 
-      // Close the custom exercise modal
+      // Close the custom exercise modal and the underlying add-exercise
+      // picker so the user returns straight to the workout.
       setShowCustomExercise(false);
+      setShowAddExercise(false);
+      setShowMuscleDropdown(false);
+      setSelectedExercisesToAdd([]);
+      setSelectedMuscleFilter(null);
+      setExerciseSearch('');
     } catch (err) {
       console.error('Failed to add custom exercise to workout:', err);
       setError(err instanceof Error ? err.message : 'Failed to add exercise to workout');
@@ -3852,8 +3880,21 @@ export default function WorkoutPage() {
                   if (filteredExercises.length === 0) {
                     return <p className="text-center text-surface-400 py-8">No exercises found</p>;
                   }
-                  
-                  return filteredExercises.map((exercise) => {
+
+                  // Collapse the long tail of rarely-used exercises unless the
+                  // user is searching or has tapped "Show all". Default-visible
+                  // set = staples + exercises the user has actually performed.
+                  const isSearchingExercises = exerciseSearch.trim().length > 0;
+                  const defaultVisibleExercises = filteredExercises.filter((ex) =>
+                    isDefaultVisibleExercise(ex.id, stapleExerciseIds, frequentExerciseIds, lastDoneExercises)
+                  );
+                  const hasHiddenExercises = !isSearchingExercises && defaultVisibleExercises.length < filteredExercises.length;
+                  const exercisesCollapsed = hasHiddenExercises && !showAllExercises;
+                  const visibleExercises = exercisesCollapsed ? defaultVisibleExercises : filteredExercises;
+
+                  return (
+                    <>
+                      {visibleExercises.map((exercise) => {
                     const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
                     return (
                       <button
@@ -3886,7 +3927,20 @@ export default function WorkoutPage() {
                         </div>
                       </button>
                     );
-                  });
+                  })}
+                      {hasHiddenExercises && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllExercises((v) => !v)}
+                          className="w-full p-4 text-center text-sm font-medium text-primary-400 hover:bg-surface-800/50 transition-colors border-b border-surface-800/50"
+                        >
+                          {exercisesCollapsed
+                            ? `Show all ${filteredExercises.length} exercises`
+                            : 'Show fewer'}
+                        </button>
+                      )}
+                    </>
+                  );
                 })()}
               </div>
             </div>

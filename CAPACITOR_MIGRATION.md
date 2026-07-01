@@ -49,8 +49,8 @@ This document tracks the progress of wrapping HyperTrack PWA in a native shell u
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Create app icons | ❌ TODO | Need 192x192 and 512x512 PNG in `/public` |
-| Create Apple icon | ❌ TODO | Need `/public/apple-icon.png` (180x180) |
+| Create app icons | ✅ Done | `icon-192.png`, `icon-512.png`, `icon-1024.png` (App Store) generated in `/public` |
+| Create Apple icon | ✅ Done | `/public/apple-icon.png` (180x180), wired in `app/layout.tsx` |
 | Set `NEXT_PUBLIC_APP_URL` | ❌ Verify | Must be set in production environment |
 | Deploy to production server | ❌ TODO | Capacitor WebView will point to this URL |
 
@@ -86,6 +86,31 @@ public/
 **Tools:** [RealFaviconGenerator](https://realfavicongenerator.net/), Figma, or ImageMagick.
 
 ---
+
+## App Store Compliance (Path A — web-only billing)
+
+Decisions made to clear App Store review:
+
+- **Payments (Guideline 3.1.1):** The native app ships **free**. All Stripe
+  purchase UI is hidden when running in the Capacitor shell, gated by the
+  `useIsNativePlatform()` hook (`hooks/useIsNativePlatform.ts`). Hidden on
+  native: pricing-page checkout cards + payment FAQ, `UpgradePrompt` CTAs
+  (shown as neutral "included with Pro/Elite" cards instead), the settings
+  Subscription card's upgrade/change-plan/manage-billing buttons, and the
+  header `SubscriptionBadge` upgrade button. Promo-code redemption and
+  subscription **status** remain visible (no purchase involved). Subscribers
+  who paid on the web keep their tier unlocked automatically. IAP can be added
+  later (Path C) if iOS conversion justifies it.
+- **Account deletion (Guideline 5.1.1(v)):** Settings → Account → "Delete
+  Account" runs the `deleteAccount()` server action, which removes the
+  `auth.users` row (cascades to all user data) and signs the user out.
+- **Sign in with Apple:** Not required — the app uses email/password auth only,
+  no third-party social login.
+- **Legal pages:** Public `/privacy` and `/terms` routes (`app/privacy/page.tsx`,
+  `app/terms/page.tsx`), linked from registration + Settings.
+- **Submission reference:** `docs/APP_STORE_SUBMISSION.md` pre-answers the App
+  Privacy questionnaire and lists the Info.plist permission strings / Xcode
+  capabilities to add after `npx cap add ios`.
 
 ## Architecture Decision
 

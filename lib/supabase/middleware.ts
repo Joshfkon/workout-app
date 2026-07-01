@@ -5,7 +5,7 @@ import type { CookieOptions } from '@supabase/ssr';
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
 // Public routes that don't require auth - checked before any auth validation
-const PUBLIC_ROUTES = ['/', '/login', '/register', '/learn', '/auth/callback', '/forgot-password', '/reset-password', '/opengraph-image', '/twitter-image', '/api/og'];
+const PUBLIC_ROUTES = ['/', '/login', '/register', '/learn', '/privacy', '/terms', '/auth/callback', '/forgot-password', '/reset-password', '/opengraph-image', '/twitter-image', '/api/og'];
 
 /**
  * Check if a route is public (no auth required)

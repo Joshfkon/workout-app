@@ -55,8 +55,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
     ],
-    apple: "/apple-icon.svg",
+    apple: { url: "/apple-icon.png", type: "image/png", sizes: "180x180" },
   },
   manifest: "/manifest.json",
 };

@@ -196,7 +196,14 @@ export default function RegisterPage() {
 
       <div className="mt-4 text-center">
         <p className="text-xs text-surface-600">
-          By signing up, you agree to our Terms of Service
+          By signing up, you agree to our{' '}
+          <Link href="/terms" className="text-surface-500 hover:text-surface-300 underline">
+            Terms of Service
+          </Link>{' '}
+          and{' '}
+          <Link href="/privacy" className="text-surface-500 hover:text-surface-300 underline">
+            Privacy Policy
+          </Link>
         </p>
       </div>
     </div>

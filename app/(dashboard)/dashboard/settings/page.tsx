@@ -11,9 +11,11 @@ import { convertWeight } from '@/lib/utils';
 import { getDisplayWeight, validateWeightEntry } from '@/lib/weightUtils';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 import { usePWA } from '@/hooks/usePWA';
 import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
+import { deleteAccount } from '@/lib/actions/account';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
@@ -898,6 +900,19 @@ export default function SettingsPage() {
 
       {/* Import & Export */}
       <ImportExportSettings />
+
+      {/* Legal */}
+      <div className="text-center text-xs text-surface-500 space-x-3">
+        <Link href="/privacy" className="hover:text-surface-300 underline">
+          Privacy Policy
+        </Link>
+        <Link href="/terms" className="hover:text-surface-300 underline">
+          Terms of Service
+        </Link>
+      </div>
+
+      {/* Danger Zone — account deletion (App Store Guideline 5.1.1(v)) */}
+      <DeleteAccountCard />
         </>
       )}
     </div>
@@ -916,9 +931,10 @@ function SubscriptionCard() {
     currentPeriodEnd, 
     cancelAtPeriodEnd,
     openPortal,
-    isLoading 
+    isLoading
   } = useSubscription();
-  
+  const isNative = useIsNativePlatform();
+
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   
   const handleManageSubscription = async () => {
@@ -1028,40 +1044,158 @@ function SubscriptionCard() {
           </div>
         )}
         
-        {/* Actions */}
-        <div className="flex gap-3">
-          {tier === 'free' && !isTrialing ? (
-            <Link href="/dashboard/pricing" className="flex-1">
-              <Button className="w-full" variant="primary">
-                Upgrade Now
-              </Button>
-            </Link>
-          ) : status === 'active' || isTrialing ? (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={handleManageSubscription}
-                isLoading={isOpeningPortal}
-                className="flex-1"
-              >
-                Manage Subscription
-              </Button>
-              <Link href="/dashboard/pricing">
-                <Button variant="secondary">
-                  Change Plan
+        {/* Actions — billing is web-only, so hide all purchase/management
+            actions inside the native app (App Store Guideline 3.1.1). */}
+        {isNative ? (
+          <p className="text-xs text-surface-500">
+            Your subscription is managed on the web.
+          </p>
+        ) : (
+          <div className="flex gap-3">
+            {tier === 'free' && !isTrialing ? (
+              <Link href="/dashboard/pricing" className="flex-1">
+                <Button className="w-full" variant="primary">
+                  Upgrade Now
                 </Button>
               </Link>
-            </>
-          ) : (
-            <Link href="/dashboard/pricing" className="flex-1">
-              <Button className="w-full" variant="primary">
-                Reactivate
-              </Button>
-            </Link>
-          )}
-        </div>
+            ) : status === 'active' || isTrialing ? (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleManageSubscription}
+                  isLoading={isOpeningPortal}
+                  className="flex-1"
+                >
+                  Manage Subscription
+                </Button>
+                <Link href="/dashboard/pricing">
+                  <Button variant="secondary">
+                    Change Plan
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <Link href="/dashboard/pricing" className="flex-1">
+                <Button className="w-full" variant="primary">
+                  Reactivate
+                </Button>
+              </Link>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+// Danger Zone — permanent account deletion
+function DeleteAccountCard() {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canDelete = confirmText.trim().toUpperCase() === 'DELETE';
+
+  const handleDelete = async () => {
+    if (!canDelete) return;
+    setIsDeleting(true);
+    setError(null);
+
+    try {
+      const result = await deleteAccount();
+      if (!result.success) {
+        setError(result.message);
+        setIsDeleting(false);
+        return;
+      }
+
+      // Account is gone — clear the now-invalid session and leave the app.
+      const supabase = createUntypedClient();
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete your account.');
+      setIsDeleting(false);
+    }
+  };
+
+  const closeModal = () => {
+    if (isDeleting) return;
+    setShowConfirm(false);
+    setConfirmText('');
+    setError(null);
+  };
+
+  return (
+    <>
+      <Card className="border-danger-500/30">
+        <CardHeader>
+          <CardTitle className="text-danger-400">Delete Account</CardTitle>
+          <p className="text-sm text-surface-400 mt-1">
+            Permanently delete your account and all associated data. This cannot be undone.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 bg-danger-500/5 border border-danger-500/20 rounded-lg">
+            <div>
+              <p className="text-sm font-medium text-surface-200">Delete my account</p>
+              <p className="text-xs text-surface-500">Removes your profile, workouts, nutrition, and all other data</p>
+            </div>
+            <Button variant="danger" size="sm" onClick={() => setShowConfirm(true)}>
+              Delete Account
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Modal isOpen={showConfirm} onClose={closeModal} title="Delete account?" size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-surface-300">
+            This will <strong className="text-danger-400">permanently delete</strong> your account and
+            all of your data — workouts, history, body composition, nutrition, and settings. This action
+            cannot be undone.
+          </p>
+          <p className="text-xs text-surface-500">
+            If you have a paid subscription, cancel it on the web first — deleting your account here does
+            not automatically cancel web billing.
+          </p>
+
+          <div>
+            <label className="block text-sm text-surface-300 mb-1.5">
+              Type <span className="font-mono font-semibold text-surface-100">DELETE</span> to confirm
+            </label>
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder="DELETE"
+              disabled={isDeleting}
+              autoFocus
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 bg-danger-500/10 border border-danger-500/20 rounded-lg text-sm text-danger-400">
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={closeModal} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={!canDelete || isDeleting}
+              isLoading={isDeleting}
+            >
+              Permanently Delete
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }
 

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Button, Card, CardContent } from '@/components/ui';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 import { Feature } from '@/lib/subscription';
 
 interface UpgradePromptProps {
@@ -54,14 +55,54 @@ export function UpgradePrompt({
   variant = 'card',
 }: UpgradePromptProps) {
   const { isTrialing, trialDaysRemaining, canAccess } = useSubscription();
-  
+  const isNative = useIsNativePlatform();
+
   // Don't show if user has access
   if (canAccess(feature)) return null;
-  
+
   const info = FEATURE_INFO[feature];
   const displayTitle = title || info.title;
   const displayDescription = description || info.description;
   const displayTier = requiredTier || info.requiredTier;
+  const tierName = displayTier === 'pro' ? 'Pro' : 'Elite';
+
+  // Native (iOS/Android) build: App Store rules forbid selling or linking to
+  // web purchases for digital features (Guideline 3.1.1 / 3.1.3). Show a
+  // neutral "locked" state with no price, no buy button, and no link out.
+  if (isNative) {
+    if (variant === 'inline') {
+      return (
+        <div className="flex items-center gap-4 p-4 bg-surface-800/50 border border-surface-700 rounded-lg">
+          <div className="w-10 h-10 rounded-full bg-surface-700 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-surface-200">{displayTitle}</p>
+            <p className="text-xs text-surface-400">Included with the {tierName} plan</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <Card className="border-surface-700 bg-surface-800/30">
+        <CardContent className="p-6 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-700 flex items-center justify-center">
+            <svg className="w-8 h-8 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-bold text-surface-100 mb-2">{displayTitle}</h3>
+          <p className="text-sm text-surface-400 mb-4">{displayDescription}</p>
+          <p className="text-sm text-surface-300">
+            This feature is included with the <strong>{tierName}</strong> plan.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (variant === 'inline') {
     return (

@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, Button, Badge, Input } from '@/components/ui';
 import { PricingCard } from '@/components/subscription';
 import { useSubscription } from '@/hooks/useSubscription';
+import { useIsNativePlatform } from '@/hooks/useIsNativePlatform';
 import { TIER_FEATURES, SubscriptionTier } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 
@@ -12,6 +13,7 @@ import { redeemPromoCode } from '@/lib/actions/promoCodes';
 function PricingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const isNative = useIsNativePlatform();
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('yearly');
   const [loadingTier, setLoadingTier] = useState<SubscriptionTier | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -178,58 +180,73 @@ function PricingContent() {
         </CardContent>
       </Card>
 
-      {/* Billing Period Toggle */}
-      <div className="flex justify-center">
-        <div className="inline-flex items-center gap-2 p-1 bg-surface-800 rounded-lg">
-          <button
-            onClick={() => setBillingPeriod('monthly')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              billingPeriod === 'monthly'
-                ? 'bg-surface-700 text-surface-100'
-                : 'text-surface-400 hover:text-surface-200'
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            onClick={() => setBillingPeriod('yearly')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              billingPeriod === 'yearly'
-                ? 'bg-surface-700 text-surface-100'
-                : 'text-surface-400 hover:text-surface-200'
-            }`}
-          >
-            Yearly
-            <Badge variant="success" size="sm" className="ml-2">Save 17%</Badge>
-          </button>
-        </div>
-      </div>
+      {/* Billing Period Toggle + Pricing Cards — web only. The native app
+          cannot sell or link to subscriptions (App Store Guideline 3.1.1),
+          so it shows the feature comparison and promo redemption only. */}
+      {isNative ? (
+        <Card>
+          <CardContent className="p-6 text-center space-y-2">
+            <h2 className="text-lg font-semibold text-surface-100">Plans &amp; billing are managed on the web</h2>
+            <p className="text-sm text-surface-400 max-w-md mx-auto">
+              Already subscribed? Your plan is active here automatically. You can compare what each
+              plan includes below, or redeem a promo code above.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-2 p-1 bg-surface-800 rounded-lg">
+              <button
+                onClick={() => setBillingPeriod('monthly')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  billingPeriod === 'monthly'
+                    ? 'bg-surface-700 text-surface-100'
+                    : 'text-surface-400 hover:text-surface-200'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingPeriod('yearly')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  billingPeriod === 'yearly'
+                    ? 'bg-surface-700 text-surface-100'
+                    : 'text-surface-400 hover:text-surface-200'
+                }`}
+              >
+                Yearly
+                <Badge variant="success" size="sm" className="ml-2">Save 17%</Badge>
+              </button>
+            </div>
+          </div>
 
-      {/* Pricing Cards */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <PricingCard
-          tier="free"
-          billingPeriod={billingPeriod}
-          isCurrentPlan={!isTrialing && currentTier === 'free'}
-          onSelect={handleSelectPlan}
-          isLoading={loadingTier === 'free'}
-        />
-        <PricingCard
-          tier="pro"
-          billingPeriod={billingPeriod}
-          isCurrentPlan={!isTrialing && currentTier === 'pro' && status === 'active'}
-          isPopular={true}
-          onSelect={handleSelectPlan}
-          isLoading={loadingTier === 'pro'}
-        />
-        <PricingCard
-          tier="elite"
-          billingPeriod={billingPeriod}
-          isCurrentPlan={!isTrialing && currentTier === 'elite' && status === 'active'}
-          onSelect={handleSelectPlan}
-          isLoading={loadingTier === 'elite'}
-        />
-      </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            <PricingCard
+              tier="free"
+              billingPeriod={billingPeriod}
+              isCurrentPlan={!isTrialing && currentTier === 'free'}
+              onSelect={handleSelectPlan}
+              isLoading={loadingTier === 'free'}
+            />
+            <PricingCard
+              tier="pro"
+              billingPeriod={billingPeriod}
+              isCurrentPlan={!isTrialing && currentTier === 'pro' && status === 'active'}
+              isPopular={true}
+              onSelect={handleSelectPlan}
+              isLoading={loadingTier === 'pro'}
+            />
+            <PricingCard
+              tier="elite"
+              billingPeriod={billingPeriod}
+              isCurrentPlan={!isTrialing && currentTier === 'elite' && status === 'active'}
+              onSelect={handleSelectPlan}
+              isLoading={loadingTier === 'elite'}
+            />
+          </div>
+        </>
+      )}
 
       {/* Feature Comparison */}
       <Card>
@@ -265,36 +282,39 @@ function PricingContent() {
         </CardContent>
       </Card>
 
-      {/* FAQ */}
-      <Card>
-        <CardContent className="p-6">
-          <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Frequently Asked Questions</h2>
-          
-          <div className="space-y-4 max-w-2xl mx-auto">
-            <FaqItem 
-              question="Can I cancel anytime?"
-              answer="Yes! You can cancel your subscription at any time. You'll continue to have access until the end of your billing period."
-            />
-            <FaqItem 
-              question="What happens after my trial ends?"
-              answer="After your 14-day trial, you'll be on the Free plan with basic features. You can upgrade anytime to unlock Pro or Elite features."
-            />
-            <FaqItem 
-              question="Can I change plans later?"
-              answer="Absolutely! You can upgrade, downgrade, or change your billing period at any time from your account settings."
-            />
-            <FaqItem 
-              question="Is my payment information secure?"
-              answer="Yes! We use Stripe for payment processing. Your payment information is encrypted and never stored on our servers."
-            />
-          </div>
-        </CardContent>
-      </Card>
+      {/* FAQ + money-back guarantee — web only (payment-related). */}
+      {!isNative && (
+        <>
+          <Card>
+            <CardContent className="p-6">
+              <h2 className="text-xl font-bold text-surface-100 mb-6 text-center">Frequently Asked Questions</h2>
 
-      {/* Money-back guarantee */}
-      <div className="text-center text-surface-400 text-sm">
-        <p>30-day money-back guarantee. No questions asked.</p>
-      </div>
+              <div className="space-y-4 max-w-2xl mx-auto">
+                <FaqItem
+                  question="Can I cancel anytime?"
+                  answer="Yes! You can cancel your subscription at any time. You'll continue to have access until the end of your billing period."
+                />
+                <FaqItem
+                  question="What happens after my trial ends?"
+                  answer="After your 14-day trial, you'll be on the Free plan with basic features. You can upgrade anytime to unlock Pro or Elite features."
+                />
+                <FaqItem
+                  question="Can I change plans later?"
+                  answer="Absolutely! You can upgrade, downgrade, or change your billing period at any time from your account settings."
+                />
+                <FaqItem
+                  question="Is my payment information secure?"
+                  answer="Yes! We use Stripe for payment processing. Your payment information is encrypted and never stored on our servers."
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="text-center text-surface-400 text-sm">
+            <p>30-day money-back guarantee. No questions asked.</p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
