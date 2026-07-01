@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, SwipeableRow } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 
 // Dynamic imports for heavy modals - reduces initial bundle size
@@ -14,6 +14,8 @@ const MacroCalculatorModal = dynamic(() => import('@/components/nutrition/MacroC
 const CreateCustomFoodModal = dynamic(() => import('@/components/nutrition/CreateCustomFoodModal').then(m => ({ default: m.CreateCustomFoodModal })), { ssr: false });
 const EditFoodModal = dynamic(() => import('@/components/nutrition/EditFoodModal').then(m => ({ default: m.EditFoodModal })), { ssr: false });
 const NutritionTrendGraph = dynamic(() => import('@/components/nutrition/NutritionTrendGraph').then(m => ({ default: m.NutritionTrendGraph })), { ssr: false });
+const DescribeMealModal = dynamic(() => import('@/components/nutrition/DescribeMealModal').then(m => ({ default: m.DescribeMealModal })), { ssr: false });
+const SavedMealsModal = dynamic(() => import('@/components/nutrition/SavedMealsModal').then(m => ({ default: m.SavedMealsModal })), { ssr: false });
 import type {
   FoodLogEntry,
   WeightLogEntry,
@@ -24,7 +26,11 @@ import type {
   SystemFood,
   MealNames,
 } from '@/types/nutrition';
-import type { FoodSearchResult } from '@/services/usdaService';
+import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
+import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
+import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
+import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
+import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -40,13 +46,21 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { IconSunrise, IconSun, IconMoon, IconApple, type Icon } from '@tabler/icons-react';
+import {
+  IconChevronLeft,
+  IconChevronRight,
+  IconSettings,
+  IconPlus,
+  IconCopy,
+  IconBookmarkPlus,
+  IconX,
+} from '@tabler/icons-react';
 
-const DEFAULT_MEAL_CONFIG: { type: MealType; label: string; icon: Icon }[] = [
-  { type: 'breakfast', label: 'Breakfast', icon: IconSunrise },
-  { type: 'lunch', label: 'Lunch', icon: IconSun },
-  { type: 'dinner', label: 'Dinner', icon: IconMoon },
-  { type: 'snack', label: 'Snacks', icon: IconApple },
+const DEFAULT_MEAL_CONFIG: { type: MealType; label: string }[] = [
+  { type: 'breakfast', label: 'Breakfast' },
+  { type: 'lunch', label: 'Lunch' },
+  { type: 'dinner', label: 'Dinner' },
+  { type: 'snack', label: 'Snacks' },
 ];
 
 function getMealConfig(customNames?: MealNames | null) {
@@ -56,6 +70,15 @@ function getMealConfig(customNames?: MealNames | null) {
   }));
 }
 
+/** Time-of-day default meal (Describe / frequent chips / saved meals) */
+function getMealTypeForNow(): MealType {
+  const hour = new Date().getHours();
+  if (hour < 11) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 20) return 'dinner';
+  return 'snack';
+}
+
 // Convert food names to proper title case (fix ALL CAPS from USDA/databases)
 function toTitleCase(str: string): string {
   if (!str) return '';
@@ -63,7 +86,7 @@ function toTitleCase(str: string): string {
   const upperCount = (str.match(/[A-Z]/g) || []).length;
   const letterCount = (str.match(/[a-zA-Z]/g) || []).length;
   const isUpperCase = letterCount > 0 && upperCount / letterCount > 0.7;
-  
+
   if (isUpperCase) {
     return str
       .toLowerCase()
@@ -84,79 +107,6 @@ function toTitleCase(str: string): string {
   return str;
 }
 
-// Get a food icon based on the food name
-function getFoodIcon(foodName: string): string {
-  const name = foodName.toLowerCase();
-  
-  // Proteins
-  if (name.includes('chicken') || name.includes('poultry')) return '🍗';
-  if (name.includes('beef') || name.includes('steak')) return '🥩';
-  if (name.includes('fish') || name.includes('salmon') || name.includes('tuna')) return '🐟';
-  if (name.includes('egg')) return '🥚';
-  if (name.includes('turkey')) return '🦃';
-  if (name.includes('pork') || name.includes('bacon') || name.includes('ham')) return '🥓';
-  if (name.includes('shrimp') || name.includes('prawn')) return '🦐';
-  
-  // Drinks
-  if (name.includes('shake') || name.includes('smoothie') || name.includes('protein')) return '🥤';
-  if (name.includes('milk')) return '🥛';
-  if (name.includes('coffee')) return '☕';
-  if (name.includes('tea')) return '🍵';
-  if (name.includes('juice') || name.includes('drink')) return '🧃';
-  if (name.includes('water')) return '💧';
-  
-  // Carbs & grains
-  if (name.includes('rice')) return '🍚';
-  if (name.includes('bread') || name.includes('toast')) return '🍞';
-  if (name.includes('pasta') || name.includes('spaghetti') || name.includes('noodle')) return '🍝';
-  if (name.includes('cereal') || name.includes('oat')) return '🥣';
-  if (name.includes('pizza')) return '🍕';
-  if (name.includes('sandwich') || name.includes('sub') || name.includes('wrap')) return '🥪';
-  if (name.includes('burrito') || name.includes('taco')) return '🌯';
-  if (name.includes('burger')) return '🍔';
-  
-  // Vegetables
-  if (name.includes('salad') || name.includes('lettuce')) return '🥗';
-  if (name.includes('broccoli')) return '🥦';
-  if (name.includes('carrot')) return '🥕';
-  if (name.includes('potato') || name.includes('fries')) return '🥔';
-  if (name.includes('corn')) return '🌽';
-  if (name.includes('tomato')) return '🍅';
-  if (name.includes('avocado')) return '🥑';
-  
-  // Fruits
-  if (name.includes('apple')) return '🍎';
-  if (name.includes('banana')) return '🍌';
-  if (name.includes('orange')) return '🍊';
-  if (name.includes('strawberr') || name.includes('berry')) return '🍓';
-  if (name.includes('grape')) return '🍇';
-  if (name.includes('peach')) return '🍑';
-  if (name.includes('watermelon') || name.includes('melon')) return '🍉';
-  
-  // Dairy
-  if (name.includes('cheese')) return '🧀';
-  if (name.includes('yogurt') || name.includes('greek')) return '🥛';
-  if (name.includes('butter')) return '🧈';
-  if (name.includes('ice cream')) return '🍦';
-  
-  // Snacks & treats
-  if (name.includes('cookie') || name.includes('biscuit')) return '🍪';
-  if (name.includes('chocolate') || name.includes('candy')) return '🍫';
-  if (name.includes('cake') || name.includes('puff') || name.includes('pastry')) return '🧁';
-  if (name.includes('donut') || name.includes('doughnut')) return '🍩';
-  if (name.includes('bar') || name.includes('granola')) return '🍫';
-  if (name.includes('chip') || name.includes('crisp')) return '🍟';
-  if (name.includes('nut') || name.includes('almond') || name.includes('peanut')) return '🥜';
-  if (name.includes('popcorn')) return '🍿';
-  
-  // Supplements
-  if (name.includes('vitamin') || name.includes('supplement') || name.includes('creatine')) return '💊';
-  if (name.includes('whey') || name.includes('casein')) return '🥤';
-  
-  // Default
-  return '🍽️';
-}
-
 // User profile data for macro calculator
 interface UserProfileData {
   weightLbs?: number;
@@ -167,11 +117,27 @@ interface UserProfileData {
   workoutsPerWeek?: number;
 }
 
+// Shape shared by every food_log insert on this page
+interface FoodLogInsert {
+  food_name: string;
+  serving_size: string;
+  servings: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  meal_type: MealType;
+  source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
+  food_id?: string;
+  nutritionix_id?: string;
+}
+
 export default function NutritionPage() {
   // Defer date initialization to client to prevent hydration mismatches
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [foodEntries, setFoodEntries] = useState<FoodLogEntry[]>([]);
+  const [yesterdayEntries, setYesterdayEntries] = useState<FoodLogEntry[]>([]);
   const [weightEntries, setWeightEntries] = useState<WeightLogEntry[]>([]);
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(null);
   const [customFoods, setCustomFoods] = useState<CustomFood[]>([]);
@@ -192,26 +158,29 @@ export default function NutritionPage() {
     fat_mass_kg: number;
   } | null>(null);
   const [trainingAge, setTrainingAge] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
-  const [isEnhanced, setIsEnhanced] = useState<boolean>(false);
-
-  // Import unified weight utility
-  // All weight operations now use lib/weightUtils.ts
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
+  const [addFoodTab, setAddFoodTab] = useState<AddFoodTab>('search');
   const [selectedMealType, setSelectedMealType] = useState<MealType>('breakfast');
+  const [showDescribeMeal, setShowDescribeMeal] = useState(false);
+  const [showSavedMeals, setShowSavedMeals] = useState(false);
   const [showWeightLog, setShowWeightLog] = useState(false);
   const [showWeightHistory, setShowWeightHistory] = useState(false);
   const [editingWeight, setEditingWeight] = useState<WeightLogEntry | null>(null);
   const [showTargetsModal, setShowTargetsModal] = useState(false);
   const [showMacroCalculator, setShowMacroCalculator] = useState(false);
   const [showCreateCustomFood, setShowCreateCustomFood] = useState(false);
+  const [customFoodBarcode, setCustomFoodBarcode] = useState<string | undefined>(undefined);
   const [editingCustomFood, setEditingCustomFood] = useState<CustomFood | null>(null);
   const [showEditFood, setShowEditFood] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
-  
+  const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
+
+  const { toasts, dismissToast, showSuccess } = useToasts();
 
   const supabase = createUntypedClient();
 
@@ -254,9 +223,15 @@ export default function NutritionPage() {
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const thirtyDaysAgoStr = getLocalDateString(thirtyDaysAgo);
 
+      // Yesterday relative to the selected date (for "Copy yesterday")
+      const previousDay = new Date(selectedDate + 'T00:00:00');
+      previousDay.setDate(previousDay.getDate() - 1);
+      const yesterdayStr = getLocalDateString(previousDay);
+
       // Run all queries in parallel for faster loading
       const [
         foodResult,
+        yesterdayResult,
         targetsResult,
         weightResult,
         customFoodsResult,
@@ -276,6 +251,13 @@ export default function NutritionPage() {
           .select('*')
           .eq('user_id', user.id)
           .eq('logged_at', selectedDate)
+          .order('created_at', { ascending: true }),
+        // Food log entries for the previous day (Copy yesterday)
+        supabase
+          .from('food_log')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('logged_at', yesterdayStr)
           .order('created_at', { ascending: true }),
         // Nutrition targets - use maybeSingle() to handle missing targets
         supabase
@@ -363,6 +345,7 @@ export default function NutritionPage() {
 
       // Process results
       setFoodEntries(foodResult.data || []);
+      setYesterdayEntries(yesterdayResult.data || []);
       setNutritionTargets(targetsResult.data);
 
       // Process weight entries
@@ -383,13 +366,13 @@ export default function NutritionPage() {
       const frequentData = frequentResult.data;
       if (frequentData && frequentData.length > 0) {
         const frequencyMap = new Map<string, FrequentFood>();
-        
+
         for (const entry of frequentData) {
           if (!entry.food_name) continue;
           const key = `${entry.meal_type}:${entry.food_name}`;
           const existing = frequencyMap.get(key);
           const servingsNum = entry.servings || 1;
-          
+
           if (existing) {
             const totalLogs = existing.times_logged + 1;
             existing.avg_calories = (existing.avg_calories * existing.times_logged + (entry.calories || 0) / servingsNum) / totalLogs;
@@ -412,7 +395,7 @@ export default function NutritionPage() {
             });
           }
         }
-        
+
         setFrequentFoods(Array.from(frequencyMap.values()));
       }
 
@@ -425,7 +408,7 @@ export default function NutritionPage() {
         const weightEntry = weightData[0] as any;
         const weightValue = weightEntry.weight || weightEntry.raw_weight || 0;
         const weightEntryUnit = weightEntry.unit || weightEntry.raw_unit || weightUnit;
-        
+
         // Convert to lbs if needed
         if (weightEntryUnit === 'kg') {
           profileData.weightLbs = weightValue * 2.20462;
@@ -497,7 +480,6 @@ export default function NutritionPage() {
         } else {
           setTrainingAge('intermediate');
         }
-        setIsEnhanced(volumeProfileData.is_enhanced || false);
       }
 
       // Calculate average daily protein (last 30 days)
@@ -510,7 +492,7 @@ export default function NutritionPage() {
           const protein = entry.protein || 0;
           proteinByDate.set(date, (proteinByDate.get(date) || 0) + protein);
         });
-        
+
         // Calculate average
         const totalProtein = Array.from(proteinByDate.values()).reduce((a, b) => a + b, 0);
         const avgProtein = totalProtein / proteinByDate.size;
@@ -530,7 +512,7 @@ export default function NutritionPage() {
             totalWorkingSets += workingSets.length;
           }
         });
-        
+
         // Average over 30 days = ~4.3 weeks
         const avgWeeklySets = (totalWorkingSets / 30) * 7;
         setAvgWeeklyTrainingSets(Math.round(avgWeeklySets));
@@ -546,7 +528,6 @@ export default function NutritionPage() {
       setUserProfile(profileData);
 
       // Load adaptive TDEE data
-      console.log('[Nutrition] Starting TDEE calculation...');
       try {
         const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
         setTdeeData(tdee);
@@ -561,27 +542,15 @@ export default function NutritionPage() {
     }
   }
 
-  async function handleAddFood(food: {
-    food_name: string;
-    serving_size: string;
-    servings: number;
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    meal_type: MealType;
-    source?: 'usda' | 'fatsecret' | 'nutritionix' | 'custom' | 'manual';
-    food_id?: string;
-    nutritionix_id?: string;
-    barcode?: string;
-  }) {
+  /**
+   * The single food_log insert path for this page. Every logging flow
+   * (add-food modal, describe, saved meals, frequent chips, copy yesterday)
+   * goes through here.
+   */
+  async function insertFoodEntry(food: FoodLogInsert) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (!selectedDate) {
-      console.error('Cannot add food: date not initialized');
-      return;
-    }
+    if (!user) throw new Error('Not signed in');
+    if (!selectedDate) throw new Error('Date not initialized');
 
     const { error } = await supabase.from('food_log').insert({
       user_id: user.id,
@@ -603,6 +572,18 @@ export default function NutritionPage() {
       console.error('Error adding food:', error);
       throw error;
     }
+  }
+
+  async function handleAddFood(food: FoodLogInsert & { barcode?: string }) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    if (!selectedDate) {
+      console.error('Cannot add food: date not initialized');
+      return;
+    }
+
+    await insertFoodEntry(food);
 
     // Save scanned barcode products to custom_foods for future search
     if (food.barcode) {
@@ -621,7 +602,7 @@ export default function NutritionPage() {
         const perServingCarbs = Math.round((food.carbs / food.servings) * 10) / 10;
         const perServingFat = Math.round((food.fat / food.servings) * 10) / 10;
 
-        await supabase.from('custom_foods').insert({
+        const { error: customError } = await supabase.from('custom_foods').insert({
           user_id: user.id,
           food_name: food.food_name,
           serving_size: food.serving_size,
@@ -631,10 +612,140 @@ export default function NutritionPage() {
           fat: perServingFat,
           barcode: food.barcode,
         });
+
+        if (!customError) {
+          showSuccess('Saved to your foods');
+        }
       }
     }
 
     await loadData();
+  }
+
+  /** Describe flow: log all AI-parsed items to the chosen meal, single refresh */
+  async function handleLogParsedItems(items: ParsedMealItem[], mealType: MealType) {
+    for (const item of items) {
+      await insertFoodEntry({
+        food_name: item.name,
+        serving_size: item.quantity || '1 serving',
+        servings: 1,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        meal_type: mealType,
+        source: 'manual',
+      });
+    }
+    await loadData();
+  }
+
+  /** Saved meals: one tap logs every item to the time-appropriate meal */
+  async function handleLogSavedMeal(meal: SavedMeal) {
+    const targetMeal = getMealTypeForNow();
+    for (const item of meal.items) {
+      await insertFoodEntry({
+        food_name: item.name,
+        serving_size: item.serving_size || '1 serving',
+        servings: item.servings || 1,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        meal_type: targetMeal,
+        source: 'manual',
+      });
+    }
+
+    const { error } = await supabase
+      .from('saved_meals')
+      .update({ times_logged: meal.times_logged + 1, updated_at: new Date().toISOString() })
+      .eq('id', meal.id);
+    if (error) {
+      console.error('Error incrementing saved meal count:', error);
+    }
+
+    await loadData();
+  }
+
+  /** Snapshot a meal's current entries into saved_meals */
+  async function handleSaveMealAsSaved(meal: { type: MealType; label: string; entries: FoodLogEntry[] }) {
+    if (meal.entries.length === 0 || !selectedDate) return;
+
+    const defaultName = `${meal.label} · ${formatDate(selectedDate, { month: 'short', day: 'numeric' })}`;
+    const name = window.prompt('Save meal as', defaultName);
+    if (!name || !name.trim()) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const items: SavedMealItem[] = meal.entries.map((entry) => ({
+      name: entry.food_name,
+      serving_size: entry.serving_size || '1 serving',
+      servings: entry.servings || 1,
+      calories: entry.calories || 0,
+      protein: entry.protein || 0,
+      carbs: entry.carbs || 0,
+      fat: entry.fat || 0,
+    }));
+
+    const { error } = await supabase.from('saved_meals').upsert(
+      {
+        user_id: user.id,
+        name: name.trim(),
+        items,
+        total_calories: items.reduce((sum, item) => sum + item.calories, 0),
+        total_protein: items.reduce((sum, item) => sum + item.protein, 0),
+        total_carbs: items.reduce((sum, item) => sum + item.carbs, 0),
+        total_fat: items.reduce((sum, item) => sum + item.fat, 0),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,name' }
+    );
+
+    if (error) {
+      console.error('Error saving meal:', error);
+      return;
+    }
+
+    showSuccess('Meal saved');
+  }
+
+  /** Copy yesterday's entries for a meal type into today */
+  async function handleCopyYesterday(mealType: MealType) {
+    const entries = yesterdayEntries.filter((entry) => entry.meal_type === mealType);
+    if (entries.length === 0) return;
+
+    for (const entry of entries) {
+      await insertFoodEntry({
+        food_name: entry.food_name,
+        serving_size: entry.serving_size || '1 serving',
+        servings: entry.servings || 1,
+        calories: entry.calories || 0,
+        protein: entry.protein || 0,
+        carbs: entry.carbs || 0,
+        fat: entry.fat || 0,
+        meal_type: mealType,
+        source: entry.source || 'manual',
+        food_id: entry.food_id || undefined,
+      });
+    }
+    await loadData();
+  }
+
+  /** Frequent chip: one tap logs to the time-appropriate meal */
+  async function handleQuickLogFrequent(food: FrequentFood) {
+    await handleAddFood({
+      food_name: food.food_name,
+      serving_size: food.serving_size || '1 serving',
+      servings: 1,
+      calories: Math.round(food.avg_calories),
+      protein: Math.round(food.avg_protein * 10) / 10,
+      carbs: Math.round(food.avg_carbs * 10) / 10,
+      fat: Math.round(food.avg_fat * 10) / 10,
+      meal_type: getMealTypeForNow(),
+      source: 'manual',
+    });
   }
 
   async function handleDeleteFood(id: string) {
@@ -648,12 +759,12 @@ export default function NutritionPage() {
     await loadData();
   }
 
-  async function handleUpdateFood(id: string, updates: { 
-    servings: number; 
-    calories: number; 
-    protein: number; 
-    carbs: number; 
-    fat: number; 
+  async function handleUpdateFood(id: string, updates: {
+    servings: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
   }) {
     const { error } = await supabase
       .from('food_log')
@@ -738,19 +849,6 @@ export default function NutritionPage() {
     await loadData();
   }
 
-  async function handleDeleteCustomFood(id: string) {
-    if (!confirm('Delete this custom food?')) return;
-
-    const { error } = await supabase.from('custom_foods').delete().eq('id', id);
-
-    if (error) {
-      console.error('Error deleting custom food:', error);
-      return;
-    }
-
-    await loadData();
-  }
-
   async function handleSaveWeight(weight: number, date: string, notes?: string) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -787,7 +885,7 @@ export default function NutritionPage() {
         unit: isLbs ? 'lb' : 'kg',
         notes: notes,
       }).eq('id', existing.id);
-      
+
       // If unit column doesn't exist, try without it
       if (result.error?.message?.includes('column "unit"')) {
         result = await supabase.from('weight_log').update({
@@ -805,7 +903,7 @@ export default function NutritionPage() {
         unit: isLbs ? 'lb' : 'kg',
         notes: notes,
       });
-      
+
       // If unit column doesn't exist, try without it
       if (result.error?.message?.includes('column "unit"')) {
         result = await supabase.from('weight_log').insert({
@@ -828,21 +926,19 @@ export default function NutritionPage() {
       const tdeeResult = await onWeightLoggedRecalculateTDEE();
       if (tdeeResult.syncResult?.synced && tdeeResult.syncResult.newCalories) {
         setMacroUpdateNotification(
-          `✅ Adaptive TDEE updated targets: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
+          `Adaptive TDEE updated targets: ${tdeeResult.syncResult.newCalories} cal - ${tdeeResult.syncResult.message}`
         );
         setTimeout(() => setMacroUpdateNotification(null), 6000);
       } else if (tdeeResult.syncResult?.message && tdeeResult.estimate) {
         // Show progress message even if not synced
-        setMacroUpdateNotification(
-          `📊 ${tdeeResult.syncResult.message}`
-        );
+        setMacroUpdateNotification(tdeeResult.syncResult.message);
         setTimeout(() => setMacroUpdateNotification(null), 4000);
       } else {
         // Fallback to weight-based recalculation if TDEE not ready
         const result = await recalculateMacrosForWeight(weightKg);
         if (result.success && !result.skipped && result.newTargets) {
           setMacroUpdateNotification(
-            `✅ Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
+            `Macros auto-updated: ${result.newTargets.calories} cal, ${result.newTargets.protein}g protein`
           );
           setTimeout(() => setMacroUpdateNotification(null), 5000);
         }
@@ -856,14 +952,14 @@ export default function NutritionPage() {
 
   async function handleUpdateWeight(weight: number, date: string, notes?: string) {
     if (!editingWeight) return;
-    
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // Prepare weight for storage - convert from user's input unit to storage format
     // We store weights in the user's preferred unit (weightUnit) for consistency
     const storageWeight = prepareWeightForStorage(weight, weightUnit, weightUnit);
-    
+
     const { error } = await supabase
       .from('weight_log')
       .update({
@@ -960,8 +1056,9 @@ export default function NutritionPage() {
     await loadData();
   }
 
-  function openAddFood(mealType: MealType) {
+  function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
     setSelectedMealType(mealType);
+    setAddFoodTab(tab);
     setShowAddFood(true);
   }
 
@@ -997,6 +1094,27 @@ export default function NutritionPage() {
     entries: foodEntries.filter((e) => e.meal_type === meal.type),
   }));
 
+  // Existing remaining-per-meal math (feeds MacroSummaryCard)
+  const mealsPerDay = nutritionTargets?.meals_per_day || 3;
+  const mealsLogged = mealGroups.filter((m) => m.entries.length > 0).length;
+  const mealsRemaining = Math.max(0, mealsPerDay - mealsLogged);
+
+  // Top frequent foods across meals for the one-tap chips row
+  const chipMap = new Map<string, { food: FrequentFood; count: number }>();
+  for (const food of frequentFoods) {
+    const existing = chipMap.get(food.food_name);
+    if (existing) {
+      existing.count += food.times_logged;
+    } else {
+      chipMap.set(food.food_name, { food, count: food.times_logged });
+    }
+  }
+  const frequentChips = Array.from(chipMap.values())
+    .filter((chip) => chip.count >= 2)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10)
+    .map((chip) => chip.food);
+
   // Use unified weight utility - all weight operations now use lib/weightUtils.ts
 
   // Calculate 7-day weight average (with unit validation and conversion)
@@ -1029,27 +1147,6 @@ export default function NutritionPage() {
       };
     });
 
-  // Get recent foods for quick add
-  const recentFoods: FoodSearchResult[] = Array.from(
-    new Map(
-      foodEntries
-        .filter((e) => (e.source === 'fatsecret' || e.source === 'nutritionix' || e.source === 'usda') && e.food_id)
-        .map((e) => [
-          e.food_name,
-          {
-            name: e.food_name,
-            servingSize: e.serving_size || '1 serving',
-            servingQty: 1,
-            calories: e.calories,
-            protein: e.protein || 0,
-            carbs: e.carbs || 0,
-            fat: e.fat || 0,
-            foodId: e.food_id!,
-          },
-        ])
-    ).values()
-  ).slice(0, 20);
-
   // Handle null date in rendering
   // CRITICAL: Server and client must render identical HTML to prevent hydration errors
   // Return null on server, loading state only after client mount
@@ -1080,15 +1177,16 @@ export default function NutritionPage() {
   // Calculate date display - now safe because we're only here after mount and date is set
   const todayDateString = getLocalDateString();
   const isToday = selectedDate === todayDateString;
-  const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
   const dateDisplay = isToday
-    ? `Today (${todayDayOfWeek})`
+    ? 'Today'
     : new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
       });
-  
+  const timeMealType = getMealTypeForNow();
+  const timeMealLabel = mealConfig.find((meal) => meal.type === timeMealType)?.label || 'Snacks';
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -1101,360 +1199,219 @@ export default function NutritionPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6" suppressHydrationWarning>
+    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-4" suppressHydrationWarning>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
       {/* Macro Update Notification */}
       {macroUpdateNotification && (
         <div className="bg-success-500/10 border border-success-500/20 rounded-lg p-3 flex items-center justify-between">
           <span className="text-success-300 text-sm">{macroUpdateNotification}</span>
-          <button 
+          <button
             onClick={() => setMacroUpdateNotification(null)}
             className="text-success-400 hover:text-success-300"
+            aria-label="Dismiss notification"
           >
-            ✕
+            <IconX size={16} aria-hidden="true" />
           </button>
         </div>
       )}
-      
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-surface-100">Food Tracking</h1>
-          <p className="text-surface-400 mt-1">Track your daily food intake and weight</p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={showWeightLog ? undefined : () => setShowWeightLog(true)}>
-            Log Weight
-          </Button>
-          <Button variant="secondary" onClick={() => setShowCreateCustomFood(true)}>
-            + Custom Food
-          </Button>
-          <Button variant="primary" onClick={() => setShowMacroCalculator(true)}>
-            Calculate Macros
-          </Button>
-          <Button variant="ghost" onClick={() => setShowTargetsModal(true)}>
-            {nutritionTargets ? 'Edit' : 'Manual'}
-          </Button>
-        </div>
-      </div>
 
-      {/* Date Selector */}
-      <div className="flex items-center justify-center gap-4">
-        <button
-          onClick={() => changeDate(-1)}
-          className="p-2 text-surface-400 hover:text-surface-100 transition-colors"
-          aria-label="Previous day"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <div className="text-center min-w-[140px]">
-          <span className="text-base font-medium text-surface-100" suppressHydrationWarning>
+      {/* Header: title left, date nav + settings right */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-[17px] font-medium text-surface-100">Nutrition</h1>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => changeDate(-1)}
+            className="p-2 text-surface-400 hover:text-surface-100 transition-colors"
+            aria-label="Previous day"
+          >
+            <IconChevronLeft size={18} aria-hidden="true" />
+          </button>
+          <button
+            onClick={goToToday}
+            disabled={isToday}
+            className="min-w-[84px] text-center text-[13px] font-medium text-surface-100 disabled:cursor-default"
+            title={isToday ? undefined : 'Back to today'}
+            suppressHydrationWarning
+          >
             {dateDisplay}
-          </span>
-          {!isToday && (
+          </button>
+          <button
+            onClick={() => changeDate(1)}
+            disabled={isToday}
+            className="p-2 text-surface-400 hover:text-surface-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Next day"
+          >
+            <IconChevronRight size={18} aria-hidden="true" />
+          </button>
+
+          {/* Settings menu: macro setup + weight + custom foods */}
+          <div className="relative">
             <button
-              onClick={goToToday}
-              className="ml-2 text-xs text-primary-400 hover:text-primary-300"
+              onClick={() => setShowSettingsMenu((open) => !open)}
+              className="p-2 text-surface-400 hover:text-surface-100 rounded-lg hover:bg-surface-800 transition-colors"
+              aria-label="Nutrition options"
             >
-              Today
+              <IconSettings size={18} aria-hidden="true" />
             </button>
-          )}
-        </div>
-        <button
-          onClick={() => changeDate(1)}
-          disabled={isToday}
-          className="p-2 text-surface-400 hover:text-surface-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          aria-label="Next day"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Daily Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Daily Summary</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Calories */}
-            <div>
-              <div className="text-sm text-surface-400">Calories</div>
-              <div className="text-2xl font-bold text-surface-100">
-                {Math.round(dailyTotals.calories)}
-                {nutritionTargets?.calories && (
-                  <span className="text-base text-surface-400 font-normal">
-                    {' '}/ {nutritionTargets.calories}
-                  </span>
-                )}
-              </div>
-              {nutritionTargets?.calories && (
-                <div className="mt-2 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary-500 transition-all"
-                    style={{
-                      width: `${Math.min((dailyTotals.calories / nutritionTargets.calories) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Protein */}
-            <div>
-              <div className="text-sm text-surface-400">Protein</div>
-              <div className="text-2xl font-bold text-surface-100">
-                {Math.round(dailyTotals.protein)}g
-                {nutritionTargets?.protein && (
-                  <span className="text-base text-surface-400 font-normal">
-                    {' '}/ {nutritionTargets.protein}g
-                  </span>
-                )}
-              </div>
-              {nutritionTargets?.protein && (
-                <div className="mt-2 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-accent-500 transition-all"
-                    style={{
-                      width: `${Math.min((dailyTotals.protein / nutritionTargets.protein) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Carbs */}
-            <div>
-              <div className="text-sm text-surface-400">Carbs</div>
-              <div className="text-2xl font-bold text-surface-100">
-                {Math.round(dailyTotals.carbs)}g
-                {nutritionTargets?.carbs && (
-                  <span className="text-base text-surface-400 font-normal">
-                    {' '}/ {nutritionTargets.carbs}g
-                  </span>
-                )}
-              </div>
-              {nutritionTargets?.carbs && (
-                <div className="mt-2 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-warning-500 transition-all"
-                    style={{
-                      width: `${Math.min((dailyTotals.carbs / nutritionTargets.carbs) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Fat */}
-            <div>
-              <div className="text-sm text-surface-400">Fat</div>
-              <div className="text-2xl font-bold text-surface-100">
-                {Math.round(dailyTotals.fat)}g
-                {nutritionTargets?.fat && (
-                  <span className="text-base text-surface-400 font-normal">
-                    {' '}/ {nutritionTargets.fat}g
-                  </span>
-                )}
-              </div>
-              {nutritionTargets?.fat && (
-                <div className="mt-2 h-2 bg-surface-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-danger-500 transition-all"
-                    style={{
-                      width: `${Math.min((dailyTotals.fat / nutritionTargets.fat) * 100, 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Remaining Calories & Meal Suggestions */}
-          {nutritionTargets?.calories && (
-            <div className="mt-4 p-4 bg-surface-800/50 rounded-lg">
-              {(() => {
-                const remaining = (nutritionTargets.calories || 0) - dailyTotals.calories;
-                const mealsPerDay = nutritionTargets.meals_per_day || 3;
-                
-                // Calculate which meals have been logged (have entries)
-                const mealsLogged = mealGroups.filter(m => m.entries.length > 0).length;
-                const mealsRemaining = Math.max(0, mealsPerDay - mealsLogged);
-                
-                // Calculate suggested calories per remaining meal
-                const suggestedPerMeal = mealsRemaining > 0 ? Math.round(remaining / mealsRemaining) : 0;
-                
-                // Find which meals are still empty (not snacks by default)
-                const emptyMeals = mealGroups
-                  .filter(m => m.entries.length === 0 && m.type !== 'snack')
-                  .map(m => m.label);
-
-                return (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm text-surface-400">Calories Remaining</div>
-                        <div className={`text-2xl font-bold ${remaining >= 0 ? 'text-primary-400' : 'text-danger-400'}`}>
-                          {Math.round(remaining)} cal
-                        </div>
-                      </div>
-                      {remaining > 0 && mealsRemaining > 0 && (
-                        <div className="text-right">
-                          <div className="text-sm text-surface-400">
-                            Suggested per meal ({mealsRemaining} left)
-                          </div>
-                          <div className="text-xl font-semibold text-accent-400">
-                            ~{suggestedPerMeal} cal
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {remaining > 0 && emptyMeals.length > 0 && (
-                      <p className="text-xs text-surface-500">
-                        Meals to log: {emptyMeals.join(', ')}
-                      </p>
-                    )}
-                    
-                    {remaining < 0 && (
-                      <p className="text-xs text-danger-400">
-                        You&apos;ve exceeded your daily target by {Math.abs(Math.round(remaining))} calories
-                      </p>
-                    )}
-                    
-                    {remaining > 0 && remaining < 100 && (
-                      <p className="text-xs text-success-400">
-                        Almost there! Just {Math.round(remaining)} calories to go 🎯
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {!nutritionTargets && (
-            <div className="p-4 bg-gradient-to-r from-primary-500/10 to-accent-500/10 border border-primary-500/20 rounded-lg">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🎯</span>
-                <div>
-                  <h4 className="font-medium text-surface-100">Get Personalized Macro Targets</h4>
-                  <p className="text-sm text-surface-300 mt-1">
-                    Let us calculate your ideal calories and macros based on your body stats, 
-                    activity level, and goals.
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setShowMacroCalculator(true)}
+            {showSettingsMenu && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setShowSettingsMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-surface-800 bg-surface-900 py-1 shadow-xl">
+                  {[
+                    { label: 'Calculate macros', action: () => setShowMacroCalculator(true) },
+                    { label: nutritionTargets ? 'Edit targets' : 'Enter targets manually', action: () => setShowTargetsModal(true) },
+                    { label: 'Log weight', action: () => setShowWeightLog(true) },
+                    { label: 'Add custom food', action: () => setShowCreateCustomFood(true) },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        setShowSettingsMenu(false);
+                        item.action();
+                      }}
+                      className="w-full px-3 py-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
                     >
-                      Calculate My Macros
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowTargetsModal(true)}
-                    >
-                      Enter Manually
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Meal Sections */}
-      <div className="space-y-4">
-        {mealGroups.map((meal) => (
-          <Card key={meal.type}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <meal.icon size={18} className="text-surface-400" aria-hidden="true" />
-                  <span>{meal.label}</span>
-                  {meal.entries.length > 0 && (
-                    <Badge variant="info" className="ml-2">
-                      {Math.round(
-                        meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0)
-                      )}{' '}
-                      cal
-                    </Badge>
-                  )}
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openAddFood(meal.type)}
-                >
-                  + Add
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {meal.entries.length === 0 ? (
-                <p className="text-center text-surface-400 py-4">No foods logged yet</p>
-              ) : (
-                <div className="space-y-1">
-                  {meal.entries.map((entry) => (
-                    <SwipeableRow
-                      key={entry.id}
-                      onDelete={() => handleDeleteFood(entry.id)}
-                    >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          openEditFood(entry);
-                        }}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-surface-800/50 rounded-lg transition-colors group text-left active:bg-surface-700"
-                      >
-                        {/* Food Icon */}
-                        <div className="text-2xl flex-shrink-0 w-10 h-10 flex items-center justify-center bg-surface-800 rounded-lg">
-                          {getFoodIcon(entry.food_name)}
-                        </div>
-                        
-                        {/* Food Name & Serving */}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-surface-100 truncate">
-                            {toTitleCase(entry.food_name)}
-                          </div>
-                          <div className="text-sm text-surface-500">
-                            {entry.servings !== 1 && `${entry.servings} × `}
-                            {entry.serving_size}
-                          </div>
-                        </div>
-                        
-                        {/* Calories & Macros */}
-                        <div className="text-right flex-shrink-0">
-                          <div className="font-semibold text-surface-100">
-                            {Math.round(entry.calories)}
-                          </div>
-                          <div className="text-xs text-surface-500">
-                            P:{Math.round(entry.protein || 0)} · C:{Math.round(entry.carbs || 0)} · F:{Math.round(entry.fat || 0)}
-                          </div>
-                        </div>
-                        
-                        {/* Swipe hint */}
-                        <div className="text-surface-600 group-hover:text-primary-400 transition-colors flex-shrink-0">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </div>
-                      </button>
-                    </SwipeableRow>
+                      {item.label}
+                    </button>
                   ))}
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Macro summary (replaces the 4-box grid + remaining-calories section) */}
+      <MacroSummaryCard
+        totals={dailyTotals}
+        targets={nutritionTargets}
+        mealsRemaining={mealsRemaining}
+        onCalculateMacros={() => setShowMacroCalculator(true)}
+        onEnterManually={() => setShowTargetsModal(true)}
+      />
+
+      {/* Quick actions: Describe / Scan / Search / Meals */}
+      <NutritionQuickActions
+        onDescribe={() => setShowDescribeMeal(true)}
+        onScan={() => openAddFood(timeMealType, 'barcode')}
+        onSearch={() => openAddFood(timeMealType, 'search')}
+        onMeals={() => setShowSavedMeals(true)}
+      />
+
+      {/* Frequent-food chips: one tap logs to the time-appropriate meal */}
+      {frequentChips.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {frequentChips.map((food) => (
+            <button
+              key={food.food_name}
+              onClick={() => handleQuickLogFrequent(food)}
+              className="flex-shrink-0 rounded-full border border-surface-800 bg-surface-900 px-2.5 py-1 text-[11px] text-surface-300 hover:bg-surface-800 transition-colors"
+            >
+              + {toTitleCase(food.food_name)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Meal sections */}
+      <div className="space-y-3">
+        {mealGroups.map((meal) => {
+          const mealCalories = Math.round(meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0));
+          const mealProtein = Math.round(meal.entries.reduce((sum, e) => sum + (e.protein || 0), 0));
+          const yesterdayHasEntries = yesterdayEntries.some((e) => e.meal_type === meal.type);
+
+          if (meal.entries.length === 0) {
+            // Empty meal: dashed card with Copy yesterday + Add
+            return (
+              <div key={meal.type} className="rounded-xl border border-dashed border-surface-700 px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] text-surface-500">{meal.label}</span>
+                  <div className="flex items-center gap-1">
+                    {yesterdayHasEntries && (
+                      <button
+                        onClick={() => handleCopyYesterday(meal.type)}
+                        className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+                      >
+                        <IconCopy size={13} aria-hidden="true" />
+                        Copy yesterday
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openAddFood(meal.type)}
+                      className="rounded-full px-2.5 py-1 text-[11px] text-primary-400 hover:bg-surface-800 transition-colors"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div key={meal.type} className="rounded-xl border border-surface-800 bg-surface-900 p-4">
+              {/* Header: "{Meal} · {kcal} kcal · {protein}p" + save-as-meal + add */}
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-baseline gap-1.5 min-w-0">
+                  <span className="text-[13px] font-medium text-surface-100">{meal.label}</span>
+                  <span className="text-[11px] text-surface-500 truncate">
+                    · {mealCalories} kcal · {mealProtein}p
+                  </span>
+                </div>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <button
+                    onClick={() => handleSaveMealAsSaved(meal)}
+                    className="p-1.5 text-surface-500 hover:text-surface-200 transition-colors"
+                    aria-label={`Save ${meal.label} as meal`}
+                    title="Save as meal"
+                  >
+                    <IconBookmarkPlus size={16} aria-hidden="true" />
+                  </button>
+                  <button
+                    onClick={() => openAddFood(meal.type)}
+                    className="p-1.5 text-surface-400 hover:text-surface-100 transition-colors"
+                    aria-label={`Add food to ${meal.label}`}
+                  >
+                    <IconPlus size={16} aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Entry rows: "name · qty | kcal", swipe-to-delete + tap-to-edit */}
+              <div>
+                {meal.entries.map((entry) => (
+                  <SwipeableRow
+                    key={entry.id}
+                    onDelete={() => handleDeleteFood(entry.id)}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openEditFood(entry);
+                      }}
+                      className="w-full flex items-center justify-between gap-3 py-1.5 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
+                    >
+                      <div className="flex items-baseline gap-1.5 min-w-0">
+                        <span className="text-[13px] text-surface-200 truncate">
+                          {toTitleCase(entry.food_name)}
+                        </span>
+                        <span className="text-[12px] text-surface-500 flex-shrink-0">
+                          · {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
+                        </span>
+                      </div>
+                      <span className="text-[13px] text-surface-300 flex-shrink-0">
+                        {Math.round(entry.calories)}
+                      </span>
+                    </button>
+                  </SwipeableRow>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Nutrition Trends Graph */}
@@ -1596,10 +1553,29 @@ export default function NutritionPage() {
         onClose={() => setShowAddFood(false)}
         onAdd={handleAddFood}
         defaultMealType={selectedMealType}
-        recentFoods={recentFoods}
+        initialTab={addFoodTab}
+        onCreateCustomFood={(barcode) => {
+          setShowAddFood(false);
+          setCustomFoodBarcode(barcode);
+          setShowCreateCustomFood(true);
+        }}
         customFoods={customFoods}
         frequentFoods={frequentFoods}
         systemFoods={systemFoods}
+      />
+
+      <DescribeMealModal
+        isOpen={showDescribeMeal}
+        onClose={() => setShowDescribeMeal(false)}
+        defaultMealType={timeMealType}
+        onLogItems={handleLogParsedItems}
+      />
+
+      <SavedMealsModal
+        isOpen={showSavedMeals}
+        onClose={() => setShowSavedMeals(false)}
+        targetMealLabel={timeMealLabel}
+        onLog={handleLogSavedMeal}
       />
 
       <CreateCustomFoodModal
@@ -1607,9 +1583,11 @@ export default function NutritionPage() {
         onClose={() => {
           setShowCreateCustomFood(false);
           setEditingCustomFood(null);
+          setCustomFoodBarcode(undefined);
         }}
         onSave={handleSaveCustomFood}
         editingFood={editingCustomFood}
+        initialBarcode={customFoodBarcode}
       />
 
       <WeightLogModal

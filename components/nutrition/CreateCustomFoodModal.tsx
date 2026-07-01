@@ -12,6 +12,8 @@ interface CreateCustomFoodModalProps {
   onClose: () => void;
   onSave: (food: Omit<CustomFood, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
   editingFood?: CustomFood | null;
+  /** Prefill the barcode field (barcode scan not-found flow) */
+  initialBarcode?: string;
 }
 
 export function CreateCustomFoodModal({
@@ -19,6 +21,7 @@ export function CreateCustomFoodModal({
   onClose,
   onSave,
   editingFood,
+  initialBarcode,
 }: CreateCustomFoodModalProps) {
   const [isPerWeight, setIsPerWeight] = useState(editingFood?.is_per_weight ?? false);
   const [foodName, setFoodName] = useState(editingFood?.food_name ?? '');
@@ -61,6 +64,13 @@ export function CreateCustomFoodModal({
       setBarcode(editingFood.barcode ?? '');
     }
   }, [editingFood]);
+
+  // Prefill barcode from a not-found scan (only for new foods)
+  useEffect(() => {
+    if (isOpen && !editingFood && initialBarcode) {
+      setBarcode(initialBarcode);
+    }
+  }, [isOpen, editingFood, initialBarcode]);
 
   const handleSubmit = async () => {
     if (!foodName.trim()) {
