@@ -22,6 +22,15 @@ import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithF
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
 import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import type { ExerciseOverride } from '@/services/mesocycleHelpers';
+import {
+  startMesocycleWorkoutSession,
+  getWorkoutForDay,
+  getTrainingDays,
+  getRestPeriod,
+  type Goal,
+  type TodayWorkout,
+} from '@/lib/training/startMesocycleSession';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
@@ -60,12 +69,7 @@ interface Mesocycle {
   preferred_workout_days: WorkoutDay[] | null;
   session_duration_minutes: number | null;
   program_data: unknown;
-}
-
-interface TodayWorkout {
-  dayName: string;
-  muscles: MuscleGroup[];
-  dayNumber: number;
+  exercise_overrides?: ExerciseOverride[];
 }
 
 interface FolderWithTemplates extends WorkoutFolder {
@@ -126,8 +130,6 @@ interface ExerciseHistoryData {
   progressPercent: number;
 }
 
-type Goal = 'bulk' | 'cut' | 'maintain';
-
 const FOLDER_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16',
 ];
@@ -141,48 +143,10 @@ const QUICK_TEMPLATES = [
   { name: 'Full Body', muscles: 'All muscle groups', icon: '🔥', muscleIds: 'chest,back,shoulders,quads,biceps,triceps' },
 ];
 
-/**
- * Get rest period based on exercise type and user's goal
- */
-function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
-  // Ab exercises need shorter rest periods (recover faster)
-  if (primaryMuscle === 'abs') {
-    return goal === 'cut' ? 30 : 45;
-  }
-
-  if (goal === 'cut') {
-    return isCompound ? 120 : 60;
-  }
-  if (goal === 'bulk') {
-    return isCompound ? 180 : 90;
-  }
-  return isCompound ? 150 : 75;
-}
-
 const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-function dayNameToNumber(dayName: WorkoutDay): number {
-  return WEEKDAY_NAMES.indexOf(dayName) + 1;
-}
 
 function numberToDayName(dayNumber: number): WorkoutDay {
   return WEEKDAY_NAMES[dayNumber - 1] || 'Monday';
-}
-
-function getTrainingDays(daysPerWeek: number, preferredWorkoutDays?: WorkoutDay[] | null): number[] {
-  if (preferredWorkoutDays && preferredWorkoutDays.length > 0) {
-    return preferredWorkoutDays.map(dayNameToNumber).sort((a, b) => a - b);
-  }
-
-  const trainingDayMaps: Record<number, number[]> = {
-    2: [1, 4],
-    3: [1, 3, 5],
-    4: [1, 2, 4, 5],
-    5: [1, 2, 3, 5, 6],
-    6: [1, 2, 3, 4, 5, 6],
-  };
-
-  return trainingDayMaps[daysPerWeek] || trainingDayMaps[4];
 }
 
 function getDefaultPreferredDays(daysPerWeek: number): WorkoutDay[] {
@@ -199,63 +163,6 @@ function areSameWorkoutDays(a: WorkoutDay[], b: WorkoutDay[]): boolean {
 function formatPreferredDays(days: WorkoutDay[]): string {
   if (days.length === 0) return 'Not set';
   return days.map(day => day.slice(0, 3)).join(', ');
-}
-
-// Get workout schedule based on split type
-function getWorkoutForDay(
-  splitType: string,
-  dayOfWeek: number,
-  daysPerWeek: number,
-  preferredWorkoutDays?: WorkoutDay[] | null
-): TodayWorkout | null {
-  const splits: Record<string, { dayName: string; muscles: MuscleGroup[] }[]> = {
-    'Full Body': [
-      { dayName: 'Full Body A', muscles: ['chest', 'back', 'quads', 'shoulders', 'triceps'] },
-      { dayName: 'Full Body B', muscles: ['back', 'hamstrings', 'glutes', 'biceps', 'calves'] },
-      { dayName: 'Full Body C', muscles: ['chest', 'quads', 'shoulders', 'biceps', 'abs'] },
-    ],
-    'Upper/Lower': [
-      { dayName: 'Upper A', muscles: ['chest', 'back', 'shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Lower A', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { dayName: 'Upper B', muscles: ['back', 'chest', 'shoulders', 'triceps', 'biceps'] },
-      { dayName: 'Lower B', muscles: ['hamstrings', 'quads', 'glutes', 'calves', 'abs'] },
-    ],
-    'PPL': [
-      { dayName: 'Push', muscles: ['chest', 'shoulders', 'triceps'] },
-      { dayName: 'Pull', muscles: ['back', 'biceps', 'shoulders'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-      { dayName: 'Push 2', muscles: ['chest', 'shoulders', 'triceps'] },
-      { dayName: 'Pull 2', muscles: ['back', 'biceps', 'shoulders'] },
-      { dayName: 'Legs 2', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-    'Arnold': [
-      { dayName: 'Chest & Back', muscles: ['chest', 'back'] },
-      { dayName: 'Shoulders & Arms', muscles: ['shoulders', 'biceps', 'triceps'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-    ],
-    'Bro Split': [
-      { dayName: 'Chest', muscles: ['chest'] },
-      { dayName: 'Back', muscles: ['back'] },
-      { dayName: 'Shoulders', muscles: ['shoulders'] },
-      { dayName: 'Arms', muscles: ['biceps', 'triceps'] },
-      { dayName: 'Legs', muscles: ['quads', 'hamstrings', 'glutes', 'calves'] },
-    ],
-  };
-
-  const schedule = splits[splitType] || splits['Upper/Lower'];
-
-  const trainingDays = getTrainingDays(daysPerWeek, preferredWorkoutDays);
-  const dayIndex = trainingDays.indexOf(dayOfWeek);
-
-  if (dayIndex === -1) {
-    return null;
-  }
-
-  const workoutIndex = dayIndex % schedule.length;
-  return {
-    ...schedule[workoutIndex],
-    dayNumber: dayIndex + 1,
-  };
 }
 
 type TabType = 'workouts' | 'mesocycle' | 'history' | 'exercises';
@@ -1483,7 +1390,10 @@ export default function WorkoutPage() {
     return `${names.slice(0, 2).join(', ')} & ${names.length - 2} more`;
   }
 
-  // Start today's workout from the mesocycle
+  // Start today's workout from the mesocycle (shared start path — uses
+  // program_data, weekly progression modifiers, and weekly set adjustments;
+  // falls back to legacy muscle-based defaults for mesocycles without
+  // program_data)
   const handleStartMesocycleWorkout = async () => {
     const activeMeso = mesocycles.find(m => m.state === 'active');
     if (!activeMeso || !todayWorkout) return;
@@ -1491,126 +1401,13 @@ export default function WorkoutPage() {
     setIsStartingWorkout(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { sessionId } = await startMesocycleWorkoutSession({
+        supabase,
+        mesocycle: activeMeso,
+        todayWorkout,
+      });
 
-      if (!user) throw new Error('Not logged in');
-
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
-        .select('goal')
-        .eq('user_id', user.id)
-        .single();
-
-      const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
-
-      const today = getLocalDateString();
-      const { data: existingWorkout } = await supabase
-        .from('workout_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('planned_date', today)
-        .in('state', ['planned', 'in_progress'])
-        .single();
-
-      if (existingWorkout) {
-        router.push(`/dashboard/workout/${existingWorkout.id}`);
-        return;
-      }
-
-      const { data: session, error: sessionError } = await supabase
-        .from('workout_sessions')
-        .insert({
-          user_id: user.id,
-          mesocycle_id: activeMeso.id,
-          planned_date: today,
-          state: 'in_progress',
-          started_at: new Date().toISOString(),
-          completion_percent: 0,
-        })
-        .select()
-        .single();
-
-      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
-
-      const { data: exercises } = await supabase
-        .from('exercises')
-        .select('*')
-        .in('primary_muscle', todayWorkout.muscles);
-
-      if (exercises && exercises.length > 0) {
-        type ExerciseRow = { id: string; name: string; primary_muscle: string; mechanic: string; default_rep_range: number[]; default_rir: number; equipment_required?: string[] };
-        const exercisesByMuscle: Record<string, ExerciseRow[]> = {};
-        (exercises as ExerciseRow[]).forEach((ex: ExerciseRow) => {
-          if (!exercisesByMuscle[ex.primary_muscle]) {
-            exercisesByMuscle[ex.primary_muscle] = [];
-          }
-          exercisesByMuscle[ex.primary_muscle].push(ex);
-        });
-
-        const blocks = [];
-        let order = 1;
-        const seenMuscles = new Set<string>();
-
-        for (const muscle of todayWorkout.muscles) {
-          const muscleExercises = exercisesByMuscle[muscle] || [];
-          const selected = muscleExercises.slice(0, Math.min(2, muscleExercises.length));
-
-          let isFirstExerciseForMuscle = !seenMuscles.has(muscle);
-
-          for (const exercise of selected) {
-            const isCompound = exercise.mechanic === 'compound';
-
-            // Generate warmups for first exercise of each muscle group (compound or isolation)
-            let warmupSets: any[] = [];
-            if (isFirstExerciseForMuscle) {
-              const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
-                ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
-                : [8, 12]) as [number, number];
-
-              warmupSets = generateWarmupProtocol({
-                workingWeight: 60,
-                exercise: {
-                  id: exercise.id,
-                  name: exercise.name,
-                  primaryMuscle: exercise.primary_muscle,
-                  secondaryMuscles: [],
-                  mechanic: isCompound ? 'compound' : 'isolation',
-                  defaultRepRange: repRange,
-                  defaultRir: exercise.default_rir || 2,
-                  minWeightIncrementKg: 2.5,
-                  formCues: [],
-                  commonMistakes: [],
-                  equipmentRequired: exercise.equipment_required || [],
-                  setupNote: '',
-                  movementPattern: isCompound ? 'compound' : 'isolation',
-                },
-                isFirstExercise: order === 1,
-              });
-              seenMuscles.add(muscle);
-              isFirstExerciseForMuscle = false;
-            }
-
-            blocks.push({
-              workout_session_id: session.id,
-              exercise_id: exercise.id,
-              order: order++,
-              target_sets: isCompound ? 4 : 3,
-              target_rep_range: exercise.default_rep_range || [8, 12],
-              target_rir: exercise.default_rir || 2,
-              target_weight_kg: 0,
-              target_rest_seconds: getRestPeriod(isCompound, userGoal, exercise.primary_muscle as MuscleGroup),
-              suggestion_reason: `${todayWorkout.dayName} - Week ${activeMeso.current_week}`,
-              warmup_protocol: { sets: warmupSets },
-            });
-          }
-        }
-
-        if (blocks.length > 0) {
-          await supabase.from('exercise_blocks').insert(blocks);
-        }
-      }
-
-      router.push(`/dashboard/workout/${session.id}`);
+      router.push(`/dashboard/workout/${sessionId}`);
     } catch (error) {
       console.error('Failed to start workout:', error);
       setIsStartingWorkout(false);
