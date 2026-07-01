@@ -104,6 +104,29 @@ const HungerChart = dynamic(
   { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-surface-700 rounded" /> }
 );
 
+// Daily tracking cards relocated from the home dashboard (Phase 3.3).
+// Self-fetching client components — loaded on demand for the Wellness tab.
+const ActivityCard = dynamic(
+  () => import('@/components/dashboard/ActivityCard').then(m => m.ActivityCard),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
+const HydrationTracker = dynamic(
+  () => import('@/components/dashboard/HydrationTracker').then(m => m.HydrationTracker),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
+const CardioTracker = dynamic(
+  () => import('@/components/dashboard/CardioTracker').then(m => m.CardioTracker),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
+const BodyTargets = dynamic(
+  () => import('@/components/dashboard/BodyTargets').then(m => m.BodyTargets),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
+const MuscleRecoveryCard = dynamic(
+  () => import('@/components/dashboard/MuscleRecoveryCard').then(m => m.MuscleRecoveryCard),
+  { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
+);
+
 // Tab types
 type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
 
@@ -1973,6 +1996,36 @@ export default function AnalyticsPage() {
       {/* Wellness Tab */}
       {activeTab === 'wellness' && (
         <div className="space-y-6">
+          {/* Daily tracking — relocated from the home dashboard (Phase 3.3) */}
+          {userId && (
+            <div className="space-y-3">
+              <h2 className="text-[15px] font-medium text-surface-100">Daily tracking</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <MuscleRecoveryCard />
+                <ActivityCard userId={userId} />
+                <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Cardio Log</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardioTracker userId={userId} />
+                  </CardContent>
+                </Card>
+                <BodyTargets
+                  userId={userId}
+                  unit={units === 'lb' ? 'in' : 'cm'}
+                  weightUnit={units}
+                  currentWeightKg={
+                    weightHistory.length > 0
+                      ? weightHistory[weightHistory.length - 1].weightKg
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
+          )}
+
           {/* Hydration Graph */}
           <Card>
             <CardHeader>

@@ -1,22 +1,19 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { IconScale, IconRun, IconDroplet, IconFlame, IconWalk, IconAlertTriangle, type Icon } from '@tabler/icons-react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint, SkeletonCard } from '@/components/ui';
-import { InlineHint } from '@/components/ui/FirstTimeHint';
-import Link from 'next/link';
+import { IconAlertTriangle } from '@tabler/icons-react';
+import { Button, LoadingAnimation } from '@/components/ui';
+import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { useEducationStore } from '@/hooks/useEducationPreferences';
-import { DashboardCard } from '@/components/dashboard/DashboardCard';
-import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import { calculateReadinessScore } from '@/services/fatigueEngine';
 import {
   applyDeloadToUpcomingWeek,
   dismissDeloadRecommendation,
@@ -26,7 +23,7 @@ import {
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow } from '@/components/dashboard/home';
 import type { TodaysWorkout, GlanceVolumeSummary } from '@/components/dashboard/home';
 
-// Loading placeholder for dashboard cards
+// Loading placeholder for lazily-loaded modal content
 const CardSkeleton = () => (
   <div className="animate-pulse bg-surface-800 rounded-lg p-4 space-y-3">
     <div className="h-4 bg-surface-700 rounded w-3/4" />
@@ -34,20 +31,15 @@ const CardSkeleton = () => (
   </div>
 );
 
-// Lazy load heavy components for faster initial render
-const WeightGraph = dynamic(
-  () => import('@/components/analytics/WeightGraph').then(mod => ({ default: mod.WeightGraph })),
-  { ssr: false, loading: () => <CardSkeleton /> }
-);
-
+// Lazy load modal content — only fetched when a quick-log modal opens
 const QuickFoodLogger = dynamic(
   () => import('@/components/nutrition/QuickFoodLogger').then(mod => ({ default: mod.QuickFoodLogger })),
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
-const StepTracking = dynamic(
-  () => import('@/components/nutrition/StepTracking').then(mod => ({ default: mod.StepTracking })),
-  { ssr: false, loading: () => <CardSkeleton /> }
+const WeightLogModal = dynamic(
+  () => import('@/components/nutrition/WeightLogModal').then(mod => ({ default: mod.WeightLogModal })),
+  { ssr: false }
 );
 
 const DailyCheckIn = dynamic(
@@ -57,16 +49,6 @@ const DailyCheckIn = dynamic(
 
 const HydrationTracker = dynamic(
   () => import('@/components/dashboard/HydrationTracker').then(mod => ({ default: mod.HydrationTracker })),
-  { ssr: false, loading: () => <CardSkeleton /> }
-);
-
-const ActivityCard = dynamic(
-  () => import('@/components/dashboard/ActivityCard').then(mod => ({ default: mod.ActivityCard })),
-  { ssr: false, loading: () => <CardSkeleton /> }
-);
-
-const MuscleRecoveryCard = dynamic(
-  () => import('@/components/dashboard/MuscleRecoveryCard').then(mod => ({ default: mod.MuscleRecoveryCard })),
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
@@ -80,50 +62,6 @@ const AtrophyRiskAlert = dynamic(
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
-// Card identifiers for reordering
-type DashboardCardId =
-  | 'quick-actions'
-  | 'todays-workout'
-  | 'daily-checkin'
-  | 'muscle-recovery'
-  | 'nutrition'
-  | 'weight'
-  | 'hydration'
-  | 'activity'
-  | 'atrophy-alert'
-  | 'weekly-volume'
-  | 'cardio'
-  | 'steps';
-
-const DEFAULT_CARD_ORDER: DashboardCardId[] = [
-  'quick-actions',
-  'todays-workout',
-  'daily-checkin',
-  'muscle-recovery',
-  'nutrition',
-  'cardio',
-  'weight',
-  'hydration',
-  'activity',
-  'steps',
-  'atrophy-alert',
-  'weekly-volume',
-];
-
-// Lower-frequency cards collapse into a tap-to-expand row by default (declutter).
-// Primary cards (workout, weekly volume, recovery, nutrition) stay full; these fold
-// into a titled row you open on demand. A card that renders null (no data) is skipped
-// entirely upstream, so no empty rows appear.
-const COLLAPSIBLE_CARDS: Partial<Record<DashboardCardId, { label: string; icon: Icon }>> = {
-  weight: { label: 'Body weight', icon: IconScale },
-  cardio: { label: 'Cardio', icon: IconRun },
-  hydration: { label: 'Hydration', icon: IconDroplet },
-  activity: { label: 'Activity', icon: IconFlame },
-  steps: { label: 'Steps', icon: IconWalk },
-};
-
-const CARD_ORDER_STORAGE_KEY = 'dashboard-card-order';
-const HIDDEN_CARDS_STORAGE_KEY = 'dashboard-hidden-cards';
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const DASHBOARD_CACHE_KEY = 'dashboard_data_cache';
@@ -132,14 +70,13 @@ const DASHBOARD_CACHE_TTL = 5 * 60 * 1000; // 5 minutes - short TTL for fresh da
 // Type for cached dashboard data
 interface DashboardCacheData {
   userId: string;
-  userGoal: string;
+  userGoal: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
   activeMesocycle: ActiveMesocycle | null;
   nutritionTotals: NutritionTotals;
   nutritionTargets: NutritionTargets | null;
   todaysWeight: { weight: number; unit: string } | null;
   weightUnit: 'lb' | 'kg';
   muscleVolume: MuscleVolumeStats[];
-  completedWorkoutsCount: number;
   timestamp: number;
   dateKey: string; // To invalidate cache on new day
 }
@@ -217,6 +154,46 @@ interface ScheduledWorkout {
 }
 
 // TodaysWorkout now lives in components/dashboard/home/TodayHeroCard.tsx
+
+/** Per-block info fetched for the hero coach line (no AI call — pure derivation). */
+interface HeroBlockInfo {
+  suggestionReason: string | null;
+  primaryMuscle: string | null;
+}
+
+/** Today's daily check-in row fields used for the readiness pill. */
+interface CheckInRow {
+  sleep_hours: number | null;
+  sleep_quality: number | null;
+  energy_level: number | null;
+  mood_rating: number | null;
+}
+
+/**
+ * Derive a 0-100 readiness score from the daily check-in using the existing
+ * pure fatigue-engine scorer. Check-in fields map onto ReadinessInput:
+ * mood inverts to stress (low mood ~ high stress) and energy stands in for
+ * the fueling/nutrition rating.
+ */
+function readinessFromCheckIn(row: CheckInRow): number {
+  const clampRating = (v: number | null): Rating | null =>
+    v == null ? null : (Math.min(5, Math.max(1, Math.round(v))) as Rating);
+  return calculateReadinessScore({
+    sleepHours: row.sleep_hours,
+    sleepQuality: clampRating(row.sleep_quality),
+    stressLevel: row.mood_rating == null ? null : clampRating(6 - row.mood_rating),
+    nutritionRating: clampRating(row.energy_level),
+  });
+}
+
+/** Infer the meal for quick food logging from the time of day. */
+function inferMealType(now: Date): MealType {
+  const hour = now.getHours();
+  if (hour < 11) return 'breakfast';
+  if (hour < 15) return 'lunch';
+  if (hour < 20) return 'dinner';
+  return 'snack';
+}
 
 // Props for server-side initial data
 interface DashboardInitialData {
@@ -299,6 +276,8 @@ function getWorkoutForDay(
   return { ...schedule[workoutIndex], dayNumber: dayIndex + 1 };
 }
 
+type QuickLogModal = 'weight' | 'water' | 'food' | 'cardio' | 'checkin';
+
 export function DashboardClient({ initialData }: DashboardClientProps) {
   // If we have server-fetched initialData, skip loading state entirely
   const hasInitialData = !!initialData;
@@ -320,18 +299,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(initialData?.nutritionTargets ?? null);
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
-  const [showQuickLogger, setShowQuickLogger] = useState(false);
-  const [showWeightLogger, setShowWeightLogger] = useState(false);
-  const [weightInput, setWeightInput] = useState('');
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialData?.weightUnit ?? 'lb');
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(initialData?.todaysWeight ?? null);
-  const [isLoggingWeight, setIsLoggingWeight] = useState(false);
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>(initialData?.weightHistory ?? []);
   const [userId, setUserId] = useState<string | null>(initialData?.userId ?? null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>(initialData?.userGoal ?? 'maintain');
-  const [debugError, setDebugError] = useState<string | null>(null);
-  const [completedWorkoutsCount, setCompletedWorkoutsCount] = useState<number>(initialData?.completedWorkoutsCount ?? 0);
-  const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+
+  // Which quick-log modal is open (the old scroll-to detail cards were removed).
+  const [activeModal, setActiveModal] = useState<QuickLogModal | null>(null);
 
   // Pending deload recommendation on the active mesocycle (Phase 1.4).
   // Fetched separately from the main dashboard load so the cached initial
@@ -425,6 +400,100 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     ? clientNow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
     : '';
 
+  // "Week 3 of 5 · PPL" context line under the greeting.
+  const weekContext = activeMesocycle
+    ? `Week ${activeMesocycle.currentWeek} of ${activeMesocycle.weeks}${activeMesocycle.splitType ? ` · ${activeMesocycle.splitType}` : ''}`
+    : null;
+
+  // Today's daily check-in — drives the readiness pill (present) or the compact
+  // check-in prompt (missing). 'loading' hides both until the fetch resolves.
+  const [checkInStatus, setCheckInStatus] = useState<'loading' | 'missing' | 'done'>('loading');
+  const [checkInReadiness, setCheckInReadiness] = useState<number | null>(null);
+
+  const refreshCheckIn = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const supabase = createUntypedClient();
+      const { data } = await supabase
+        .from('daily_check_ins')
+        .select('sleep_hours, sleep_quality, energy_level, mood_rating')
+        .eq('user_id', userId)
+        .eq('date', dateKey)
+        .maybeSingle();
+      if (data) {
+        setCheckInStatus('done');
+        setCheckInReadiness(readinessFromCheckIn(data as CheckInRow));
+      } else {
+        setCheckInStatus('missing');
+        setCheckInReadiness(null);
+      }
+    } catch (err) {
+      console.error('Failed to load daily check-in:', err);
+    }
+  }, [userId, dateKey]);
+
+  useEffect(() => {
+    refreshCheckIn();
+  }, [refreshCheckIn]);
+
+  // Hero coach line source data: today's block suggestion reasons + muscle focus.
+  // Small keyed fetch (like the deload recommendation) so neither the server
+  // payload nor the cached fast path changes shape. The line itself is pure
+  // derivation — never an AI API call.
+  const todaysWorkoutId = todaysWorkout?.id ?? null;
+  const [heroBlocks, setHeroBlocks] = useState<HeroBlockInfo[]>([]);
+
+  useEffect(() => {
+    if (!todaysWorkoutId) {
+      setHeroBlocks([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const { data } = await supabase
+          .from('exercise_blocks')
+          .select('suggestion_reason, exercises (primary_muscle)')
+          .eq('workout_session_id', todaysWorkoutId)
+          .order('order', { ascending: true });
+        if (cancelled || !data) return;
+        setHeroBlocks(
+          data.map((row: { suggestion_reason: string | null; exercises: { primary_muscle: string | null } | null }) => ({
+            suggestionReason: row.suggestion_reason,
+            primaryMuscle: row.exercises?.primary_muscle ?? null,
+          }))
+        );
+      } catch (err) {
+        console.error('Failed to load workout blocks for coach line:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [todaysWorkoutId]);
+
+  // One coach sentence for the hero: prefer the first block progression/adjustment
+  // reason ("+1 set chest — recovering well"), else fall back to the muscle focus list.
+  const coachLine = useMemo(() => {
+    const reason = heroBlocks
+      .map((b) => b.suggestionReason?.trim())
+      .find((r): r is string => !!r && r.length > 0);
+    if (reason) return reason;
+
+    const muscleNames: string[] = [];
+    for (const block of heroBlocks) {
+      if (!block.primaryMuscle) continue;
+      const key = block.primaryMuscle.toLowerCase().trim();
+      const standard = isStandardMuscle(key) ? key : toStandardMuscleForVolume(key);
+      const name = standard ? STANDARD_MUSCLE_DISPLAY_NAMES[standard].toLowerCase() : key;
+      if (!muscleNames.includes(name)) muscleNames.push(name);
+    }
+    const source = muscleNames.length > 0 ? muscleNames : (scheduledWorkout?.muscles ?? []);
+    if (source.length > 0) return `Focus today: ${source.slice(0, 4).join(', ')}`;
+    return null;
+  }, [heroBlocks, scheduledWorkout]);
+
   // Weekly weight trend (latest vs the earliest entry within the last ~7 days), in the preferred unit.
   const weightTrend = (() => {
     if (weightHistory.length < 2) return null;
@@ -472,39 +541,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
 
-  // Edit mode state for rearranging dashboard cards
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [cardOrder, setCardOrder] = useState<DashboardCardId[]>(DEFAULT_CARD_ORDER);
-  const [hiddenCards, setHiddenCards] = useState<Set<DashboardCardId>>(new Set());
-
-  // Load card order and hidden cards from localStorage on mount
-  useEffect(() => {
-    try {
-      const savedOrder = localStorage.getItem(CARD_ORDER_STORAGE_KEY);
-      if (savedOrder) {
-        const parsed = JSON.parse(savedOrder) as DashboardCardId[];
-        // Validate that all cards are present (in case we add new cards in the future)
-        const validOrder = DEFAULT_CARD_ORDER.filter(id => parsed.includes(id));
-        const newCards = DEFAULT_CARD_ORDER.filter(id => !parsed.includes(id));
-        setCardOrder([...parsed.filter(id => DEFAULT_CARD_ORDER.includes(id)), ...newCards]);
-      }
-    } catch (e) {
-      console.error('Failed to load card order:', e);
-    }
-
-    try {
-      const savedHidden = localStorage.getItem(HIDDEN_CARDS_STORAGE_KEY);
-      if (savedHidden) {
-        const parsed = JSON.parse(savedHidden) as DashboardCardId[];
-        // Only keep valid card IDs
-        const validHidden = parsed.filter(id => DEFAULT_CARD_ORDER.includes(id));
-        setHiddenCards(new Set(validHidden));
-      }
-    } catch (e) {
-      console.error('Failed to load hidden cards:', e);
-    }
-  }, []);
-
   // Load cached weight history on mount for faster initial render
   useEffect(() => {
     try {
@@ -535,14 +571,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         if (isValid) {
           // Apply cached data immediately - show content without waiting for fetch
           setUserId(data.userId);
-          setUserGoal(data.userGoal as any);
+          setUserGoal(data.userGoal);
           setActiveMesocycle(data.activeMesocycle);
           setNutritionTotals(data.nutritionTotals);
           setNutritionTargets(data.nutritionTargets);
           setTodaysWeight(data.todaysWeight);
           setWeightUnit(data.weightUnit);
           setMuscleVolume(data.muscleVolume);
-          setCompletedWorkoutsCount(data.completedWorkoutsCount);
           if (!todaysWorkout && data.activeMesocycle) {
             const today = new Date();
             const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
@@ -560,55 +595,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     } catch (e) {
       // Ignore cache errors - fresh data will be fetched
     }
-  }, []);
-
-  // Save card order to localStorage
-  const saveCardOrder = useCallback((newOrder: DashboardCardId[]) => {
-    setCardOrder(newOrder);
-    try {
-      localStorage.setItem(CARD_ORDER_STORAGE_KEY, JSON.stringify(newOrder));
-    } catch (e) {
-      console.error('Failed to save card order:', e);
-    }
-  }, []);
-
-  // Move card up in order
-  const moveCardUp = useCallback((cardId: DashboardCardId) => {
-    const index = cardOrder.indexOf(cardId);
-    if (index > 0) {
-      const newOrder = [...cardOrder];
-      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-      saveCardOrder(newOrder);
-    }
-  }, [cardOrder, saveCardOrder]);
-
-  // Move card down in order
-  const moveCardDown = useCallback((cardId: DashboardCardId) => {
-    const index = cardOrder.indexOf(cardId);
-    if (index < cardOrder.length - 1) {
-      const newOrder = [...cardOrder];
-      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-      saveCardOrder(newOrder);
-    }
-  }, [cardOrder, saveCardOrder]);
-
-  // Toggle card visibility (hide/show)
-  const toggleCardVisibility = useCallback((cardId: DashboardCardId) => {
-    setHiddenCards(prev => {
-      const newHidden = new Set(prev);
-      if (newHidden.has(cardId)) {
-        newHidden.delete(cardId);
-      } else {
-        newHidden.add(cardId);
-      }
-      // Save to localStorage
-      try {
-        localStorage.setItem(HIDDEN_CARDS_STORAGE_KEY, JSON.stringify(Array.from(newHidden)));
-      } catch (e) {
-        console.error('Failed to save hidden cards:', e);
-      }
-      return newHidden;
-    });
   }, []);
 
   // Helper function to update the dashboard cache after data mutations
@@ -634,12 +620,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   }, []);
 
-  // Get volume data for atrophy risk alert - use the same data source as Weekly Volume box
-  // This uses muscleVolume which is calculated from weeklyBlocks in fetchDashboardData
-  const { volumeSummary } = useAdaptiveVolume();
-  
-  // Use module-level constants for MEV targets and muscle groups
-
   // Find muscles below MEV (for atrophy risk alert) - use muscleVolume from dashboard query
   const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
     // Create a map of muscle -> sets from muscleVolume for quick lookup
@@ -658,7 +638,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       if (isBelowMev) {
         const mrv = mev * 2.5; // Rough estimate: MRV is typically 2-3x MEV
-        
+
         result.push({
           muscleGroup: muscle,
           totalSets: sets,
@@ -684,26 +664,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     if (userGoal === 'recomp') return 'maintenance'; // Recomp treated as maintenance for atrophy risk
     return userGoal as 'bulk' | 'cut' | 'maintenance';
   }, [userGoal]);
-
-  // Debug: Catch global errors
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      setDebugError(`Global Error: ${event.message} at ${event.filename}:${event.lineno}`);
-      console.error('Global error caught:', event);
-    };
-    const handleRejection = (event: PromiseRejectionEvent) => {
-      const reason = event.reason;
-      const msg = reason instanceof Error ? reason.message : String(reason);
-      setDebugError(`Unhandled Rejection: ${msg}`);
-      console.error('Unhandled rejection:', reason);
-    };
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleRejection);
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleRejection);
-    };
-  }, []);
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -822,7 +782,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         ninetyDaysAgo.setDate(today.getDate() - 90);
         const weekStart = new Date(today);
         weekStart.setDate(today.getDate() - 6); // Rolling 7 days (including today)
-        
+
         // OPTIMIZATION: Split queries into critical (blocks render) and deferred (loads in background)
         // Critical queries - needed for initial content display
         const [
@@ -834,7 +794,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           weightResult,
           weightHistoryResult,
           weeklyBlocksResult,
-          completedWorkoutsResult,
         ] = await Promise.all([
           // User profile (goal)
           supabase.from('users').select('goal').eq('id', user.id).single(),
@@ -871,7 +830,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .eq('logged_at', todayStr)
             .maybeSingle(),
 
-          // Weight history (90 days for graph timeframe options)
+          // Weight history (90 days for trend calculation)
           supabase.from('weight_log')
             .select('logged_at, weight, unit')
             .eq('user_id', user.id)
@@ -885,17 +844,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .eq('workout_sessions.user_id', user.id)
             .eq('workout_sessions.state', 'completed')
             .gte('workout_sessions.completed_at', weekStart.toISOString()),
-
-          // Count completed workouts (for first week hints)
-          supabase.from('workout_sessions')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('state', 'completed'),
         ]);
 
         // Deferred queries - load in background, only needed for food logging
         // These don't block initial render
-        const deferredQueries = Promise.all([
+        Promise.all([
           // Frequent foods - only needed when opening food logger
           supabase.from('food_log')
             .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
@@ -949,15 +902,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }).catch(() => {
           // Ignore errors in deferred queries - not critical
         });
-        
+
         // Process user profile
         if (userProfileResult.data?.goal) {
           setUserGoal(userProfileResult.data.goal);
-        }
-
-        // Process completed workouts count for first week hints
-        if (completedWorkoutsResult.count !== null) {
-          setCompletedWorkoutsCount(completedWorkoutsResult.count);
         }
 
         // Process mesocycles
@@ -986,7 +934,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
           });
 
-          const todaySession = sessions.find((s: any) => 
+          const todaySession = sessions.find((s: any) =>
             s.planned_date === todayStr || s.state === 'in_progress'
           );
 
@@ -1205,7 +1153,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
           };
         }
-
         try {
           const cacheData: DashboardCacheData = {
             userId: user.id,
@@ -1227,7 +1174,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             } : null,
             weightUnit: (prefsResult.data?.weight_unit as 'lb' | 'kg') || 'lb',
             muscleVolume: [], // Volume is computed, skip for cache simplicity
-            completedWorkoutsCount: completedWorkoutsResult.count || 0,
             timestamp: Date.now(),
             dateKey: todayStr,
           };
@@ -1246,7 +1192,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     fetchDashboardData();
   }, [hasInitialData, dateKey]);
 
-  const handleAddFood = async (food: any) => {
+  const handleAddFood = async (food: {
+    food_name: string;
+    serving_size: string;
+    servings: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    meal_type: MealType;
+    source: 'usda' | 'manual' | 'barcode';
+  }) => {
     try {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
@@ -1286,113 +1242,91 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         updateDashboardCache({ nutritionTotals: newTotals });
         return newTotals;
       });
-      setShowQuickLogger(false);
+      setActiveModal(null);
     } catch (err) {
       console.error('handleAddFood: Exception:', err);
     }
   };
 
-  const handleSaveWeight = async () => {
-    if (!weightInput || isNaN(parseFloat(weightInput))) return;
-    
-    setIsLoggingWeight(true);
-    try {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+  // Save handler for the shared WeightLogModal (weight in the preferred display
+  // unit, date from the modal's date picker). Throws on failure so the modal
+  // shows its inline error state.
+  const handleSaveWeight = async (weight: number, date: string, notes?: string) => {
+    const supabase = createUntypedClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Not signed in');
 
-      const weight = parseFloat(weightInput);
-      const today = getLocalDateString();
+    // First try to update an existing entry for the chosen date
+    const { data: existing } = await supabase
+      .from('weight_log')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('logged_at', date)
+      .maybeSingle();
 
-      // First try to update existing entry for today
-      const { data: existing, error: selectError } = await supabase
-        .from('weight_log')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('logged_at', today)
-        .maybeSingle();
+    let error;
+    if (existing) {
+      // Update existing entry - try with unit first, fall back without
+      let result = await supabase.from('weight_log').update({
+        weight,
+        unit: weightUnit,
+        notes,
+      }).eq('id', existing.id);
 
-      if (selectError) {
-        console.error('Error checking existing weight:', selectError);
+      // If unit column doesn't exist, try without it
+      if (result.error?.message?.includes('column "unit"')) {
+        result = await supabase.from('weight_log').update({ weight, notes }).eq('id', existing.id);
       }
+      error = result.error;
+    } else {
+      // Insert new entry - try with unit first, fall back without
+      let result = await supabase.from('weight_log').insert({
+        user_id: user.id,
+        logged_at: date,
+        weight,
+        unit: weightUnit,
+        notes,
+      });
 
-      let error;
-      if (existing) {
-        // Update existing entry - try with unit first, fall back without
-        let result = await supabase.from('weight_log').update({
-          weight: weight,
-          unit: weightUnit,
-        }).eq('id', existing.id);
-        
-        // If unit column doesn't exist, try without it
-        if (result.error?.message?.includes('column "unit"')) {
-          result = await supabase.from('weight_log').update({
-            weight: weight,
-          }).eq('id', existing.id);
-        }
-        error = result.error;
-      } else {
-        // Insert new entry - try with unit first, fall back without
-        let result = await supabase.from('weight_log').insert({
+      // If unit column doesn't exist, try without it
+      if (result.error?.message?.includes('column "unit"')) {
+        result = await supabase.from('weight_log').insert({
           user_id: user.id,
-          logged_at: today,
-          weight: weight,
-          unit: weightUnit,
+          logged_at: date,
+          weight,
+          notes,
         });
-        
-        // If unit column doesn't exist, try without it
-        if (result.error?.message?.includes('column "unit"')) {
-          result = await supabase.from('weight_log').insert({
-            user_id: user.id,
-            logged_at: today,
-            weight: weight,
-          });
-        }
-        error = result.error;
       }
+      error = result.error;
+    }
 
-      if (error) throw error;
+    if (error) throw error;
 
+    const entry = { date, weight, unit: weightUnit };
+    if (date === getLocalDateString()) {
       const newWeight = { weight, unit: weightUnit };
       setTodaysWeight(newWeight);
-      setWeightInput('');
-      setShowWeightLogger(false);
-
       // Update dashboard cache with new weight to persist across reloads
       updateDashboardCache({ todaysWeight: newWeight });
+    }
 
-      // Also update weight history cache to include today's entry
+    // Update weight history state + cache so the trend refreshes immediately
+    setWeightHistory((prev) => {
+      const next = [...prev];
+      const existingIndex = next.findIndex((h) => h.date === date);
+      if (existingIndex >= 0) {
+        next[existingIndex] = entry;
+      } else {
+        next.push(entry);
+        next.sort((a, b) => a.date.localeCompare(b.date));
+      }
       try {
-        const historyCache = localStorage.getItem(WEIGHT_HISTORY_CACHE_KEY);
-        if (historyCache) {
-          const { data: historyData } = JSON.parse(historyCache);
-          if (Array.isArray(historyData)) {
-            // Update or add today's entry
-            const todayEntry = { date: today, weight, unit: weightUnit };
-            const existingIndex = historyData.findIndex((h: any) => h.date === today);
-            if (existingIndex >= 0) {
-              historyData[existingIndex] = todayEntry;
-            } else {
-              historyData.push(todayEntry);
-              // Sort by date descending (newest first)
-              historyData.sort((a: any, b: any) => b.date.localeCompare(a.date));
-            }
-            localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({
-              data: historyData,
-              timestamp: Date.now(),
-            }));
-            // Also update local state for immediate UI update
-            setWeightHistory(historyData);
-          }
-        }
+        localStorage.setItem(WEIGHT_HISTORY_CACHE_KEY, JSON.stringify({ data: next, timestamp: Date.now() }));
       } catch (e) {
         // Ignore weight history cache update errors
       }
-    } catch (err) {
-      console.error('Failed to save weight:', err);
-    } finally {
-      setIsLoggingWeight(false);
-    }
+      return next;
+    });
   };
 
   if (isLoading) {
@@ -1404,876 +1338,150 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     );
   }
 
-  // Render a card by its ID
-  const renderCard = (cardId: DashboardCardId, index: number) => {
-    const isFirst = index === 0;
-    const isLast = index === cardOrder.length - 1;
+  const cardioPrescription = nutritionTargets?.cardio_prescription;
+  const showCardio = !!cardioPrescription?.needed;
 
-    const cardContent = (() => {
-      switch (cardId) {
-        case 'quick-actions':
-          return (
-            <div className="flex gap-3">
-              <Link href="/dashboard/workout/quick" className="flex-1">
-                <button className="w-full p-3 bg-gradient-to-r from-accent-600 to-accent-500 hover:from-accent-500 hover:to-accent-400 rounded-xl transition-all shadow-lg shadow-accent-500/20 hover:shadow-accent-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="font-semibold text-white">Quick Workout</span>
-                </button>
-              </Link>
-              <Link href="/dashboard/workout/new" className="flex-1">
-                <button className="w-full p-3 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-500 hover:to-primary-400 rounded-xl transition-all shadow-lg shadow-primary-500/20 hover:shadow-primary-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span className="font-semibold text-white">Create Workout</span>
-                </button>
-              </Link>
-            </div>
-          );
+  // Contextual insight cards — each renders only when triggered.
+  const checkInPromptCard = userId && checkInStatus === 'missing' ? (
+    <div className="rounded-xl bg-surface-900 border border-surface-800 p-4 flex items-center justify-between gap-3">
+      <p className="text-[13px] text-surface-300">How are you feeling today?</p>
+      <Button size="sm" onClick={() => setActiveModal('checkin')}>Check in</Button>
+    </div>
+  ) : null;
 
-        case 'todays-workout':
-          if (todaysWorkout) {
-            return (
-              <Card className={`overflow-hidden border-2 relative ${
-                todaysWorkout.state === 'completed'
-                  ? 'border-success-500/50 bg-success-500/5'
-                  : todaysWorkout.state === 'in_progress'
-                  ? 'border-warning-500/50 bg-warning-500/5'
-                  : 'border-primary-500/50 bg-primary-500/5'
-              }`}>
-                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                </Link>
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                        todaysWorkout.state === 'completed' ? 'bg-success-500/20' :
-                        todaysWorkout.state === 'in_progress' ? 'bg-warning-500/20' : 'bg-primary-500/20'
-                      }`}>
-                        {todaysWorkout.state === 'completed' ? (
-                          <svg className="w-6 h-6 text-success-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        ) : (
-                          <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                        )}
-                      </div>
-                      <div>
-                        <Badge variant={todaysWorkout.state === 'completed' ? 'success' : todaysWorkout.state === 'in_progress' ? 'warning' : 'default'} size="sm">
-                          {todaysWorkout.state === 'completed' ? 'Done' : todaysWorkout.state === 'in_progress' ? 'In Progress' : 'Ready'}
-                        </Badge>
-                        <h2 className="text-lg font-bold text-surface-100 mt-1">Today&apos;s Workout</h2>
-                        <p className="text-sm text-surface-400">
-                          {todaysWorkout.exercises} exercises · {todaysWorkout.completedSets}/{todaysWorkout.totalSets} sets
-                        </p>
-                      </div>
-                    </div>
-                    {todaysWorkout.state !== 'completed' && (
-                      <Link href={`/dashboard/workout/${todaysWorkout.id}`}>
-                        <Button>{todaysWorkout.state === 'in_progress' ? 'Continue' : 'Start'}</Button>
-                      </Link>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          } else if (scheduledWorkout) {
-            return (
-              <Card className="overflow-hidden border-2 border-primary-500/50 bg-primary-500/5 relative">
-                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                </Link>
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-primary-500/20 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <Badge variant="info" size="sm">Scheduled</Badge>
-                        <h2 className="text-lg font-bold text-surface-100 mt-1">{scheduledWorkout.dayName}</h2>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {scheduledWorkout.muscles.slice(0, 3).map((m) => (
-                            <span key={m} className="text-xs px-2 py-0.5 bg-surface-800 rounded text-surface-400 capitalize">{m}</span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <Link href="/dashboard/mesocycle">
-                      <Button>Start Workout</Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          } else if (activeMesocycle) {
-            return (
-              <Card className="overflow-hidden border border-surface-700 bg-surface-800/30 relative">
-                <Link href="/dashboard/learn/mesocycle-science" className="absolute top-3 right-3">
-                  <button className="p-1.5 hover:bg-surface-700/50 rounded-lg transition-colors" title="Learn about mesocycle science">
-                    <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
-                </Link>
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-surface-700/50 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h2 className="text-lg font-semibold text-surface-200">Rest Day</h2>
-                      <p className="text-sm text-surface-500">No workout scheduled. Recovery is part of progress!</p>
-                    </div>
-                    <Link href="/dashboard/workout/quick">
-                      <Button variant="outline" size="sm">Quick Workout</Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          } else {
-            return (
-              <Card className="overflow-hidden border-2 border-dashed border-primary-500/40 bg-gradient-to-r from-primary-500/10 to-accent-500/10">
-                <FirstTimeHint
-                  id="dashboard-mesocycle-intro"
-                  title="What's a Mesocycle?"
-                  description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
-                  position="top"
-                />
-                <CardContent className="p-6 text-center">
-                  <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-primary-500/20 flex items-center justify-center">
-                    <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                  <h2 className="text-xl font-bold text-surface-100">Create Your Training Plan</h2>
-                  <p className="text-surface-400 mt-2 max-w-md mx-auto">
-                    Set up an AI-powered mesocycle for smart progression, volume tracking, and personalized recommendations.
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center mt-5">
-                    <Link href="/dashboard/mesocycle/new">
-                      <Button size="lg">Create Mesocycle</Button>
-                    </Link>
-                    <Link href="/dashboard/workout/quick">
-                      <Button size="lg" variant="outline">Quick Workout</Button>
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          }
+  const deloadCard = deloadRecommendation && activeMesocycleId ? (
+    <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
+      <div className="flex items-start gap-3">
+        <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+        <div className="flex-1 min-w-0">
+          <p className="text-[15px] font-medium text-surface-100">
+            Fatigue is high — deload recommended
+          </p>
+          {deloadRecommendation.reasons.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5">
+              {deloadRecommendation.reasons.map((reason) => (
+                <li key={reason} className="text-xs text-surface-400">
+                  {reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3 flex items-center gap-2">
+            <Button size="sm" onClick={handleAcceptDeload} disabled={isResolvingDeload}>
+              Make next week a deload
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDismissDeload} disabled={isResolvingDeload}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
-        case 'daily-checkin':
-          return userId ? <DailyCheckIn userId={userId} userGoal={userGoal} /> : null;
+  const atrophyCard = musclesBelowMev.length > 0 ? (
+    <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
+  ) : null;
 
-        case 'muscle-recovery':
-          return <MuscleRecoveryCard limit={6} />;
-
-        case 'nutrition':
-          return (
-            <Card>
-              <FirstTimeHint
-                id="dashboard-nutrition"
-                title="Track Your Macros"
-                description="Hitting your protein target is key for muscle growth. The colored bars show your progress, and the small indicator shows if you're on pace for the day. Aim for consistent daily protein intake!"
-                position="top"
-              />
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <span>🍎</span> Today&apos;s Nutrition
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowQuickLogger(!showQuickLogger)}
-                      className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                      title="Quick log"
-                    >
-                      <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                    </button>
-                    <Link href="/dashboard/nutrition">
-                      <Button variant="ghost" size="sm">View All →</Button>
-                    </Link>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {showQuickLogger && (
-                  <div className="mb-4">
-                    <QuickFoodLogger
-                      onAdd={handleAddFood}
-                      onClose={() => setShowQuickLogger(false)}
-                      frequentFoods={frequentFoods}
-                      systemFoods={systemFoods}
-                    />
-                  </div>
-                )}
-
-                {(() => {
-                  if (!nutritionTargets) return null;
-
-                  const targets = nutritionTargets;
-
-                  return (
-                    <div className="space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-surface-300">Calories</span>
-                          <span className="text-sm text-surface-400">
-                            <span className="font-semibold text-surface-200">{Math.round(nutritionTotals.calories)}</span>
-                            {' / '}{targets.calories}
-                          </span>
-                        </div>
-                        <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${
-                              nutritionTotals.calories > targets.calories
-                                ? 'bg-danger-500'
-                                : nutritionTotals.calories > targets.calories * 0.9
-                                ? 'bg-success-500'
-                                : 'bg-primary-500'
-                            }`}
-                            style={{ width: `${Math.min(100, (nutritionTotals.calories / targets.calories) * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {(() => {
-                        const now = new Date();
-                        const hours = now.getHours();
-                        const minutes = now.getMinutes();
-                        const currentTimeInHours = hours + minutes / 60;
-                        const startHour = 7;
-                        const endHour = 21;
-                        const totalWindow = endHour - startHour;
-
-                        let expectedPercent: number;
-                        if (currentTimeInHours <= startHour) {
-                          expectedPercent = 0;
-                        } else if (currentTimeInHours >= endHour) {
-                          expectedPercent = 100;
-                        } else {
-                          expectedPercent = ((currentTimeInHours - startHour) / totalWindow) * 100;
-                        }
-
-                        const getPaceStatus = (actual: number, target: number) => {
-                          const actualPercent = (actual / target) * 100;
-                          const diff = actualPercent - expectedPercent;
-                          if (diff > 15) return { status: 'ahead', color: 'text-amber-400', icon: '↑' };
-                          if (diff < -15) return { status: 'behind', color: 'text-blue-400', icon: '↓' };
-                          return { status: 'on-track', color: 'text-success-400', icon: '✓' };
-                        };
-
-                        const proteinPace = getPaceStatus(nutritionTotals.protein, targets.protein);
-                        const carbsPace = getPaceStatus(nutritionTotals.carbs, targets.carbs);
-                        const fatPace = getPaceStatus(nutritionTotals.fat, targets.fat);
-
-                      return (
-                        <div className="grid grid-cols-3 gap-4">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-surface-500">Protein</span>
-                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.protein)}g</span>
-                            </div>
-                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, (nutritionTotals.protein / targets.protein) * 100)}%` }} />
-                            </div>
-                            <div className="flex items-center justify-between mt-0.5">
-                              <p className="text-xs text-surface-600">/ {targets.protein}g</p>
-                              <span className={`text-[10px] ${proteinPace.color}`}>{proteinPace.icon}</span>
-                            </div>
-                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                              <div
-                                className={`absolute h-full rounded-full ${
-                                  proteinPace.status === 'ahead' ? 'bg-amber-500/60' :
-                                  proteinPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                                }`}
-                                style={{ width: `${Math.min(100, (nutritionTotals.protein / targets.protein) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-surface-500">Carbs</span>
-                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.carbs)}g</span>
-                            </div>
-                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-amber-500" style={{ width: `${Math.min(100, (nutritionTotals.carbs / targets.carbs) * 100)}%` }} />
-                            </div>
-                            <div className="flex items-center justify-between mt-0.5">
-                              <p className="text-xs text-surface-600">/ {targets.carbs}g</p>
-                              <span className={`text-[10px] ${carbsPace.color}`}>{carbsPace.icon}</span>
-                            </div>
-                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                              <div
-                                className={`absolute h-full rounded-full ${
-                                  carbsPace.status === 'ahead' ? 'bg-amber-500/60' :
-                                  carbsPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                                }`}
-                                style={{ width: `${Math.min(100, (nutritionTotals.carbs / targets.carbs) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-surface-500">Fat</span>
-                              <span className="text-xs text-surface-400">{Math.round(nutritionTotals.fat)}g</span>
-                            </div>
-                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden">
-                              <div className="h-full bg-pink-500" style={{ width: `${Math.min(100, (nutritionTotals.fat / targets.fat) * 100)}%` }} />
-                            </div>
-                            <div className="flex items-center justify-between mt-0.5">
-                              <p className="text-xs text-surface-600">/ {targets.fat}g</p>
-                              <span className={`text-[10px] ${fatPace.color}`}>{fatPace.icon}</span>
-                            </div>
-                            <div className="h-0.5 bg-surface-800 rounded-full mt-1 relative">
-                              <div className="absolute h-full bg-surface-600 rounded-full" style={{ width: `${expectedPercent}%` }} />
-                              <div
-                                className={`absolute h-full rounded-full ${
-                                  fatPace.status === 'ahead' ? 'bg-amber-500/60' :
-                                  fatPace.status === 'behind' ? 'bg-blue-500/60' : 'bg-success-500/60'
-                                }`}
-                                style={{ width: `${Math.min(100, (nutritionTotals.fat / targets.fat) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    </div>
-                  );
-                })()}
-                {!nutritionTargets && (
-                  <div className="text-center py-6">
-                    <p className="text-surface-400 text-sm mb-3">No nutrition targets set</p>
-                    <Link href="/dashboard/nutrition">
-                      <Button variant="outline" size="sm">Set Up Targets</Button>
-                    </Link>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-
-        case 'weight':
-          return (
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <span>⚖️</span> Today&apos;s Weight
-                  </CardTitle>
-                  {!showWeightLogger && todaysWeight && (
-                    <button
-                      onClick={() => setShowWeightLogger(true)}
-                      className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors"
-                      title="Update weight"
-                    >
-                      <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="pt-2">
-                {showWeightLogger ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      step="0.1"
-                      placeholder={`Weight (${weightUnit})`}
-                      value={weightInput}
-                      onChange={(e) => setWeightInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSaveWeight()}
-                      className="flex-1 px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      autoFocus
-                    />
-                    <select
-                      value={weightUnit}
-                      onChange={(e) => setWeightUnit(e.target.value as 'lb' | 'kg')}
-                      className="px-2 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    >
-                      <option value="lb">lbs</option>
-                      <option value="kg">kg</option>
-                    </select>
-                    <Button size="sm" onClick={handleSaveWeight} disabled={!weightInput || isLoggingWeight}>
-                      {isLoggingWeight ? '...' : 'Save'}
-                    </Button>
-                    <button
-                      onClick={() => { setShowWeightLogger(false); setWeightInput(''); }}
-                      className="p-2 text-surface-400 hover:text-surface-300 transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ) : todaysWeight ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-primary-500/20 flex items-center justify-center">
-                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-                          </svg>
-                        </div>
-                        <div>
-                          <p className="text-2xl font-bold text-surface-100">
-                            {getDisplayWeight(
-                              todaysWeight.weight,
-                              todaysWeight.unit as 'lb' | 'kg' | null,
-                              weightUnit
-                            ).toFixed(1)} <span className="text-base font-normal text-surface-400">{weightUnit}</span>
-                          </p>
-                          <p className="text-xs text-surface-500">Logged today</p>
-                        </div>
-                      </div>
-                      <Link href="/dashboard/nutrition">
-                        <Button variant="ghost" size="sm">History →</Button>
-                      </Link>
-                    </div>
-                    {weightHistory.length >= 2 && (
-                      <div className="pt-2 border-t border-surface-800">
-                        <WeightGraph
-                          key={`weight-graph-${weightHistory.length}-${weightUnit}`}
-                          weightHistory={weightHistory}
-                          preferredUnit={weightUnit}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowWeightLogger(true)}
-                    className="w-full py-4 border-2 border-dashed border-surface-700 rounded-lg text-surface-400 hover:border-primary-500 hover:text-primary-400 transition-colors flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Log your weight
-                  </button>
-                )}
-              </CardContent>
-            </Card>
-          );
-
-        case 'cardio':
-          // Only show card if cardio prescription exists and is needed
-          if (!nutritionTargets?.cardio_prescription?.needed) {
-            return null;
-          }
-          return (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <span>🏃</span> Zone 2 Cardio
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {userId && (
-                  <CardioTracker
-                    userId={userId}
-                    prescription={nutritionTargets.cardio_prescription}
-                  />
-                )}
-                {!userId && (
-                  <div className="text-center py-4 text-surface-400 text-sm">
-                    Loading...
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-
-        case 'hydration':
-          return userId ? <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} /> : null;
-
-        case 'activity':
-          return userId ? <ActivityCard userId={userId} /> : null;
-
-        case 'steps':
-          // Calculate userWeightKg from available weight data
-          const userWeightKg = (() => {
-            if (todaysWeight) {
-              const storedUnit = (todaysWeight.unit || weightUnit) as 'kg' | 'lb';
-              return storedUnit === 'kg'
-                ? todaysWeight.weight
-                : todaysWeight.weight * 0.453592;
-            }
-            if (weightHistory.length > 0) {
-              const latest = weightHistory[weightHistory.length - 1];
-              const storedUnit = (latest.unit || weightUnit) as 'kg' | 'lb';
-              return storedUnit === 'kg'
-                ? latest.weight
-                : latest.weight * 0.453592;
-            }
-            return 80; // Default fallback
-          })();
-          return <StepTracking date={getLocalDateString()} userWeightKg={userWeightKg} />;
-
-        case 'atrophy-alert': {
-          // Insight cards: deload recommendation (Phase 1.4) + atrophy risk.
-          const deloadCard = deloadRecommendation && activeMesocycleId ? (
-            <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
-              <div className="flex items-start gap-3">
-                <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[15px] font-medium text-surface-100">
-                    Fatigue is high — deload recommended
-                  </p>
-                  {deloadRecommendation.reasons.length > 0 && (
-                    <ul className="mt-1.5 space-y-0.5">
-                      {deloadRecommendation.reasons.map((reason) => (
-                        <li key={reason} className="text-xs text-surface-400">
-                          {reason}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="mt-3 flex items-center gap-2">
-                    <Button size="sm" onClick={handleAcceptDeload} disabled={isResolvingDeload}>
-                      Make next week a deload
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={handleDismissDeload} disabled={isResolvingDeload}>
-                      Dismiss
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null;
-
-          const atrophyCard = musclesBelowMev.length > 0 ? (
-            <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
-          ) : null;
-
-          if (!deloadCard && !atrophyCard) return null;
-          return (
-            <div className="space-y-4">
-              {deloadCard}
-              {atrophyCard}
-            </div>
-          );
-        }
-
-        case 'weekly-volume':
-          // Calculate muscles with zero volume
-          const trainedMuscles = new Set(muscleVolume.map(mv => mv.muscle));
-          const zeroVolumeMuscles = ALL_MUSCLE_GROUPS.filter(muscle => !trainedMuscles.has(muscle));
-
-          // Only show the weekly volume hint if user has started training
-          const hasStartedTraining = activeMesocycle || muscleVolume.length > 0;
-
-          return (
-            <Card>
-              {hasStartedTraining && (
-                <FirstTimeHint
-                  id="dashboard-weekly-volume"
-                  title="Understanding Weekly Volume"
-                  description="Volume tracking shows how many sets per muscle group you've done this week. Your body needs enough volume (MEV) to grow, but not so much (MRV) that you can't recover. Green means you're in the sweet spot!"
-                  position="top"
-                />
-              )}
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <span>📊</span> Weekly Volume
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-normal text-surface-500">sets per muscle</span>
-                    <Link href="/dashboard/learn/adaptive-volume">
-                      <button className="p-1.5 hover:bg-surface-700 rounded-lg transition-colors" title="Learn about adaptive volume">
-                        <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </button>
-                    </Link>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {muscleVolume.length > 0 ? (
-                  <div className="space-y-2">
-                    {muscleVolume.slice(0, 8).map((mv) => (
-                      <details key={mv.muscle} className="group">
-                        <summary className="cursor-pointer list-none">
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                <svg className="w-3 h-3 text-surface-500 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                </svg>
-                                <span className="text-surface-300">{STANDARD_MUSCLE_DISPLAY_NAMES[mv.muscle as StandardMuscleGroup] ?? mv.muscle}</span>
-                              </div>
-                              <span className={`font-medium ${
-                                mv.status === 'optimal' ? 'text-success-400' :
-                                mv.status === 'low' ? 'text-warning-400' : 'text-red-400'
-                              }`}>
-                                {mv.sets}/{mv.target}
-                                <span className="text-xs text-surface-500 ml-1">
-                                  {mv.status === 'low' ? '↓' : mv.status === 'high' ? '↑' : '✓'}
-                                </span>
-                              </span>
-                            </div>
-                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
-                              <div
-                                className={`h-full transition-all duration-500 ${
-                                  mv.status === 'optimal' ? 'bg-success-500' :
-                                  mv.status === 'low' ? 'bg-warning-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${Math.min(100, (mv.sets / mv.target) * 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </summary>
-                        {mv.exercises && mv.exercises.length > 0 && (
-                          <div className="ml-5 mt-2 pl-3 border-l-2 border-surface-700 space-y-1.5">
-                            {mv.exercises.map((ex) => (
-                              <div key={ex.id} className="flex items-center justify-between text-xs">
-                                <span className="text-surface-400 truncate">{ex.name}</span>
-                                <span className="text-surface-500 flex-shrink-0 ml-2">{ex.sets} sets</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </details>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <p className="text-surface-400 text-sm">Complete workouts to track volume</p>
-                  </div>
-                )}
-
-                {/* Zero Volume Muscles - Expandable Section */}
-                {zeroVolumeMuscles.length > 0 && (
-                  <details className="mt-4 pt-3 border-t border-surface-800 group/zero">
-                    <summary className="cursor-pointer list-none flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-3 h-3 text-red-500/70 transition-transform group-open/zero:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        <span className="text-red-400/80">No volume this week</span>
-                        <span className="text-xs text-red-500/50 ml-1">({zeroVolumeMuscles.length})</span>
-                      </div>
-                      <span className="text-xs text-red-500/60 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        atrophy risk
-                      </span>
-                    </summary>
-                    <div className="mt-3 space-y-2">
-                      {zeroVolumeMuscles.map((muscle) => {
-                        const target = MEV_TARGETS[muscle] || 4;
-                        return (
-                          <div key={muscle} className="space-y-1">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-red-400/70 ml-5">{STANDARD_MUSCLE_DISPLAY_NAMES[muscle] ?? muscle}</span>
-                              <span className="text-red-500/60 font-medium">
-                                0/{target}
-                                <span className="text-xs text-red-500/40 ml-1">↓</span>
-                              </span>
-                            </div>
-                            <div className="h-1.5 bg-surface-800 rounded-full overflow-hidden ml-5">
-                              <div className="h-full bg-red-500/30 w-0" />
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <p className="text-xs text-red-500/50 mt-3 ml-5 italic">
-                        Muscles not trained for extended periods may experience strength and size loss
-                      </p>
-                    </div>
-                  </details>
-                )}
-
-                {/* First week progress interpretation */}
-                {muscleVolume.length > 0 && completedWorkoutsCount <= 5 && showBeginnerTips && (
-                  <div className="mt-4">
-                    <InlineHint id="first-week-volume-interpretation">
-                      <div>
-                        <p className="font-medium mb-2">Your first week progress!</p>
-                        <div className="space-y-2 text-sm text-primary-200">
-                          {muscleVolume.filter(mv => mv.sets > 0).length > 0 ? (
-                            <>
-                              <p>
-                                Great start! You&apos;ve trained{' '}
-                                <strong>{muscleVolume.filter(mv => mv.sets > 0).length} muscle groups</strong>{' '}
-                                this week.
-                              </p>
-                              {muscleVolume.some(mv => mv.status === 'optimal') && (
-                                <p className="text-success-300">
-                                  {muscleVolume.filter(mv => mv.status === 'optimal').length} muscles are in the optimal zone (green) - perfect for growth!
-                                </p>
-                              )}
-                              {muscleVolume.some(mv => mv.status === 'low' && mv.sets > 0) && (
-                                <p className="text-warning-300">
-                                  {muscleVolume.filter(mv => mv.status === 'low' && mv.sets > 0).length} muscles need a bit more volume - aim to complete more workouts this week.
-                                </p>
-                              )}
-                              <p className="text-xs text-primary-300 mt-1">
-                                Keep going! As you complete more workouts, your volume will reach optimal levels for each muscle.
-                              </p>
-                            </>
-                          ) : (
-                            <p>Complete some workouts to see your volume progress!</p>
-                          )}
-                        </div>
-                      </div>
-                    </InlineHint>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-
-        default:
-          return null;
-      }
-    })();
-
-    if (!cardContent) return null;
-
-    const isHidden = hiddenCards.has(cardId);
-
-    // In normal mode, don't render hidden cards
-    if (!isEditMode && isHidden) return null;
-
-    // The active workout is rendered as the hero at the top of the glance, so skip the
-    // duplicate card in normal mode (only when there IS a today's workout to show as hero).
-    if (!isEditMode && cardId === 'todays-workout' && todaysWorkout) return null;
-
-    // In normal mode, fold lower-frequency cards into a collapsed, tap-to-expand row
-    // (the value is summarized up top in the glance; full detail is one tap away).
-    const collapsibleMeta = COLLAPSIBLE_CARDS[cardId];
-    if (!isEditMode && collapsibleMeta) {
-      return (
-        <details key={cardId} id={`dash-card-${cardId}`} className="group scroll-mt-20">
-          <summary className="cursor-pointer list-none flex items-center gap-2.5 px-4 py-3 bg-surface-900 border border-surface-800 rounded-xl transition-colors hover:bg-surface-800/50 group-open:rounded-b-none group-open:border-b-0">
-            <collapsibleMeta.icon size={18} className="text-surface-400" aria-hidden="true" />
-            <span className="text-sm font-medium text-surface-200 flex-1">{collapsibleMeta.label}</span>
-            <svg className="w-4 h-4 text-surface-500 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </summary>
-          <div className="rounded-b-xl overflow-hidden [&>*]:rounded-t-none [&>*]:border-t-0">{cardContent}</div>
-        </details>
-      );
-    }
-
-    return (
-      <DashboardCard
-        key={cardId}
-        id={cardId}
-        isEditMode={isEditMode}
-        isFirst={isFirst}
-        isLast={isLast}
-        isHidden={isHidden}
-        onMoveUp={() => moveCardUp(cardId)}
-        onMoveDown={() => moveCardDown(cardId)}
-        onToggleVisibility={() => toggleCardVisibility(cardId)}
-      >
-        {cardContent}
-      </DashboardCard>
-    );
-  };
+  const hasInsightCards = !!(checkInPromptCard || deloadCard || atrophyCard);
 
   return (
-    <div className={`space-y-6 max-w-3xl mx-auto ${isEditMode ? 'pl-14' : ''}`}>
-      {/* Edit Mode Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {isEditMode && (
-            <span className="text-sm text-primary-400 font-medium">
-              Editing Layout
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setIsEditMode(!isEditMode)}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all ${
-            isEditMode
-              ? 'bg-primary-500 text-white'
-              : 'bg-surface-800 text-surface-400 hover:text-surface-200 hover:bg-surface-700'
-          }`}
-        >
-          {isEditMode ? (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-sm font-medium">Done</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-              </svg>
-              <span className="text-sm font-medium">Edit</span>
-            </>
-          )}
-        </button>
-      </div>
+    <div className="space-y-4 max-w-5xl mx-auto">
+      {/* Greeting (client-only — see clientNow above — to avoid SSR hydration mismatch) */}
+      {clientNow && (
+        <GlanceHeader
+          greeting={greeting}
+          todayLabel={todayLabel}
+          weekContext={weekContext}
+          readinessScore={checkInStatus === 'done' ? checkInReadiness : null}
+        />
+      )}
 
-      {/* Compact dashboard glance (mockup): greeting + 2x2 metric grid + quick log.
-          Full detail cards render below; long-tail ones are collapsed. */}
-      {!isEditMode && (
-        <div className="space-y-4">
-          {/* Greeting (client-only — see clientNow above — to avoid SSR hydration mismatch) */}
-          {clientNow && <GlanceHeader greeting={greeting} todayLabel={todayLabel} />}
+      {/* Today's workout hero — the primary daily action (null on rest days) */}
+      <TodayHeroCard
+        workout={todaysWorkout}
+        scheduled={scheduledWorkout}
+        hasPlan={!!activeMesocycle}
+        mesocycleName={activeMesocycle?.name ?? null}
+        coachLine={coachLine}
+      />
 
-          {/* Today's workout hero — the primary daily action */}
-          {todaysWorkout && (
-            <TodayHeroCard workout={todaysWorkout} mesocycleName={activeMesocycle?.name ?? null} />
-          )}
+      {/* Glance metric grid: Nutrition · Recovery · Weekly volume · Weight */}
+      <MetricTileGrid
+        nutritionTotals={nutritionTotals}
+        nutritionTargets={nutritionTargets}
+        recoveryLoading={recoveryLoading}
+        readyMuscles={readyMuscles}
+        recoveringMuscles={recoveringMuscles}
+        volume={glanceVolume}
+        todaysWeight={todaysWeight}
+        weightUnit={weightUnit}
+        weightTrend={weightTrend}
+      />
 
-          {/* 2x2 glance grid: Nutrition · Recovery · Weekly volume · Weight */}
-          <MetricTileGrid
-            nutritionTotals={nutritionTotals}
-            nutritionTargets={nutritionTargets}
-            recoveryLoading={recoveryLoading}
-            readyMuscles={readyMuscles}
-            recoveringMuscles={recoveringMuscles}
-            volume={glanceVolume}
-            todaysWeight={todaysWeight}
-            weightUnit={weightUnit}
-            weightTrend={weightTrend}
-          />
+      {/* Quick log row — each button opens a modal */}
+      <QuickLogRow
+        onLogWeight={() => setActiveModal('weight')}
+        onLogWater={userId ? () => setActiveModal('water') : undefined}
+        onLogFood={() => setActiveModal('food')}
+        onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
+      />
 
-          {/* Quick log row — taps scroll to and open the matching card below */}
-          <QuickLogRow
-            showWater={!!userId}
-            showCardio={!!nutritionTargets?.cardio_prescription?.needed}
-          />
+      {/* Contextual insight cards — render only when triggered */}
+      {hasInsightCards && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {checkInPromptCard}
+          {deloadCard}
+          {atrophyCard}
         </div>
       )}
 
-      {/* Render cards in order */}
-      {cardOrder.map((cardId, index) => renderCard(cardId, index))}
+      {/* Quick-log modals (content lazy-loads on first open) */}
+      {activeModal === 'weight' && (
+        <WeightLogModal
+          isOpen
+          onClose={() => setActiveModal(null)}
+          onSave={handleSaveWeight}
+          preferredUnit={weightUnit}
+        />
+      )}
+
+      {activeModal === 'water' && userId && (
+        <Modal isOpen onClose={() => setActiveModal(null)} title="Log water">
+          <HydrationTracker userId={userId} unit={weightUnit === 'kg' ? 'ml' : 'oz'} />
+        </Modal>
+      )}
+
+      {activeModal === 'food' && (
+        <Modal isOpen onClose={() => setActiveModal(null)} title="Log food" size="lg">
+          <QuickFoodLogger
+            onAdd={handleAddFood}
+            onClose={() => setActiveModal(null)}
+            frequentFoods={frequentFoods}
+            systemFoods={systemFoods}
+            defaultMealType={inferMealType(new Date())}
+          />
+        </Modal>
+      )}
+
+      {activeModal === 'cardio' && userId && cardioPrescription && (
+        <Modal isOpen onClose={() => setActiveModal(null)} title="Zone 2 cardio">
+          <CardioTracker userId={userId} prescription={cardioPrescription} />
+        </Modal>
+      )}
+
+      {activeModal === 'checkin' && userId && (
+        <Modal isOpen onClose={() => setActiveModal(null)} title="Daily check-in">
+          <DailyCheckIn
+            userId={userId}
+            userGoal={userGoal}
+            onComplete={() => {
+              refreshCheckIn();
+              setActiveModal(null);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
