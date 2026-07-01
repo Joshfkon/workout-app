@@ -10,7 +10,14 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getSessionFromProgramData, getWeeklyProgressionModifiers, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { getSessionFromProgramData, getWeekSessionsFromProgramData, getWeeklyProgressionModifiers, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import {
+  planWeeklySetAdjustments,
+  loadWeeklyMuscleSignals,
+  resolveVolumeLandmarks,
+  exerciseKey,
+  type WeeklyAdjustmentPlan,
+} from '@/lib/training/weeklyRollover';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import type { Split, MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 import { DAYS_OF_WEEK } from '@/types/schema';
@@ -410,7 +417,7 @@ export default function MesocyclePage() {
 
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, weight_kg, body_fat_percent, experience')
+        .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks')
         .eq('id', user.id)
         .single();
 
@@ -467,6 +474,39 @@ export default function MesocyclePage() {
         activeMesocycle.current_week
       );
 
+      // Weekly auto-regulation (Phase 1.2): react to last week's per-muscle
+      // feedback (session_muscle_feedback) + performance trend by adding or
+      // removing one set on the last exercise targeting each muscle in this
+      // week's plan. With no feedback rows the engine holds everywhere and
+      // the plan stays empty, so generation is identical to before.
+      const weekSessions = getWeekSessionsFromProgramData(programData, activeMesocycle.current_week);
+      const weekSessionIdx = weekSessions.length > 0 ? sessionIndex % weekSessions.length : 0;
+      let weeklyAdjustmentPlan: WeeklyAdjustmentPlan | null = null;
+      if (
+        weekSessions.length > 0 &&
+        programSession !== null &&
+        programSession.exercises.length > 0 &&
+        !progressionModifiers.isDeload
+      ) {
+        try {
+          const signals = await loadWeeklyMuscleSignals(supabase, user.id, activeMesocycle.id);
+          weeklyAdjustmentPlan = planWeeklySetAdjustments({
+            weekSessions,
+            feedbackByMuscle: signals.feedbackByMuscle,
+            trendByMuscle: signals.trendByMuscle,
+            landmarksByMuscle: resolveVolumeLandmarks(
+              userExperience,
+              (userData?.volume_landmarks as Record<string, unknown> | null) ?? null
+            ),
+            weekInMeso: activeMesocycle.current_week,
+            isDeloadWeek: activeMesocycle.current_week === activeMesocycle.deload_week,
+          });
+        } catch (adjustmentError) {
+          // Non-fatal: fall back to the unadjusted program.
+          console.error('Weekly set adjustment failed, using program as-is:', adjustmentError);
+        }
+      }
+
       const blocks = [];
       let order = 1;
       const seenMuscles = new Set<string>();
@@ -477,7 +517,8 @@ export default function MesocyclePage() {
         const exercisesWithOverrides = applyExerciseOverrides(programSession.exercises, overrides);
 
         // USE PROGRAM_DATA: Create exercise blocks from pre-calculated program
-        for (const exercise of exercisesWithOverrides) {
+        for (let exerciseIndex = 0; exerciseIndex < exercisesWithOverrides.length; exerciseIndex++) {
+          const exercise = exercisesWithOverrides[exerciseIndex];
           const isCompound = exercise.primaryMuscle && ['chest', 'back', 'quads', 'hamstrings', 'glutes'].includes(exercise.primaryMuscle);
           const isFirstForMuscle = !seenMuscles.has(exercise.primaryMuscle);
 
@@ -544,16 +585,23 @@ export default function MesocyclePage() {
             seenMuscles.add(exercise.primaryMuscle);
           }
 
+          // Weekly auto-regulation delta for THIS exercise position in the week's plan
+          const setAdjustment = weeklyAdjustmentPlan?.byExercise.get(
+            exerciseKey(weekSessionIdx, exerciseIndex)
+          );
+
           blocks.push({
             workout_session_id: session.id,
             exercise_id: exerciseId,
             order: order++,
-            target_sets: exercise.sets, // From program_data (respects session duration & fatigue budget)
+            // From program_data (respects session duration & fatigue budget),
+            // plus the ±1 weekly adjustment from last week's muscle feedback.
+            target_sets: setAdjustment ? setAdjustment.adjustedSets : exercise.sets,
             target_rep_range: [exercise.repRange.min, exercise.repRange.max],
             target_rir: exercise.targetRir,
             target_weight_kg: targetWeight, // From WeightEstimationEngine
             target_rest_seconds: exercise.restSeconds || getRestPeriod(isCompound, userGoal, exercise.primaryMuscle),
-            suggestion_reason: `${programSession.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}`,
+            suggestion_reason: `${programSession.dayName} - Week ${activeMesocycle.current_week}${progressionModifiers.isDeload ? ' (Deload)' : ''}${setAdjustment ? ` · ${setAdjustment.label}` : ''}`,
             warmup_protocol: { sets: warmupSets },
           });
         }

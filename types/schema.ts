@@ -232,6 +232,32 @@ export interface VolumeLandmarks {
   mrv: number;
 }
 
+// ============ PER-MUSCLE SESSION FEEDBACK (auto-regulation) ============
+
+/** 0 none · 1 mild · 2 sore, healed just in time · 3 still sore at next session */
+export type SorenessRating = 0 | 1 | 2 | 3;
+/** 0 none · 1 mild · 2 good · 3 extreme */
+export type PumpRating0to3 = 0 | 1 | 2 | 3;
+/** 0 too easy · 1 just right · 2 pushed it · 3 too much */
+export type WorkloadRating = 0 | 1 | 2 | 3;
+
+/**
+ * Per-muscle feedback attached to a workout session (session_muscle_feedback).
+ * pump/workload are logged at session end; sorenessBefore is written at the
+ * START of the next session hitting the same muscle — it describes recovery
+ * from THIS session, so it lives on this row.
+ */
+export interface MuscleFeedback {
+  id: string;
+  userId: string;
+  sessionId: string;
+  muscleGroup: StandardMuscleGroup;
+  sorenessBefore: SorenessRating | null;
+  pump: PumpRating0to3 | null;
+  workload: WorkloadRating | null;
+  createdAt: Date;
+}
+
 // ============ BODYWEIGHT ============
 
 /**

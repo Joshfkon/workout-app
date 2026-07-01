@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
-import { IconScale, IconRun, IconDroplet, IconFlame, IconWalk, type Icon } from '@tabler/icons-react';
+import { IconScale, IconRun, IconDroplet, IconFlame, IconWalk, IconAlertTriangle, type Icon } from '@tabler/icons-react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, LoadingAnimation, FirstTimeHint, SkeletonCard } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import Link from 'next/link';
@@ -17,6 +17,12 @@ import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import {
+  applyDeloadToUpcomingWeek,
+  dismissDeloadRecommendation,
+  fetchDeloadRecommendation,
+  type DeloadRecommendation,
+} from '@/lib/training/deloadRecommendation';
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow } from '@/components/dashboard/home';
 import type { TodaysWorkout, GlanceVolumeSummary } from '@/components/dashboard/home';
 
@@ -326,6 +332,61 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [debugError, setDebugError] = useState<string | null>(null);
   const [completedWorkoutsCount, setCompletedWorkoutsCount] = useState<number>(initialData?.completedWorkoutsCount ?? 0);
   const showBeginnerTips = useEducationStore((state) => state.showBeginnerTips);
+
+  // Pending deload recommendation on the active mesocycle (Phase 1.4).
+  // Fetched separately from the main dashboard load so the cached initial
+  // data path doesn't need to change shape.
+  const [deloadRecommendation, setDeloadRecommendation] = useState<DeloadRecommendation | null>(null);
+  const [isResolvingDeload, setIsResolvingDeload] = useState(false);
+  const activeMesocycleId = activeMesocycle?.id ?? null;
+
+  useEffect(() => {
+    if (!activeMesocycleId) {
+      setDeloadRecommendation(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const recommendation = await fetchDeloadRecommendation(supabase, activeMesocycleId);
+        if (!cancelled) setDeloadRecommendation(recommendation);
+      } catch (err) {
+        console.error('Failed to load deload recommendation:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMesocycleId]);
+
+  const handleAcceptDeload = async () => {
+    if (!activeMesocycleId || isResolvingDeload) return;
+    setIsResolvingDeload(true);
+    try {
+      const supabase = createUntypedClient();
+      await applyDeloadToUpcomingWeek(supabase, activeMesocycleId);
+      setDeloadRecommendation(null);
+    } catch (err) {
+      console.error('Failed to apply deload week:', err);
+    } finally {
+      setIsResolvingDeload(false);
+    }
+  };
+
+  const handleDismissDeload = async () => {
+    if (!activeMesocycleId || isResolvingDeload) return;
+    setIsResolvingDeload(true);
+    try {
+      const supabase = createUntypedClient();
+      await dismissDeloadRecommendation(supabase, activeMesocycleId);
+      setDeloadRecommendation(null);
+    } catch (err) {
+      console.error('Failed to dismiss deload recommendation:', err);
+    } finally {
+      setIsResolvingDeload(false);
+    }
+  };
 
   // Recovery data for the glance "Recovery" tile (same source as the recovery card).
   // While loading, the hook reports every muscle as ready (empty training map), so gate
@@ -1873,10 +1934,50 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           })();
           return <StepTracking date={getLocalDateString()} userWeightKg={userWeightKg} />;
 
-        case 'atrophy-alert':
-          return musclesBelowMev.length > 0 ? (
+        case 'atrophy-alert': {
+          // Insight cards: deload recommendation (Phase 1.4) + atrophy risk.
+          const deloadCard = deloadRecommendation && activeMesocycleId ? (
+            <div className="rounded-xl bg-warning-500/10 border border-warning-500/20 p-4">
+              <div className="flex items-start gap-3">
+                <IconAlertTriangle className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[15px] font-medium text-surface-100">
+                    Fatigue is high — deload recommended
+                  </p>
+                  {deloadRecommendation.reasons.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {deloadRecommendation.reasons.map((reason) => (
+                        <li key={reason} className="text-xs text-surface-400">
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button size="sm" onClick={handleAcceptDeload} disabled={isResolvingDeload}>
+                      Make next week a deload
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleDismissDeload} disabled={isResolvingDeload}>
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null;
+
+          const atrophyCard = musclesBelowMev.length > 0 ? (
             <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
           ) : null;
+
+          if (!deloadCard && !atrophyCard) return null;
+          return (
+            <div className="space-y-4">
+              {deloadCard}
+              {atrophyCard}
+            </div>
+          );
+        }
 
         case 'weekly-volume':
           // Calculate muscles with zero volume

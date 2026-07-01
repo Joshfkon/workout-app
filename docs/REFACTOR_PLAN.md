@@ -117,9 +117,10 @@ Rules (v1, tuned later):
 Add jest coverage threshold entry (70/60/50/70) per CLAUDE.md convention.
 
 ### 1.3 Readiness → session modulation
-- New pure helper in `services/fatigueEngine.ts`:
-  `applyReadinessModulation(targets: { targetRIR: number; sets: number }, readiness: number)` →
-  readiness < 40: `targetRIR + 1` and flag `suggestSetReduction: true`; 40–55: `targetRIR + 0.5` (rounded at prescription time); ≥ 55: unchanged.
+- DONE (service side): `applyReadinessModulation(readinessScore)` in `services/fatigueEngine.ts` —
+  <40: rirDelta +1 and `suggestSetReduction: true`; 40–55: rirDelta +1 only (integer RIR is what the
+  chips display, so the +0.5 idea was dropped); ≥55: unchanged. Returns banner copy. Tested.
+  REMAINING: apply rirDelta in the workout page prescription glue + render the banner (Phase 2 header).
 - Applied in `_lib/suggestions.ts` when the session loads after check-in; banner in WorkoutHeader: "Adjusted for low readiness — targets eased today". Dismissable override ("Train as planned").
 
 ### 1.4 Wire the deload
@@ -128,14 +129,22 @@ Add jest coverage threshold entry (70/60/50/70) per CLAUDE.md convention.
 - Home InsightCards renders: "Fatigue is high — deload recommended" with reasons + CTA "Make next week a deload", which regenerates the coming week using `deloadEngine.getExerciseDeloadMultiplier` per movement pattern.
 - Experience gating already in `deloadEngine` (novice 1 trigger, advanced 2+) — keep.
 
-### 1.5 RPE calibration bias → prescriptions
-- `rpeCalibration.getAdjustedRIR` output feeds `setPrescription.calculateTargetRIR` and `progressionEngine.recommendNextSet` (bias passed as optional param; only applied at confidence ≥ medium).
-- Suggestion reason string mentions it: "target RIR 1 — your AMRAPs show you usually leave 2 extra reps".
+### 1.5 RPE calibration bias → prescriptions — mostly already wired
+Implementation finding: the workout page already loads amrap_calibrations into
+RPECalibrationEngine and passes `adjustedTargetRir` (from `getAdjustedRIR`, which gates on
+confidence ≥ medium) into ExerciseCard (page.tsx ~3537). REMAINING (folded into Phase 2):
+SetLoggerRow must default its RIR chip to the adjusted value and SuggestionBanner must
+surface `adjustmentReason` ("you tend to stop N reps early").
 
-### 1.6 E1RM clamp
-- In `recommendNextSet` (progressionEngine.ts ~line 240): clamp the rep term to 12 in the Epley anchor (`effectiveReps = min(reps + rir, 12 + rir)` — decide exact form in PR, add regression tests for 15–20-rep sets).
+### 1.6 E1RM clamp — RESOLVED: no code change
+Investigated during implementation: the unclamped Epley in `recommendNextSet` is
+deliberate and correct. It's used as a local interpolation ratio (last-set reps →
+target reps), so the Epley error cancels between numerator and denominator;
+clamping only the anchor would collapse high-rep prescriptions (documented at
+progressionEngine.ts:231, regression-tested by the 110×20 RIR4 case). The display
+E1RM clamps at 12 separately. The three E1RM estimators stay intentionally distinct.
 
-### 1.7 Surface plateau detection
+### 1.7 Surface plateau detection (folded into Phase 2 — the exercise card is rebuilt there; building the badge twice is waste)
 - Exercise card overflow menu shows a badge when `plateauDetector.detectPlateau` fires; tapping opens a sheet listing `generatePlateauSuggestions` with one-tap apply: "switch to 5–8 reps" (updates block rep range) or "swap exercise" (opens existing SwapModal pre-filtered).
 
 ### 1.8 Fatigue budget → swap/picker ranking (or delete)

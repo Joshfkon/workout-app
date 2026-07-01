@@ -569,3 +569,29 @@ describe('getReadinessInterpretation', () => {
     expect(getReadinessInterpretation(39).level).toBe('poor');
   });
 });
+
+describe('applyReadinessModulation', () => {
+  const { applyReadinessModulation } = jest.requireActual('../fatigueEngine');
+
+  it('eases RIR and suggests set reduction below 40', () => {
+    const m = applyReadinessModulation(35);
+    expect(m).toMatchObject({ rirDelta: 1, suggestSetReduction: true });
+    expect(m.banner).toMatch(/low readiness/i);
+  });
+
+  it('eases RIR only between 40 and 55', () => {
+    const m = applyReadinessModulation(48);
+    expect(m).toMatchObject({ rirDelta: 1, suggestSetReduction: false });
+    expect(m.banner).toBeTruthy();
+  });
+
+  it('changes nothing at 55 and above', () => {
+    expect(applyReadinessModulation(55)).toEqual({ rirDelta: 0, suggestSetReduction: false, banner: null });
+    expect(applyReadinessModulation(90).banner).toBeNull();
+  });
+
+  it('boundary: 39.9 trims, 40 does not trim', () => {
+    expect(applyReadinessModulation(39.9).suggestSetReduction).toBe(true);
+    expect(applyReadinessModulation(40).suggestSetReduction).toBe(false);
+  });
+});

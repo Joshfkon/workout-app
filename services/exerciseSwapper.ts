@@ -10,6 +10,26 @@ import type {
   SwapSuggestion,
   MovementPattern,
 } from '@/types/schema';
+import { BASE_SFR } from './fatigueBudgetEngine';
+
+// ============================================
+// STIMULUS-TO-FATIGUE (SFR)
+// ============================================
+
+/**
+ * Estimate an exercise's stimulus-to-fatigue ratio from the fatigue budget
+ * tables. Null when the pattern/equipment combination isn't covered —
+ * callers must treat unknown as neutral, never as bad.
+ */
+export function estimateExerciseSFR(exercise: Exercise): number | null {
+  const patternTable = BASE_SFR[exercise.movementPattern as keyof typeof BASE_SFR];
+  if (!patternTable) return null;
+  const equipment = exercise.equipmentRequired.find(
+    (eq): eq is keyof typeof patternTable => eq in patternTable
+  );
+  if (!equipment) return null;
+  return patternTable[equipment] ?? null;
+}
 
 // ============================================
 // TYPES
@@ -106,6 +126,18 @@ export function findSimilarExercises(
     });
   }
 
+  // Efficiency nudge: prefer candidates with a better stimulus-to-fatigue
+  // ratio than the source (up to ±10%). Unknown SFR stays neutral.
+  const sourceSFR = estimateExerciseSFR(source);
+  if (sourceSFR !== null) {
+    scored.forEach((item) => {
+      const sfr = estimateExerciseSFR(item.exercise);
+      if (sfr !== null) {
+        item.score *= Math.min(1.1, Math.max(0.9, 1 + (sfr - sourceSFR) * 0.1));
+      }
+    });
+  }
+
   // Sort by score descending
   scored.sort((a, b) => b.score - a.score);
 
@@ -130,9 +162,16 @@ export function suggestSwap(
   // Take top 5 suggestions
   const top = similar.slice(0, 5);
 
+  const sourceSFR = estimateExerciseSFR(source);
+
   return top.map((exercise) => {
     const score = calculateSimilarityScore(source, exercise);
-    const reason = generateSwapReason(source, exercise, context, score);
+    let reason = generateSwapReason(source, exercise, context, score);
+
+    const sfr = estimateExerciseSFR(exercise);
+    if (sourceSFR !== null && sfr !== null && sfr - sourceSFR >= 0.2) {
+      reason += ' Gives more stimulus per unit of fatigue.';
+    }
 
     return {
       exercise,

@@ -2,9 +2,59 @@
 
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
-import type { WorkoutSession, SetLog, ExerciseBlock, MuscleGroup, WeightUnit, FormRating } from '@/types/schema';
+import type {
+  WorkoutSession,
+  SetLog,
+  ExerciseBlock,
+  MuscleGroup,
+  WeightUnit,
+  FormRating,
+  StandardMuscleGroup,
+  PumpRating0to3,
+  WorkloadRating,
+} from '@/types/schema';
+import {
+  STANDARD_MUSCLE_DISPLAY_NAMES,
+  DETAILED_TO_STANDARD_MAP,
+  isDetailedMuscle,
+  isStandardMuscle,
+  legacyToStandardMuscles,
+} from '@/types/schema';
 import { formatDuration, formatWeight, estimateE1RM } from '@/lib/utils';
 import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
+
+/** Per-muscle end-of-session feedback captured in the summary (0-3 scales). */
+export interface SessionMuscleFeedbackEntry {
+  muscleGroup: StandardMuscleGroup;
+  pump: PumpRating0to3;
+  workload: WorkloadRating;
+}
+
+const PUMP_CHIP_OPTIONS: { value: PumpRating0to3; label: string }[] = [
+  { value: 0, label: 'None' },
+  { value: 1, label: 'Mild' },
+  { value: 2, label: 'Good' },
+  { value: 3, label: 'Extreme' },
+];
+
+const WORKLOAD_CHIP_OPTIONS: { value: WorkloadRating; label: string }[] = [
+  { value: 0, label: 'Too easy' },
+  { value: 1, label: 'Just right' },
+  { value: 2, label: 'Pushed it' },
+  { value: 3, label: 'Too much' },
+];
+
+const DEFAULT_MUSCLE_RATING = { pump: 1 as PumpRating0to3, workload: 1 as WorkloadRating };
+
+/** Resolve a raw primaryMuscle string (detailed/standard/legacy) to a StandardMuscleGroup. */
+function resolveStandardMuscle(raw: string | undefined): StandardMuscleGroup | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (isDetailedMuscle(lower)) return DETAILED_TO_STANDARD_MAP[lower];
+  if (isStandardMuscle(lower)) return lower;
+  const legacy = legacyToStandardMuscles(lower);
+  return legacy.length > 0 ? legacy[0] : null;
+}
 
 interface ExerciseWithHistory {
   exerciseId: string;
@@ -40,6 +90,8 @@ interface SessionSummaryProps {
     sessionRpe: number;
     pumpRating: number;
     notes: string;
+    /** Per-muscle pump/workload chips (defaults 1/1 submit as-is when untouched). */
+    muscleFeedback: SessionMuscleFeedbackEntry[];
   }) => void;
   readOnly?: boolean;
 }
@@ -78,6 +130,10 @@ export function SessionSummary({
   const [sessionRpe, setSessionRpe] = useState(session.sessionRpe || 7);
   const [pumpRating, setPumpRating] = useState(session.pumpRating || 3);
   const [notes, setNotes] = useState(session.sessionNotes || '');
+  // Per-muscle pump/workload overrides; muscles not in the map use the 1/1 default.
+  const [muscleRatings, setMuscleRatings] = useState<
+    Partial<Record<StandardMuscleGroup, { pump: PumpRating0to3; workload: WorkloadRating }>>
+  >({});
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [showExerciseDetails, setShowExerciseDetails] = useState(true);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
@@ -320,6 +376,38 @@ export function SessionSummary({
     }).filter(e => e.sets.length > 0); // Only show exercises with completed sets
   }, [exerciseBlocks, workingSets, allSets, exerciseHistories]);
 
+  // Muscles trained this session (blocks with at least one working set),
+  // resolved to standard muscle groups — drives the per-muscle feedback rows.
+  const trainedMuscles = useMemo<StandardMuscleGroup[]>(() => {
+    const seen = new Set<StandardMuscleGroup>();
+    const muscles: StandardMuscleGroup[] = [];
+    exerciseBlocks.forEach((block) => {
+      const hasWorkingSets = workingSets.some((s) => s.exerciseBlockId === block.id);
+      if (!hasWorkingSets) return;
+      const raw = (block as ExerciseBlock & { exercise?: { primaryMuscle?: string } })
+        .exercise?.primaryMuscle;
+      const muscle = resolveStandardMuscle(raw);
+      if (muscle && !seen.has(muscle)) {
+        seen.add(muscle);
+        muscles.push(muscle);
+      }
+    });
+    return muscles;
+  }, [exerciseBlocks, workingSets]);
+
+  const getMuscleRating = (muscle: StandardMuscleGroup) =>
+    muscleRatings[muscle] ?? DEFAULT_MUSCLE_RATING;
+
+  const setMuscleRating = (
+    muscle: StandardMuscleGroup,
+    patch: Partial<{ pump: PumpRating0to3; workload: WorkloadRating }>
+  ) => {
+    setMuscleRatings((prev) => ({
+      ...prev,
+      [muscle]: { ...(prev[muscle] ?? DEFAULT_MUSCLE_RATING), ...patch },
+    }));
+  };
+
   const toggleExerciseExpanded = (blockId: string) => {
     setExpandedExercises(prev => {
       const next = new Set(prev);
@@ -338,6 +426,10 @@ export function SessionSummary({
         sessionRpe,
         pumpRating,
         notes,
+        muscleFeedback: trainedMuscles.map((muscle) => ({
+          muscleGroup: muscle,
+          ...getMuscleRating(muscle),
+        })),
       });
     }
   };
@@ -972,6 +1064,64 @@ export function SessionSummary({
           </>
         )}
       </Card>
+
+      {/* Per-muscle pump/workload feedback (drives weekly set progression) */}
+      {!readOnly && trainedMuscles.length > 0 && (
+        <Card>
+          <h3 className="text-[15px] font-medium text-surface-200 mb-1">
+            How did each muscle feel?
+          </h3>
+          <p className="text-xs text-surface-500 mb-3">
+            Tunes next week&apos;s sets — defaults are fine if nothing stood out.
+          </p>
+          <div className="space-y-3">
+            {trainedMuscles.map((muscle) => {
+              const rating = getMuscleRating(muscle);
+              return (
+                <div key={muscle} className="space-y-1.5">
+                  <p className="text-xs font-medium text-surface-300">
+                    {STANDARD_MUSCLE_DISPLAY_NAMES[muscle]}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-surface-500 w-14 shrink-0">Pump</span>
+                      {PUMP_CHIP_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setMuscleRating(muscle, { pump: option.value })}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            rating.pump === option.value
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-surface-500 w-14 shrink-0">Workload</span>
+                      {WORKLOAD_CHIP_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setMuscleRating(muscle, { workload: option.value })}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                            rating.workload === option.value
+                              ? 'bg-primary-500 text-white'
+                              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {/* Notes */}
       {(notes || !readOnly) && (

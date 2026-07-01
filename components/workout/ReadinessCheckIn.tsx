@@ -2,8 +2,26 @@
 
 import { useState, useEffect } from 'react';
 import { Button, Card, Slider, Badge } from '@/components/ui';
-import type { PreWorkoutCheckIn, Rating, TemporaryInjury, WeightUnit } from '@/types/schema';
+import type {
+  PreWorkoutCheckIn,
+  Rating,
+  TemporaryInjury,
+  WeightUnit,
+  StandardMuscleGroup,
+  SorenessRating,
+} from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import { calculateReadinessScore, getReadinessInterpretation } from '@/services/fatigueEngine';
+
+/** Muscle soreness ratings keyed by muscle; unrated muscles are simply absent. */
+export type MuscleSorenessRatings = Partial<Record<StandardMuscleGroup, SorenessRating>>;
+
+const SORENESS_CHIP_OPTIONS: { value: SorenessRating; label: string }[] = [
+  { value: 0, label: 'None' },
+  { value: 1, label: 'Mild' },
+  { value: 2, label: 'Sore' },
+  { value: 3, label: 'Still very sore' },
+];
 
 // Injury area options with display names
 const INJURY_AREAS: { value: TemporaryInjury['area']; label: string; icon: string }[] = [
@@ -39,12 +57,18 @@ interface TodayNutrition {
 }
 
 interface ReadinessCheckInProps {
-  onSubmit: (checkIn: PreWorkoutCheckIn) => void;
+  onSubmit: (checkIn: PreWorkoutCheckIn, sorenessRatings?: MuscleSorenessRatings) => void;
   onSkip?: () => void;
   onSkipPermanently?: () => void;
   unit?: WeightUnit;
   todayNutrition?: TodayNutrition;
   userGoal?: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
+  /**
+   * Muscles on today's menu that were also trained in a completed session in
+   * the last few days — shows optional "How sore is X?" chip rows. The ratings
+   * are passed back via onSubmit's second argument (no defaults; skippable).
+   */
+  sorenessMuscles?: StandardMuscleGroup[];
   // Initial values from daily check-in and weight log
   initialValues?: {
     sleepHours?: number | null;
@@ -56,7 +80,7 @@ interface ReadinessCheckInProps {
   };
 }
 
-export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition, userGoal, initialValues }: ReadinessCheckInProps) {
+export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = 'kg', todayNutrition, userGoal, sorenessMuscles, initialValues }: ReadinessCheckInProps) {
   // Initialize with daily check-in data if available
   const [sleepHours, setSleepHours] = useState(initialValues?.sleepHours ?? 7);
   const [sleepQuality, setSleepQuality] = useState<Rating>(initialValues?.sleepQuality ?? 3);
@@ -68,6 +92,9 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
     : '';
   const [bodyweight, setBodyweight] = useState(initialBodyweight);
   
+  // Per-muscle soreness — intentionally no defaults (null = not rated).
+  const [sorenessRatings, setSorenessRatings] = useState<MuscleSorenessRatings>({});
+
   const [showInjurySection, setShowInjurySection] = useState(false);
   const [temporaryInjuries, setTemporaryInjuries] = useState<TemporaryInjury[]>([]);
   const [selectedArea, setSelectedArea] = useState<TemporaryInjury['area'] | ''>('');
@@ -137,6 +164,18 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
   
   const nutritionRating = getNutritionRating();
 
+  const toggleSoreness = (muscle: StandardMuscleGroup, value: SorenessRating) => {
+    setSorenessRatings((prev) => {
+      if (prev[muscle] === value) {
+        // Tap again to un-rate (skippable — null means "not rated").
+        const next = { ...prev };
+        delete next[muscle];
+        return next;
+      }
+      return { ...prev, [muscle]: value };
+    });
+  };
+
   const addInjury = () => {
     if (selectedArea) {
       // Check if already added
@@ -201,7 +240,10 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
         refeedRecommended,
       }),
     };
-    onSubmit(checkIn);
+    onSubmit(
+      checkIn,
+      Object.keys(sorenessRatings).length > 0 ? sorenessRatings : undefined
+    );
   };
 
   const getRatingLabel = (rating: Rating, type: 'sleep' | 'stress' | 'nutrition' | 'focus' | 'libido') => {
@@ -307,6 +349,42 @@ export function ReadinessCheckIn({ onSubmit, onSkip, onSkipPermanently, unit = '
           </div>
           <p className="text-xs text-surface-500 mt-1">1 = Very High Stress, 5 = Very Low Stress</p>
         </div>
+
+        {/* Muscle soreness from the last session hitting today's muscles */}
+        {sorenessMuscles && sorenessMuscles.length > 0 && (
+          <div>
+            <label className="text-[15px] font-medium text-surface-200">
+              Muscle soreness
+            </label>
+            <p className="text-xs text-surface-500 mt-0.5 mb-2">
+              From your recent training — helps tune next week&apos;s volume (optional)
+            </p>
+            <div className="space-y-2.5">
+              {sorenessMuscles.map((muscle) => (
+                <div key={muscle} className="space-y-1">
+                  <p className="text-xs font-medium text-surface-300">
+                    How sore is your {STANDARD_MUSCLE_DISPLAY_NAMES[muscle].toLowerCase()}?
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {SORENESS_CHIP_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => toggleSoreness(muscle, option.value)}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          sorenessRatings[muscle] === option.value
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Cut-specific: Focus & Libido (for refeed detection) */}
         {isOnCut && (

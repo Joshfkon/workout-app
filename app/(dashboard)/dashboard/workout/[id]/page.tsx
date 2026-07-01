@@ -28,7 +28,9 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup } from '@/types/schema';
+import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
+import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
@@ -69,6 +71,14 @@ import {
   mapWorkoutSessionRow,
   type LoadedBlockRow,
 } from './_lib/sessionMapping';
+import {
+  fetchRecentMuscleSessions,
+  resolvePrimaryMuscle,
+  upsertSessionMuscleFeedback,
+  type RecentMuscleSession,
+} from './_lib/muscleFeedbackWrites';
+import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
+import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
 import type {
   AvailableExercise,
   CalibratedLift,
@@ -271,6 +281,11 @@ export default function WorkoutPage() {
   // Injury report modal state
   const [showInjuryModal, setShowInjuryModal] = useState(false);
   const [showReadinessModal, setShowReadinessModal] = useState(false);
+  // Per-muscle "previous session" lookup for the check-in soreness rows:
+  // muscles on today's menu that a completed session trained in the last 4 days.
+  const [recentMuscleSessions, setRecentMuscleSessions] = useState<
+    Partial<Record<StandardMuscleGroup, RecentMuscleSession>>
+  >({});
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [showPlateCalculator, setShowPlateCalculator] = useState(false);
   const [plateCalculatorWeight, setPlateCalculatorWeight] = useState<number | undefined>(undefined);
@@ -1198,6 +1213,61 @@ export default function WorkoutPage() {
       console.error('[AI Coach Notes] Failed to regenerate:', error);
     } finally {
       setIsLoadingAiNotes(false);
+    }
+  };
+
+  // When the readiness check-in opens, look up which of today's muscles were
+  // trained in a completed session in the last 4 days — those get "How sore
+  // is X?" rows, written back onto the PREVIOUS session's feedback row.
+  useEffect(() => {
+    if (!showReadinessModal || !session || blocks.length === 0) return;
+
+    const todayMuscles = Array.from(
+      new Set(
+        blocks
+          .map((b) => resolvePrimaryMuscle(b.exercise?.primaryMuscle))
+          .filter((m): m is StandardMuscleGroup => m !== null)
+      )
+    );
+    if (todayMuscles.length === 0) return;
+
+    let cancelled = false;
+    const supabase = createUntypedClient();
+    fetchRecentMuscleSessions(supabase, {
+      userId: session.userId,
+      muscles: todayMuscles,
+      excludeSessionId: session.id,
+    }).then(({ byMuscle, error: fetchError }) => {
+      if (fetchError) {
+        console.error('Failed to load recent muscle sessions:', fetchError);
+      }
+      if (!cancelled) setRecentMuscleSessions(byMuscle);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showReadinessModal, session, blocks]);
+
+  // Persist check-in soreness ratings onto each muscle's PREVIOUS session row.
+  const saveSorenessFeedback = async (sorenessRatings: MuscleSorenessRatings) => {
+    if (!session) return;
+    const writes = (
+      Object.entries(sorenessRatings) as Array<
+        [StandardMuscleGroup, MuscleSorenessRatings[StandardMuscleGroup]]
+      >
+    ).flatMap(([muscle, rating]) => {
+      const previous = recentMuscleSessions[muscle];
+      return previous && rating !== undefined
+        ? [{ sessionId: previous.sessionId, muscleGroup: muscle, sorenessBefore: rating }]
+        : [];
+    });
+    if (writes.length === 0) return;
+
+    const supabase = createUntypedClient();
+    const { errors } = await upsertSessionMuscleFeedback(supabase, session.userId, writes);
+    if (errors.length > 0) {
+      console.error('Failed to save muscle soreness feedback:', errors);
     }
   };
 
@@ -2808,10 +2878,15 @@ export default function WorkoutPage() {
     }
   };
 
-  const handleSummarySubmit = async (data: { sessionRpe: number; pumpRating: number; notes: string }) => {
+  const handleSummarySubmit = async (data: {
+    sessionRpe: number;
+    pumpRating: number;
+    notes: string;
+    muscleFeedback: SessionMuscleFeedbackEntry[];
+  }) => {
     try {
       const supabase = createUntypedClient();
-      
+
       // Update workout session
       await supabase
         .from('workout_sessions')
@@ -2824,6 +2899,88 @@ export default function WorkoutPage() {
           completion_percent: 100,
         })
         .eq('id', sessionId);
+
+      // Persist per-muscle pump/workload chips (weeklyProgressionEngine input).
+      // Non-blocking for the user: failures are logged, finishing still works.
+      if (session && data.muscleFeedback.length > 0) {
+        const { errors: feedbackErrors } = await upsertSessionMuscleFeedback(
+          supabase,
+          session.userId,
+          data.muscleFeedback.map((entry) => ({
+            sessionId,
+            muscleGroup: entry.muscleGroup,
+            pump: entry.pump,
+            workload: entry.workload,
+          }))
+        );
+        if (feedbackErrors.length > 0) {
+          console.error('Failed to save per-muscle feedback:', feedbackErrors);
+        }
+      }
+
+      // Deload trigger check (Phase 1.4). Log this week's fatigue signals to
+      // weekly_fatigue_logs (the data checkDeloadTriggers reads), then run the
+      // trigger check and stamp deload_recommended_at/deload_reasons on the
+      // mesocycle if it fires. Fire-and-forget: must never block or fail the
+      // finish flow.
+      if (session?.mesocycleId) {
+        const mesocycleId = session.mesocycleId;
+        const sessionUserId = session.userId;
+        const checkIn = session.preWorkoutCheckIn;
+        const sessionRpe = data.sessionRpe;
+        void (async () => {
+          try {
+            const { data: meso } = await supabase
+              .from('mesocycles')
+              .select('start_date, total_weeks')
+              .eq('id', mesocycleId)
+              .maybeSingle();
+
+            // Date-based week in mesocycle (matches how the page computes
+            // weekInMesocycle for coaching context). Distinct week numbers are
+            // what lets checkDeloadTriggers compare consecutive weeks.
+            const weekNumber = meso?.start_date
+              ? computeCurrentWeek(meso.start_date, meso.total_weeks ?? 1).week
+              : 1;
+
+            const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
+              userId: sessionUserId,
+              mesocycleId,
+              weekNumber,
+              readinessScore: checkIn?.readinessScore ?? 0,
+              sleepQuality: checkIn?.sleepQuality ?? null,
+              stressLevel: checkIn?.stressLevel ?? null,
+              sessionAvgRpe: sessionRpe,
+            });
+            if (!fatigueResult.ok) {
+              console.error('Failed to save weekly fatigue log:', fatigueResult.error);
+            }
+
+            // current_week was historically written only at creation (always 1),
+            // which silently disabled everything that reads it: the weekly
+            // rollover's deload-week hold, program-week modifiers at workout
+            // start, and deload-accept's current_week+1 targeting. Keep it in
+            // step with the date-derived week here, where we already computed it.
+            if (meso?.start_date) {
+              const { error: weekError } = await supabase
+                .from('mesocycles')
+                .update({ current_week: weekNumber })
+                .eq('id', mesocycleId)
+                .neq('current_week', weekNumber);
+              if (weekError) {
+                console.error('Failed to advance mesocycle current_week:', weekError);
+              }
+            }
+
+            const { recordDeloadRecommendationIfTriggered } = await import(
+              '@/lib/training/deloadRecommendation'
+            );
+            await recordDeloadRecommendationIfTriggered(supabase, sessionUserId, mesocycleId);
+          } catch (err) {
+            console.error('Post-session deload check failed:', err);
+          }
+        })();
+      }
 
       // Calculate and save workout calories (set-based HyperTracker method) in
       // the background. It runs several sequential DB round-trips and the
@@ -3908,14 +4065,18 @@ export default function WorkoutPage() {
         >
           <div className="max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <ReadinessCheckIn
-              onSubmit={async (data) => {
+              onSubmit={async (data, sorenessRatings) => {
                 await handleCheckInComplete(data, { startSession: false });
+                if (sorenessRatings) {
+                  await saveSorenessFeedback(sorenessRatings);
+                }
                 setShowReadinessModal(false);
               }}
               onSkip={() => setShowReadinessModal(false)}
               unit={preferences.units}
               todayNutrition={todayNutrition || undefined}
               userGoal={userGoal}
+              sorenessMuscles={Object.keys(recentMuscleSessions) as StandardMuscleGroup[]}
               initialValues={todayCheckInData || undefined}
             />
           </div>

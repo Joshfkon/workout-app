@@ -430,3 +430,31 @@ describe('exerciseSwapper', () => {
     });
   });
 });
+
+describe('estimateExerciseSFR', () => {
+  const { estimateExerciseSFR } = jest.requireActual('../exerciseSwapper');
+
+  it('returns the SFR for a known pattern/equipment pair', () => {
+    const sfr = estimateExerciseSFR(
+      createExercise({ movementPattern: 'squat', equipmentRequired: ['barbell'] })
+    );
+    expect(typeof sfr).toBe('number');
+    expect(sfr).toBeGreaterThan(0);
+  });
+
+  it('returns null for an unknown movement pattern (neutral, never penalized)', () => {
+    expect(
+      estimateExerciseSFR(
+        createExercise({ movementPattern: 'not-a-pattern', equipmentRequired: ['barbell'] })
+      )
+    ).toBeNull();
+  });
+
+  it('returns null when no listed equipment is covered by the SFR table', () => {
+    expect(
+      estimateExerciseSFR(
+        createExercise({ movementPattern: 'squat', equipmentRequired: ['resistance-band-of-unknown-kind'] })
+      )
+    ).toBeNull();
+  });
+});

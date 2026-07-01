@@ -670,3 +670,43 @@ export function getReadinessInterpretation(score: number): {
   };
 }
 
+
+// ============================================
+// READINESS -> SESSION MODULATION
+// ============================================
+
+export interface ReadinessModulation {
+  /** Added to every block's target RIR for this session (0 = unchanged). */
+  rirDelta: 0 | 1;
+  /** UI hint: offer dropping the last set of each exercise (never auto-applied). */
+  suggestSetReduction: boolean;
+  /** Banner copy for the workout header; null when nothing changes. */
+  banner: string | null;
+}
+
+/**
+ * Turn a readiness score (calculateReadinessScore, 0-100) into concrete,
+ * conservative session adjustments. Pure; the caller applies rirDelta to
+ * prescriptions and renders the banner with a "train as planned" override.
+ *
+ * <40  -> ease targets a full RIR and suggest trimming a set per exercise
+ * 40-55 -> ease targets a full RIR
+ * >=55 -> unchanged
+ */
+export function applyReadinessModulation(readinessScore: number): ReadinessModulation {
+  if (readinessScore < 40) {
+    return {
+      rirDelta: 1,
+      suggestSetReduction: true,
+      banner: 'Adjusted for low readiness — targets eased and shorter sessions suggested today',
+    };
+  }
+  if (readinessScore < 55) {
+    return {
+      rirDelta: 1,
+      suggestSetReduction: false,
+      banner: 'Adjusted for readiness — leaving one extra rep in reserve today',
+    };
+  }
+  return { rirDelta: 0, suggestSetReduction: false, banner: null };
+}

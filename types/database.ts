@@ -142,6 +142,8 @@ export interface Database {
           split_type: string;
           fatigue_score: number;
           session_duration_minutes: number | null;
+          deload_recommended_at: string | null;
+          deload_reasons: Json | null;
           created_at: string;
           started_at: string | null;
           completed_at: string | null;
@@ -158,6 +160,8 @@ export interface Database {
           split_type?: string;
           fatigue_score?: number;
           session_duration_minutes?: number | null;
+          deload_recommended_at?: string | null;
+          deload_reasons?: Json | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -174,6 +178,8 @@ export interface Database {
           split_type?: string;
           fatigue_score?: number;
           session_duration_minutes?: number | null;
+          deload_recommended_at?: string | null;
+          deload_reasons?: Json | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -222,6 +228,42 @@ export interface Database {
           pump_rating?: number | null;
           session_notes?: string | null;
           completion_percent?: number;
+        };
+        Relationships: [];
+      };
+      session_muscle_feedback: {
+        Row: {
+          id: string;
+          user_id: string;
+          session_id: string;
+          muscle_group: string;
+          soreness_before: number | null;
+          pump: number | null;
+          workload: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          session_id: string;
+          muscle_group: string;
+          soreness_before?: number | null;
+          pump?: number | null;
+          workload?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          session_id?: string;
+          muscle_group?: string;
+          soreness_before?: number | null;
+          pump?: number | null;
+          workload?: number | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
