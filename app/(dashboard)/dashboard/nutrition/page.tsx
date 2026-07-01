@@ -40,12 +40,13 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { IconSunrise, IconSun, IconMoon, IconApple, type Icon } from '@tabler/icons-react';
 
-const DEFAULT_MEAL_CONFIG: { type: MealType; label: string; emoji: string }[] = [
-  { type: 'breakfast', label: 'Breakfast', emoji: '🌅' },
-  { type: 'lunch', label: 'Lunch', emoji: '☀️' },
-  { type: 'dinner', label: 'Dinner', emoji: '🌙' },
-  { type: 'snack', label: 'Snacks', emoji: '🍎' },
+const DEFAULT_MEAL_CONFIG: { type: MealType; label: string; icon: Icon }[] = [
+  { type: 'breakfast', label: 'Breakfast', icon: IconSunrise },
+  { type: 'lunch', label: 'Lunch', icon: IconSun },
+  { type: 'dinner', label: 'Dinner', icon: IconMoon },
+  { type: 'snack', label: 'Snacks', icon: IconApple },
 ];
 
 function getMealConfig(customNames?: MealNames | null) {
@@ -1128,7 +1129,7 @@ export default function NutritionPage() {
             + Custom Food
           </Button>
           <Button variant="primary" onClick={() => setShowMacroCalculator(true)}>
-            🧮 Calculate Macros
+            Calculate Macros
           </Button>
           <Button variant="ghost" onClick={() => setShowTargetsModal(true)}>
             {nutritionTargets ? 'Edit' : 'Manual'}
@@ -1351,7 +1352,7 @@ export default function NutritionPage() {
                       size="sm"
                       onClick={() => setShowMacroCalculator(true)}
                     >
-                      🧮 Calculate My Macros
+                      Calculate My Macros
                     </Button>
                     <Button
                       variant="ghost"
@@ -1375,7 +1376,7 @@ export default function NutritionPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <span>{meal.emoji}</span>
+                  <meal.icon size={18} className="text-surface-400" aria-hidden="true" />
                   <span>{meal.label}</span>
                   {meal.entries.length > 0 && (
                     <Badge variant="info" className="ml-2">

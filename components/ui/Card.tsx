@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'elevated' | 'bordered' | 'ghost';
-  padding?: 'none' | 'sm' | 'md' | 'lg';
+  /** One density everywhere (p-4); 'none' is structural for flush-edge cards only. */
+  padding?: 'none' | 'md';
 }
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
@@ -19,9 +20,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
 
     const paddings = {
       none: '',
-      sm: 'p-3',
       md: 'p-4',
-      lg: 'p-6',
     };
 
     return (
@@ -60,7 +59,7 @@ const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingEleme
   ({ className, ...props }, ref) => (
     <h3
       ref={ref}
-      className={cn('text-lg font-semibold text-surface-100', className)}
+      className={cn('text-[15px] font-medium text-surface-100', className)}
       {...props}
     />
   )

@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/Select';
 import { searchFoods, getFoodDetails, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
 import { lookupBarcode as lookupBarcodeOFF, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { BarcodeScanner } from './BarcodeScanner';
+import { IconBolt, IconScan, IconFolder, IconPencil } from '@tabler/icons-react';
 import type { MealType, CustomFood, FrequentFood, SystemFood } from '@/types/nutrition';
 
 // Serving unit options for scanned foods
@@ -712,10 +713,10 @@ export function AddFoodModal({
         {/* Tabs */}
         <div className="flex gap-2 border-b border-surface-800 overflow-x-auto">
           {([
-            { id: 'quick' as Tab, label: '⚡ Quick Add' },
-            { id: 'barcode' as Tab, label: '📷 Barcode' },
-            { id: 'custom' as Tab, label: '📁 Custom' },
-            { id: 'manual' as Tab, label: '✏️ Manual' },
+            { id: 'quick' as Tab, label: 'Quick Add', icon: IconBolt },
+            { id: 'barcode' as Tab, label: 'Barcode', icon: IconScan },
+            { id: 'custom' as Tab, label: 'Custom', icon: IconFolder },
+            { id: 'manual' as Tab, label: 'Manual', icon: IconPencil },
           ]).map((tab) => (
             <button
               key={tab.id}
@@ -726,12 +727,13 @@ export function AddFoodModal({
                 setSelectedSystemFood(null);
                 setFilterQuery('');
               }}
-              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === tab.id
                   ? 'border-primary-500 text-primary-400'
                   : 'border-transparent text-surface-400 hover:text-surface-200'
               }`}
             >
+              <tab.icon size={15} aria-hidden="true" />
               {tab.label}
             </button>
           ))}

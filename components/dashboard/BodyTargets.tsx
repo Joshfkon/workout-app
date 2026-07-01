@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { IconTarget } from '@tabler/icons-react';
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Input, Modal } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { BodyCompositionTarget, MeasurementTargets, TargetProgress, Mesocycle } from '@/types/schema';
@@ -348,7 +349,7 @@ export function BodyTargets({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
-            <span>🎯</span> Body Composition Goals
+            <IconTarget size={16} className="text-surface-400" aria-hidden="true" /> Body Composition Goals
           </CardTitle>
           <div className="flex items-center gap-2">
             <div className="flex bg-surface-800 rounded-lg p-0.5">

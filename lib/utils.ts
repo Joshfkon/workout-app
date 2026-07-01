@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 import {
   rirToRpe as rirToRpeDiscrete,
   rpeToRir as rpeToRirDiscrete,
@@ -6,10 +7,12 @@ import {
 } from '@/types/schema';
 
 /**
- * Utility for merging class names conditionally
+ * Utility for merging class names conditionally.
+ * tailwind-merge resolves conflicting utilities (later classes win), so
+ * `cn('p-4', className)` lets callers deterministically override defaults.
  */
 export function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+  return twMerge(clsx(inputs));
 }
 
 /**

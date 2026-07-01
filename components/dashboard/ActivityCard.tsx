@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import Link from 'next/link';
+import { IconWalk } from '@tabler/icons-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -184,7 +185,7 @@ export const ActivityCard = memo(function ActivityCard({ userId }: ActivityCardP
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <span>👟</span> Today&apos;s Activity
+              <IconWalk size={16} className="text-surface-400" aria-hidden="true" /> Today&apos;s Activity
             </CardTitle>
             <div className="flex items-center gap-1">
               {hasWearable && (

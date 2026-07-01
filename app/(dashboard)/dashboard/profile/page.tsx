@@ -128,7 +128,7 @@ export default function MyProfilePage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
       {/* Profile Header */}
-      <Card padding="lg">
+      <Card>
         <div className="flex items-start gap-4">
           <Avatar
             src={profile.avatar_url}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, memo } from 'react';
+import { IconDroplet } from '@tabler/icons-react';
 import { Card, CardHeader, CardTitle, CardContent, Button } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
@@ -131,7 +132,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center justify-between">
           <span className="flex items-center gap-2">
-            💧 Hydration
+            <IconDroplet size={16} className="text-surface-400" aria-hidden="true" /> Hydration
           </span>
           <span className={`text-xs ${trackingStatus.color} flex items-center gap-1`}>
             {trackingStatus.emoji} {trackingStatus.label}
@@ -185,7 +186,7 @@ export const HydrationTracker = memo(function HydrationTracker({ userId, unit = 
           </div>
           {/* Water drop visual */}
           <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-            <span className="text-2xl">💧</span>
+            <IconDroplet size={24} className="text-blue-400" aria-hidden="true" />
           </div>
         </div>
 

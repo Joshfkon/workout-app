@@ -28,14 +28,14 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, SetType, ExerciseType } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType } from '@/types/schema';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
-import { computeStapleExerciseIds, isDefaultVisibleExercise } from '@/services/exerciseStaples';
+import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
@@ -56,31 +56,29 @@ import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
-
-type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'error';
-
-interface ExerciseBlockWithExercise extends ExerciseBlock {
-  exercise: Exercise;
-}
-
-interface AvailableExercise {
-  id: string;
-  name: string;
-  primary_muscle: string;
-  secondary_muscles?: string[];
-  mechanic: 'compound' | 'isolation';
-  equipment_required?: string[];
-  default_rep_range?: [number, number];
-  default_rir?: number;
-  is_bodyweight?: boolean;
-  hypertrophy_tier?: string | null;
-}
-
-interface GymLocation {
-  id: string;
-  name: string;
-  is_default: boolean;
-}
+import { WorkoutHeader } from './_components/WorkoutHeader';
+import { AddExercisePicker } from './_components/AddExercisePicker';
+import {
+  buildExerciseHistories,
+  fetchExerciseHistory,
+  generateCoachMessage,
+} from './_lib/suggestions';
+import {
+  mapLoadedBlockRow,
+  mapSetLogRow,
+  mapWorkoutSessionRow,
+  type LoadedBlockRow,
+} from './_lib/sessionMapping';
+import type {
+  AvailableExercise,
+  CalibratedLift,
+  ExerciseBlockWithExercise,
+  ExerciseHistoryData,
+  GymLocation,
+  UserContext,
+  UserProfileForWeights,
+  WorkoutPhase,
+} from './_lib/types';
 
 // Equipment mapping for filtering exercises based on available equipment at a location
 const EQUIPMENT_MAPPING: Record<string, string[]> = {
@@ -125,46 +123,6 @@ const EQUIPMENT_MAPPING: Record<string, string[]> = {
   foam_roller: ['foam roller', 'roller'],
 };
 
-// Normalize exercise search terms for better matching
-// Handles variations like "situps" vs "sit up" vs "sit-up"
-function normalizeForSearch(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[-\s]/g, '')  // Remove hyphens and spaces
-    .replace(/s$/, '');     // Remove trailing 's' for basic plural handling
-}
-
-interface CalibratedLift {
-  lift_name: string;
-  estimated_1rm: number;
-  tested_at: string;
-}
-
-interface UserProfileForWeights {
-  weightKg: number;
-  heightCm: number;
-  bodyFatPercent: number;
-  experience: 'novice' | 'intermediate' | 'advanced';
-  regionalData?: DexaRegionalData;
-  calibratedLifts?: CalibratedLift[];
-}
-
-interface UserContext {
-  goal?: 'bulk' | 'cut' | 'recomp' | 'maintain';
-  laggingAreas?: string[];  // From regional DEXA analysis
-  recentPlateaus?: string[];  // Exercise names with recent plateaus
-  weekInMesocycle?: number;
-  mesocycleName?: string;
-}
-
-interface ExerciseHistoryData {
-  lastWorkoutDate: string;
-  lastWorkoutSets: { weightKg: number; reps: number; rpe?: number }[];
-  estimatedE1RM: number;
-  personalRecord: { weightKg: number; reps: number; e1rm: number; date: string } | null;
-  totalSessions: number;
-}
-
 // Wrapper to convert injuries array to get risk info using new intelligent swapper
 function getExerciseInjuryRisk(
   exercise: Exercise, 
@@ -195,358 +153,6 @@ function getExerciseInjuryRisk(
     severity: maxSeverity,
     reasons: Array.from(new Set(reasons)),
     risk: worstRisk
-  };
-}
-
-// Calculate E1RM using Brzycki formula
-// RPE adjusts for reps in reserve: effectiveReps = reps + (10 - rpe)
-function calculateE1RM(weight: number, reps: number, rpe: number = 10): number {
-  if (reps === 1 && rpe === 10) return weight;
-  // Account for reps in reserve when RPE < 10
-  const effectiveReps = rpe ? reps + (10 - rpe) : reps;
-  if (effectiveReps > 12) return weight * (1 + effectiveReps / 30);
-  return weight * (36 / (37 - effectiveReps));
-}
-
-/**
- * Fetch exercise history for a specific exercise ID.
- * Used when adding a new exercise mid-workout that wasn't in the original query.
- */
-async function fetchExerciseHistory(
-  exerciseId: string,
-  userId: string
-): Promise<ExerciseHistoryData | null> {
-  const supabase = createUntypedClient();
-
-  const { data: historyBlocks, error } = await supabase
-    .from('exercise_blocks')
-    .select(`
-      id,
-      exercise_id,
-      workout_sessions!inner (
-        id,
-        completed_at,
-        state,
-        user_id
-      ),
-      set_logs (
-        weight_kg,
-        reps,
-        rpe,
-        is_warmup,
-        set_number,
-        set_type,
-        logged_at
-      )
-    `)
-    .eq('exercise_id', exerciseId)
-    .eq('workout_sessions.user_id', userId)
-    .eq('workout_sessions.state', 'completed')
-    .order('workout_sessions(completed_at)', { ascending: false })
-    .limit(10);
-
-  if (error || !historyBlocks || historyBlocks.length === 0) {
-    return null;
-  }
-
-  let bestE1RM = 0;
-  let personalRecord: ExerciseHistoryData['personalRecord'] = null;
-  let totalSessions = 0;
-  const seenSessions = new Set<string>();
-
-  // Get last workout data
-  const lastBlock = historyBlocks[0];
-  const lastSession = lastBlock.workout_sessions as any;
-  const lastSets = ((lastBlock.set_logs as any[]) || [])
-    // Only normal working sets, ordered by set_number — so previousSets[i] maps to
-    // the prior workout's i-th working set (not a dropset/rest-pause or DB-ordering quirk).
-    .filter((s: any) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
-    .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
-    .map((s: any) => ({
-      weightKg: s.weight_kg,
-      reps: s.reps,
-      rpe: s.rpe,
-    }));
-
-  // Calculate best E1RM and PR
-  historyBlocks.forEach((block: any) => {
-    const session = block.workout_sessions;
-    if (session && !seenSessions.has(session.id)) {
-      seenSessions.add(session.id);
-      totalSessions++;
-    }
-
-    const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-    sets.forEach((set: any) => {
-      const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
-      if (e1rm > bestE1RM) {
-        bestE1RM = e1rm;
-        personalRecord = {
-          weightKg: set.weight_kg,
-          reps: set.reps,
-          e1rm,
-          date: session?.completed_at || set.logged_at,
-        };
-      }
-    });
-  });
-
-  return {
-    lastWorkoutDate: lastSession?.completed_at || '',
-    lastWorkoutSets: lastSets,
-    estimatedE1RM: bestE1RM,
-    personalRecord,
-    totalSessions,
-  };
-}
-
-// Generate coach message based on workout structure and user context
-function generateCoachMessage(
-  blocks: ExerciseBlockWithExercise[],
-  userProfile?: UserProfileForWeights,
-  userContext?: UserContext,
-  unit: 'kg' | 'lb' = 'kg',
-  exerciseHistories?: Record<string, ExerciseHistoryData>
-): {
-  greeting: string;
-  overview: string;
-  personalizedInsight?: string;
-  exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[];
-  tips: string[];
-} {
-  if (blocks.length === 0) {
-    return {
-      greeting: "Let's get started!",
-      overview: "Your workout is ready.",
-      exerciseNotes: [],
-      tips: [],
-    };
-  }
-
-  // Analyze workout structure
-  const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
-  const compoundCount = blocks.filter(b => b.exercise.mechanic === 'compound').length;
-  const isolationCount = blocks.filter(b => b.exercise.mechanic === 'isolation').length;
-  const totalSets = blocks.reduce((sum, b) => sum + b.targetSets, 0);
-
-  // Determine workout type
-  let workoutType = '';
-  if (muscles.length >= 5) workoutType = 'Full Body';
-  else if (muscles.includes('chest') && muscles.includes('back')) workoutType = 'Upper Body';
-  else if (muscles.includes('quads') && muscles.includes('hamstrings')) workoutType = 'Lower Body';
-  else if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) workoutType = 'Push';
-  else if (muscles.includes('back') && muscles.includes('biceps')) workoutType = 'Pull';
-  else workoutType = muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
-
-  // Generate greeting based on time of day and goal
-  const hour = new Date().getHours();
-  let timeGreeting = 'Hey';
-  if (hour < 12) timeGreeting = 'Good morning';
-  else if (hour < 17) timeGreeting = 'Good afternoon';
-  else timeGreeting = 'Good evening';
-
-  // Personalize greeting based on goal
-  let goalPhrase = '';
-  if (userContext?.goal === 'bulk') {
-    goalPhrase = 'Time to build! 💪';
-  } else if (userContext?.goal === 'cut') {
-    goalPhrase = 'Stay strong in your cut! 🔥';
-  } else if (userContext?.goal === 'recomp') {
-    goalPhrase = 'Building while leaning out! 💎';
-  }
-
-  const greetings = goalPhrase
-    ? [`${timeGreeting}! ${goalPhrase} Today's ${workoutType} workout is ready.`]
-    : [
-        `${timeGreeting}! Ready to crush this ${workoutType} session? 💪`,
-        `${timeGreeting}! Today's ${workoutType} workout is designed for maximum gains.`,
-        `${timeGreeting}! Let's make this ${workoutType} session count!`,
-      ];
-
-  // Generate personalized insight based on context
-  let personalizedInsight: string | undefined;
-  const insights: string[] = [];
-
-  // Goal-specific insights
-  if (userContext?.goal === 'bulk') {
-    insights.push(`Since you're bulking, prioritize progressive overload—try to add a rep or small weight increase today.`);
-    if (totalSets > 20) {
-      insights.push(`High volume today (${totalSets} sets) is perfect for your bulk. Make sure you're eating enough to recover!`);
-    }
-  } else if (userContext?.goal === 'cut') {
-    insights.push(`During your cut, maintaining intensity is key to preserving muscle. Don't drop the weight—keep it heavy, just manage volume.`);
-    if (compoundCount > 2) {
-      insights.push(`The compound focus helps maintain strength while in a deficit. If energy is low, prioritize these over isolation work.`);
-    }
-  }
-
-  // Lagging area insights
-  if (userContext?.laggingAreas && userContext.laggingAreas.length > 0) {
-    const laggingMusclesInWorkout = userContext.laggingAreas.filter(area => {
-      const areaLower = area.toLowerCase();
-      return muscles.some(m => {
-        if (areaLower.includes('arm')) return m === 'biceps' || m === 'triceps';
-        if (areaLower.includes('leg')) return m === 'quads' || m === 'hamstrings' || m === 'glutes' || m === 'calves';
-        if (areaLower.includes('trunk')) return m === 'chest' || m === 'back' || m === 'shoulders';
-        return areaLower.includes(m);
-      });
-    });
-    
-    if (laggingMusclesInWorkout.length > 0) {
-      insights.push(`📊 Your DEXA showed ${laggingMusclesInWorkout.join(', ')} as areas to bring up. Focus on mind-muscle connection and full ROM on those exercises today.`);
-    }
-  }
-
-  // Plateau insights
-  if (userContext?.recentPlateaus && userContext.recentPlateaus.length > 0) {
-    const plateauExercisesInWorkout = userContext.recentPlateaus.filter(ex => 
-      blocks.some(b => b.exercise.name.toLowerCase().includes(ex.toLowerCase()))
-    );
-    
-    if (plateauExercisesInWorkout.length > 0) {
-      insights.push(`⚠️ You've hit a plateau on ${plateauExercisesInWorkout.join(', ')}. Today, try a slightly different rep range or tempo to break through.`);
-    }
-  }
-
-  // Week in mesocycle insights
-  if (userContext?.weekInMesocycle) {
-    if (userContext.weekInMesocycle === 1) {
-      insights.push(`Week 1 of your ${userContext.mesocycleName || 'mesocycle'}—find your working weights and focus on form. Leave 2-3 reps in reserve.`);
-    } else if (userContext.weekInMesocycle >= 4) {
-      insights.push(`Week ${userContext.weekInMesocycle}—you should be approaching peak intensity. Push close to failure on your last sets!`);
-    }
-  }
-
-  // Combine insights
-  if (insights.length > 0) {
-    personalizedInsight = insights.slice(0, 2).join(' ');  // Max 2 insights to avoid overwhelm
-  }
-
-  // Generate overview
-  let overviewBase = `${totalSets} total sets across ${blocks.length} exercises. `;
-  if (compoundCount > 0) {
-    overviewBase += `Starting with ${compoundCount} compound movement${compoundCount > 1 ? 's' : ''} for strength, `;
-  }
-  if (isolationCount > 0) {
-    overviewBase += `then ${isolationCount} isolation exercise${isolationCount > 1 ? 's' : ''} for targeted work.`;
-  }
-
-  const overviews = [overviewBase];
-
-  // Generate exercise-specific notes
-  const exerciseNotes: { name: string; reason: string; weightRec?: WorkingWeightRecommendation }[] = [];
-  
-  blocks.forEach((block, idx) => {
-    const ex = block.exercise;
-    const repRange = block.targetRepRange;
-    const isFirst = idx === 0;
-    const isCompound = ex.mechanic === 'compound';
-    
-    let reason = '';
-    
-    if (isFirst && isCompound) {
-      reason = `Leading with this compound to maximize neural drive while fresh. ${repRange[0]}-${repRange[1]} reps keeps intensity high for strength gains.`;
-    } else if (isCompound) {
-      reason = `Heavy compound for overall ${ex.primaryMuscle} development. Rep range of ${repRange[0]}-${repRange[1]} balances strength and hypertrophy.`;
-    } else if (idx >= blocks.length - 2) {
-      reason = `Finishing with isolation to fully fatigue the ${ex.primaryMuscle}. Higher reps (${repRange[0]}-${repRange[1]}) for metabolic stress and pump.`;
-    } else {
-      reason = `Targeted ${ex.primaryMuscle} work. ${repRange[0]}-${repRange[1]} reps optimized for muscle fiber type.`;
-    }
-
-    // Add specific notes based on muscle
-    if (ex.primaryMuscle === 'calves') {
-      reason += ' Calves are slow-twitch dominant—higher reps with controlled tempo work best.';
-    } else if (ex.primaryMuscle === 'hamstrings') {
-      reason += ' Hamstrings are fast-twitch dominant—heavier loads with full stretch.';
-    }
-
-    // Get weight recommendation if user profile available
-    let weightRec: WorkingWeightRecommendation | undefined;
-    if (userProfile && userProfile.weightKg > 0 && userProfile.heightCm > 0) {
-      try {
-        // Get known E1RM from exercise history if available
-        // This provides much more accurate suggestions than bodyweight-based estimation
-        const exerciseHistory = exerciseHistories?.[block.exerciseId];
-        const knownE1RM = exerciseHistory?.estimatedE1RM;
-
-        // Use calibration data if available for more accurate estimates
-        if (userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0) {
-          weightRec = quickWeightEstimateWithCalibration(
-            ex.name,
-            { min: repRange[0], max: repRange[1] },
-            block.targetRir || 2,
-            userProfile.weightKg,
-            userProfile.heightCm,
-            userProfile.bodyFatPercent || 20,
-            userProfile.experience,
-            userProfile.calibratedLifts,
-            userProfile.regionalData,
-            unit,
-            knownE1RM
-          );
-        } else {
-          weightRec = quickWeightEstimate(
-            ex.name,
-            { min: repRange[0], max: repRange[1] },
-            block.targetRir || 2,
-            userProfile.weightKg,
-            userProfile.heightCm,
-            userProfile.bodyFatPercent || 20,
-            userProfile.experience,
-            userProfile.regionalData,
-            unit,
-            knownE1RM
-          );
-        }
-      } catch (e) {
-        // Silently fail if weight estimation fails
-      }
-    }
-
-    exerciseNotes.push({ name: ex.name, reason, weightRec });
-  });
-
-  // Generate tips based on goal and workout
-  const tips: string[] = [];
-  
-  // Goal-specific tips
-  if (userContext?.goal === 'cut') {
-    tips.push('💡 In a cut: Keep intensity high but listen to your body. Lower energy is normal—prioritize compounds if needed.');
-  } else if (userContext?.goal === 'bulk') {
-    tips.push('💡 In a bulk: Push for progressive overload—even one extra rep counts toward gains!');
-  }
-  
-  if (compoundCount > 0) {
-    tips.push('Take full rest (2-3 min) between compound sets to maintain strength.');
-  }
-  if (isolationCount > 0) {
-    tips.push('Shorter rest (60-90 sec) for isolation work to keep metabolic stress high.');
-  }
-  if (blocks.some(b => b.exercise.primaryMuscle === 'back')) {
-    tips.push('Focus on initiating pulls with your elbows, not your hands—better lat activation.');
-  }
-  if (blocks.some(b => b.exercise.primaryMuscle === 'chest')) {
-    tips.push('Squeeze at the top of each rep and control the eccentric for chest exercises.');
-  }
-  if (blocks.some(b => b.exercise.primaryMuscle === 'biceps' || b.exercise.primaryMuscle === 'triceps')) {
-    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('arm'))) {
-      tips.push('🎯 Arms are a focus area—slow eccentrics (3 sec) boost time under tension for growth.');
-    }
-  }
-  if (blocks.some(b => b.exercise.primaryMuscle === 'quads' || b.exercise.primaryMuscle === 'hamstrings')) {
-    if (userContext?.laggingAreas?.some(a => a.toLowerCase().includes('leg'))) {
-      tips.push('🎯 Legs are a focus area—full depth and controlled negatives maximize stimulus.');
-    }
-  }
-  tips.push('Log your RPE honestly—it helps the app optimize your future workouts.');
-
-  return {
-    greeting: greetings[Math.floor(Math.random() * greetings.length)],
-    overview: overviews[0],  // Use the personalized overview
-    personalizedInsight,
-    exerciseNotes,
-    tips: tips.slice(0, 4), // Limit to 4 tips
   };
 }
 
@@ -858,79 +464,12 @@ export default function WorkoutPage() {
         }
         if (blocksError) throw blocksError;
 
-        // Transform data
-        const transformedSession: WorkoutSession = {
-          id: sessionData.id,
-          userId: sessionData.user_id,
-          mesocycleId: sessionData.mesocycle_id,
-          state: sessionData.state,
-          plannedDate: sessionData.planned_date,
-          startedAt: sessionData.started_at,
-          completedAt: sessionData.completed_at,
-          preWorkoutCheckIn: sessionData.pre_workout_check_in,
-          sessionRpe: sessionData.session_rpe,
-          pumpRating: sessionData.pump_rating,
-          sessionNotes: sessionData.session_notes,
-          completionPercent: sessionData.completion_percent,
-        };
+        // Transform data (row → domain mapping lives in ./_lib/sessionMapping)
+        const transformedSession: WorkoutSession = mapWorkoutSessionRow(sessionData);
 
         const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
-          .filter((block: any) => block.exercises) // Filter out blocks without exercises
-          .map((block: any) => ({
-            id: block.id,
-            workoutSessionId: block.workout_session_id,
-            exerciseId: block.exercise_id,
-            order: block.order,
-            supersetGroupId: block.superset_group_id,
-            supersetOrder: block.superset_order,
-            targetSets: block.target_sets,
-            targetRepRange: block.target_rep_range,
-            targetRir: block.target_rir,
-            targetWeightKg: block.target_weight_kg,
-            targetRestSeconds: block.target_rest_seconds,
-            progressionType: block.progression_type,
-            suggestionReason: block.suggestion_reason,
-            warmupProtocol: block.warmup_protocol?.sets || [],
-            note: block.note,
-            dropsetsPerSet: block.dropsets_per_set ?? 0,
-            dropPercentage: block.drop_percentage ?? 0.25,
-            exercise: {
-              id: block.exercises.id,
-              name: block.exercises.name,
-              primaryMuscle: block.exercises.primary_muscle,
-              secondaryMuscles: block.exercises.secondary_muscles || [],
-              mechanic: block.exercises.mechanic,
-              defaultRepRange: block.exercises.default_rep_range || [8, 12],
-              defaultRir: block.exercises.default_rir || 2,
-              minWeightIncrementKg: block.exercises.min_weight_increment_kg || 2.5,
-              formCues: block.exercises.form_cues || [],
-              commonMistakes: block.exercises.common_mistakes || [],
-              setupNote: block.exercises.setup_note || '',
-              movementPattern: block.exercises.movement_pattern || '',
-              equipmentRequired: block.exercises.equipment_required || [],
-              equipment: block.exercises.equipment || (block.exercises.equipment_required?.[0] || 'barbell'),
-              // Include hypertrophy scoring for tier badges
-              hypertrophyScore: block.exercises.hypertrophy_tier ? {
-                tier: block.exercises.hypertrophy_tier,
-                stretchUnderLoad: block.exercises.stretch_under_load || 3,
-                resistanceProfile: block.exercises.resistance_profile || 3,
-                progressionEase: block.exercises.progression_ease || 3,
-              } : undefined,
-              // Bodyweight exercise metadata
-              // Check is_bodyweight column first, then fall back to equipment field, then equipment_required array
-              isBodyweight: (block.exercises.is_bodyweight as boolean) ?? 
-                           (block.exercises.equipment === 'bodyweight' || 
-                            (block.exercises.equipment_required && block.exercises.equipment_required.includes('bodyweight'))),
-              bodyweightType: block.exercises.bodyweight_type as 'pure' | 'weighted_possible' | 'assisted_possible' | 'both' | undefined,
-              assistanceType: block.exercises.assistance_type as 'machine' | 'band' | 'partner' | undefined,
-              // Video demonstration fields
-              demoGifUrl: block.exercises.demo_gif_url as string | undefined,
-              demoThumbnailUrl: block.exercises.demo_thumbnail_url as string | undefined,
-              youtubeVideoId: block.exercises.youtube_video_id as string | undefined,
-              // Exercise type for duration-based exercises (planks, holds)
-              exerciseType: block.exercises.exercise_type as ExerciseType | undefined,
-            },
-          }));
+          .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
+          .map(mapLoadedBlockRow);
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
@@ -945,47 +484,7 @@ export default function WorkoutPage() {
             .order('set_number');
           
           if (existingSets && existingSets.length > 0) {
-            const transformedSets: SetLog[] = existingSets.map((set: any) => {
-              // Parse JSON fields
-              let feedback: SetFeedback | undefined;
-              if (set.feedback) {
-                try {
-                  feedback = typeof set.feedback === 'string' ? JSON.parse(set.feedback) : set.feedback;
-                } catch (e) {
-                  console.error('Failed to parse feedback JSON:', e);
-                }
-              }
-
-              let bodyweightData: BodyweightData | undefined;
-              if (set.bodyweight_data) {
-                try {
-                  bodyweightData = typeof set.bodyweight_data === 'string' 
-                    ? JSON.parse(set.bodyweight_data) 
-                    : set.bodyweight_data;
-                } catch (e) {
-                  console.error('Failed to parse bodyweight_data JSON:', e);
-                }
-              }
-
-              return {
-                id: set.id,
-                exerciseBlockId: set.exercise_block_id,
-                setNumber: set.set_number,
-                weightKg: set.weight_kg,
-                reps: set.reps,
-                rpe: set.rpe,
-                restSeconds: set.rest_seconds,
-                isWarmup: set.is_warmup,
-                setType: (set.set_type as SetType) || (set.is_warmup ? 'warmup' : 'normal'),
-                parentSetId: set.parent_set_id || null,
-                quality: set.quality,
-                qualityReason: set.quality_reason || '',
-                note: set.note,
-                loggedAt: set.logged_at,
-                feedback,
-                bodyweightData,
-              };
-            });
+            const transformedSets: SetLog[] = existingSets.map(mapSetLogRow);
             setCompletedSets(transformedSets);
             
             // Set current set number based on existing sets for the first incomplete block
@@ -1195,73 +694,9 @@ export default function WorkoutPage() {
         
         // Process exercise history (already fetched in parallel above)
         if (allHistoryBlocks && allHistoryBlocks.length > 0) {
-          // Group results by exercise_id and limit to 10 per exercise
-          const groupedByExercise: Record<string, any[]> = {};
-          for (const block of (allHistoryBlocks || [])) {
-            const exId = block.exercise_id;
-            if (!groupedByExercise[exId]) groupedByExercise[exId] = [];
-            if (groupedByExercise[exId].length < 10) {
-              groupedByExercise[exId].push(block);
-            }
-          }
+          // Group by exercise, cap at 10 blocks each, compute E1RM/PR (./_lib/suggestions)
+          const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(allHistoryBlocks);
 
-          const histories: Record<string, ExerciseHistoryData> = {};
-
-          for (const [exerciseId, historyBlocks] of Object.entries(groupedByExercise)) {
-            if (historyBlocks && historyBlocks.length > 0) {
-              let bestE1RM = 0;
-              let personalRecord: ExerciseHistoryData['personalRecord'] = null;
-              let totalSessions = 0;
-              const seenSessions = new Set<string>();
-              
-              // Get last workout data
-              const lastBlock = historyBlocks[0];
-              const lastSession = lastBlock.workout_sessions as any;
-              const lastSets = ((lastBlock.set_logs as any[]) || [])
-                // Only normal working sets, ordered by set_number (see above).
-                .filter((s: any) => !s.is_warmup && (s.set_type ?? 'normal') === 'normal')
-                .sort((a: any, b: any) => (a.set_number ?? 0) - (b.set_number ?? 0))
-                .map((s: any) => ({
-                  weightKg: s.weight_kg,
-                  reps: s.reps,
-                  rpe: s.rpe,
-                }));
-              
-              // Calculate best E1RM and PR
-              historyBlocks.forEach((block: any) => {
-                const session = block.workout_sessions;
-                if (session && !seenSessions.has(session.id)) {
-                  seenSessions.add(session.id);
-                  totalSessions++;
-                }
-
-                const sets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
-                sets.forEach((set: any) => {
-                  // Pass RPE to get accurate E1RM - without RPE it assumes failure (RPE 10)
-                  // which underestimates true strength for sets done with reps in reserve
-                  const e1rm = calculateE1RM(set.weight_kg, set.reps, set.rpe);
-                  if (e1rm > bestE1RM) {
-                    bestE1RM = e1rm;
-                    personalRecord = {
-                      weightKg: set.weight_kg,
-                      reps: set.reps,
-                      e1rm,
-                      date: session?.completed_at || set.logged_at,
-                    };
-                  }
-                });
-              });
-              
-              histories[exerciseId] = {
-                lastWorkoutDate: lastSession?.completed_at || '',
-                lastWorkoutSets: lastSets,
-                estimatedE1RM: bestE1RM,
-                personalRecord,
-                totalSessions,
-              };
-            }
-          }
-          
           setExerciseHistories(histories);
 
           // Generate coach message with exercise history for accurate weight suggestions
@@ -3553,398 +2988,37 @@ export default function WorkoutPage() {
 
         {/* Add Exercise Modal */}
         {showAddExercise && (
-          <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
-            <div
-              className="absolute inset-0 bg-black/60"
-              onClick={handleCloseAddExerciseModal}
-            />
-            {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
-            <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
-                <button
-                  onClick={handleCloseAddExerciseModal}
-                  className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
-                <button
-                  onClick={handleAddSelectedExercises}
-                  disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
-                  className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                    selectedExercisesToAdd.length > 0
-                      ? 'bg-primary-500 text-white hover:bg-primary-600'
-                      : 'bg-surface-700 text-surface-500 cursor-not-allowed'
-                  }`}
-                >
-                  {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
-                </button>
-              </div>
-              
-              {/* Search and Filters */}
-              <div className="p-4 border-b border-surface-800 space-y-3 flex-shrink-0">
-                <input
-                  type="text"
-                  value={exerciseSearch}
-                  onChange={(e) => setExerciseSearch(e.target.value)}
-                  placeholder="Search exercises..."
-                  className="w-full px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
-                />
-
-                {/* Body Part and Location Dropdowns */}
-                <div className="flex gap-2">
-                  {/* Body Part Dropdown */}
-                  <div className="relative flex-1">
-                    <button
-                      onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                    >
-                      <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                        {selectedMuscleFilter || 'Any Body Part'}
-                      </span>
-                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Dropdown Menu */}
-                    {showMuscleDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                        <button
-                          onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Any Body Part</span>
-                          {!selectedMuscleFilter && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        {(() => {
-                          const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                          return muscles.map(muscle => (
-                            <button
-                              key={muscle}
-                              onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                                selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                              }`}
-                            >
-                              <span>{muscle}</span>
-                              {selectedMuscleFilter === muscle && (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </button>
-                          ));
-                        })()}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Location Dropdown */}
-                  {gymLocations.length > 0 && (
-                    <div className="relative flex-1">
-                      <button
-                        onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
-                        className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                      >
-                        <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
-                          {selectedLocationFilter
-                            ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
-                            : 'Any Location'}
-                        </span>
-                        <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
-
-                      {/* Location Dropdown Menu */}
-                      {showLocationDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                          <button
-                            onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
-                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                              !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
-                            }`}
-                          >
-                            <span>Any Location</span>
-                            {!selectedLocationFilter && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                          {gymLocations.map(location => (
-                            <button
-                              key={location.id}
-                              onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
-                              className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                                selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
-                              }`}
-                            >
-                              <span>{location.name}</span>
-                              {selectedLocationFilter === location.id && (
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Sort Button */}
-                  <div className="relative">
-                    <button
-                      onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
-                      className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
-                      title="Sort exercises"
-                    >
-                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                      </svg>
-                    </button>
-
-                    {/* Sort Dropdown */}
-                    {showSortDropdown && (
-                      <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
-                        <button
-                          onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Most Frequent</span>
-                          {exerciseSortOption === 'frequency' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Recently Done</span>
-                          {exerciseSortOption === 'recent' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Name (A-Z)</span>
-                          {exerciseSortOption === 'name' && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Exercise List */}
-              <div className="flex-1 overflow-y-auto">
-                {(() => {
-                  let filteredExercises = availableExercises;
-
-                  // Filter by muscle
-                  if (selectedMuscleFilter) {
-                    filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
-                  }
-
-                  // Filter by search
-                  if (exerciseSearch) {
-                    const normalizedSearch = normalizeForSearch(exerciseSearch);
-                    filteredExercises = filteredExercises.filter(ex =>
-                      normalizeForSearch(ex.name).includes(normalizedSearch)
-                    );
-                  }
-
-                  // Filter by location equipment
-                  if (selectedLocationFilter) {
-                    // First, filter out exercises the user explicitly marked as unavailable
-                    if (unavailableExerciseIds.size > 0) {
-                      filteredExercises = filteredExercises.filter(ex => !unavailableExerciseIds.has(ex.id));
-                    }
-
-                    const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
-
-                    // Machine brand prefixes and machine-specific terms that indicate machine exercises
-                    const machineBrands = ['mts', 'iso-lateral', 'iso lateral', 'hammer strength', 'nautilus', 'cybex', 'life fitness', 'technogym', 'matrix', 'precor', 'hoist', 'star trac', 'freemotion', 'prime', 'arsenal', 'atlantis', 'body-solid', 'icarian', 'strive', 'magnum', 'panatta'];
-                    const machineTerms = ['leg press', 'leg extension', 'leg curl', 'hack squat', 'pendulum', 'seated row', 'chest press', 'shoulder press machine', 'lat pulldown', 'pec deck', 'fly machine', 'hip abductor', 'hip adductor', 'glute drive', 'calf raise machine', 'reverse hyper', 'back extension machine', 'ab crunch machine', 'torso rotation', 'inner thigh', 'outer thigh', 'belt squat'];
-
-                    filteredExercises = filteredExercises.filter(ex => {
-                      const exerciseNameLower = ex.name.toLowerCase();
-
-                      // If location has no equipment, only allow bodyweight exercises
-                      if (normalizedAvailable.length === 0) {
-                        return ex.is_bodyweight === true;
-                      }
-
-                      // Check if exercise requires a machine (by brand or term)
-                      const isMachineExercise =
-                        machineBrands.some(brand => exerciseNameLower.includes(brand)) ||
-                        machineTerms.some(term => exerciseNameLower.includes(term));
-
-                      // If it's a machine exercise, check if user has machine equipment available
-                      if (isMachineExercise) {
-                        const hasMachineEquipment = normalizedAvailable.some(a =>
-                          a.includes('machine') || a.includes('press') || a.includes('pulldown') ||
-                          a.includes('leg extension') || a.includes('leg curl') || a.includes('hack') ||
-                          a.includes('cable') || a.includes('lat pulldown') || a.includes('seated row')
-                        );
-                        if (!hasMachineEquipment) return false;
-                      }
-
-                      // If exercise has no equipment requirement, check name for equipment hints
-                      if (!ex.equipment_required || ex.equipment_required.length === 0) {
-                        // Check if exercise name indicates specific equipment
-                        const requiresCable = exerciseNameLower.includes('cable');
-                        const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-                        const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
-                        const requiresMachine = exerciseNameLower.includes('machine');
-                        const requiresSmith = exerciseNameLower.includes('smith');
-                        const requiresKettlebell = exerciseNameLower.includes('kettlebell') || exerciseNameLower.includes('kb ');
-                        const requiresBand = exerciseNameLower.includes('band') || exerciseNameLower.includes('resistance band');
-
-                        if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
-                        if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
-                        if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
-                        if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
-                        if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
-                        if (requiresKettlebell && !normalizedAvailable.some(a => a.includes('kettlebell') || a.includes('kb'))) return false;
-                        if (requiresBand && !normalizedAvailable.some(a => a.includes('band'))) return false;
-
-                        return true;
-                      }
-
-                      // For exercises with equipment_required, check if ALL required equipment is available
-                      const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
-                      return requiredEquipment.every(reqEq => {
-                        if (normalizedAvailable.includes(reqEq)) return true;
-                        return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
-                      });
-                    });
-                  }
-
-                  // Sort based on selected option
-                  filteredExercises = [...filteredExercises].sort((a, b) => {
-                    switch (exerciseSortOption) {
-                      case 'frequency': {
-                        // Sort by frequency (highest first), then by name for ties
-                        const freqA = frequentExerciseIds.get(a.id) || 0;
-                        const freqB = frequentExerciseIds.get(b.id) || 0;
-                        if (freqB !== freqA) return freqB - freqA;
-                        return a.name.localeCompare(b.name);
-                      }
-                      case 'recent': {
-                        // Sort by most recently done first, then by name for ties
-                        const dateA = lastDoneExercises.get(a.id);
-                        const dateB = lastDoneExercises.get(b.id);
-                        // Exercises without a date go to the bottom
-                        if (!dateA && !dateB) return a.name.localeCompare(b.name);
-                        if (!dateA) return 1;
-                        if (!dateB) return -1;
-                        return dateB.getTime() - dateA.getTime();
-                      }
-                      case 'name':
-                      default:
-                        return a.name.localeCompare(b.name);
-                    }
-                  });
-                  
-                  if (availableExercises.length === 0) {
-                    return <p className="text-center text-surface-400 py-8">Loading exercises...</p>;
-                  }
-                  
-                  if (filteredExercises.length === 0) {
-                    return <p className="text-center text-surface-400 py-8">No exercises found</p>;
-                  }
-
-                  // Collapse the long tail of rarely-used exercises unless the
-                  // user is searching or has tapped "Show all". Default-visible
-                  // set = staples + exercises the user has actually performed.
-                  const isSearchingExercises = exerciseSearch.trim().length > 0;
-                  const defaultVisibleExercises = filteredExercises.filter((ex) =>
-                    isDefaultVisibleExercise(ex.id, stapleExerciseIds, frequentExerciseIds, lastDoneExercises)
-                  );
-                  const hasHiddenExercises = !isSearchingExercises && defaultVisibleExercises.length < filteredExercises.length;
-                  const exercisesCollapsed = hasHiddenExercises && !showAllExercises;
-                  const visibleExercises = exercisesCollapsed ? defaultVisibleExercises : filteredExercises;
-
-                  return (
-                    <>
-                      {visibleExercises.map((exercise) => {
-                    const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
-                    return (
-                      <button
-                        key={exercise.id}
-                        onClick={() => toggleExerciseSelection(exercise)}
-                        disabled={isAddingExercise}
-                        className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-                          isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-surface-200">{exercise.name}</span>
-                          {frequentExerciseIds.has(exercise.id) && (
-                            <span className="text-amber-400 text-sm">★</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${
-                            exercise.mechanic === 'compound' 
-                              ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                              : 'bg-surface-700 text-surface-400'
-                          }`}>
-                            {exercise.mechanic}
-                          </span>
-                          {isSelected && (
-                            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                      {hasHiddenExercises && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllExercises((v) => !v)}
-                          className="w-full p-4 text-center text-sm font-medium text-primary-400 hover:bg-surface-800/50 transition-colors border-b border-surface-800/50"
-                        >
-                          {exercisesCollapsed
-                            ? `Show all ${filteredExercises.length} exercises`
-                            : 'Show fewer'}
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-          </div>
+          <AddExercisePicker
+            variant="empty"
+            availableExercises={availableExercises}
+            exerciseSearch={exerciseSearch}
+            onExerciseSearchChange={setExerciseSearch}
+            selectedMuscleFilter={selectedMuscleFilter}
+            onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+            showMuscleDropdown={showMuscleDropdown}
+            onShowMuscleDropdownChange={setShowMuscleDropdown}
+            showSortDropdown={showSortDropdown}
+            onShowSortDropdownChange={setShowSortDropdown}
+            showLocationDropdown={showLocationDropdown}
+            onShowLocationDropdownChange={setShowLocationDropdown}
+            exerciseSortOption={exerciseSortOption}
+            onExerciseSortOptionChange={setExerciseSortOption}
+            showAllExercises={showAllExercises}
+            onToggleShowAllExercises={() => setShowAllExercises((v) => !v)}
+            gymLocations={gymLocations}
+            selectedLocationFilter={selectedLocationFilter}
+            onSelectedLocationFilterChange={setSelectedLocationFilter}
+            locationEquipment={locationEquipment}
+            unavailableExerciseIds={unavailableExerciseIds}
+            stapleExerciseIds={stapleExerciseIds}
+            frequentExerciseIds={frequentExerciseIds}
+            lastDoneExercises={lastDoneExercises}
+            selectedExercisesToAdd={selectedExercisesToAdd}
+            onToggleExerciseSelection={toggleExerciseSelection}
+            isAddingExercise={isAddingExercise}
+            onClose={handleCloseAddExerciseModal}
+            onAddSelected={handleAddSelectedExercises}
+          />
         )}
       </div>
     );
@@ -3994,147 +3068,25 @@ export default function WorkoutPage() {
       )}
       
       {/* Workout header */}
-      <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <p className="text-surface-400">
-                {totalCompletedSets} of {totalPlannedSets} sets completed
-              </p>
-              {/* Workout timer display with pause/play */}
-              {session?.startedAt && (
-                <button
-                  onClick={workoutTimer.toggle}
-                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm font-mono transition-colors ${
-                    workoutTimer.isPaused
-                      ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
-                      : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                  }`}
-                  title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
-                >
-                  {workoutTimer.isPaused ? (
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                    </svg>
-                  )}
-                  <span>{workoutTimer.formattedTime}</span>
-                </button>
-              )}
-              {/* Estimated time remaining */}
-              {workoutEstimate.totalMinutes > 0 && (
-                <span
-                  className="text-sm text-surface-500"
-                  title={`Total estimated: ${workoutEstimate.formattedTotal}`}
-                >
-                  {workoutEstimate.completedSets > 0
-                    ? workoutEstimate.formattedRemaining
-                    : workoutEstimate.formattedTotal}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
-            <button
-              onClick={() => setAllCollapsed(!allCollapsed)}
-              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-                allCollapsed
-                  ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
-                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-              }`}
-              title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
-            >
-              {allCollapsed ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                  <span className="hidden sm:inline">Expand</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
-                  <span className="hidden sm:inline">Collapse</span>
-                </>
-              )}
-            </button>
-            {/* Secondary tools tucked into one quiet menu (Hurt / Readiness / Plates) */}
-            <div className="relative">
-              <button
-                onClick={() => setShowToolsMenu((v) => !v)}
-                className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-                  temporaryInjuries.length > 0
-                    ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
-                    : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-                }`}
-                title="More tools"
-                aria-haspopup="menu"
-                aria-expanded={showToolsMenu}
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z" />
-                </svg>
-                <span className="hidden sm:inline">{temporaryInjuries.length > 0 ? 'Injured' : 'Tools'}</span>
-              </button>
-              {showToolsMenu && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowToolsMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1" role="menu">
-                    <button
-                      onClick={() => { setShowInjuryModal(true); setShowToolsMenu(false); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
-                      role="menuitem"
-                    >
-                      <span>🤕</span>
-                      {temporaryInjuries.length > 0 ? 'Injuries' : 'Hurt?'}
-                    </button>
-                    <button
-                      onClick={() => { setShowReadinessModal(true); setShowToolsMenu(false); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
-                      role="menuitem"
-                    >
-                      <span>🔋</span>
-                      Readiness
-                    </button>
-                    <button
-                      onClick={() => { setShowPlateCalculator(true); setShowToolsMenu(false); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
-                      role="menuitem"
-                    >
-                      <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
-                      Plate calculator
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              onClick={() => setShowCancelModal(true)}
-              className="text-surface-400 hover:text-danger-400 flex-1 sm:flex-none"
-            >
-              Cancel
-            </Button>
-            <Button variant="ghost" onClick={handleOpenAddExercise} className="flex-1 sm:flex-none">
-              <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add
-            </Button>
-            <Button variant="outline" onClick={handleWorkoutComplete} className="flex-1 sm:flex-none">
-              Finish
-            </Button>
-          </div>
-        </div>
-      </div>
+      <WorkoutHeader
+        totalCompletedSets={totalCompletedSets}
+        totalPlannedSets={totalPlannedSets}
+        startedAt={session?.startedAt ?? null}
+        workoutTimer={workoutTimer}
+        workoutEstimate={workoutEstimate}
+        allCollapsed={allCollapsed}
+        onToggleAllCollapsed={() => setAllCollapsed(!allCollapsed)}
+        showToolsMenu={showToolsMenu}
+        onToggleToolsMenu={() => setShowToolsMenu((v) => !v)}
+        onCloseToolsMenu={() => setShowToolsMenu(false)}
+        injuryCount={temporaryInjuries.length}
+        onOpenInjuryModal={() => setShowInjuryModal(true)}
+        onOpenReadinessModal={() => setShowReadinessModal(true)}
+        onOpenPlateCalculator={() => setShowPlateCalculator(true)}
+        onCancelWorkout={() => setShowCancelModal(true)}
+        onAddExercise={handleOpenAddExercise}
+        onFinishWorkout={handleWorkoutComplete}
+      />
 
       {/* Overall progress bar */}
       <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
@@ -4874,357 +3826,39 @@ export default function WorkoutPage() {
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
-        <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center pt-[env(safe-area-inset-top)] sm:pt-0">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={handleCloseAddExerciseModal}
-          />
-
-          {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
-          <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
-              <button
-                onClick={handleCloseAddExerciseModal}
-                className="p-2 text-surface-400 hover:text-surface-200 -ml-2"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
-              <button
-                onClick={handleAddSelectedExercises}
-                disabled={selectedExercisesToAdd.length === 0 || isAddingExercise}
-                className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-colors ${
-                  selectedExercisesToAdd.length > 0
-                    ? 'bg-primary-500 text-white hover:bg-primary-600'
-                    : 'bg-surface-700 text-surface-500 cursor-not-allowed'
-                }`}
-              >
-                {isAddingExercise ? 'Adding...' : `Add${selectedExercisesToAdd.length > 0 ? ` (${selectedExercisesToAdd.length})` : ''}`}
-              </button>
-            </div>
-
-            {/* Search and Filters */}
-            <div className="p-4 space-y-3 border-b border-surface-800 flex-shrink-0">
-              <Input
-                placeholder="Search exercises..."
-                value={exerciseSearch}
-                onChange={(e) => setExerciseSearch(e.target.value)}
-              />
-
-              {/* Body Part and Location Dropdowns */}
-              <div className="flex gap-2">
-                {/* Body Part Dropdown */}
-                <div className="relative flex-1">
-                  <button
-                    onClick={() => { setShowMuscleDropdown(!showMuscleDropdown); setShowSortDropdown(false); setShowLocationDropdown(false); }}
-                    className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                  >
-                    <span className={selectedMuscleFilter ? 'capitalize' : 'text-surface-400'}>
-                      {selectedMuscleFilter || 'Any Body Part'}
-                    </span>
-                    <svg className={`w-4 h-4 text-surface-400 transition-transform ${showMuscleDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showMuscleDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                      <button
-                        onClick={() => { setSelectedMuscleFilter(null); setShowMuscleDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          !selectedMuscleFilter ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Any Body Part</span>
-                        {!selectedMuscleFilter && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      {(() => {
-                        const muscles = Array.from(new Set(availableExercises.map(ex => ex.primary_muscle).filter(Boolean))).sort();
-                        return muscles.map(muscle => (
-                          <button
-                            key={muscle}
-                            onClick={() => { setSelectedMuscleFilter(muscle!); setShowMuscleDropdown(false); }}
-                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors capitalize flex items-center justify-between ${
-                              selectedMuscleFilter === muscle ? 'text-primary-400' : 'text-surface-200'
-                            }`}
-                          >
-                            <span>{muscle}</span>
-                            {selectedMuscleFilter === muscle && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                        ));
-                      })()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Location Dropdown */}
-                {gymLocations.length > 0 && (
-                  <div className="relative flex-1">
-                    <button
-                      onClick={() => { setShowLocationDropdown(!showLocationDropdown); setShowMuscleDropdown(false); setShowSortDropdown(false); }}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 hover:bg-surface-700 transition-colors"
-                    >
-                      <span className={selectedLocationFilter ? '' : 'text-surface-400'}>
-                        {selectedLocationFilter
-                          ? gymLocations.find(l => l.id === selectedLocationFilter)?.name || 'Any Location'
-                          : 'Any Location'}
-                      </span>
-                      <svg className={`w-4 h-4 text-surface-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Location Dropdown Menu */}
-                    {showLocationDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
-                        <button
-                          onClick={() => { setSelectedLocationFilter(null); setShowLocationDropdown(false); }}
-                          className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                            !selectedLocationFilter ? 'text-primary-400' : 'text-surface-200'
-                          }`}
-                        >
-                          <span>Any Location</span>
-                          {!selectedLocationFilter && (
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        {gymLocations.map(location => (
-                          <button
-                            key={location.id}
-                            onClick={() => { setSelectedLocationFilter(location.id); setShowLocationDropdown(false); }}
-                            className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                              selectedLocationFilter === location.id ? 'text-primary-400' : 'text-surface-200'
-                            }`}
-                          >
-                            <span>{location.name}</span>
-                            {selectedLocationFilter === location.id && (
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Sort Button */}
-                <div className="relative">
-                  <button
-                    onClick={() => { setShowSortDropdown(!showSortDropdown); setShowMuscleDropdown(false); setShowLocationDropdown(false); }}
-                    className="flex items-center justify-center px-3 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
-                    title="Sort exercises"
-                  >
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                    </svg>
-                  </button>
-
-                  {/* Sort Dropdown */}
-                  {showSortDropdown && (
-                    <div className="absolute top-full right-0 mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-10">
-                      <button
-                        onClick={() => { setExerciseSortOption('frequency'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'frequency' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Most Frequent</span>
-                        {exerciseSortOption === 'frequency' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => { setExerciseSortOption('recent'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'recent' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Recently Done</span>
-                        {exerciseSortOption === 'recent' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => { setExerciseSortOption('name'); setShowSortDropdown(false); }}
-                        className={`w-full text-left px-4 py-3 hover:bg-surface-700 transition-colors flex items-center justify-between ${
-                          exerciseSortOption === 'name' ? 'text-primary-400' : 'text-surface-200'
-                        }`}
-                      >
-                        <span>Name (A-Z)</span>
-                        {exerciseSortOption === 'name' && (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Create custom exercise button */}
-              <button
-                onClick={() => setShowCustomExercise(true)}
-                className="w-full p-3 bg-surface-800/50 hover:bg-surface-800 rounded-lg border border-dashed border-surface-600 hover:border-primary-500/50 transition-all flex items-center justify-center gap-2 text-surface-400 hover:text-primary-400"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span className="text-sm font-medium">Create Custom Exercise</span>
-              </button>
-              
-              {/* Error display */}
-              {error && (
-                <div className="mt-2 p-2 bg-danger-500/10 border border-danger-500/20 rounded-lg text-danger-400 text-xs">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Exercise list */}
-            <div className="flex-1 overflow-y-auto">
-              {(() => {
-                let filteredExercises = availableExercises;
-
-                // Filter by muscle
-                if (selectedMuscleFilter) {
-                  filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
-                }
-
-                // Filter by search
-                if (exerciseSearch) {
-                  const normalizedSearch = normalizeForSearch(exerciseSearch);
-                  filteredExercises = filteredExercises.filter(ex =>
-                    normalizeForSearch(ex.name).includes(normalizedSearch)
-                  );
-                }
-
-                // Filter by location equipment
-                if (selectedLocationFilter && locationEquipment.length > 0) {
-                  const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
-                  filteredExercises = filteredExercises.filter(ex => {
-                    // If exercise has no equipment requirement, check name for equipment hints
-                    if (!ex.equipment_required || ex.equipment_required.length === 0) {
-                      const exerciseNameLower = ex.name.toLowerCase();
-
-                      // Check if exercise name indicates specific equipment
-                      const requiresCable = exerciseNameLower.includes('cable');
-                      const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-                      const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
-                      const requiresMachine = exerciseNameLower.includes('machine');
-                      const requiresSmith = exerciseNameLower.includes('smith');
-
-                      if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
-                      if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
-                      if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
-                      if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
-                      if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
-
-                      return true;
-                    }
-
-                    // For exercises with equipment_required, check if ALL required equipment is available
-                    const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
-                    return requiredEquipment.every(reqEq => {
-                      if (normalizedAvailable.includes(reqEq)) return true;
-                      return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
-                    });
-                  });
-                }
-
-                // Sort based on selected option
-                filteredExercises = [...filteredExercises].sort((a, b) => {
-                  switch (exerciseSortOption) {
-                    case 'frequency': {
-                      // Sort by frequency (highest first), then by name for ties
-                      const freqA = frequentExerciseIds.get(a.id) || 0;
-                      const freqB = frequentExerciseIds.get(b.id) || 0;
-                      if (freqB !== freqA) return freqB - freqA;
-                      return a.name.localeCompare(b.name);
-                    }
-                    case 'recent': {
-                      // Sort by most recently done first, then by name for ties
-                      const dateA = lastDoneExercises.get(a.id);
-                      const dateB = lastDoneExercises.get(b.id);
-                      // Exercises without a date go to the bottom
-                      if (!dateA && !dateB) return a.name.localeCompare(b.name);
-                      if (!dateA) return 1;
-                      if (!dateB) return -1;
-                      return dateB.getTime() - dateA.getTime();
-                    }
-                    case 'name':
-                    default:
-                      return a.name.localeCompare(b.name);
-                  }
-                });
-
-                if (availableExercises.length === 0) {
-                  return <p className="text-center text-surface-500 py-8">Loading exercises...</p>;
-                }
-                
-                if (filteredExercises.length === 0) {
-                  return <p className="text-center text-surface-500 py-8">No exercises found</p>;
-                }
-                
-                return filteredExercises.map((exercise) => {
-                  const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
-                  return (
-                    <button
-                      key={exercise.id}
-                      onClick={() => toggleExerciseSelection(exercise)}
-                      disabled={isAddingExercise}
-                      className={`w-full flex items-center justify-between p-4 transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
-                        isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-surface-200">{exercise.name}</span>
-                        {frequentExerciseIds.has(exercise.id) && (
-                          <span className="text-amber-400 text-sm">★</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          exercise.mechanic === 'compound' 
-                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' 
-                            : 'bg-surface-700 text-surface-400'
-                        }`}>
-                          {exercise.mechanic}
-                        </span>
-                        {isSelected && (
-                          <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </div>
-                    </button>
-                  );
-                });
-              })()}
-            </div>
-          </div>
-        </div>
+        <AddExercisePicker
+          variant="workout"
+          availableExercises={availableExercises}
+          exerciseSearch={exerciseSearch}
+          onExerciseSearchChange={setExerciseSearch}
+          selectedMuscleFilter={selectedMuscleFilter}
+          onSelectedMuscleFilterChange={setSelectedMuscleFilter}
+          showMuscleDropdown={showMuscleDropdown}
+          onShowMuscleDropdownChange={setShowMuscleDropdown}
+          showSortDropdown={showSortDropdown}
+          onShowSortDropdownChange={setShowSortDropdown}
+          showLocationDropdown={showLocationDropdown}
+          onShowLocationDropdownChange={setShowLocationDropdown}
+          exerciseSortOption={exerciseSortOption}
+          onExerciseSortOptionChange={setExerciseSortOption}
+          showAllExercises={showAllExercises}
+          onToggleShowAllExercises={() => setShowAllExercises((v) => !v)}
+          gymLocations={gymLocations}
+          selectedLocationFilter={selectedLocationFilter}
+          onSelectedLocationFilterChange={setSelectedLocationFilter}
+          locationEquipment={locationEquipment}
+          unavailableExerciseIds={unavailableExerciseIds}
+          stapleExerciseIds={stapleExerciseIds}
+          frequentExerciseIds={frequentExerciseIds}
+          lastDoneExercises={lastDoneExercises}
+          selectedExercisesToAdd={selectedExercisesToAdd}
+          onToggleExerciseSelection={toggleExerciseSelection}
+          isAddingExercise={isAddingExercise}
+          onClose={handleCloseAddExerciseModal}
+          onAddSelected={handleAddSelectedExercises}
+          onCreateCustom={() => setShowCustomExercise(true)}
+          error={error}
+        />
       )}
 
       {/* Custom Exercise Creation Modal with AI */}

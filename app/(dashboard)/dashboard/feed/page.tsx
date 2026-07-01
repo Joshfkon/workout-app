@@ -324,7 +324,7 @@ export default function FeedPage() {
     return (
       <div className="space-y-6 py-6">
         {/* Profile Header */}
-        <Card padding="lg">
+        <Card>
           <div className="flex items-start gap-4">
             <Avatar
               src={profile.avatar_url}

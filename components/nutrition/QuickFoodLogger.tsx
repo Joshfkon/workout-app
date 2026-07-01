@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui';
+import { IconBolt, IconScan, IconPencil } from '@tabler/icons-react';
 import { BarcodeScanner } from './BarcodeScanner';
 import type { BarcodeSearchResult } from '@/services/openFoodFactsService';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
@@ -43,10 +44,10 @@ interface QuickFoodLoggerProps {
 }
 
 const MEAL_LABELS: Record<MealType, string> = {
-  breakfast: '🌅 Breakfast',
-  lunch: '☀️ Lunch',
-  dinner: '🌙 Dinner',
-  snack: '🍎 Snack',
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snack: 'Snack',
 };
 
 const CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
@@ -337,7 +338,7 @@ export function QuickFoodLogger({
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          ⚡ Quick Add
+          <IconBolt size={14} aria-hidden="true" /> Quick Add
         </button>
         <button
           onClick={() => { setMode('barcode'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
@@ -347,7 +348,7 @@ export function QuickFoodLogger({
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          📷 Scan
+          <IconScan size={14} aria-hidden="true" /> Scan
         </button>
         <button
           onClick={() => { setMode('manual'); setBarcodeProduct(null); setSelectedFood(null); setSelectedFrequentFood(null); }}
@@ -357,7 +358,7 @@ export function QuickFoodLogger({
               : 'text-surface-400 hover:text-surface-200'
           }`}
         >
-          ✏️ Manual
+          <IconPencil size={14} aria-hidden="true" /> Manual
         </button>
       </div>
 

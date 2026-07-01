@@ -12,6 +12,17 @@ export interface AvailableExercise {
   primary_muscle: string;
   secondary_muscles?: string[];
   mechanic: 'compound' | 'isolation';
+  equipment_required?: string[];
+  default_rep_range?: [number, number];
+  default_rir?: number;
+  is_bodyweight?: boolean;
+  hypertrophy_tier?: string | null;
+}
+
+export interface GymLocation {
+  id: string;
+  name: string;
+  is_default: boolean;
 }
 
 export interface CalibratedLift {
