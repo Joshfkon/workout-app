@@ -1,15 +1,23 @@
 /**
  * Snapshot and unit tests for ExerciseCard component
- * Tests the complex workout exercise card with various configurations
+ *
+ * Covers the one-tap set logger flow (SetLoggerRow + SuggestionBanner),
+ * plateau badge, bodyweight handling, and the compact completed/pending
+ * set lines.
  */
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ExerciseCard } from '../ExerciseCard';
-import type { Exercise, ExerciseBlock, SetLog, SetQuality } from '@/types/schema';
+import type {
+  Exercise,
+  ExerciseBlock,
+  SetLog,
+  ExercisePerformanceSnapshot,
+} from '@/types/schema';
 
-// Mock the child components to keep snapshots focused
+// Mock the child components that carry their own behavior/timers
 jest.mock('../InlineRestTimerBar', () => ({
   InlineRestTimerBar: ({ seconds, isRunning }: any) => (
     <div data-testid="inline-rest-timer" data-seconds={seconds} data-running={isRunning}>
@@ -27,33 +35,8 @@ jest.mock('../DropsetPrompt', () => ({
   ),
 }));
 
-jest.mock('../SetFeedbackCard', () => ({
-  SetFeedbackCard: ({ onSubmit, onSkip }: any) => (
-    <div data-testid="set-feedback-card">
-      <button onClick={() => onSubmit({ repsInTank: 2, form: 'clean' })}>Submit Feedback</button>
-      <button onClick={onSkip}>Skip</button>
-    </div>
-  ),
-}));
-
-jest.mock('../BodyweightSetInputRow', () => ({
-  BodyweightSetInputRow: () => <div data-testid="bodyweight-set-input">Bodyweight Input Mock</div>,
-}));
-
-jest.mock('../BodyweightDisplay', () => ({
-  BodyweightDisplay: () => <div data-testid="bodyweight-display">Bodyweight Display Mock</div>,
-}));
-
 jest.mock('../BodyweightSetEditRow', () => ({
   BodyweightSetEditRow: () => <div data-testid="bodyweight-edit">Bodyweight Edit Mock</div>,
-}));
-
-jest.mock('../CompactSetRow', () => ({
-  CompactSetRow: ({ set }: any) => (
-    <div data-testid={`compact-set-row-${set.id}`}>
-      Set {set.setNumber}: {set.weightKg}kg x {set.reps}
-    </div>
-  ),
 }));
 
 jest.mock('../SegmentedControl', () => ({
@@ -72,20 +55,6 @@ jest.mock('../SegmentedControl', () => ({
   ),
 }));
 
-// Mock progressionEngine
-jest.mock('@/services/progressionEngine', () => ({
-  calculateSetQuality: jest.fn(() => ({
-    quality: 'stimulative' as SetQuality,
-    reason: 'Good effort',
-  })),
-  recommendNextSet: jest.fn((input: { lastWeightKg: number; lastReps: number; targetRir: number }) => ({
-    weightKg: input.lastWeightKg,
-    reps: input.lastReps,
-    rpe: 10 - input.targetRir,
-    rationale: 'maintain',
-  })),
-}));
-
 // Mock exerciseSwapper
 jest.mock('@/services/exerciseSwapper', () => ({
   findSimilarExercises: jest.fn(() => []),
@@ -102,14 +71,20 @@ jest.mock('@/services/injuryAwareSwapper', () => ({
   },
 }));
 
-// Mock utils - include cn function used by UI components
+// Mock utils - include cn function used by UI components. Conversion mocks
+// are faithful so unit-handling assertions stay meaningful.
 jest.mock('@/lib/utils', () => ({
   cn: (...classes: any[]) => classes.filter(Boolean).join(' '),
-  convertWeight: jest.fn((w, _, toUnit) => toUnit === 'lb' ? w * 2.205 : w),
+  convertWeight: jest.fn((w, from, to) => {
+    if (from === to) return w;
+    return to === 'lb' ? w * 2.20462 : w / 2.20462;
+  }),
   formatWeight: jest.fn((w, unit) => `${w}${unit}`),
-  formatWeightValue: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205) : w),
-  convertWeightForDisplay: jest.fn((w, unit) => unit === 'lb' ? Math.round(w * 2.205 * 10) / 10 : w),
-  inputWeightToKg: jest.fn((w, unit) => unit === 'lb' ? w / 2.205 : w),
+  formatWeightValue: jest.fn((w, unit) => (unit === 'lb' ? Math.round((w * 2.20462) / 2.5) * 2.5 : w)),
+  convertWeightForDisplay: jest.fn((w, unit) =>
+    unit === 'lb' ? Math.round(w * 2.20462 * 10) / 10 : Math.round(w * 10) / 10
+  ),
+  inputWeightToKg: jest.fn((w, unit) => (unit === 'lb' ? w / 2.20462 : w)),
   roundToPlateIncrement: jest.fn((w) => Math.round(w / 2.5) * 2.5),
   roundToIncrement: jest.fn((w, inc) => (inc > 0 ? Math.round(w / inc) * inc : w)),
   clamp: jest.fn((v, min, max) => Math.max(min, Math.min(max, v))),
@@ -174,6 +149,30 @@ const createMockSetLog = (overrides: Partial<SetLog> = {}): SetLog => ({
   ...overrides,
 });
 
+const createSnapshot = (
+  overrides: Partial<ExercisePerformanceSnapshot> = {}
+): ExercisePerformanceSnapshot => ({
+  id: 'snap-1',
+  userId: 'user-1',
+  exerciseId: 'exercise-1',
+  sessionDate: '2026-05-01',
+  topSetWeightKg: 100,
+  topSetReps: 8,
+  topSetRpe: 8,
+  totalWorkingSets: 3,
+  estimatedE1RM: 120,
+  ...overrides,
+});
+
+/** Five weeks of flat E1RM — unambiguous plateau for detectPlateau. */
+const plateauedSnapshots: ExercisePerformanceSnapshot[] = [
+  createSnapshot({ id: 's1', sessionDate: '2026-05-01' }),
+  createSnapshot({ id: 's2', sessionDate: '2026-05-08' }),
+  createSnapshot({ id: 's3', sessionDate: '2026-05-15' }),
+  createSnapshot({ id: 's4', sessionDate: '2026-05-22' }),
+  createSnapshot({ id: 's5', sessionDate: '2026-05-29' }),
+];
+
 describe('ExerciseCard', () => {
   const defaultProps = {
     exercise: createMockExercise(),
@@ -195,58 +194,12 @@ describe('ExerciseCard', () => {
         createMockSetLog({ id: 'set-2', setNumber: 2, weightKg: 100, reps: 9, rpe: 8 }),
       ];
 
-      const { container } = render(
-        <ExerciseCard {...defaultProps} sets={sets} />
-      );
+      const { container } = render(<ExerciseCard {...defaultProps} sets={sets} />);
       expect(container).toMatchSnapshot();
     });
 
-    it('renders active state', () => {
-      const { container } = render(
-        <ExerciseCard {...defaultProps} isActive={true} />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with recommended weight', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          recommendedWeight={102.5}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with previous sets history', () => {
-      const previousSets = [
-        { weightKg: 100, reps: 10 },
-        { weightKg: 100, reps: 9 },
-        { weightKg: 100, reps: 8 },
-      ];
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          previousSets={previousSets}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with warmup sets', () => {
-      const warmupSets = [
-        { setNumber: 1, percentOfWorking: 50, targetReps: 10, purpose: 'Light warmup' },
-        { setNumber: 2, percentOfWorking: 70, targetReps: 6, purpose: 'Working weight approach' },
-      ];
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          warmupSets={warmupSets}
-          workingWeight={100}
-        />
-      );
+    it('renders active state with logger row and suggestion banner', () => {
+      const { container } = render(<ExerciseCard {...defaultProps} isActive={true} />);
       expect(container).toMatchSnapshot();
     });
 
@@ -268,85 +221,19 @@ describe('ExerciseCard', () => {
       };
 
       const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          exerciseHistory={exerciseHistory}
-        />
+        <ExerciseCard {...defaultProps} exerciseHistory={exerciseHistory} />
       );
       expect(container).toMatchSnapshot();
     });
 
     it('renders in lb unit mode', () => {
       const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          unit="lb"
-          recommendedWeight={100}
-        />
+        <ExerciseCard {...defaultProps} unit="lb" recommendedWeight={100} />
       );
       expect(container).toMatchSnapshot();
     });
 
-    it('renders all sets completed state', () => {
-      const sets = [
-        createMockSetLog({ id: 'set-1', setNumber: 1 }),
-        createMockSetLog({ id: 'set-2', setNumber: 2 }),
-        createMockSetLog({ id: 'set-3', setNumber: 3 }),
-      ];
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          sets={sets}
-          block={createMockBlock({ targetSets: 3 })}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with block note', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          block={createMockBlock({ note: 'Focus on controlling the eccentric' })}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with rest timer showing', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          showRestTimer={true}
-          timerSeconds={120}
-          timerInitialSeconds={180}
-          timerIsRunning={true}
-          timerIsFinished={false}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders isolation exercise', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          exercise={createMockExercise({
-            id: 'curl-1',
-            name: 'Bicep Curl',
-            primaryMuscle: 'biceps',
-            secondaryMuscles: [],
-            mechanic: 'isolation',
-            movementPattern: '',
-            equipmentRequired: ['dumbbell'],
-          })}
-        />
-      );
-      expect(container).toMatchSnapshot();
-    });
-
-    it('renders with hypertrophy score', () => {
+    it('renders with hypertrophy score tier pill', () => {
       const { container } = render(
         <ExerciseCard
           {...defaultProps}
@@ -362,112 +249,416 @@ describe('ExerciseCard', () => {
       );
       expect(container).toMatchSnapshot();
     });
+
+    it('renders bodyweight exercise', () => {
+      const { container } = render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({
+            id: 'pullup-1',
+            name: 'Pull-ups',
+            primaryMuscle: 'back',
+            equipmentRequired: ['bodyweight'],
+          })}
+          userBodyweightKg={80}
+        />
+      );
+      expect(container).toMatchSnapshot();
+    });
+
+    it('renders with plateau pill', () => {
+      const { container } = render(
+        <ExerciseCard {...defaultProps} performanceSnapshots={plateauedSnapshots} />
+      );
+      expect(container).toMatchSnapshot();
+    });
   });
 
-  describe('Basic Rendering', () => {
-    it('displays exercise name', () => {
+  describe('Header', () => {
+    it('displays exercise name and primary muscle meta line', () => {
       render(<ExerciseCard {...defaultProps} />);
       expect(screen.getByText('Bench Press')).toBeInTheDocument();
-    });
-
-    it('displays set count badge', () => {
-      render(<ExerciseCard {...defaultProps} />);
-      // Progress badge shows "X/Y" format - "0/3" for no completed sets and 3 target sets
-      expect(screen.getByText(/0\/3/)).toBeInTheDocument();
-    });
-
-    it('displays primary muscle', () => {
-      render(<ExerciseCard {...defaultProps} />);
       expect(screen.getByText(/chest/i)).toBeInTheDocument();
     });
 
-    it('shows completed sets count', () => {
-      const sets = [
-        createMockSetLog({ id: 'set-1', setNumber: 1 }),
-        createMockSetLog({ id: 'set-2', setNumber: 2 }),
-      ];
+    it('displays progress badge', () => {
+      render(<ExerciseCard {...defaultProps} />);
+      expect(screen.getByText(/0\/3/)).toBeInTheDocument();
+    });
 
+    it('shows last-session summary in the meta line', () => {
       render(
         <ExerciseCard
           {...defaultProps}
-          sets={sets}
-          block={createMockBlock({ targetSets: 3 })}
+          exerciseHistory={{
+            lastWorkoutDate: '2024-01-10',
+            lastWorkoutSets: [
+              { weightKg: 60, reps: 9, rpe: 8 },
+              { weightKg: 60, reps: 8, rpe: 8 },
+            ],
+            estimatedE1RM: 80,
+            personalRecord: null,
+            totalSessions: 5,
+          }}
         />
       );
+      // "chest · last session 60 kg × 9, × 8 @ 2 RIR"
+      expect(screen.getByText(/last session 60 kg × 9, × 8 @ 2 RIR/)).toBeInTheDocument();
+    });
 
-      // Should show 2/3
-      expect(screen.getByText('2')).toBeInTheDocument();
+    it('calls onExerciseNameClick when exercise name is clicked', async () => {
+      const user = userEvent.setup();
+      const onExerciseNameClick = jest.fn();
+
+      render(<ExerciseCard {...defaultProps} onExerciseNameClick={onExerciseNameClick} />);
+
+      await user.click(screen.getByText('Bench Press'));
+      expect(onExerciseNameClick).toHaveBeenCalled();
     });
   });
 
-  describe('Set Logging', () => {
-    it('calls onSetComplete when set is submitted', async () => {
+  describe('One-tap set logging (SetLoggerRow)', () => {
+    it('logs a set with prefilled suggestion values in exactly one tap', async () => {
       const user = userEvent.setup();
       const onSetComplete = jest.fn().mockResolvedValue('new-set-id');
 
       render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
+      );
+
+      // Suggestion prefill: block target weight 60kg, mid of 8-12 = 10 reps,
+      // default RIR chip = block target RIR (2). One tap:
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledTimes(1);
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weightKg: 60,
+          reps: 10,
+          rpe: 7.5, // rirToRpe(2)
+          setType: 'normal',
+          feedback: expect.objectContaining({ repsInTank: 2, form: 'clean' }),
+        })
+      );
+    });
+
+    it('changing the RIR chip changes the logged RIR and derived RPE', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('new-set-id');
+
+      render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
+      );
+
+      await user.click(screen.getByRole('button', { name: '0 reps in reserve' }));
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rpe: 10, // rirToRpe(0)
+          feedback: expect.objectContaining({ repsInTank: 0 }),
+        })
+      );
+    });
+
+    it('pre-selects the calibration-adjusted RIR chip when provided', async () => {
+      render(
         <ExerciseCard
           {...defaultProps}
           isActive={true}
-          onSetComplete={onSetComplete}
+          adjustedRir={{
+            prescribedRIR: 0,
+            internalTargetRIR: 2,
+            hasAdjustment: true,
+            adjustmentReason: 'you tend to stop 2 reps early',
+          }}
         />
       );
 
-      // Find the weight input and fill it
-      const weightInputs = screen.getAllByRole('spinbutton');
-      if (weightInputs.length > 0) {
-        await user.type(weightInputs[0], '100');
-      }
-
-      // Find and click log set button
-      const logButton = screen.queryByRole('button', { name: /log set/i });
-      if (logButton) {
-        await user.click(logButton);
-        expect(onSetComplete).toHaveBeenCalled();
-      }
+      expect(screen.getByRole('button', { name: '0 reps in reserve' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
     });
 
-    it('displays completed sets', () => {
+    it('weight stepper respects the exercise minWeightIncrementKg', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          exercise={createMockExercise({ minWeightIncrementKg: 2.5 })}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Prefilled 60 kg; one + tap steps by exactly 2.5 kg
+      await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+      expect(
+        screen.getByRole('button', { name: /Weight: 62\.5 kg/ })
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Decrease weight' }));
+      expect(screen.getByRole('button', { name: /Weight: 60 kg/ })).toBeInTheDocument();
+    });
+
+    it('reps stepper adjusts reps by one', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('id');
+
+      render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Increase reps' }));
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ reps: 11 })
+      );
+    });
+
+    it('preserves the exact previous-set weight when seeding (no plate rounding)', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          unit="lb"
+          isActive={true}
+          previousSets={[{ weightKg: 100, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // 100 kg = 220.5 lb exact (convertWeightForDisplay), NOT 220 (plate-rounded)
+      expect(
+        screen.getByRole('button', { name: /Weight: 220\.5 lbs/ })
+      ).toBeInTheDocument();
+    });
+
+    it('shows the suggestion banner with a reason', () => {
+      render(<ExerciseCard {...defaultProps} isActive={true} />);
+      // No history and a target weight -> profile-based starting point reason
+      expect(screen.getByText(/starting point estimated/)).toBeInTheDocument();
+    });
+
+    it('surfaces the readiness easing in the suggestion reason', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          readinessModulation={{
+            rirDelta: 1,
+            suggestSetReduction: false,
+            banner: 'Adjusted for readiness — leaving one extra rep in reserve today',
+          }}
+        />
+      );
+
+      expect(screen.getByText(/eased for readiness/)).toBeInTheDocument();
+      // Target RIR 2 + readiness delta 1 -> chip 3 pre-selected
+      expect(screen.getByRole('button', { name: '3 reps in reserve' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+    });
+  });
+
+  describe('Bodyweight support', () => {
+    const bodyweightProps = {
+      ...defaultProps,
+      exercise: createMockExercise({
+        id: 'pullup-1',
+        name: 'Pull-ups',
+        primaryMuscle: 'back',
+        equipmentRequired: ['bodyweight'],
+      }),
+      userBodyweightKg: 80,
+      isActive: true,
+    };
+
+    it('logs plain bodyweight sets with effectiveLoadKg = bodyweight', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('id');
+
+      render(<ExerciseCard {...bodyweightProps} onSetComplete={onSetComplete} />);
+
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weightKg: 80,
+          bodyweightData: expect.objectContaining({
+            userBodyweightKg: 80,
+            modification: 'none',
+            effectiveLoadKg: 80,
+          }),
+        })
+      );
+    });
+
+    it('weighted mode computes effectiveLoadKg = bodyweight + added load', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('id');
+
+      render(<ExerciseCard {...bodyweightProps} onSetComplete={onSetComplete} />);
+
+      // Switch to weighted mode via the segmented control
+      await user.click(screen.getByRole('button', { name: 'Weighted' }));
+      // Step the added load up by the exercise increment (2.5 kg)
+      await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weightKg: 82.5,
+          bodyweightData: expect.objectContaining({
+            userBodyweightKg: 80,
+            modification: 'weighted',
+            addedWeightKg: 2.5,
+            effectiveLoadKg: 82.5,
+          }),
+        })
+      );
+    });
+
+    it('assisted mode computes effectiveLoadKg = bodyweight - assistance', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('id');
+
+      render(<ExerciseCard {...bodyweightProps} onSetComplete={onSetComplete} />);
+
+      await user.click(screen.getByRole('button', { name: 'Assisted' }));
+      await user.click(screen.getByRole('button', { name: 'Increase weight' }));
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weightKg: 77.5,
+          bodyweightData: expect.objectContaining({
+            userBodyweightKg: 80,
+            modification: 'assisted',
+            assistanceWeightKg: 2.5,
+            effectiveLoadKg: 77.5,
+          }),
+        })
+      );
+    });
+  });
+
+  describe('Feedback sheet (absorbs SetFeedbackCard)', () => {
+    it('round-trips form rating and discomfort into the logged feedback', async () => {
+      const user = userEvent.setup();
+      const onSetComplete = jest.fn().mockResolvedValue('id');
+
+      render(
+        <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
+      );
+
+      // Open the feedback sheet from the note icon
+      await user.click(screen.getByRole('button', { name: 'Add set feedback' }));
+
+      // Form rating
+      await user.click(screen.getByText('Some Breakdown'));
+
+      // Discomfort: expand, pick body part + severity, save
+      await user.click(screen.getByText(/Log discomfort/));
+      await user.click(screen.getByText('Lower Back'));
+      await user.click(screen.getByText('Twinge'));
+      await user.click(screen.getByText('Save Discomfort'));
+
+      // Close the sheet and log the set
+      await user.click(screen.getByRole('button', { name: 'Done' }));
+      await user.click(screen.getByRole('button', { name: 'Log set' }));
+
+      expect(onSetComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedback: expect.objectContaining({
+            form: 'some_breakdown',
+            discomfort: expect.objectContaining({
+              bodyPart: 'lower_back',
+              severity: 'twinge',
+            }),
+          }),
+        })
+      );
+    });
+  });
+
+  describe('Completed and pending set lines', () => {
+    it('renders completed sets as compact lines with RIR and quality', () => {
       const sets = [
-        createMockSetLog({ id: 'set-1', setNumber: 1, quality: 'stimulative', qualityReason: 'Good effort' }),
-        createMockSetLog({ id: 'set-2', setNumber: 2, quality: 'effective', qualityReason: 'Solid work' }),
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8, quality: 'stimulative' }),
       ];
 
       render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
 
-      // Sets should be rendered via CompactSetRow mock
-      const setRow1 = screen.queryByTestId('compact-set-row-set-1');
-      const setRow2 = screen.queryByTestId('compact-set-row-set-2');
+      expect(screen.getByText(/Set 1 · 100 kg × 10/)).toBeInTheDocument();
+      // rpeToRir(8) = 2
+      expect(screen.getByText(/2 RIR ·/)).toBeInTheDocument();
+      expect(screen.getByText('stimulative')).toBeInTheDocument();
+    });
 
-      // At least verify the component renders with sets
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
-      // If compact rows are rendered, verify them
-      if (setRow1) expect(setRow1).toBeInTheDocument();
-      if (setRow2) expect(setRow2).toBeInTheDocument();
+    it('renders remaining sets as muted target lines', () => {
+      render(<ExerciseCard {...defaultProps} isActive={true} />);
+
+      // Active set 1 is the logger; sets 2 and 3 are pending lines
+      expect(screen.getAllByText(/60 kg × 8–12 target/)).toHaveLength(2);
     });
   });
 
-  describe('Warmup Sets', () => {
-    it('renders with warmup sets passed', () => {
-      const warmupSets = [
-        { setNumber: 1, percentOfWorking: 50, targetReps: 10, purpose: 'Light warmup' },
-        { setNumber: 2, percentOfWorking: 70, targetReps: 6, purpose: 'Working weight approach' },
-      ];
+  describe('Plateau badge (plateauDetector)', () => {
+    it('shows the plateau pill when detectPlateau fires and opens the sheet', async () => {
+      const user = userEvent.setup();
+      const onRepRangeChange = jest.fn();
+      const onExerciseSwap = jest.fn();
 
-      const { container } = render(
+      render(
         <ExerciseCard
           {...defaultProps}
-          warmupSets={warmupSets}
-          workingWeight={100}
-          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={onRepRangeChange}
+          onExerciseSwap={onExerciseSwap}
         />
       );
 
-      // Verify component renders successfully with warmup data
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
-      // Warmup section is present - verify table exists
-      const table = container.querySelector('table');
-      expect(table).toBeInTheDocument();
+      const pill = screen.getByRole('button', { name: 'Plateau' });
+      await user.click(pill);
+
+      expect(screen.getByText('Plateau detected')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Swap exercise' })).toBeInTheDocument();
+
+      // One-tap rep-range action parsed from the suggestions
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+      expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
+    });
+
+    it('does not show the plateau pill without enough history', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          performanceSnapshots={plateauedSnapshots.slice(0, 2)}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Rest Timer Integration', () => {
+    it('renders the inline timer while active and resting', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          showRestTimer={true}
+          timerSeconds={120}
+          timerInitialSeconds={180}
+          timerIsRunning={true}
+        />
+      );
+
+      expect(screen.getByTestId('inline-rest-timer')).toBeInTheDocument();
     });
   });
 
@@ -486,183 +677,7 @@ describe('ExerciseCard', () => {
         />
       );
 
-      // Modal should be open
-      expect(screen.getByText(/swap/i)).toBeInTheDocument();
-    });
-  });
-
-  describe('Rest Timer Integration', () => {
-    it('renders with rest timer props', () => {
-      render(
-        <ExerciseCard
-          {...defaultProps}
-          showRestTimer={true}
-          timerSeconds={120}
-          timerInitialSeconds={180}
-          timerIsRunning={true}
-        />
-      );
-
-      // Timer is conditionally rendered based on component state
-      const timer = screen.queryByTestId('inline-rest-timer');
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
-      if (timer) {
-        expect(timer).toBeInTheDocument();
-      }
-    });
-
-    it('accepts timer props without error', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          showRestTimer={true}
-          timerSeconds={90}
-          timerInitialSeconds={180}
-          timerIsRunning={false}
-        />
-      );
-
-      // Verify component renders without error
-      expect(container).toBeInTheDocument();
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
-    });
-  });
-
-  describe('Dropset Support', () => {
-    it('renders with pendingDropset prop', () => {
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          pendingDropset={{
-            parentSetId: 'set-1',
-            parentWeight: 100,
-            blockId: 'block-1',
-            dropNumber: 1,
-            totalDrops: 2,
-          }}
-        />
-      );
-
-      // Verify component renders without error
-      expect(container).toBeInTheDocument();
-      // Dropset prompt may be conditionally shown
-      const dropsetPrompt = screen.queryByTestId('dropset-prompt');
-      if (dropsetPrompt) {
-        expect(dropsetPrompt).toBeInTheDocument();
-      }
-    });
-  });
-
-  describe('Callbacks', () => {
-    it('calls onExerciseNameClick when exercise name is clicked', async () => {
-      const user = userEvent.setup();
-      const onExerciseNameClick = jest.fn();
-
-      render(
-        <ExerciseCard
-          {...defaultProps}
-          onExerciseNameClick={onExerciseNameClick}
-        />
-      );
-
-      const exerciseName = screen.getByText('Bench Press');
-      await user.click(exerciseName);
-
-      expect(onExerciseNameClick).toHaveBeenCalled();
-    });
-
-    it('renders with onTargetSetsChange callback', () => {
-      const onTargetSetsChange = jest.fn();
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          onTargetSetsChange={onTargetSetsChange}
-          isActive={true}
-        />
-      );
-
-      // Verify component renders without error
-      expect(container).toBeInTheDocument();
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
-    });
-  });
-
-  describe('Different Exercise Types', () => {
-    it('handles bodyweight exercise', () => {
-      const bodyweightExercise = createMockExercise({
-        id: 'pullup-1',
-        name: 'Pull-ups',
-        primaryMuscle: 'back',
-        equipmentRequired: ['bodyweight'],
-      });
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          exercise={bodyweightExercise}
-          userBodyweightKg={80}
-        />
-      );
-
-      expect(container).toMatchSnapshot();
-    });
-
-    it('handles cable exercise', () => {
-      const cableExercise = createMockExercise({
-        id: 'cable-fly-1',
-        name: 'Cable Fly',
-        primaryMuscle: 'chest',
-        mechanic: 'isolation',
-        equipmentRequired: ['cable'],
-      });
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          exercise={cableExercise}
-        />
-      );
-
-      expect(container).toMatchSnapshot();
-    });
-
-    it('handles machine exercise', () => {
-      const machineExercise = createMockExercise({
-        id: 'leg-press-1',
-        name: 'Leg Press',
-        primaryMuscle: 'quads',
-        mechanic: 'compound',
-        equipmentRequired: ['machine'],
-      });
-
-      const { container } = render(
-        <ExerciseCard
-          {...defaultProps}
-          exercise={machineExercise}
-        />
-      );
-
-      expect(container).toMatchSnapshot();
-    });
-  });
-
-  describe('Injury Awareness', () => {
-    it('shows injury warning when currentInjuries affect exercise', () => {
-      const currentInjuries = [
-        { area: 'shoulder', severity: 2 as const },
-      ];
-
-      render(
-        <ExerciseCard
-          {...defaultProps}
-          currentInjuries={currentInjuries}
-        />
-      );
-
-      // Should show some warning indicator (implementation may vary)
-      // This tests that the component handles injuries gracefully
-      expect(screen.getByText('Bench Press')).toBeInTheDocument();
+      expect(screen.getByText(/swap exercise/i)).toBeInTheDocument();
     });
   });
 });

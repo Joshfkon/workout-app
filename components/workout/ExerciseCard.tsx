@@ -1,23 +1,27 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from 'react';
-import { Card, Badge, Button, InfoTooltip, ConfirmModal } from '@/components/ui';
+import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
-import type { Exercise, ExerciseBlock, SetLog, ProgressionType, WeightUnit, SetQuality, SetFeedback, BodyweightData } from '@/types/schema';
-import { convertWeight, formatWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement, formatDuration } from '@/lib/utils';
-import { calculateSetQuality } from '@/services/progressionEngine';
+import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
+import { rpeToRir } from '@/types/schema';
+import { convertWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
+import { detectPlateau, type PlateauDetectionResult } from '@/services/plateauDetector';
+import type { AdjustedRIRResult } from '@/services/rpeCalibration';
+import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
+import { IconCheck, IconChevronDown } from '@tabler/icons-react';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
-import { BodyweightSetInputRow } from './BodyweightSetInputRow';
-import { BodyweightDisplay } from './BodyweightDisplay';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
-import { CompactSetRow } from './CompactSetRow';
 import { SegmentedControl } from './SegmentedControl';
+import { SetLoggerRow } from './SetLoggerRow';
+import { SuggestionBanner } from './SuggestionBanner';
+import { BottomSheet } from './BottomSheet';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
 
@@ -155,7 +159,6 @@ interface ExerciseCardProps {
   recommendedWeight?: number;  // AI-suggested weight in kg
   previousSets?: { weightKg: number; reps: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
-  hideHeader?: boolean;  // Hide the exercise name header (for mobile when shown in parent)
   warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
   workingWeight?: number;  // Working weight in kg for warmup calculations
   showSwapOnMount?: boolean;  // Auto-show swap modal when mounted (for injury-related swaps)
@@ -182,8 +185,14 @@ interface ExerciseCardProps {
   onDropsetStart?: () => void;  // Called when manual dropset is started (to stop timer)
   // Bodyweight exercise support
   userBodyweightKg?: number;  // User's current bodyweight for bodyweight exercises
-  // RPE calibration - adjusted RIR based on user's bias
-  adjustedTargetRir?: number;  // If user has +2 bias, this would be 0 when block.targetRir is 2
+  // RPE calibration - full adjustment result (prescribed RIR + reason) based on user's bias
+  adjustedRir?: AdjustedRIRResult;
+  // Readiness easing for this session (rirDelta + banner copy), from applyReadinessModulation
+  readinessModulation?: ReadinessModulation | null;
+  // Per-session performance history for plateau detection (services/plateauDetector)
+  performanceSnapshots?: ExercisePerformanceSnapshot[];
+  // One-tap plateau action: update the block's target rep range
+  onRepRangeChange?: (range: [number, number]) => void;
   // AMRAP suggestion - indicates this is the last set and user should push to failure
   isAmrapSuggested?: boolean;  // If true, pre-fill RPE with 9.5 as a target
   // Plate calculator
@@ -212,7 +221,6 @@ export const ExerciseCard = memo(function ExerciseCard({
   recommendedWeight,
   previousSets = [],
   exerciseHistory,
-  hideHeader = false,
   warmupSets = [],
   workingWeight = 0,
   showSwapOnMount = false,
@@ -229,13 +237,21 @@ export const ExerciseCard = memo(function ExerciseCard({
   onDropsetCancel,
   onDropsetStart,
   userBodyweightKg,
-  adjustedTargetRir,
+  adjustedRir,
+  readinessModulation,
+  performanceSnapshots,
+  onRepRangeChange,
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
 }: ExerciseCardProps) {
-  // Use adjusted RIR if available, otherwise fall back to block target RIR
-  const effectiveTargetRir = adjustedTargetRir ?? block.targetRir;
-  
+  // Prescribed RIR: calibration-adjusted target when available, eased further
+  // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
+  const baseTargetRir = adjustedRir?.hasAdjustment ? adjustedRir.prescribedRIR : block.targetRir;
+  const effectiveTargetRir = Math.max(
+    0,
+    Math.min(4, baseTargetRir + (readinessModulation?.rirDelta ?? 0))
+  );
+
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [completedWarmups, setCompletedWarmups] = useState<Set<number>>(new Set());
@@ -251,13 +267,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [swapSearch, setSwapSearch] = useState('');
   const [isCompletingSet, setIsCompletingSet] = useState(false); // Prevent double-clicks
   const [dropsetMode, setDropsetMode] = useState<{ parentSetId: string; parentWeight: number } | null>(null);
-  // Optional feedback overlay: shown after set is completed, user can fill in or skip
-  const [pendingFeedbackSet, setPendingFeedbackSet] = useState<{
-    setId: string;
-    weightKg: number;
-    reps: number;
-    setNumber: number;
-  } | null>(null);
+  // Plateau suggestions bottom sheet (opened from the header pill)
+  const [showPlateauSheet, setShowPlateauSheet] = useState(false);
 
   // Note editing state
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -398,6 +409,43 @@ export const ExerciseCard = memo(function ExerciseCard({
     isPureBodyweight ? 'bodyweight' : 'bodyweight'
   );
 
+  // Added/assistance load input (display units) for weighted/assisted bodyweight
+  // modes. Kept separate from pendingInputs because those seed EFFECTIVE loads.
+  const [bwLoadInput, setBwLoadInput] = useState('');
+
+  // Plateau detection for this exercise (services/plateauDetector, Phase 1.7).
+  // History snapshots are threaded from the page's already-loaded exercise history.
+  const plateau: PlateauDetectionResult | null = useMemo(() => {
+    if (!performanceSnapshots || performanceSnapshots.length === 0) return null;
+    const result = detectPlateau({ exerciseId: exercise.id, snapshots: performanceSnapshots });
+    return result.isPlateaued ? result : null;
+  }, [performanceSnapshots, exercise.id]);
+
+  // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
+  const plateauRepRange: [number, number] | null = useMemo(() => {
+    if (!plateau) return null;
+    for (const suggestion of plateau.suggestions) {
+      const match = suggestion.match(/\((\d+)\s*-\s*(\d+) reps\)/);
+      if (match) return [parseInt(match[1]), parseInt(match[2])];
+    }
+    return null;
+  }, [plateau]);
+
+  // Seed the bodyweight load input from the most recent set logged in the
+  // same mode (added load for weighted, assistance for assisted).
+  useEffect(() => {
+    if (!isBodyweightExercise) return;
+    const lastBw = [...completedSets].reverse().find((s) => s.bodyweightData)?.bodyweightData;
+    if (weightMode === 'weighted') {
+      const kg = lastBw?.modification === 'weighted' ? lastBw.addedWeightKg ?? 0 : 0;
+      setBwLoadInput(kg > 0 ? String(convertWeightForDisplay(kg, unit)) : '');
+    } else if (weightMode === 'assisted') {
+      const kg = lastBw?.modification === 'assisted' ? lastBw.assistanceWeightKg ?? 0 : 0;
+      setBwLoadInput(kg > 0 ? String(convertWeightForDisplay(kg, unit)) : '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weightMode, isBodyweightExercise, completedSets.length, unit]);
+
   // Determine suggested weight
   const suggestedWeight = block.targetWeightKg > 0 
     ? block.targetWeightKg 
@@ -409,6 +457,18 @@ export const ExerciseCard = memo(function ExerciseCard({
     return preserveExact ? convertWeightForDisplay(kg, unit) : formatWeightValue(kg, unit);
   }, [unit]);
   const weightLabel = unit === 'lb' ? 'lbs' : 'kg';
+
+  // Seed string for a pending weight input. When the seed comes verbatim from
+  // a logged set (recommendation held the weight, or seeding from last
+  // session), preserve the user's EXACT input via convertWeightForDisplay —
+  // only fresh suggestions round to plate increments (SetInputRow convention).
+  const seedWeightString = useCallback(
+    (kg: number, exactSourceKg?: number) => {
+      if (!(kg > 0)) return '';
+      return String(displayWeight(kg, exactSourceKg !== undefined && kg === exactSourceKg));
+    },
+    [displayWeight]
+  );
 
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
@@ -457,14 +517,14 @@ export const ExerciseCard = memo(function ExerciseCard({
       }
 
       updatedInputs.push({
-        weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
+        weight: seedWeightString(smartWeight, lastCompleted.weightKg),
         reps: String(setReps),
         rpe: String(setRpe),
       });
     }
 
     setPendingInputs(updatedInputs);
-  }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, displayWeight, isAmrapSuggested]);
+  }, [completedSets, pendingSetsCount, effectiveTargetRir, block.targetRepRange, seedWeightString, isAmrapSuggested]);
   
   // Initialize pending inputs when component mounts or when we need a full reset
   // Only reinitialize when pendingSetsCount increases (sets were added) or on first mount
@@ -508,7 +568,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
 
         updatedInputs.push({
-          weight: smartWeight > 0 ? String(displayWeight(smartWeight)) : '',
+          weight: seedWeightString(smartWeight, lastCompleted?.weightKg),
           reps: String(setReps),
           rpe: String(setRpe),
         });
@@ -573,7 +633,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         }
 
         newPendingInputs.push({
-          weight: defaultWeight > 0 ? String(displayWeight(defaultWeight)) : '',
+          weight: seedWeightString(defaultWeight, lastCompleted?.weightKg ?? prevSet?.weightKg),
           reps: String(defaultReps),
           rpe: String(defaultRpe),
         });
@@ -796,19 +856,20 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
   };
 
-  // Complete set immediately, then show optional feedback overlay
-  const completeSetImmediately = async (index: number, asDropset = false) => {
+  // One-tap commit from the SetLoggerRow. The payload arrives in the exact
+  // shape the persistence path expects: weight already converted to kg, RPE
+  // derived from the selected RIR chip, feedback (form/discomfort/note sheet)
+  // included, bodyweightData populated for bodyweight exercises.
+  const completeLoggedSet = async (data: {
+    weightKg: number;
+    reps: number;
+    rpe: number;
+    note?: string;
+    feedback: SetFeedback;
+    bodyweightData?: BodyweightData;
+  }) => {
     if (isCompletingSet || !onSetComplete) return;
-
-    const input = pendingInputs[index];
-    if (!input) return;
-
-    const weightNum = parseFloat(input.weight);
-    const repsNum = parseInt(input.reps);
-
-    if (isNaN(weightNum) || isNaN(repsNum) || repsNum < 1) {
-      return;
-    }
+    if (isNaN(data.weightKg) || data.weightKg < 0 || data.reps < 1) return;
 
     // Lock to prevent double-clicks
     setIsCompletingSet(true);
@@ -816,39 +877,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     // Subtle haptic tick the moment a set is committed (native; no-op on web/iOS WKWebView).
     void lightHaptic();
 
-    // Convert from display unit to kg
-    const weightKg = inputWeightToKg(weightNum, unit);
-    const setNumber = completedSets.length + index + 1;
-
-    // Use target RPE as default (will be updated if user provides feedback)
-    const targetRpe = 10 - effectiveTargetRir;
-
     try {
       // Complete the set immediately (rest timer starts in parent)
-      const result = await onSetComplete({
-        weightKg,
-        reps: repsNum,
-        rpe: targetRpe,
-        setType: asDropset && dropsetMode ? 'dropset' : 'normal',
-        parentSetId: asDropset && dropsetMode ? dropsetMode.parentSetId : undefined,
-        // No feedback yet - user can add it optionally
+      await onSetComplete({
+        weightKg: data.weightKg,
+        reps: data.reps,
+        rpe: data.rpe,
+        note: data.note,
+        setType: 'normal',
+        feedback: data.feedback,
+        bodyweightData: data.bodyweightData,
       });
-
-      // Clear dropset mode after completing
-      if (asDropset) {
-        setDropsetMode(null);
-      }
-
-      // Show feedback overlay if we got a set ID back (submission succeeded)
-      if (result && typeof result === 'string') {
-        setPendingFeedbackSet({
-          setId: result,
-          weightKg,
-          reps: repsNum,
-          setNumber,
-        });
-      }
-      // If result is null/undefined, submission failed - lock will be released below
     } catch (error) {
       console.error('Set submission failed:', error);
       // Lock will be released in finally block
@@ -859,22 +898,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   };
 
-  // Submit feedback for the pending set
-  const submitFeedback = (feedback: SetFeedback) => {
-    if (!pendingFeedbackSet || !onSetFeedbackUpdate) return;
 
-    onSetFeedbackUpdate(pendingFeedbackSet.setId, feedback);
-    setPendingFeedbackSet(null);
-  };
-
-  // Skip feedback entry
-  const skipFeedback = () => {
-    setPendingFeedbackSet(null);
-  };
-
-  // Alias for backwards compatibility
-  const completePendingSet = completeSetImmediately;
-  
   // Start dropset mode with reduced weight
   const startDropset = (parentSet: SetLog) => {
     // Typical dropset reduces weight by 20-30%
@@ -890,21 +914,6 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Cancel dropset mode
   const cancelDropset = () => {
     setDropsetMode(null);
-  };
-
-  const getQualityPreview = (input: { weight: string; reps: string; rpe: string }): { quality: SetQuality; reason: string } | null => {
-    const repsNum = parseInt(input.reps);
-    const rpeNum = parseFloat(input.rpe);
-    
-    if (isNaN(repsNum) || isNaN(rpeNum)) return null;
-    
-    return calculateSetQuality({
-      rpe: rpeNum,
-      targetRir: block.targetRir,
-      reps: repsNum,
-      targetRepRange: block.targetRepRange,
-      isLastSet: false,
-    });
   };
 
   const startEditing = (set: SetLog) => {
@@ -956,117 +965,149 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   };
 
-  const getProgressionIcon = (type: ProgressionType | null) => {
-    switch (type) {
-      case 'load':
-        return (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-          </svg>
-        );
-      case 'reps':
-        return (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        );
-      case 'sets':
-        return (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const getQualityColor = (quality: SetQuality) => {
+  // Text color for the completed-line quality tag (mockup grammar):
+  // stimulative=success, effective=neutral, junk=warning, excessive=danger.
+  const qualityTextClass = (quality: SetQuality) => {
     switch (quality) {
-      case 'junk': return 'text-surface-500';
-      case 'effective': return 'text-primary-400';
       case 'stimulative': return 'text-success-400';
+      case 'effective': return 'text-surface-400';
+      case 'junk': return 'text-warning-400';
       case 'excessive': return 'text-danger-400';
+      default: return 'text-surface-500';
     }
   };
 
-  // Background-color class for the compact set-quality dot shown on the set number.
-  const qualityDotClass = (quality: SetQuality) => {
-    switch (quality) {
-      case 'junk': return 'bg-surface-500';
-      case 'effective': return 'bg-primary-400';
-      case 'stimulative': return 'bg-success-400';
-      case 'excessive': return 'bg-danger-400';
-      default: return 'bg-surface-600';
+  // Reason sentence + plain-language explanation for the SuggestionBanner.
+  // Primary reason from the within-session recommender rationale (or the
+  // last-session comparison for the first set); calibration / readiness
+  // modifiers are flagged inline and fully explained in the info sheet.
+  const buildSuggestionInfo = (isAmrap: boolean): { reason: string; explanation: string[] } => {
+    const lastCompleted = completedSets[completedSets.length - 1];
+    const explanation: string[] = [];
+    let reason: string;
+
+    const deltaLabel = (deltaKg: number) =>
+      `${deltaKg > 0 ? '+' : '-'}${convertWeightForDisplay(Math.abs(deltaKg), unit)} ${weightLabel}`;
+
+    if (lastCompleted) {
+      const rec = recommendNext({
+        weightKg: lastCompleted.weightKg,
+        reps: lastCompleted.reps,
+        rpe: lastCompleted.rpe,
+      });
+      const deltaKg = rec.weightKg - lastCompleted.weightKg;
+      if (rec.rationale === 'increase_load') {
+        reason = `up ${deltaLabel(deltaKg)} — last set was clearly too light`;
+      } else if (rec.rationale === 'reduce_load') {
+        reason = `down ${deltaLabel(deltaKg)} — last set was harder than the target effort`;
+      } else {
+        reason = 'holding the weight — your last set matched the target effort';
+      }
+      explanation.push(
+        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prediction works back from.`
+      );
+    } else {
+      const lastSessionTop = exerciseHistory?.lastWorkoutSets?.[0];
+      if (lastSessionTop && suggestedWeight > 0) {
+        const deltaKg = suggestedWeight - lastSessionTop.weightKg;
+        reason =
+          Math.abs(deltaKg) < 0.25
+            ? 'matching your last session'
+            : `${deltaKg > 0 ? 'up' : 'down'} ${deltaLabel(deltaKg)} vs last session`;
+        explanation.push(
+          `Anchored to your last session: ${displayWeight(lastSessionTop.weightKg, true)} ${weightLabel} × ${lastSessionTop.reps}.`
+        );
+      } else if (suggestedWeight > 0) {
+        reason = 'starting point estimated from your training profile';
+        explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
+      } else {
+        reason = 'enter your working weight to calibrate';
+        explanation.push('Log a first set and future suggestions will anchor to it.');
+      }
+      if (exerciseHistory && exerciseHistory.estimatedE1RM > 0) {
+        explanation.push(
+          `Best estimated 1RM on record: ${displayWeight(exerciseHistory.estimatedE1RM)} ${weightLabel}.`
+        );
+      }
     }
+
+    explanation.push(
+      `Target: ${block.targetRepRange[0]}-${block.targetRepRange[1]} ${isDurationBased ? 'seconds' : 'reps'} leaving ${effectiveTargetRir} in reserve (RIR ${effectiveTargetRir}).`
+    );
+
+    if (adjustedRir?.hasAdjustment && adjustedRir.adjustmentReason) {
+      reason += ' · calibration-adjusted';
+      explanation.push(`Calibration: ${adjustedRir.adjustmentReason}.`);
+    }
+    if (readinessModulation?.banner) {
+      reason += ' · eased for readiness';
+      explanation.push(`Readiness: ${readinessModulation.banner}.`);
+    }
+    if (isAmrap) {
+      explanation.push('Last set: push to failure (AMRAP) so the app can calibrate how you rate effort.');
+    }
+
+    return { reason, explanation };
   };
 
-  // Previous workout's set at a given index, formatted "weight × reps" (or null).
-  const prevSetLabel = (i: number): string | null => {
-    const p = previousSets[i];
-    return p ? `${displayWeight(p.weightKg)} × ${p.reps}` : null;
-  };
+  // Single meta line under the exercise name (mockup 2.4):
+  // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
+  const lastSessionMeta = (() => {
+    const lastSets = exerciseHistory?.lastWorkoutSets ?? [];
+    if (lastSets.length === 0) return null;
+    const repsPart = lastSets
+      .slice(0, 3)
+      .map((s) => `× ${s.reps}${isDurationBased ? 's' : ''}`)
+      .join(', ');
+    const rir = lastSets[0].rpe != null ? Math.max(0, Math.round(10 - lastSets[0].rpe)) : null;
+    return `last session ${displayWeight(lastSets[0].weightKg, true)} ${weightLabel} ${repsPart}${
+      rir !== null ? ` @ ${rir} RIR` : ''
+    }`;
+  })();
 
   return (
     <Card
       variant={isActive ? 'elevated' : 'default'}
       padding="none"
       className={`relative overflow-hidden transition-all ${
-        isActive && !hideHeader ? 'ring-2 ring-primary-500/50' : ''
-      } ${hideHeader ? 'border-0 shadow-none bg-transparent' : ''}`}
+        isActive ? 'ring-2 ring-primary-500/50' : ''
+      }`}
     >
-      {/* Header - compact when hideHeader is true */}
-      <div className={`${hideHeader ? 'px-2 pt-2 pb-0 border-0 bg-transparent' : 'p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10'}`}>
-        <div className="flex items-start justify-between gap-2">
-          {/* Exercise name and info - hidden when hideHeader */}
-          {!hideHeader && (
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onExerciseNameClick}
-                  className="font-semibold text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
-                >
-                  {exercise.name}
-                  {isBodyweightExercise && (
-                    <span className="ml-2 text-xs text-surface-500 font-normal">(bodyweight)</span>
-                  )}
-                </button>
-                {exercise.hypertrophyScore?.tier && (
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
-                    {exercise.hypertrophyScore.tier}
-                  </span>
-                )}
-                <SafetyTierBadge
-                  tier={getFailureSafetyTier(exercise.name)}
-                  variant="short"
-                  showTooltip={true}
-                />
-                {block.progressionType && (
-                  <span className="flex items-center gap-1 text-primary-400">
-                    {getProgressionIcon(block.progressionType)}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-surface-400 mt-0.5">
-                {exercise.primaryMuscle} • {exercise.mechanic}
-                {exercise.equipmentRequired && exercise.equipmentRequired.length > 0 && (
-                  <> • <span className="text-surface-500 capitalize">{exercise.equipmentRequired[0]}</span></>
-                )}
-              </p>
-              {/* Show tier explanation for top-tier exercises */}
-              {exercise.hypertrophyScore?.tier && ['S', 'A'].includes(exercise.hypertrophyScore.tier) && (
-                <p className="text-xs text-emerald-500/70 mt-0.5 flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  {exercise.hypertrophyScore.tier === 'S' 
-                    ? 'Top-tier for muscle growth' 
-                    : 'Highly effective choice'}
-                </p>
-              )}
-            </div>
+      {/* Header — slim: name + pills on one line, one meta line below (2.4) */}
+      <div className="p-4 border-b border-surface-800 sticky top-0 bg-surface-900 z-10">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onExerciseNameClick}
+            className="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          >
+            {exercise.name}
+          </button>
+          {exercise.hypertrophyScore?.tier && (
+            <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${getTierBadgeClasses(exercise.hypertrophyScore.tier)}`}>
+              {exercise.hypertrophyScore.tier}
+            </span>
           )}
-          <div className={hideHeader ? 'absolute top-1.5 right-1.5 z-30 flex items-center gap-1.5' : 'flex items-center gap-1.5'}>
+          {/* Plateau badge (services/plateauDetector) — opens the suggestions sheet */}
+          {plateau && (
+            <button
+              onClick={() => setShowPlateauSheet(true)}
+              className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
+              aria-haspopup="dialog"
+            >
+              Plateau
+            </button>
+          )}
+          {block.supersetGroupId && (
+            <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
+              SS{block.supersetOrder}
+            </span>
+          )}
+          <SafetyTierBadge
+            tier={getFailureSafetyTier(exercise.name)}
+            variant="short"
+            showTooltip={true}
+          />
+          <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
             {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
             {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
             {isActive && (onExerciseSwap || onExerciseDelete || onPlateCalculatorOpen) && (
@@ -1149,15 +1190,31 @@ export const ExerciseCard = memo(function ExerciseCard({
                 )}
               </div>
             )}
-            {/* Progress badge — hidden in the workout view (the workout header shows the
-                count and per-set dots/checks convey progress); keeps the header uncluttered */}
-            {!hideHeader && (
-              <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
-                {completedSets.length}/{block.targetSets}
-              </Badge>
-            )}
+            <Badge variant={progressPercent === 100 ? 'success' : 'default'}>
+              {completedSets.length}/{block.targetSets}
+            </Badge>
           </div>
         </div>
+
+        {/* Meta line — doubles as the history expandable trigger */}
+        <button
+          onClick={() => exerciseHistory && setShowHistory(!showHistory)}
+          disabled={!exerciseHistory}
+          className="mt-1 flex items-center justify-between w-full gap-2 text-left"
+        >
+          <p className="min-w-0 text-[11px] text-surface-500 truncate">
+            <span className="capitalize">{exercise.primaryMuscle}</span>
+            {isBodyweightExercise && ' · bodyweight'}
+            {lastSessionMeta && <> · {lastSessionMeta}</>}
+          </p>
+          {exerciseHistory && (
+            <IconChevronDown
+              size={14}
+              className={`flex-shrink-0 text-surface-500 transition-transform ${showHistory ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          )}
+        </button>
 
         {/* Weight mode segmented control for bodyweight exercises */}
         {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
@@ -1174,42 +1231,21 @@ export const ExerciseCard = memo(function ExerciseCard({
           </div>
         )}
 
-        {/* Exercise Stats & History */}
-        {exerciseHistory && (
-          <div className={hideHeader ? 'pr-9' : 'mt-3 pt-3 border-t border-surface-800'}>
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              className="flex items-center justify-between w-full text-left"
-            >
-              <div className="flex items-center gap-2 text-xs text-surface-400 flex-wrap">
-                {/* Estimated 1RM — hidden until there's a real estimate (avoid "0 lbs") */}
+        {/* Expanded history detail (behind the meta-line expandable) */}
+        {exerciseHistory && showHistory && (
+          <div className="mt-3 pt-3 border-t border-surface-800">
+            <div className="space-y-3">
+                {/* Estimated 1RM + session count */}
                 {exerciseHistory.estimatedE1RM > 0 && (
-                  <span>1RM <span className="text-surface-300">{displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}</span></span>
+                  <p className="text-xs text-surface-400">
+                    Estimated 1RM{' '}
+                    <span className="text-surface-200">
+                      {displayWeight(exerciseHistory.estimatedE1RM)} {weightLabel}
+                    </span>
+                    <span className="text-surface-600"> · </span>
+                    {exerciseHistory.totalSessions} session{exerciseHistory.totalSessions === 1 ? '' : 's'}
+                  </p>
                 )}
-                {/* Last workout's top set (mockup: "last 45 × 9") */}
-                {exerciseHistory.estimatedE1RM > 0 && exerciseHistory.lastWorkoutSets.length > 0 && (
-                  <span className="text-surface-600">·</span>
-                )}
-                {exerciseHistory.lastWorkoutSets.length > 0 && (() => {
-                  const top = exerciseHistory.lastWorkoutSets.reduce((a, b) => (b.weightKg > a.weightKg ? b : a));
-                  return (
-                    <span>last <span className="text-surface-300">{displayWeight(top.weightKg, true)} × {top.reps}{isDurationBased ? 's' : ''}</span></span>
-                  );
-                })()}
-              </div>
-              <svg 
-                className={`w-4 h-4 text-surface-400 transition-transform ${showHistory ? 'rotate-180' : ''}`}
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-
-            {/* Expanded history */}
-            {showHistory && (
-              <div className="mt-3 space-y-3">
                 {/* Last workout */}
                 {exerciseHistory.lastWorkoutSets.length > 0 && (
                   <div className="p-3 bg-surface-800/50 rounded-lg">
@@ -1252,12 +1288,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                     Exercise Info
                   </a>
                 </div>
-              </div>
-            )}
+            </div>
           </div>
         )}
-
-        {/* Quick links when no history - removed Watch Form (now in header) */}
       </div>
 
       {/* Warmup sets - keep in separate table for now (legacy) */}
@@ -1447,633 +1480,330 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Bodyweight exercises: Compact design | Non-bodyweight: Table design */}
-      {isBodyweightExercise ? (
-        // Compact set rows for bodyweight exercises
-        <div className="divide-y divide-surface-800">
-          {/* Completed working sets */}
-          {completedSets.map((set, setIndex) => {
-            const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
-            const isLastCompletedSet = setIndex === completedSets.length - 1;
-            
-            // Use bodyweight edit row for bodyweight sets when editing
-            if (editingSetId === set.id && set.bodyweightData && userBodyweightKg) {
-              return (
-                <BodyweightSetEditRow
-                  key={set.id}
-                  set={set}
-                  userBodyweightKg={userBodyweightKg}
-                  canAddWeight={canAddWeight}
-                  canUseAssistance={canUseAssistance}
-                  isPureBodyweight={isPureBodyweight}
-                  unit={unit}
-                  onSave={(data) => {
-                    if (onSetEdit) {
-                      onSetEdit(set.id, {
-                        weightKg: data.weightKg,
-                        reps: data.reps,
-                        rpe: data.rpe,
-                        bodyweightData: data.bodyweightData,
-                      });
-                    }
-                    cancelEditing();
-                  }}
-                  onCancel={cancelEditing}
-                />
-              );
-            }
-            
-            // Use compact row for completed sets (when not editing)
-            if (editingSetId !== set.id) {
-              return (
-                <CompactSetRow
-                  key={set.id}
-                  setNumber={set.setNumber}
-                  userBodyweightKg={userBodyweightKg}
-                  weightMode={weightMode}
-                  isBodyweight={isBodyweightExercise}
-                  canAddWeight={canAddWeight}
-                  canUseAssistance={canUseAssistance}
-                  isPureBodyweight={isPureBodyweight}
-                  targetRepRange={block.targetRepRange}
-                  targetRir={block.targetRir}
-                  isCompleted={true}
-                  completedSet={set}
-                  onEdit={onSetEdit ? () => setEditingSetId(set.id) : undefined}
-                  unit={unit}
-                  isDurationBased={isDurationBased}
-                  exerciseId={exercise.id}
-                />
-              );
-            }
-            
-            return null;
-          })}
+      {/* Set list — compact completed lines, one-tap active logger, muted pending targets (mockup 2.1) */}
+      <div className="px-3 py-3 space-y-1.5">
+        {/* Completed working sets */}
+        {completedSets.map((set, setIndex) => {
+          const isDropsetSet = set.setType === 'dropset';
+          const isLastCompletedSet = setIndex === completedSets.length - 1;
 
-          {/* Auto-triggered Dropset Prompt */}
-          {isActive && pendingDropset && (
-            <DropsetPrompt
-              parentWeight={pendingDropset.parentWeight}
-              dropNumber={pendingDropset.dropNumber}
-              totalDrops={pendingDropset.totalDrops}
-              dropPercentage={block.dropPercentage ?? 0.25}
-              unit={unit}
-              exerciseEquipment={exercise.equipmentRequired}
-              onComplete={(data) => {
-                if (onSetComplete) {
-                  onSetComplete({
-                    weightKg: data.weightKg,
-                    reps: data.reps,
-                    rpe: data.rpe,
-                    setType: 'dropset',
-                    parentSetId: pendingDropset.parentSetId,
-                  });
-                }
-              }}
-              onCancel={() => onDropsetCancel?.()}
-            />
-          )}
-
-          {/* Inline Rest Timer */}
-          {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
-            <InlineRestTimerBar
-              seconds={timerSeconds}
-              initialSeconds={timerInitialSeconds}
-              isRunning={timerIsRunning}
-              isFinished={timerIsFinished}
-              isSkipped={timerIsSkipped}
-              restedSeconds={timerRestedSeconds}
-              onShowControls={onShowTimerControls}
-              variant="div"
-            />
-          )}
-
-          {/* Pending sets */}
-          {isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
-            const setNumber = completedSets.length + index + 1;
-            const previousSet = completedSets[completedSets.length - 1] || previousSets[completedSets.length + index - 1];
-            
+          // Editing: bodyweight sets get the dedicated edit row
+          if (editingSetId === set.id && set.bodyweightData && userBodyweightKg) {
             return (
-              <CompactSetRow
-                key={`pending-${setNumber}`}
-                setNumber={setNumber}
+              <BodyweightSetEditRow
+                key={set.id}
+                set={set}
                 userBodyweightKg={userBodyweightKg}
-                weightMode={weightMode}
-                isBodyweight={isBodyweightExercise}
                 canAddWeight={canAddWeight}
                 canUseAssistance={canUseAssistance}
                 isPureBodyweight={isPureBodyweight}
-                previousSet={previousSet}
-                targetRepRange={block.targetRepRange}
-                targetRir={block.targetRir}
-                isActive={index === 0}
-                suggestedWeight={suggestedWeight}
-                onSubmit={async (data) => {
-                  if (onSetComplete) {
-                    const result = await onSetComplete({
+                unit={unit}
+                onSave={(data) => {
+                  if (onSetEdit) {
+                    onSetEdit(set.id, {
                       weightKg: data.weightKg,
                       reps: data.reps,
                       rpe: data.rpe,
-                      note: data.note,
-                      feedback: data.feedback,
                       bodyweightData: data.bodyweightData,
                     });
-                    return result;
                   }
+                  cancelEditing();
                 }}
-                unit={unit}
-                disabled={isCompletingSet}
-                isDurationBased={isDurationBased}
-                exerciseId={exercise.id}
+                onCancel={cancelEditing}
               />
             );
-          })}
+          }
 
-          {/* Inactive placeholder sets */}
-          {!isActive && Array.from({ length: pendingSetsCount }).map((_, index) => {
-            const setNumber = completedSets.length + index + 1;
+          // Editing: standard sets get inline weight/reps inputs
+          if (editingSetId === set.id) {
             return (
-              <div
-                key={`inactive-${setNumber}`}
-                className="flex items-center gap-2 px-3 py-2 h-14 bg-surface-800/20 opacity-40"
-              >
-                <div className="w-8 text-xs text-surface-500">{setNumber}</div>
-                <div className="flex-1 text-xs text-surface-600">—</div>
-                <div className="w-20 text-center text-sm text-surface-600">—</div>
-                <div className="w-10"></div>
+              <div key={set.id} className="flex items-center gap-2 rounded-lg bg-primary-500/10 px-2 py-1.5">
+                <span className="w-6 flex-shrink-0 text-[12px] font-medium text-surface-300 text-center">
+                  {set.setNumber}
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={handleEditKeyDown}
+                  step="0.5"
+                  aria-label="Edit weight"
+                  className="w-20 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                  autoFocus
+                />
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={editReps}
+                  onChange={(e) => setEditReps(e.target.value)}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={handleEditKeyDown}
+                  aria-label="Edit reps"
+                  className="w-14 px-1 py-1.5 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
+                />
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    onClick={saveEdit}
+                    aria-label="Save set edit"
+                    className="p-2 text-success-400 hover:bg-success-500/20 rounded-lg"
+                  >
+                    <IconCheck size={16} />
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    aria-label="Cancel set edit"
+                    className="p-2 text-surface-400 hover:bg-surface-700 rounded-lg"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  {onSetDelete && (
+                    <button
+                      onClick={() => {
+                        cancelEditing();
+                        onSetDelete(set.id);
+                      }}
+                      aria-label="Delete set"
+                      className="p-2 text-danger-400 hover:bg-danger-500/10 rounded-lg"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
             );
-          })}
-        </div>
-      ) : (
-        // Table design for non-bodyweight exercises
-        <div className="overflow-hidden">
-          <table className="w-full text-sm table-fixed">
-            <thead className="bg-surface-800/50">
-              <tr>
-                <th className="px-2 py-2 text-left text-surface-400 font-medium">Set</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">Previous</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : weightLabel}</th>
-                <th className="px-2 py-2 text-center text-surface-400 font-medium">{isDurationBased ? 'Sec' : 'Reps'}</th>
-                <th className="px-1 py-2 w-14"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-surface-800">
-              {/* Completed working sets */}
-              {completedSets.map((set, setIndex) => {
-                const isDropset = (set as any).setType === 'dropset' || (set as any).set_type === 'dropset';
-                const isLastCompletedSet = setIndex === completedSets.length - 1;
-                
-                return editingSetId === set.id ? (
-                  <tr key={set.id} className="bg-primary-500/10">
-                    <td className="px-2 py-2 text-surface-300 font-medium">{set.setNumber}</td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(setIndex) ?? '—'}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={editWeight}
-                        onChange={(e) => setEditWeight(e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={handleEditKeyDown}
-                        step="0.5"
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                        autoFocus
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={editReps}
-                        onChange={(e) => setEditReps(e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={handleEditKeyDown}
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-600 rounded text-center font-mono text-surface-100 text-sm"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex gap-1 justify-center">
-                        <button
-                          onClick={saveEdit}
-                          className="p-1.5 text-success-400 hover:bg-success-500/20 rounded"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={cancelEditing}
-                          className="p-1.5 text-surface-400 hover:bg-surface-700 rounded"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  <React.Fragment key={set.id}>
-                    <tr
-                      className={`hover:bg-surface-800/30 group ${
-                        isDropset ? 'bg-purple-500/10' : 'bg-success-500/5'
-                      }`}
-                      onTouchStart={(e) => handleTouchStart(set.id, e)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={() => handleTouchEnd(set.id, true)}
-                      style={getSwipeTransform(set.id)}
-                    >
-                      <td className="px-2 py-2.5 text-surface-300 font-medium">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {onSetFeedbackUpdate ? (
-                            <button
-                              type="button"
-                              onClick={() => setPendingFeedbackSet({ setId: set.id, weightKg: set.weightKg, reps: set.reps, setNumber: set.setNumber })}
-                              title="Tap to rate effort (RIR)"
-                              aria-label="Rate set effort"
-                              className="flex-shrink-0 p-1 -m-1"
-                            >
-                              <span className={`block w-2 h-2 rounded-full ${qualityDotClass(set.quality)}`} />
-                            </button>
-                          ) : (
-                            <span className={`block w-2 h-2 rounded-full flex-shrink-0 ${qualityDotClass(set.quality)}`} />
-                          )}
-                          {isDropset && <span className="text-purple-400 text-xs">↓</span>}
-                          <span className="truncate">{set.setNumber}</span>
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5 text-center font-mono text-xs text-surface-500">
-                        {prevSetLabel(setIndex) ?? '—'}
-                      </td>
-                      <td
-                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                        onClick={() => onSetEdit && startEditing(set)}
-                      >
-                        {set.bodyweightData
-                          ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
-                          : displayWeight(set.weightKg, true)}
-                      </td>
-                      <td
-                        className={`px-2 py-2.5 text-center font-mono text-surface-200 ${onSetEdit ? 'cursor-pointer hover:text-primary-400' : ''}`}
-                        onClick={() => onSetEdit && startEditing(set)}
-                      >
-                        {set.reps}{isDurationBased ? 's' : ''}
-                      </td>
-                      <td className="px-1 py-2.5 relative">
-                        {/* Delete reveal background for swipe */}
-                        {swipeState.setId === set.id && swipeState.isSwiping && (
-                          <div
-                            className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500 text-white pointer-events-none"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </div>
-                        )}
-                        {onSetDelete ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSetDelete(set.id);
-                            }}
-                            className="min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-lg bg-success-500 active:bg-surface-600 transition-colors group/check"
-                            title="Uncheck set"
-                          >
-                            <svg className="w-4 h-4 text-white group-active/check:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                            <svg className="w-4 h-4 text-surface-400 hidden group-active/check:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        ) : (
-                          <div className="p-1.5 rounded-lg bg-success-500">
-                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
+          }
 
-                    {/* Inline RIR rating for the just-completed set (replaces the old modal) */}
-                    {pendingFeedbackSet?.setId === set.id && onSetFeedbackUpdate && (
-                      <tr className="bg-primary-500/5">
-                        <td colSpan={5} className="px-2 py-2">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs text-surface-400 mr-0.5 inline-flex items-center">
-                              Reps in reserve?<InfoTooltip term="RIR" size="sm" />
-                            </span>
-                            {([
-                              { v: 4, label: '4+', sub: 'Easy' },
-                              { v: 2, label: '2-3', sub: 'Good' },
-                              { v: 1, label: '1', sub: 'Hard' },
-                              { v: 0, label: '0', sub: 'Max' },
-                            ] as const).map((o) => (
-                              <button
-                                key={o.v}
-                                onClick={() => submitFeedback({ repsInTank: o.v, form: set.feedback?.form ?? 'clean' })}
-                                className="min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-800 text-surface-200 hover:bg-primary-500 hover:text-white active:bg-primary-600 transition-colors"
-                              >
-                                {o.label}
-                                <span className="ml-1 text-[10px] font-normal opacity-70">{o.sub}</span>
-                              </button>
-                            ))}
-                            <button
-                              onClick={skipFeedback}
-                              className="ml-auto text-xs text-surface-500 hover:text-surface-300 px-2 py-1"
-                            >
-                              Skip
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+          // Completed line: "✓ Set 1 · 62.5 lbs × 9    2 RIR · stimulative"
+          const completedWeight = set.bodyweightData
+            ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
+            : displayWeight(set.weightKg, true);
+          const rirValue = rpeToRir(set.rpe);
 
-                    {/* Add Dropset button */}
-                    {isActive && isLastCompletedSet && !dropsetMode && !isDropset && !pendingDropset &&
-                     pendingInputs.length === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
-                      <tr className="bg-surface-800/20">
-                        <td colSpan={5} className="px-3 py-2">
-                          <button
-                            onClick={() => startDropset(set)}
-                            className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                            </svg>
-                            Add Dropset (reduce weight, continue to failure)
-                          </button>
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
+          return (
+            <React.Fragment key={set.id}>
+              <div
+                className={`flex items-center gap-2 px-1 py-2 ${
+                  isDropsetSet ? 'bg-purple-500/5 rounded-lg' : ''
+                } ${onSetEdit ? 'cursor-pointer hover:bg-surface-800/30 rounded-lg' : ''}`}
+                onClick={() => onSetEdit && startEditing(set)}
+                onTouchStart={(e) => handleTouchStart(set.id, e)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={() => handleTouchEnd(set.id, true)}
+                style={getSwipeTransform(set.id)}
+              >
+                <IconCheck size={16} className="text-success-400 flex-shrink-0" aria-hidden="true" />
+                {isDropsetSet && (
+                  <span className="text-[11px] text-purple-400 flex-shrink-0">drop</span>
+                )}
+                <span className="text-[13px] text-surface-300 truncate">
+                  Set {set.setNumber} · {set.bodyweightData?.modification === 'none' ? 'BW ' : ''}
+                  {completedWeight} {weightLabel} × {set.reps}
+                  {isDurationBased ? 's' : ''}
+                </span>
+                <span className="ml-auto flex-shrink-0 text-[11px] text-surface-500">
+                  {rirValue} RIR · <span className={qualityTextClass(set.quality)}>{set.quality}</span>
+                </span>
+              </div>
 
-              {/* Auto-triggered Dropset Prompt */}
-              {isActive && pendingDropset && (
-                <tr>
-                  <td colSpan={5} className="p-0">
-                    <DropsetPrompt
-                      parentWeight={pendingDropset.parentWeight}
-                      dropNumber={pendingDropset.dropNumber}
-                      totalDrops={pendingDropset.totalDrops}
-                      dropPercentage={block.dropPercentage ?? 0.25}
-                      unit={unit}
-                      exerciseEquipment={exercise.equipmentRequired}
-                      onComplete={(data) => {
-                        if (onSetComplete) {
-                          onSetComplete({
-                            weightKg: data.weightKg,
-                            reps: data.reps,
-                            rpe: data.rpe,
-                            setType: 'dropset',
-                            parentSetId: pendingDropset.parentSetId,
-                          });
-                        }
-                      }}
-                      onCancel={() => onDropsetCancel?.()}
-                    />
-                  </td>
-                </tr>
+              {/* Add Dropset affordance after the final completed set */}
+              {isActive && isLastCompletedSet && !dropsetMode && !isDropsetSet && !pendingDropset &&
+               pendingSetsCount === 0 && (!block.dropsetsPerSet || block.dropsetsPerSet === 0) && (
+                <button
+                  onClick={() => startDropset(set)}
+                  className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 rounded-lg transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                  </svg>
+                  Add Dropset (reduce weight, continue to failure)
+                </button>
               )}
+            </React.Fragment>
+          );
+        })}
 
-              {/* Inline Rest Timer */}
-              {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
-                <InlineRestTimerBar
-                  seconds={timerSeconds}
-                  initialSeconds={timerInitialSeconds}
-                  isRunning={timerIsRunning}
-                  isFinished={timerIsFinished}
-                  isSkipped={timerIsSkipped}
-                  restedSeconds={timerRestedSeconds}
-                  onShowControls={onShowTimerControls}
-                  colSpan={5}
-                />
-              )}
+        {/* Auto-triggered Dropset Prompt */}
+        {isActive && pendingDropset && (
+          <DropsetPrompt
+            parentWeight={pendingDropset.parentWeight}
+            dropNumber={pendingDropset.dropNumber}
+            totalDrops={pendingDropset.totalDrops}
+            dropPercentage={block.dropPercentage ?? 0.25}
+            unit={unit}
+            exerciseEquipment={exercise.equipmentRequired}
+            onComplete={(data) => {
+              if (onSetComplete) {
+                onSetComplete({
+                  weightKg: data.weightKg,
+                  reps: data.reps,
+                  rpe: data.rpe,
+                  setType: 'dropset',
+                  parentSetId: pendingDropset.parentSetId,
+                });
+              }
+            }}
+            onCancel={() => onDropsetCancel?.()}
+          />
+        )}
 
-              {/* Manual Dropset input row */}
-              {isActive && dropsetMode && !pendingDropset && (
-                <tr className="bg-purple-500/20 border-l-2 border-purple-500">
-                  <td className="px-2 py-2 text-purple-400 font-medium min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] sm:text-xs">↓</span>
-                      <span className="truncate">D</span>
-                    </div>
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
-                      id="dropset-weight-input"
-                      step="0.5"
-                      className="w-full max-w-[4rem] px-1 py-1 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-xs sm:text-sm"
-                      autoFocus
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      defaultValue=""
-                      id="dropset-reps-input"
-                      placeholder="?"
-                      className="w-full max-w-[3rem] px-1 py-1 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-xs sm:text-sm placeholder-surface-500"
-                    />
-                  </td>
-                  <td className="px-2 py-1.5 text-center min-w-0">
-                    <span className="text-[10px] sm:text-xs text-purple-400 font-medium truncate block">DROPSET</span>
-                  </td>
-                    <td className="px-2 py-1.5">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
-                          const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
+        {/* Inline Rest Timer */}
+        {isActive && (showRestTimer || (timerIsSkipped && timerRestedSeconds > 0)) && !pendingDropset && (
+          <InlineRestTimerBar
+            seconds={timerSeconds}
+            initialSeconds={timerInitialSeconds}
+            isRunning={timerIsRunning}
+            isFinished={timerIsFinished}
+            isSkipped={timerIsSkipped}
+            restedSeconds={timerRestedSeconds}
+            onShowControls={onShowTimerControls}
+            variant="div"
+          />
+        )}
 
-                          const weight = parseFloat(weightEl?.value || '0');
-                          const reps = parseInt(repsEl?.value || '0');
-                          const rpe = 10; // dropsets are taken to/near failure
+        {/* Manual dropset entry */}
+        {isActive && dropsetMode && !pendingDropset && (
+          <div className="flex items-center gap-2 rounded-lg bg-purple-500/20 border-l-2 border-purple-500 px-2 py-1.5">
+            <span className="text-xs font-medium text-purple-400 flex-shrink-0">Drop</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              defaultValue={displayWeight(dropsetMode.parentWeight).toString()}
+              id="dropset-weight-input"
+              step="0.5"
+              aria-label="Dropset weight"
+              className="w-20 px-1 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm"
+              autoFocus
+            />
+            <input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              defaultValue=""
+              id="dropset-reps-input"
+              placeholder="?"
+              aria-label="Dropset reps"
+              className="w-14 px-1 py-1.5 bg-surface-900 border border-purple-500/50 rounded text-center font-mono text-surface-100 text-sm placeholder-surface-500"
+            />
+            <div className="ml-auto flex gap-1">
+              <button
+                onClick={() => {
+                  const weightEl = document.getElementById('dropset-weight-input') as HTMLInputElement;
+                  const repsEl = document.getElementById('dropset-reps-input') as HTMLInputElement;
 
-                          if (weight > 0 && reps > 0 && onSetComplete) {
-                            const weightKg = inputWeightToKg(weight, unit);
-                            onSetComplete({
-                              weightKg,
-                              reps,
-                              rpe,
-                              setType: 'dropset',
-                              parentSetId: dropsetMode.parentSetId,
-                            });
-                            setDropsetMode(null);
-                          }
-                        }}
-                        className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors"
-                      >
-                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={cancelDropset}
-                        className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
-                      >
-                        <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              
-              {/* Pending sets */}
-              {isActive && pendingInputs.map((input, index) => {
-                const setNumber = completedSets.length + index + 1;
-                const pendingId = `pending-set-${setNumber}`;
+                  const weight = parseFloat(weightEl?.value || '0');
+                  const reps = parseInt(repsEl?.value || '0');
+                  const rpe = 10; // dropsets are taken to/near failure
 
-                return (
-                  <tr
-                    key={pendingId}
-                    className="bg-surface-800/30"
-                    onTouchStart={(e) => handleTouchStart(pendingId, e)}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={() => handleTouchEnd(pendingId, false)}
-                    style={getSwipeTransform(pendingId)}
-                  >
-                    <td className="px-2 py-2 text-surface-400 font-medium">{setNumber}</td>
-                    <td className="px-2 py-1.5 text-center font-mono text-xs text-surface-500">
-                      {prevSetLabel(completedSets.length + index) ?? '—'}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <input
-                        id={`pending-weight-${index}`}
-                        type="number"
-                        inputMode="decimal"
-                        enterKeyHint="next"
-                        value={input.weight || ''}
-                        onChange={(e) => updatePendingInput(index, 'weight', e.target.value)}
-                        onFocus={(e) => e.target.select()}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            document.getElementById(`pending-reps-${index}`)?.focus();
-                          }
-                        }}
-                        step="0.5"
-                        min="0"
-                        placeholder={(() => {
-                          // Try to get suggested weight from various sources
-                          const prevSet = previousSets?.[completedSets.length + index];
-                          const lastCompleted = completedSets[completedSets.length - 1];
-                          if (lastCompleted) return String(displayWeight(lastCompleted.weightKg));
-                          if (prevSet) return String(displayWeight(prevSet.weightKg));
-                          if (suggestedWeight > 0) return String(displayWeight(suggestedWeight));
-                          return '—';
-                        })()}
-                        className="w-full px-1 py-1 bg-surface-900 border border-surface-700 rounded text-center font-mono text-surface-100 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </td>
-                    <td className="px-2 py-1.5">
-                      {(() => {
-                        const repsValue = parseInt(input.reps) || 0;
-                        const isOutsideRange = repsValue > 0 && (
-                          repsValue < block.targetRepRange[0] || repsValue > block.targetRepRange[1]
-                        );
-                        return (
-                          <div className="relative">
-                            <input
-                              id={`pending-reps-${index}`}
-                              type="number"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              enterKeyHint="done"
-                              value={input.reps}
-                              onChange={(e) => updatePendingInput(index, 'reps', e.target.value)}
-                              onFocus={(e) => e.target.select()}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  (e.target as HTMLInputElement).blur();
-                                  if (input.weight && input.reps && parseInt(input.reps) >= 1) {
-                                    completeSetImmediately(index);
-                                  }
-                                }
-                              }}
-                              min="0"
-                              max={isDurationBased ? 600 : 100}
-                              title={isOutsideRange ? `Estimated ${isDurationBased ? 'seconds' : 'reps'} outside target range (${block.targetRepRange[0]}-${block.targetRepRange[1]})` : undefined}
-                              className={`w-full px-1 py-1 bg-surface-900 border rounded text-center font-mono text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
-                                isOutsideRange
-                                  ? 'border-danger-500 text-danger-400'
-                                  : 'border-surface-700 text-surface-100'
-                              }`}
-                            />
-                            {isOutsideRange && (
-                              <span className="absolute -top-1 -right-1 w-2 h-2 bg-danger-500 rounded-full" title={`Outside target ${isDurationBased ? 'duration' : 'rep'} range`} />
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-1 py-1.5 relative">
-                      {/* Delete reveal background for swipe */}
-                      {swipeState.setId === pendingId && swipeState.isSwiping && (
-                        <div
-                          className="absolute inset-y-0 left-full w-24 flex items-center justify-center bg-danger-500/20 text-danger-400 pointer-events-none"
-                        >
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </div>
-                      )}
-                      <button
-                        onClick={() => completeSetImmediately(index)}
-                        disabled={!input.weight || !input.reps || parseInt(input.reps) < 1 || isCompletingSet}
-                        className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg transition-all border-2 border-dashed border-surface-600 text-surface-500 hover:border-success-500 hover:border-solid hover:bg-success-500 hover:text-white disabled:opacity-30 disabled:hover:border-surface-600 disabled:hover:border-dashed disabled:hover:bg-transparent disabled:hover:text-surface-500"
-                        title="Complete set"
-                      >
-                        {isCompletingSet ? (
-                          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                  if (weight > 0 && reps > 0 && onSetComplete) {
+                    const weightKg = inputWeightToKg(weight, unit);
+                    onSetComplete({
+                      weightKg,
+                      reps,
+                      rpe,
+                      setType: 'dropset',
+                      parentSetId: dropsetMode.parentSetId,
+                    });
+                    setDropsetMode(null);
+                  }
+                }}
+                aria-label="Log dropset"
+                className="p-2 rounded-lg bg-purple-500 hover:bg-purple-600 transition-colors text-white"
+              >
+                <IconCheck size={16} />
+              </button>
+              <button
+                onClick={cancelDropset}
+                aria-label="Cancel dropset"
+                className="p-2 rounded-lg bg-surface-700 hover:bg-surface-600 transition-colors"
+              >
+                <svg className="w-4 h-4 text-surface-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
 
-              {/* Show placeholder rows when not active */}
-              {!isActive && pendingSetsCount > 0 && Array.from({ length: pendingSetsCount }).map((_, i) => {
-                const inactiveSetNumber = completedSets.length + i + 1;
-                return (
-                  <tr key={`inactive-set-${inactiveSetNumber}`} className="bg-surface-800/20">
-                    <td className="px-2 py-2.5 text-surface-500">
-                      {inactiveSetNumber}
-                    </td>
-                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-2 py-2.5 text-center text-surface-600 text-xs">—</td>
-                    <td className="px-2 py-2.5"></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {/* Active set: suggestion banner + one-tap logger */}
+        {isActive && !pendingDropset && !dropsetMode && pendingSetsCount > 0 && pendingInputs.length > 0 && (() => {
+          const input = pendingInputs[0];
+          const activeSetNumber = completedSets.length + 1;
+          const activeIsAmrap = isAmrapSuggested && pendingSetsCount === 1;
+          const loggerTargetRir = activeIsAmrap ? 0 : effectiveTargetRir;
+          const usesBwLoad = isBodyweightExercise && weightMode !== 'bodyweight';
+
+          const bannerWeight = isBodyweightExercise
+            ? weightMode === 'bodyweight'
+              ? 'BW'
+              : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
+            : `${input.weight || '—'} ${weightLabel}`;
+          const { reason, explanation } = buildSuggestionInfo(activeIsAmrap);
+
+          return (
+            <div className="space-y-2 pt-1">
+              <SuggestionBanner
+                weightLabel={bannerWeight}
+                repsLabel={`${input.reps || '—'}${isDurationBased ? 's' : ''}`}
+                rir={Math.max(0, Math.min(3, loggerTargetRir))}
+                reason={reason}
+                explanation={explanation}
+              />
+              <SetLoggerRow
+                setNumber={activeSetNumber}
+                weight={usesBwLoad ? bwLoadInput : input.weight}
+                reps={input.reps}
+                onWeightChange={(value) =>
+                  usesBwLoad ? setBwLoadInput(value) : updatePendingInput(0, 'weight', value)
+                }
+                onRepsChange={(value) => updatePendingInput(0, 'reps', value)}
+                targetRir={loggerTargetRir}
+                unit={unit}
+                minIncrementKg={exercise.minWeightIncrementKg}
+                disabled={isCompletingSet}
+                isDurationBased={isDurationBased}
+                isBodyweight={isBodyweightExercise}
+                weightMode={weightMode}
+                userBodyweightKg={userBodyweightKg}
+                onLog={completeLoggedSet}
+              />
+            </div>
+          );
+        })()}
+
+        {/* Pending sets: muted single-line targets */}
+        {Array.from({ length: pendingSetsCount }).map((_, i) => {
+          const isActiveLoggerSlot = isActive && !pendingDropset && !dropsetMode && i === 0;
+          if (isActiveLoggerSlot) return null;
+
+          const pendingSetNumber = completedSets.length + i + 1;
+          const pendingWeight = isBodyweightExercise
+            ? 'BW'
+            : pendingInputs[i]?.weight ||
+              (suggestedWeight > 0 ? String(displayWeight(suggestedWeight)) : '—');
+
+          return (
+            <div
+              key={`pending-${pendingSetNumber}`}
+              className="flex items-center gap-2 px-1 py-2 text-[12px] text-surface-500"
+            >
+              <span className="w-4 flex-shrink-0 text-center">{pendingSetNumber}</span>
+              <span className="text-surface-700" aria-hidden="true">|</span>
+              <span className="truncate">
+                {pendingWeight}
+                {!isBodyweightExercise && pendingWeight !== '—' ? ` ${weightLabel}` : ''} ×{' '}
+                {block.targetRepRange[0]}–{block.targetRepRange[1]} target
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
       {/* Footer actions - prominent "Add set" (mockup style) + quiet secondary links */}
       {isActive && (
@@ -2593,8 +2323,56 @@ export const ExerciseCard = memo(function ExerciseCard({
         </div>
       )}
 
-      {/* Post-set feedback is handled INLINE in the set table (the "Reps in
-          reserve?" sub-row), not as a modal — keeps logging low-friction. */}
+      {/* Plateau suggestions sheet (Phase 1.7 — opened from the header pill) */}
+      {plateau && (
+        <BottomSheet
+          isOpen={showPlateauSheet}
+          onClose={() => setShowPlateauSheet(false)}
+          title="Plateau detected"
+        >
+          <div className="space-y-4">
+            <p className="text-[13px] text-surface-400">
+              No meaningful progress on {exercise.name} for{' '}
+              {plateau.weeksSinceProgress >= 1
+                ? `${plateau.weeksSinceProgress} week${plateau.weeksSinceProgress === 1 ? '' : 's'}`
+                : 'several sessions'}
+              . Here is what usually breaks it:
+            </p>
+            <ul className="space-y-2">
+              {plateau.suggestions.map((suggestion, i) => (
+                <li key={i} className="flex items-start gap-2 text-[13px] text-surface-300">
+                  <span className="mt-1.5 w-1 h-1 rounded-full bg-warning-400 flex-shrink-0" aria-hidden="true" />
+                  {suggestion}
+                </li>
+              ))}
+            </ul>
+            <div className="space-y-2 pt-1">
+              {plateauRepRange && onRepRangeChange && (
+                <button
+                  onClick={() => {
+                    onRepRangeChange(plateauRepRange);
+                    setShowPlateauSheet(false);
+                  }}
+                  className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
+                >
+                  Try {plateauRepRange[0]}–{plateauRepRange[1]} reps
+                </button>
+              )}
+              {onExerciseSwap && (
+                <button
+                  onClick={() => {
+                    setShowPlateauSheet(false);
+                    setShowSwapModal(true);
+                  }}
+                  className="w-full bg-surface-800 hover:bg-surface-700 text-surface-200 rounded-lg py-2.5 text-sm font-medium transition-colors"
+                >
+                  Swap exercise
+                </button>
+              )}
+            </div>
+          </div>
+        </BottomSheet>
+      )}
 
       {/* RPE Guide Modal */}
       {showRpeGuide && (
@@ -2667,6 +2445,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.block.id === nextProps.block.id &&
     prevProps.block.targetSets === nextProps.block.targetSets &&
     prevProps.block.targetWeightKg === nextProps.block.targetWeightKg &&
+    prevProps.block.targetRepRange[0] === nextProps.block.targetRepRange[0] &&
+    prevProps.block.targetRepRange[1] === nextProps.block.targetRepRange[1] &&
+    prevProps.block.targetRir === nextProps.block.targetRir &&
     prevProps.sets.length === nextProps.sets.length &&
     // Compare set content (RPE, form, weight, reps) to detect feedback updates
     prevProps.sets.every((s, i) =>
@@ -2689,6 +2470,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.timerIsFinished === nextProps.timerIsFinished &&
     prevProps.timerIsSkipped === nextProps.timerIsSkipped &&
     prevProps.timerRestedSeconds === nextProps.timerRestedSeconds &&
-    prevProps.onShowTimerControls === nextProps.onShowTimerControls
+    prevProps.onShowTimerControls === nextProps.onShowTimerControls &&
+    // Prescription + insight props (calibration, readiness, plateau, AMRAP)
+    prevProps.adjustedRir?.prescribedRIR === nextProps.adjustedRir?.prescribedRIR &&
+    prevProps.adjustedRir?.hasAdjustment === nextProps.adjustedRir?.hasAdjustment &&
+    prevProps.readinessModulation?.rirDelta === nextProps.readinessModulation?.rirDelta &&
+    prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
+    prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
+    prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
+    prevProps.userBodyweightKg === nextProps.userBodyweightKg
   );
 });

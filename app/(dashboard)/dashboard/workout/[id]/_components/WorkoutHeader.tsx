@@ -3,16 +3,27 @@
 /**
  * WorkoutHeader.tsx
  *
- * The sticky page header for an in-progress workout: title, sets-completed
- * counter, workout timer (pause/play), time-remaining estimate, collapse-all
- * toggle, the quiet Tools menu (Hurt / Readiness / Plate calculator), and the
- * Cancel / Add / Finish actions.
+ * Slim sticky header for an in-progress workout (Phase 2.3, per mockup):
+ * - left: workout name over "{elapsed} · exercise {n} of {total}"
+ * - right: per-exercise progress segments (completed / active / pending),
+ *   compact Finish button, and an overflow menu holding the secondary
+ *   actions (Add exercise, collapse-all, injuries, readiness, plates, Cancel).
  *
- * Extracted verbatim from `page.tsx` (Phase 0.2 decomposition) — purely
- * presentational; all state stays in the page.
+ * Purely presentational; all state stays in the page.
  */
 
-import { Button } from '@/components/ui';
+import {
+  IconActivity,
+  IconBandage,
+  IconBarbell,
+  IconChevronsDown,
+  IconChevronsUp,
+  IconDotsVertical,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconPlus,
+  IconX,
+} from '@tabler/icons-react';
 
 interface WorkoutTimerView {
   isPaused: boolean;
@@ -20,20 +31,20 @@ interface WorkoutTimerView {
   toggle: () => void;
 }
 
-interface WorkoutEstimateView {
-  totalMinutes: number;
-  completedSets: number;
-  formattedTotal: string;
-  formattedRemaining: string;
-}
+export type ExerciseSegmentStatus = 'completed' | 'active' | 'pending';
 
 export interface WorkoutHeaderProps {
-  totalCompletedSets: number;
-  totalPlannedSets: number;
-  /** session.startedAt — timer button renders only when the session has started */
+  /** Workout display name (e.g. "Push", "Upper Body"). */
+  workoutName: string;
+  /** 1-based position of the active exercise among non-skipped exercises. */
+  exerciseNumber: number;
+  /** Total non-skipped exercises. */
+  exerciseTotal: number;
+  /** One entry per non-skipped exercise, in workout order. */
+  segments: ExerciseSegmentStatus[];
+  /** session.startedAt — elapsed time renders only when the session has started */
   startedAt: string | null;
   workoutTimer: WorkoutTimerView;
-  workoutEstimate: WorkoutEstimateView;
   allCollapsed: boolean;
   onToggleAllCollapsed: () => void;
   showToolsMenu: boolean;
@@ -48,12 +59,19 @@ export interface WorkoutHeaderProps {
   onFinishWorkout: () => void;
 }
 
+const SEGMENT_CLASS: Record<ExerciseSegmentStatus, string> = {
+  completed: 'bg-success-500',
+  active: 'bg-primary-500',
+  pending: 'bg-surface-800',
+};
+
 export function WorkoutHeader({
-  totalCompletedSets,
-  totalPlannedSets,
+  workoutName,
+  exerciseNumber,
+  exerciseTotal,
+  segments,
   startedAt,
   workoutTimer,
-  workoutEstimate,
   allCollapsed,
   onToggleAllCollapsed,
   showToolsMenu,
@@ -67,145 +85,141 @@ export function WorkoutHeader({
   onAddExercise,
   onFinishWorkout,
 }: WorkoutHeaderProps) {
+  const menuItemClass =
+    'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left';
+
   return (
-    <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <p className="text-surface-400">
-              {totalCompletedSets} of {totalPlannedSets} sets completed
-            </p>
-            {/* Workout timer display with pause/play */}
+    <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
+      <div className="flex items-center gap-3">
+        {/* Left: name + elapsed / position meta */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
+          <div className="flex items-center gap-1 text-[11px] text-surface-500">
             {startedAt && (
-              <button
-                onClick={workoutTimer.toggle}
-                className={`flex items-center gap-1.5 px-2 py-0.5 rounded-md text-sm font-mono transition-colors ${
-                  workoutTimer.isPaused
-                    ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
-                    : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
-                }`}
-                title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
-              >
-                {workoutTimer.isPaused ? (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                ) : (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-                  </svg>
-                )}
-                <span>{workoutTimer.formattedTime}</span>
-              </button>
+              <>
+                <button
+                  onClick={workoutTimer.toggle}
+                  className={`inline-flex items-center gap-1 tabular-nums transition-colors ${
+                    workoutTimer.isPaused
+                      ? 'text-warning-400 hover:text-warning-300'
+                      : 'hover:text-surface-300'
+                  }`}
+                  title={workoutTimer.isPaused ? 'Resume timer' : 'Pause timer'}
+                >
+                  {workoutTimer.isPaused ? (
+                    <IconPlayerPlay size={11} stroke={2} />
+                  ) : (
+                    <IconPlayerPause size={11} stroke={2} />
+                  )}
+                  {workoutTimer.formattedTime}
+                </button>
+                <span aria-hidden="true">·</span>
+              </>
             )}
-            {/* Estimated time remaining */}
-            {workoutEstimate.totalMinutes > 0 && (
-              <span
-                className="text-sm text-surface-500"
-                title={`Total estimated: ${workoutEstimate.formattedTotal}`}
-              >
-                {workoutEstimate.completedSets > 0
-                  ? workoutEstimate.formattedRemaining
-                  : workoutEstimate.formattedTotal}
-              </span>
-            )}
+            <span>
+              exercise {exerciseNumber} of {exerciseTotal}
+            </span>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
+
+        {/* Right: progress segments + Finish + overflow menu */}
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <div className="hidden min-[360px]:flex items-center gap-1" aria-hidden="true">
+            {segments.map((status, i) => (
+              <span
+                key={i}
+                className={`w-3.5 h-1 rounded-full ${SEGMENT_CLASS[status]}`}
+              />
+            ))}
+          </div>
           <button
-            onClick={onToggleAllCollapsed}
-            className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
-              allCollapsed
-                ? 'bg-primary-500/20 hover:bg-primary-500/30 text-primary-400'
-                : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
-            }`}
-            title={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
+            onClick={onFinishWorkout}
+            className="px-3.5 py-1.5 rounded-lg bg-primary-500 text-white text-xs font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
           >
-            {allCollapsed ? (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-                <span className="hidden sm:inline">Expand</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-                <span className="hidden sm:inline">Collapse</span>
-              </>
-            )}
+            Finish
           </button>
-          {/* Secondary tools tucked into one quiet menu (Hurt / Readiness / Plates) */}
           <div className="relative">
             <button
               onClick={onToggleToolsMenu}
-              className={`px-3 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${
+              className={`p-1.5 rounded-lg transition-colors ${
                 injuryCount > 0
-                  ? 'bg-warning-500/20 hover:bg-warning-500/30 text-warning-400'
-                  : 'bg-surface-800 hover:bg-surface-700 text-surface-400'
+                  ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
+                  : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
               }`}
-              title="More tools"
+              title="More actions"
+              aria-label="More actions"
               aria-haspopup="menu"
               aria-expanded={showToolsMenu}
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4zm0 6a2 2 0 100-4 2 2 0 000 4z" />
-              </svg>
-              <span className="hidden sm:inline">{injuryCount > 0 ? 'Injured' : 'Tools'}</span>
+              <IconDotsVertical size={18} stroke={2} />
             </button>
             {showToolsMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={onCloseToolsMenu} />
-                <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1" role="menu">
+                <div
+                  className="absolute right-0 top-full mt-1 z-20 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1"
+                  role="menu"
+                >
                   <button
-                    onClick={() => { onOpenInjuryModal(); onCloseToolsMenu(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                    onClick={() => { onAddExercise(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
                     role="menuitem"
                   >
-                    <span>🤕</span>
-                    {injuryCount > 0 ? 'Injuries' : 'Hurt?'}
+                    <IconPlus size={16} className="text-surface-400" />
+                    Add exercise
+                  </button>
+                  <button
+                    onClick={() => { onToggleAllCollapsed(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitem"
+                  >
+                    {allCollapsed ? (
+                      <IconChevronsDown size={16} className="text-surface-400" />
+                    ) : (
+                      <IconChevronsUp size={16} className="text-surface-400" />
+                    )}
+                    {allCollapsed ? 'Expand all' : 'Collapse all'}
+                  </button>
+                  <button
+                    onClick={() => { onOpenInjuryModal(); onCloseToolsMenu(); }}
+                    className={menuItemClass}
+                    role="menuitem"
+                  >
+                    <IconBandage
+                      size={16}
+                      className={injuryCount > 0 ? 'text-warning-400' : 'text-surface-400'}
+                    />
+                    {injuryCount > 0 ? `Injuries (${injuryCount})` : 'Hurt?'}
                   </button>
                   <button
                     onClick={() => { onOpenReadinessModal(); onCloseToolsMenu(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                    className={menuItemClass}
                     role="menuitem"
                   >
-                    <span>🔋</span>
+                    <IconActivity size={16} className="text-surface-400" />
                     Readiness
                   </button>
                   <button
                     onClick={() => { onOpenPlateCalculator(); onCloseToolsMenu(); }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
+                    className={menuItemClass}
                     role="menuitem"
                   >
-                    <svg className="w-4 h-4 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
+                    <IconBarbell size={16} className="text-surface-400" />
                     Plate calculator
+                  </button>
+                  <div className="my-1 border-t border-surface-700" />
+                  <button
+                    onClick={() => { onCancelWorkout(); onCloseToolsMenu(); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger-400 hover:bg-surface-700 transition-colors text-left"
+                    role="menuitem"
+                  >
+                    <IconX size={16} />
+                    Cancel workout
                   </button>
                 </div>
               </>
             )}
           </div>
-          <Button
-            variant="ghost"
-            onClick={onCancelWorkout}
-            className="text-surface-400 hover:text-danger-400 flex-1 sm:flex-none"
-          >
-            Cancel
-          </Button>
-          <Button variant="ghost" onClick={onAddExercise} className="flex-1 sm:flex-none">
-            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add
-          </Button>
-          <Button variant="outline" onClick={onFinishWorkout} className="flex-1 sm:flex-none">
-            Finish
-          </Button>
         </div>
       </div>
     </div>

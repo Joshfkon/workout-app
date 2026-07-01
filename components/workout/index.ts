@@ -1,10 +1,11 @@
 // Workout Components
 export { ExerciseCard } from './ExerciseCard';
 export { ExerciseDetailsModal } from './ExerciseDetailsModal';
-export { SetInputRow } from './SetInputRow';
+export { SetLoggerRow } from './SetLoggerRow';
+export { SuggestionBanner } from './SuggestionBanner';
+export { BottomSheet } from './BottomSheet';
 export { RestTimer } from './RestTimer';
 export { InlineRestTimerBar } from './InlineRestTimerBar';
-export { RestTimerControlPanel } from './RestTimerControlPanel';
 export { WarmupProtocol } from './WarmupProtocol';
 export { ReadinessCheckIn } from './ReadinessCheckIn';
 export { SessionSummary } from './SessionSummary';
@@ -12,9 +13,7 @@ export { SessionSummary } from './SessionSummary';
 // Bodyweight Exercise Components
 export { BodyweightInput } from './BodyweightInput';
 export { BodyweightDisplay, BodyweightDisplayInline, BodyweightPRBadge } from './BodyweightDisplay';
-export { BodyweightSetInputRow } from './BodyweightSetInputRow';
 export { BodyweightSetEditRow } from './BodyweightSetEditRow';
-export { CompactSetRow } from './CompactSetRow';
 export { DurationTimerInput } from './DurationTimerInput';
 export { SegmentedControl } from './SegmentedControl';
 
@@ -27,4 +26,3 @@ export { ResumeWorkoutBanner } from './ResumeWorkoutBanner';
 
 // Pause Overlay
 export { PauseOverlay } from './PauseOverlay';
-

@@ -1,16 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SetInputRow } from '../workout/SetInputRow';
+import { SetLoggerRow } from '../workout/SetLoggerRow';
 import { formatWeight, formatWeightValue, inputWeightToKg, convertWeight } from '@/lib/utils';
-
-// Mock the progressionEngine service
-jest.mock('@/services/progressionEngine', () => ({
-  calculateSetQuality: jest.fn(() => ({
-    quality: 'effective',
-    reason: 'Good set within target range',
-  })),
-}));
+import type { WeightUnit } from '@/types/schema';
 
 // Mock InfoTooltip to prevent rendering issues
 jest.mock('@/components/ui', () => ({
@@ -18,232 +11,115 @@ jest.mock('@/components/ui', () => ({
   InfoTooltip: () => null,
 }));
 
-describe('Unit Preference Integration', () => {
-  describe('SetInputRow Component', () => {
-    const defaultProps = {
-      setNumber: 1,
-      targetWeight: 100, // 100kg
-      targetRepRange: [8, 12] as [number, number],
-      targetRir: 2,
-      isLastSet: false,
-      onSubmit: jest.fn(),
-    };
+/**
+ * Controlled harness matching how ExerciseCard drives SetLoggerRow:
+ * weight/reps live in parent state (display units) and flow down as strings.
+ */
+function LoggerHarness({
+  unit,
+  initialWeight,
+  initialReps = '10',
+  onLog,
+  minIncrementKg = 2.5,
+}: {
+  unit: WeightUnit;
+  initialWeight: string;
+  initialReps?: string;
+  onLog: jest.Mock;
+  minIncrementKg?: number;
+}) {
+  const [weight, setWeight] = React.useState(initialWeight);
+  const [reps, setReps] = React.useState(initialReps);
+  return (
+    <SetLoggerRow
+      setNumber={1}
+      weight={weight}
+      reps={reps}
+      onWeightChange={setWeight}
+      onRepsChange={setReps}
+      targetRir={2}
+      unit={unit}
+      minIncrementKg={minIncrementKg}
+      onLog={onLog}
+    />
+  );
+}
 
+describe('Unit Preference Integration', () => {
+  describe('SetLoggerRow Component', () => {
     beforeEach(() => {
       jest.clearAllMocks();
     });
 
-    test('displays weight label in kg for metric users', () => {
-      render(<SetInputRow {...defaultProps} unit="kg" />);
-      expect(screen.getByText('Weight (kg)')).toBeInTheDocument();
+    test('displays weight with kg unit label for metric users', () => {
+      render(<LoggerHarness unit="kg" initialWeight="100" onLog={jest.fn()} />);
+      expect(screen.getByRole('button', { name: /Weight: 100 kg/ })).toBeInTheDocument();
     });
 
-    test('displays weight label in lb for imperial users', () => {
-      render(<SetInputRow {...defaultProps} unit="lb" />);
-      expect(screen.getByText('Weight (lb)')).toBeInTheDocument();
+    test('displays weight with lbs unit label for imperial users', () => {
+      render(<LoggerHarness unit="lb" initialWeight="220" onLog={jest.fn()} />);
+      expect(screen.getByRole('button', { name: /Weight: 220 lbs/ })).toBeInTheDocument();
     });
 
-    test('converts target weight to display unit for initial value (kg)', () => {
-      render(<SetInputRow {...defaultProps} unit="kg" />);
+    test('submits weight in kg regardless of display unit (metric)', () => {
+      const onLog = jest.fn();
+      render(<LoggerHarness unit="kg" initialWeight="100" onLog={onLog} />);
 
-      // Use getAllByRole and find the first number input (weight)
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const weightInput = inputs[0]; // First input is weight
-      // 100kg stays as 100kg (rounded to plate increment)
-      expect(parseFloat(weightInput.value)).toBe(100);
-    });
+      // One tap: prefilled weight/reps + pre-selected RIR chip
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
 
-    test('converts target weight to display unit for initial value (lb)', () => {
-      render(<SetInputRow {...defaultProps} unit="lb" />);
-
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const weightInput = inputs[0]; // First input is weight
-      // 100kg = 220.46 lbs, rounded to 2.5lb = 220
-      expect(parseFloat(weightInput.value)).toBeCloseTo(220, 0);
-    });
-
-    test('submits weight in kg regardless of display unit (metric)', async () => {
-      const onSubmit = jest.fn();
-      render(<SetInputRow {...defaultProps} unit="kg" onSubmit={onSubmit} />);
-
-      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-
-      fireEvent.change(weightInput, { target: { value: '100' } });
-      fireEvent.change(repsInput, { target: { value: '10' } });
-
-      // Click proceed to go to feedback phase
-      const proceedButton = screen.getByRole('button', { name: /log set/i });
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
-
-      // Wait for feedback phase to render - use waitFor for more reliable waiting
-      await waitFor(() => {
-        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
-      });
-
-      // Now we're in feedback phase - find RIR selector buttons
-      // RIRSelector shows buttons with labels like "2-3", "1", "4+", "Maxed"
-      const allButtons = screen.getAllByRole('button');
-      const rirButton = allButtons.find(btn =>
-        btn.textContent?.includes('2-3') ||
-        btn.textContent?.includes('Good')
-      );
-
-      expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
-
-      // Find form selector button (Clean, Some Breakdown, Ugly)
-      const formButton = allButtons.find(btn =>
-        btn.textContent?.includes('Clean') &&
-        !btn.textContent?.includes('Save')
-      );
-
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
-
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn =>
-        btn.textContent?.includes('Save Set')
-      );
-
-      expect(saveButton).toBeTruthy();
-      expect(saveButton).not.toBeDisabled();
-      fireEvent.click(saveButton!);
-
-      // Verify submission - weight should be stored in kg
-      expect(onSubmit).toHaveBeenCalledTimes(1);
-      expect(onSubmit).toHaveBeenCalledWith(
+      expect(onLog).toHaveBeenCalledTimes(1);
+      expect(onLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          weightKg: 100, // 100kg stored as 100kg
+          weightKg: 100,
           reps: 10,
           rpe: 7.5, // default RIR 2 converts to RPE 7.5
           feedback: expect.objectContaining({
-            repsInTank: 2, // default feedback
-            form: 'clean', // default feedback
+            repsInTank: 2,
+            form: 'clean',
           }),
         })
       );
 
-      // Verify weightKg is a number, not a string
-      const submittedData = onSubmit.mock.calls[0][0];
+      const submittedData = onLog.mock.calls[0][0];
       expect(typeof submittedData.weightKg).toBe('number');
       expect(typeof submittedData.reps).toBe('number');
       expect(typeof submittedData.rpe).toBe('number');
     });
 
-    test('submits weight in kg regardless of display unit (imperial)', async () => {
-      const onSubmit = jest.fn();
-      render(<SetInputRow {...defaultProps} unit="lb" onSubmit={onSubmit} />);
+    test('submits weight in kg regardless of display unit (imperial)', () => {
+      const onLog = jest.fn();
+      render(<LoggerHarness unit="lb" initialWeight="225" onLog={onLog} />);
 
-      const [weightInput, repsInput] = screen.getAllByRole('spinbutton') as HTMLInputElement[];
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
 
-      fireEvent.change(weightInput, { target: { value: '225' } });
-      fireEvent.change(repsInput, { target: { value: '10' } });
-
-      // Click proceed to go to feedback phase
-      const proceedButton = screen.getByRole('button', { name: /log set/i });
-      expect(proceedButton).toBeTruthy();
-      fireEvent.click(proceedButton!);
-
-      // Wait for feedback phase to render - use waitFor for more reliable waiting
-      await waitFor(() => {
-        expect(screen.getByText('Reps left in tank?')).toBeInTheDocument();
-      });
-
-      // Now we're in feedback phase - find RIR and Form selectors
-      const allButtons = screen.getAllByRole('button');
-
-      // Find RIR selector button (shows "2-3" or "Good")
-      const rirButton = allButtons.find(btn =>
-        btn.textContent?.includes('2-3') ||
-        btn.textContent?.includes('Good')
-      );
-
-      expect(rirButton).toBeTruthy();
-      if (rirButton) {
-        fireEvent.click(rirButton);
-      }
-
-      // Find form selector button (shows "Clean")
-      const formButton = allButtons.find(btn =>
-        btn.textContent?.includes('Clean') &&
-        !btn.textContent?.includes('Save')
-      );
-
-      expect(formButton).toBeTruthy();
-      if (formButton) {
-        fireEvent.click(formButton);
-      }
-
-      // Find and click Save Set button
-      const saveButton = allButtons.find(btn => 
-        btn.textContent?.includes('Save Set')
-      );
-      
-      expect(saveButton).toBeTruthy();
-      expect(saveButton).not.toBeDisabled();
-      fireEvent.click(saveButton!);
-
-      // Verify the conversion is correct (225lbs ~= 102.06kg)
-      expect(onSubmit).toHaveBeenCalledTimes(1);
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({
-          weightKg: expect.any(Number), // 225lbs converted to kg
-          reps: 10,
-          rpe: 7.5, // default RIR 2 converts to RPE 7.5
-          feedback: expect.objectContaining({
-            repsInTank: 2, // default feedback
-            form: 'clean', // default feedback
-          }),
-        })
-      );
-      
-      const submittedData = onSubmit.mock.calls[0][0];
-      const submittedKg = submittedData.weightKg;
-      expect(submittedKg).toBeCloseTo(102.06, 0);
-      
-      // Verify all values are numbers, not strings
-      expect(typeof submittedData.weightKg).toBe('number');
-      expect(typeof submittedData.reps).toBe('number');
-      expect(typeof submittedData.rpe).toBe('number');
+      expect(onLog).toHaveBeenCalledTimes(1);
+      const submittedData = onLog.mock.calls[0][0];
+      // 225 lbs ~= 102.06 kg
+      expect(submittedData.weightKg).toBeCloseTo(102.06, 0);
+      expect(submittedData.reps).toBe(10);
+      expect(submittedData.rpe).toBe(7.5);
     });
 
-    test('displays previous set weight in user preferred unit', () => {
-      const previousSet = {
-        id: 'prev-1',
-        exerciseBlockId: 'block-1',
-        setNumber: 1,
-        weightKg: 100, // Stored in kg
-        reps: 10,
-        rpe: 8,
-        restSeconds: null,
-        isWarmup: false,
-        setType: 'normal' as const,
-        parentSetId: null,
-        quality: 'effective' as const,
-        qualityReason: 'Good set',
-        note: null,
-        loggedAt: new Date().toISOString(),
-      };
-
-      // Render with imperial preference
+    test('stepper moves by the exercise increment converted to display units', () => {
       render(
-        <SetInputRow
-          {...defaultProps}
-          unit="lb"
-          previousSet={previousSet}
-        />
+        <LoggerHarness unit="lb" initialWeight="220" onLog={jest.fn()} minIncrementKg={2.5} />
       );
 
-      const inputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
-      const weightInput = inputs[0];
-      // 100kg = 220.46 lbs. The seed preserves the EXACT converted value (220.5)
-      // rather than snapping to a plate increment (the old, lossy behavior).
-      expect(parseFloat(weightInput.value)).toBeCloseTo(220.5, 1);
+      // 2.5 kg = 5.51 lb, snapped to real 2.5 lb plate math -> 5 lb step
+      fireEvent.click(screen.getByRole('button', { name: 'Increase weight' }));
+      expect(screen.getByRole('button', { name: /Weight: 225 lbs/ })).toBeInTheDocument();
+    });
+
+    test('tapping the value swaps to a direct-entry input', () => {
+      render(<LoggerHarness unit="kg" initialWeight="100" onLog={jest.fn()} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /Weight: 100 kg/ }));
+      const input = screen.getByRole('spinbutton', { name: 'Weight' });
+      fireEvent.change(input, { target: { value: '105' } });
+      fireEvent.blur(input);
+
+      expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
     });
   });
 
@@ -262,6 +138,12 @@ describe('Unit Preference Integration', () => {
       const result = formatWeight(100, 'lb');
       // 100kg = 220.46 lbs, rounded to 220
       expect(result).toMatch(/220(\.\d)? lbs/);
+    });
+
+    test('formatWeightValue rounds suggestions to plate increments', () => {
+      // 100kg = 220.46 lbs -> 220 (2.5 lb increments)
+      expect(formatWeightValue(100, 'lb')).toBeCloseTo(220, 0);
+      expect(formatWeightValue(100, 'kg')).toBe(100);
     });
   });
 

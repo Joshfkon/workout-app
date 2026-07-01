@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
-import { RestTimerControlPanel, PauseOverlay } from '@/components/workout';
+import { RestTimer, PauseOverlay } from '@/components/workout';
+import { IconGripVertical, IconX } from '@tabler/icons-react';
 import { useRestTimer } from '@/hooks/useRestTimer';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
 
@@ -20,7 +21,6 @@ const ExerciseCard = dynamic(
   }
 );
 import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
-import { useWorkoutEstimate } from '@/hooks/useWorkoutEstimate';
 
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
@@ -28,7 +28,7 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -54,11 +54,13 @@ import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercis
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
 import { RPECalibrationEngine, type CalibrationResult, type CalibrationSetLog } from '@/services/rpeCalibration';
+import { applyReadinessModulation } from '@/services/fatigueEngine';
+import { buildPerformanceSnapshots, type SnapshotSourceBlock } from '@/components/workout/exercisePerformance';
 import { getFailureSafetyTier } from '@/services/exerciseSafety';
 import { SanityCheckToast } from '@/components/workout/SanityCheckToast';
 import { CalibrationResultCard } from '@/components/workout/CalibrationResultCard';
 import { useWorkoutStore } from '@/stores/workoutStore';
-import { WorkoutHeader } from './_components/WorkoutHeader';
+import { WorkoutHeader, type ExerciseSegmentStatus } from './_components/WorkoutHeader';
 import { AddExercisePicker } from './_components/AddExercisePicker';
 import {
   buildExerciseHistories,
@@ -199,8 +201,17 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
-  const [restTimerPanelVisible, setRestTimerPanelVisible] = useState(true);
+  // Blocks the user skipped for this session ("Skip today" on an up-next row).
+  // Mirrors exercise_blocks.skipped_at; excluded from progress, summary
+  // aggregates, and progression/feedback derivations.
+  const [skippedBlockIds, setSkippedBlockIds] = useState<Set<string>>(new Set());
+  // Session-local readiness banner state: dismissed hides the strip only;
+  // "Train as planned" additionally zeroes the modulation passed down.
+  const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
+  const [readinessOverridden, setReadinessOverridden] = useState(false);
   const [exerciseHistories, setExerciseHistories] = useState<Record<string, ExerciseHistoryData>>({});
+  // Per-session performance snapshots per exercise (plateau detection input)
+  const [performanceSnapshots, setPerformanceSnapshots] = useState<Record<string, ExercisePerformanceSnapshot[]>>({});
   const [allCollapsed, setAllCollapsed] = useState(false);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Set<string>>(new Set());
   
@@ -378,13 +389,6 @@ export default function WorkoutPage() {
     startedAt: session?.startedAt ?? null,
   });
 
-  // Workout time estimate - calculates estimated duration based on sets/rest
-  const workoutEstimate = useWorkoutEstimate({
-    exerciseBlocks: blocks,
-    completedSets: completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length,
-    defaultRestSeconds: preferences?.restTimerDefault ?? 180,
-  });
-
   // Clear timer when session changes or component unmounts
   useEffect(() => {
     // Clear timer when sessionId changes (new workout started)
@@ -488,7 +492,16 @@ export default function WorkoutPage() {
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
-        
+
+        // Restore per-block skip state (exercise_blocks.skipped_at)
+        const skippedIds = new Set<string>(
+          ((blocksData || []) as Array<{ id: string; skipped_at?: string | null }>)
+            .filter((block) => Boolean(block.skipped_at))
+            .map((block) => block.id)
+        );
+        setSkippedBlockIds(skippedIds);
+
+
         // Fetch existing sets for this workout (important for viewing completed workouts or resuming)
         const blockIds = transformedBlocks.map((b: ExerciseBlockWithExercise) => b.id);
         if (blockIds.length > 0) {
@@ -504,6 +517,7 @@ export default function WorkoutPage() {
             
             // Set current set number based on existing sets for the first incomplete block
             const firstIncompleteBlock = transformedBlocks.find((block: ExerciseBlockWithExercise) => {
+              if (skippedIds.has(block.id)) return false;
               const blockSets = transformedSets.filter(s => s.exerciseBlockId === block.id && !s.isWarmup && s.setType !== 'warmup');
               return blockSets.length < block.targetSets;
             });
@@ -513,6 +527,14 @@ export default function WorkoutPage() {
               const existingBlockSets = transformedSets.filter(s => s.exerciseBlockId === firstIncompleteBlock.id && !s.isWarmup && s.setType !== 'warmup');
               setCurrentBlockIndex(blockIdx);
               setCurrentSetNumber(existingBlockSets.length + 1);
+            }
+          } else if (skippedIds.size > 0) {
+            // No sets yet: make sure the starting exercise isn't a skipped block
+            const firstActiveIdx = transformedBlocks.findIndex(
+              (b: ExerciseBlockWithExercise) => !skippedIds.has(b.id)
+            );
+            if (firstActiveIdx > 0) {
+              setCurrentBlockIndex(firstActiveIdx);
             }
           }
         }
@@ -713,6 +735,9 @@ export default function WorkoutPage() {
           const histories: Record<string, ExerciseHistoryData> = buildExerciseHistories(allHistoryBlocks);
 
           setExerciseHistories(histories);
+
+          // Same rows, mapped to per-session snapshots for plateau detection
+          setPerformanceSnapshots(buildPerformanceSnapshots(allHistoryBlocks as SnapshotSourceBlock[]));
 
           // Generate coach message with exercise history for accurate weight suggestions
           setCoachMessage(generateCoachMessage(transformedBlocks, profile, userContext, preferences.units, histories));
@@ -1225,6 +1250,7 @@ export default function WorkoutPage() {
     const todayMuscles = Array.from(
       new Set(
         blocks
+          .filter((b) => !skippedBlockIds.has(b.id))
           .map((b) => resolvePrimaryMuscle(b.exercise?.primaryMuscle))
           .filter((m): m is StandardMuscleGroup => m !== null)
       )
@@ -1247,7 +1273,7 @@ export default function WorkoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [showReadinessModal, session, blocks]);
+  }, [showReadinessModal, session, blocks, skippedBlockIds]);
 
   // Persist check-in soreness ratings onto each muscle's PREVIOUS session row.
   const saveSorenessFeedback = async (sorenessRatings: MuscleSorenessRatings) => {
@@ -1296,6 +1322,10 @@ export default function WorkoutPage() {
           readinessScore: checkInData.readinessScore,
           temporaryInjuries: checkInData.temporaryInjuries,
         };
+
+        // Keep the local session in sync so readiness modulation applies
+        // immediately (not just after a reload).
+        setSession(prev => (prev ? { ...prev, preWorkoutCheckIn: checkInData } : prev));
         
         // Set temporary injuries in state so they carry over to workout
         if (checkInData.temporaryInjuries && checkInData.temporaryInjuries.length > 0) {
@@ -1360,6 +1390,21 @@ export default function WorkoutPage() {
       if (startSession) setPhase('workout'); // Continue anyway
     }
   };
+
+  // Readiness easing for this session (Phase 1.3): computed from the
+  // check-in's readiness score, threaded into ExerciseCard (RIR chips +
+  // suggestion banner reason).
+  const readinessScore = session?.preWorkoutCheckIn?.readinessScore;
+  const baseReadinessModulation = useMemo(
+    () =>
+      typeof readinessScore === 'number' && readinessScore > 0
+        ? applyReadinessModulation(readinessScore)
+        : null,
+    [readinessScore]
+  );
+  // "Train as planned" zeroes the modulation for the rest of the session
+  // (session-local; the check-in itself is untouched).
+  const readinessModulation = readinessOverridden ? null : baseReadinessModulation;
 
   const handleSetComplete = async (data: {
     weightKg: number;
@@ -1490,7 +1535,6 @@ export default function WorkoutPage() {
           totalDrops: currentBlock.dropsetsPerSet ?? 1,
         });
         setShowRestTimer(false);
-        setRestTimerPanelVisible(false);
       } else if (isDropsetSet && pendingDropset) {
         // Just completed a dropset - check if more drops remaining
         if (pendingDropset.dropNumber < pendingDropset.totalDrops) {
@@ -1502,13 +1546,10 @@ export default function WorkoutPage() {
             dropNumber: pendingDropset.dropNumber + 1,
           });
           setShowRestTimer(false);
-          setRestTimerPanelVisible(false);
         } else {
           // Final drop complete - NOW start rest timer
           setPendingDropset(null);
           setShowRestTimer(true);
-          // Inline rest bar is primary; keep the control panel collapsed (tap bar to reveal).
-          setRestTimerPanelVisible(false);
           setRestTimerDuration(null);
           restTimer.start(currentBlock?.targetRestSeconds ?? 180);
         }
@@ -1516,9 +1557,6 @@ export default function WorkoutPage() {
         // Normal flow - start rest timer
         setPendingDropset(null);
         setShowRestTimer(true);
-        // Inline rest bar (in the set table) is the primary display; keep the bulky
-        // control panel collapsed — tapping the inline bar reveals controls on demand.
-        setRestTimerPanelVisible(false);
         setRestTimerDuration(null);
         restTimer.start(currentBlock?.targetRestSeconds ?? 180);
       }
@@ -2013,6 +2051,36 @@ export default function WorkoutPage() {
     }
   };
 
+  // One-tap plateau action: update the block's target rep range (same
+  // local-state + exercise_blocks update path as target sets / notes).
+  const handleRepRangeChange = async (blockId: string, range: [number, number]) => {
+    // Update local state immediately
+    setBlocks(prevBlocks => prevBlocks.map(block =>
+      block.id === blockId
+        ? { ...block, targetRepRange: range }
+        : block
+    ));
+
+    // Update in database
+    try {
+      const supabase = createUntypedClient();
+      const { error: updateError } = await supabase
+        .from('exercise_blocks')
+        .update({ target_rep_range: range })
+        .eq('id', blockId);
+
+      if (updateError) {
+        console.error('Failed to update rep range:', updateError);
+        setError(`Failed to update rep range: ${updateError.message}`);
+      } else {
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Failed to update rep range:', err);
+      setError(err instanceof Error ? err.message : 'Failed to update rep range');
+    }
+  };
+
   const handleBlockNoteUpdate = async (blockId: string, note: string | null) => {
     // Update local state immediately
     setBlocks(prevBlocks => prevBlocks.map(block =>
@@ -2096,7 +2164,10 @@ export default function WorkoutPage() {
     }
   }, []);
 
-  // Calculate the target index based on current drag position
+  // Calculate the target index based on current drag position. Reads the
+  // data-block-index attribute (rather than the DOM position) because the
+  // list is rendered in two sections (started/current cards + the "Up next"
+  // rows), so DOM order is not guaranteed to match block order.
   const calculateDragTargetIndex = useCallback((clientY: number): number => {
     if (!exerciseListRef.current || draggedBlockIndex === null) return draggedBlockIndex ?? 0;
 
@@ -2105,14 +2176,16 @@ export default function WorkoutPage() {
 
     for (let i = 0; i < listItems.length; i++) {
       const item = listItems[i] as HTMLElement;
+      const itemIndex = Number(item.dataset.blockIndex);
+      if (Number.isNaN(itemIndex)) continue;
       const rect = item.getBoundingClientRect();
       const midY = rect.top + rect.height / 2;
 
       if (clientY < midY) {
-        targetIndex = i;
+        targetIndex = itemIndex;
         break;
       }
-      targetIndex = i + 1;
+      targetIndex = itemIndex + 1;
     }
 
     // Clamp to valid range
@@ -2155,9 +2228,10 @@ export default function WorkoutPage() {
     const finalTargetIndex = dragOverBlockIndex ?? draggedBlockIndex;
 
     if (draggedBlockIndex !== null && finalTargetIndex !== null && draggedBlockIndex !== finalTargetIndex) {
-      const newBlocks = [...blocks];
-      const [removed] = newBlocks.splice(draggedBlockIndex, 1);
-      newBlocks.splice(finalTargetIndex, 0, removed);
+      const spliced = [...blocks];
+      const [removed] = spliced.splice(draggedBlockIndex, 1);
+      spliced.splice(finalTargetIndex, 0, removed);
+      const newBlocks = spliced.map((b, i) => ({ ...b, order: i + 1 }));
 
       // Update local state immediately
       setBlocks(newBlocks);
@@ -2171,14 +2245,25 @@ export default function WorkoutPage() {
         setCurrentBlockIndex(currentBlockIndex + 1);
       }
 
-      // Update sort orders in database
+      // Persist the new order. exercise_blocks."order" (the column the loader
+      // sorts by) is UNIQUE per session, so write in two passes — park every
+      // block on a temporary offset first, then write the final 1..n values —
+      // to avoid transient unique-constraint collisions mid-update.
       try {
         const supabase = createUntypedClient();
         for (let i = 0; i < newBlocks.length; i++) {
-          await supabase
+          const { error: parkError } = await supabase
             .from('exercise_blocks')
-            .update({ sort_order: i })
+            .update({ order: i + 1001 })
             .eq('id', newBlocks[i].id);
+          if (parkError) throw parkError;
+        }
+        for (let i = 0; i < newBlocks.length; i++) {
+          const { error: orderError } = await supabase
+            .from('exercise_blocks')
+            .update({ order: i + 1 })
+            .eq('id', newBlocks[i].id);
+          if (orderError) throw orderError;
         }
       } catch (err) {
         console.error('Error saving reorder:', err);
@@ -2214,21 +2299,24 @@ export default function WorkoutPage() {
         });
       }
 
-      // Calculate which position the item would drop at
+      // Calculate which position the item would drop at (attribute-based:
+      // DOM order can differ from block order with the "Up next" section)
       if (!exerciseListRef.current) return;
       const listItems = exerciseListRef.current.querySelectorAll('[data-block-index]');
       let targetIndex = draggedBlockIndexRef.current;
 
       for (let i = 0; i < listItems.length; i++) {
         const item = listItems[i] as HTMLElement;
+        const itemIndex = Number(item.dataset.blockIndex);
+        if (Number.isNaN(itemIndex)) continue;
         const rect = item.getBoundingClientRect();
         const midY = rect.top + rect.height / 2;
 
         if (clientY < midY) {
-          targetIndex = i;
+          targetIndex = itemIndex;
           break;
         }
-        targetIndex = i + 1;
+        targetIndex = itemIndex + 1;
       }
 
       // Clamp to valid range
@@ -2483,12 +2571,67 @@ export default function WorkoutPage() {
   };
 
   const handleNextExercise = () => {
-    if (currentBlockIndex < blocks.length - 1) {
-      setCurrentBlockIndex(currentBlockIndex + 1);
+    // Advance to the next non-skipped block
+    const nextIndex = blocks.findIndex(
+      (b, i) => i > currentBlockIndex && !skippedBlockIds.has(b.id)
+    );
+    if (nextIndex !== -1) {
+      setCurrentBlockIndex(nextIndex);
       setCurrentSetNumber(1);
       // Clear AMRAP accepted state when changing blocks
       setAmrapAcceptedBlockId(null);
       // Keep rest timer running - need rest between sets even when switching exercises
+    }
+  };
+
+  // "Skip today" on an up-next row: persist skipped_at on the block; the block
+  // stays on the session (undoable) but is excluded from progress, summary,
+  // and progression/feedback derivations.
+  const handleSkipBlock = async (blockId: string) => {
+    setSkippedBlockIds((prev) => {
+      const next = new Set(prev);
+      next.add(blockId);
+      return next;
+    });
+    try {
+      const supabase = createUntypedClient();
+      const { error: skipError } = await supabase
+        .from('exercise_blocks')
+        .update({ skipped_at: new Date().toISOString() })
+        .eq('id', blockId);
+      if (skipError) throw skipError;
+    } catch (err) {
+      console.error('Failed to skip exercise:', err);
+      setSkippedBlockIds((prev) => {
+        const next = new Set(prev);
+        next.delete(blockId);
+        return next;
+      });
+      showError('Could not skip the exercise. Please try again.');
+    }
+  };
+
+  const handleUnskipBlock = async (blockId: string) => {
+    setSkippedBlockIds((prev) => {
+      const next = new Set(prev);
+      next.delete(blockId);
+      return next;
+    });
+    try {
+      const supabase = createUntypedClient();
+      const { error: unskipError } = await supabase
+        .from('exercise_blocks')
+        .update({ skipped_at: null })
+        .eq('id', blockId);
+      if (unskipError) throw unskipError;
+    } catch (err) {
+      console.error('Failed to restore exercise:', err);
+      setSkippedBlockIds((prev) => {
+        const next = new Set(prev);
+        next.add(blockId);
+        return next;
+      });
+      showError('Could not restore the exercise. Please try again.');
     }
   };
 
@@ -3062,7 +3205,7 @@ export default function WorkoutPage() {
             state: 'completed',
             completedAt: new Date().toISOString(),
           }}
-          exerciseBlocks={blocks}
+          exerciseBlocks={blocks.filter((b) => !skippedBlockIds.has(b.id))}
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
           amrapCalibrations={sessionCalibrations}
@@ -3190,12 +3333,57 @@ export default function WorkoutPage() {
     return blockSets.length >= block.targetSets;
   };
 
-  // Calculate overall workout progress
+  // Calculate overall workout progress (skipped blocks excluded)
   // Account for extra set being added - when user clicks "+ Add Set", we have a pending incomplete set
+  const activeBlocks = blocks.filter(b => !skippedBlockIds.has(b.id));
   const pendingExtraSets = addingExtraSet ? 1 : 0;
-  const totalPlannedSets = blocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
+  const totalPlannedSets = activeBlocks.reduce((sum, b) => sum + b.targetSets, 0) + pendingExtraSets;
   const totalCompletedSets = completedSets.filter(s => !s.isWarmup && s.setType !== 'warmup').length;
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
+
+  // Header: workout label + per-exercise progress segments (skipped excluded)
+  const workoutLabel = (() => {
+    if (blocks.length === 0) return 'Workout';
+    const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
+    if (muscles.length >= 5) return 'Full Body';
+    if (muscles.includes('chest') && muscles.includes('back')) return 'Upper Body';
+    if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
+    if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
+    if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
+    return muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+  })();
+  const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
+    isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'
+  );
+  const currentExerciseNumber =
+    Math.max(0, activeBlocks.findIndex((b) => b.id === currentBlock?.id)) + 1;
+
+  // Up-next rows: non-active blocks with nothing logged yet (skipped ones
+  // render greyed with an Undo). Everything else stays in the main list.
+  const isBlockInMainList = (index: number) => {
+    const b = blocks[index];
+    if (!b) return false;
+    return index === currentBlockIndex || getSetsForBlock(b.id).length > 0;
+  };
+  const upNextEntries = blocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ index }) => !isBlockInMainList(index));
+
+  // Vertical shift applied to non-dragged rows while a drag is in flight
+  const getDragTranslateY = (index: number, isBeingDragged: boolean): number => {
+    if (!isDraggingBlock || draggedBlockIndex === null || dragOverBlockIndex === null || isBeingDragged) {
+      return 0;
+    }
+    const itemHeight = 60; // Approximate height of a collapsed item
+    if (draggedBlockIndex < dragOverBlockIndex) {
+      // Dragging down: items between original and target shift up
+      if (index > draggedBlockIndex && index <= dragOverBlockIndex) return -itemHeight;
+    } else if (draggedBlockIndex > dragOverBlockIndex) {
+      // Dragging up: items between target and original shift down
+      if (index >= dragOverBlockIndex && index < draggedBlockIndex) return itemHeight;
+    }
+    return 0;
+  };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-8">
@@ -3226,11 +3414,12 @@ export default function WorkoutPage() {
       
       {/* Workout header */}
       <WorkoutHeader
-        totalCompletedSets={totalCompletedSets}
-        totalPlannedSets={totalPlannedSets}
+        workoutName={workoutLabel}
+        exerciseNumber={currentExerciseNumber}
+        exerciseTotal={activeBlocks.length}
+        segments={headerSegments}
         startedAt={session?.startedAt ?? null}
         workoutTimer={workoutTimer}
-        workoutEstimate={workoutEstimate}
         allCollapsed={allCollapsed}
         onToggleAllCollapsed={() => setAllCollapsed(!allCollapsed)}
         showToolsMenu={showToolsMenu}
@@ -3245,13 +3434,26 @@ export default function WorkoutPage() {
         onFinishWorkout={handleWorkoutComplete}
       />
 
-      {/* Overall progress bar */}
-      <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
-        <div
-          className="bg-primary-500 h-full transition-all duration-300"
-          style={{ width: `${overallProgress}%` }}
-        />
-      </div>
+      {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
+          session-local "Train as planned" override that zeroes the modulation */}
+      {baseReadinessModulation?.banner && !readinessBannerDismissed && !readinessOverridden && (
+        <div className="flex items-center gap-3 bg-warning-500/10 text-warning-400 text-xs px-4 py-2 rounded-lg -mt-2">
+          <span className="flex-1">{baseReadinessModulation.banner}</span>
+          <button
+            onClick={() => setReadinessOverridden(true)}
+            className="flex-shrink-0 font-medium underline underline-offset-2 hover:text-warning-300 transition-colors"
+          >
+            Train as planned
+          </button>
+          <button
+            onClick={() => setReadinessBannerDismissed(true)}
+            className="flex-shrink-0 p-0.5 hover:text-warning-300 transition-colors"
+            aria-label="Dismiss"
+          >
+            <IconX size={14} />
+          </button>
+        </div>
+      )}
 
       {/* First workout guidance */}
       {isFirstWorkout && showBeginnerTips && (
@@ -3371,58 +3573,24 @@ export default function WorkoutPage() {
         </Card>
       )}
 
-      {/* Rest timer control panel - fixed at bottom */}
-      {showRestTimer && (
-        <RestTimerControlPanel
-          isRunning={restTimer.isRunning}
-          isFinished={restTimer.isFinished}
-          onToggle={restTimer.toggle}
-          onAddTime={restTimer.addTime}
-          onReset={restTimer.reset}
-          onSkip={() => {
-            restTimer.skip();
-            // Keep "Rested for X" message visible until next set is checked
-            // The message will be cleared when restTimer.start() is called on next set completion
-            // Explicitly keep timer visible to ensure it stays shown
-            setShowRestTimer(true);
-          }}
-          isVisible={restTimerPanelVisible}
-          onVisibilityChange={setRestTimerPanelVisible}
-        />
-      )}
-
       {/* All exercises list */}
       <div className="space-y-4" ref={exerciseListRef}>
-        <p className="text-xs text-surface-500">💡 Hold the ≡ handle to drag reorder</p>
         {blocks.map((block, index) => {
+          // Upcoming (not-yet-started, non-active) blocks render in the
+          // compact "Up next" list below instead of as full cards.
+          if (!isBlockInMainList(index)) return null;
+
           const blockSets = getSetsForBlock(block.id);
           const isComplete = blockSets.length >= block.targetSets;
           const isCurrent = index === currentBlockIndex;
           const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
           const isInSuperset = block.supersetGroupId !== null;
           const isSupersetWithNext = nextBlock && block.supersetGroupId && block.supersetGroupId === nextBlock.supersetGroupId;
-          const isPast = index < currentBlockIndex;
-          const isFuture = index > currentBlockIndex;
           const isBlockCollapsed = collapsedBlocks.has(block.id);
           const isBeingDragged = draggedBlockIndex === index;
-          const isDragTarget = dragOverBlockIndex === index && draggedBlockIndex !== index;
 
           // Calculate if this item should be visually shifted during drag
-          let translateY = 0;
-          if (isDraggingBlock && draggedBlockIndex !== null && dragOverBlockIndex !== null && !isBeingDragged) {
-            const itemHeight = 60; // Approximate height of collapsed item
-            if (draggedBlockIndex < dragOverBlockIndex) {
-              // Dragging down: items between original and target shift up
-              if (index > draggedBlockIndex && index <= dragOverBlockIndex) {
-                translateY = -itemHeight;
-              }
-            } else if (draggedBlockIndex > dragOverBlockIndex) {
-              // Dragging up: items between target and original shift down
-              if (index >= dragOverBlockIndex && index < draggedBlockIndex) {
-                translateY = itemHeight;
-              }
-            }
-          }
+          const translateY = getDragTranslateY(index, isBeingDragged);
 
           return (
             <React.Fragment key={block.id}>
@@ -3587,50 +3755,12 @@ export default function WorkoutPage() {
                 const effectiveWorkingWeight = block.targetWeightKg > 0 ? block.targetWeightKg : aiRecommendedWeightKg;
                 
                 return (
-                  // Exercise group container - single plain card (mockup style)
-                  <div className="mt-4 mb-6 rounded-2xl border border-surface-800 bg-surface-900 transition-all">
-                    {/* Exercise name header */}
-                    <div className="px-3 py-2.5 sm:px-4 sm:py-3 border-b border-surface-800">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSelectedExerciseForDetails(block.exercise)}
-                          className="text-base font-semibold text-left text-primary-400 hover:text-primary-300 transition-colors"
-                        >
-                          {block.exercise.name}
-                          {block.exercise.equipmentRequired && block.exercise.equipmentRequired.length > 0 && (
-                            <span className="text-surface-500 font-normal text-sm ml-1">
-                              ({block.exercise.equipmentRequired[0]})
-                            </span>
-                          )}
-                        </button>
-                        {/* Tier badge */}
-                        {block.exercise.hypertrophyScore?.tier && (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 ${
-                            block.exercise.hypertrophyScore.tier === 'S' 
-                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-black' 
-                              : block.exercise.hypertrophyScore.tier === 'A' 
-                                ? 'bg-emerald-500/30 text-emerald-400'
-                                : block.exercise.hypertrophyScore.tier === 'B'
-                                  ? 'bg-blue-500/30 text-blue-400'
-                                  : 'bg-surface-600 text-surface-400'
-                          }`}>
-                            {block.exercise.hypertrophyScore.tier}
-                          </span>
-                        )}
-                        {/* Superset badge */}
-                        {block.supersetGroupId && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0 bg-cyan-500/20 text-cyan-400">
-                            SS{block.supersetOrder}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Card content area */}
-                    <div className="px-2 py-3 sm:px-4 space-y-3">
-                    {/* Exercise card with integrated set inputs and warmups - hideHeader since name shows above */}
+                  // Exercise group container — ExerciseCard renders its own
+                  // card with the slim header (name + tier/plateau pills +
+                  // meta line, Phase 2.4), so no duplicate header here.
+                  <div className="mt-4 mb-6 transition-all">
+                    <div className="space-y-3">
                     <ExerciseCard
-                      hideHeader
                     exercise={block.exercise}
                     block={addingExtraSet === block.id 
                       ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
@@ -3645,17 +3775,8 @@ export default function WorkoutPage() {
                     onWarmupComplete={(restSeconds) => {
                       setRestTimerDuration(restSeconds);
                       setShowRestTimer(true);
-                      setRestTimerPanelVisible(false); // Inline bar is primary; tap it for controls
                       restTimer.start(restSeconds);
                     }}
-                    showRestTimer={showRestTimer && isCurrent}
-                    timerSeconds={restTimer.seconds}
-                    timerInitialSeconds={restTimer.initialSeconds}
-                    timerIsRunning={restTimer.isRunning}
-                    timerIsFinished={restTimer.isFinished}
-                    timerIsSkipped={restTimer.isSkipped}
-                    timerRestedSeconds={restTimer.restedSeconds}
-                    onShowTimerControls={() => setRestTimerPanelVisible(true)}
                     onSetEdit={handleSetEdit}
                     onSetDelete={handleDeleteSet}
                     onSetFeedbackUpdate={handleSetFeedbackUpdate}
@@ -3689,12 +3810,16 @@ export default function WorkoutPage() {
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
                     exerciseHistory={exerciseHistories[block.exerciseId]}
                     previousSets={exerciseHistories[block.exerciseId]?.lastWorkoutSets ?? []}
-                    adjustedTargetRir={
+                    onExerciseNameClick={() => setSelectedExerciseForDetails(block.exercise)}
+                    adjustedRir={
                       (() => {
                         const adjusted = calibrationEngineRef.current.getAdjustedRIR(block.exercise.name, block.targetRir);
-                        return adjusted.hasAdjustment ? adjusted.prescribedRIR : undefined;
+                        return adjusted.hasAdjustment ? adjusted : undefined;
                       })()
                     }
+                    readinessModulation={readinessModulation}
+                    performanceSnapshots={performanceSnapshots[block.exerciseId]}
+                    onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={
                       // Show AMRAP when either the suggestion is active OR user already accepted it
                       (amrapSuggestion?.blockId === block.id && amrapSuggestion?.setNumber === (completedSets.filter(s => s.exerciseBlockId === block.id && s.setType === 'normal').length + 1)) ||
@@ -3768,6 +3893,21 @@ export default function WorkoutPage() {
                     }}
                   />
 
+                  {/* Rest timer - single slim bar below the active exercise */}
+                  {isCurrent && showRestTimer && !pendingDropset && (
+                    <RestTimer
+                      seconds={restTimer.seconds}
+                      initialSeconds={restTimer.initialSeconds}
+                      isRunning={restTimer.isRunning}
+                      isFinished={restTimer.isFinished}
+                      onAddTime={restTimer.addTime}
+                      onSkip={() => {
+                        restTimer.skip();
+                        setShowRestTimer(false);
+                      }}
+                    />
+                  )}
+
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
                   {amrapSuggestion && amrapSuggestion.blockId === block.id && (
                     <Card className="p-4 bg-gradient-to-r from-primary-500/20 to-primary-600/10 border-primary-500/30">
@@ -3825,7 +3965,7 @@ export default function WorkoutPage() {
                         >
                           + Add Extra Set
                         </Button>
-                        {index < blocks.length - 1 && (
+                        {blocks.some((b, i) => i > index && !skippedBlockIds.has(b.id)) && (
                           <Button variant="secondary" onClick={handleNextExercise}>
                             Next Exercise →
                           </Button>
@@ -3890,8 +4030,9 @@ export default function WorkoutPage() {
               )}
             </div>
             
-            {/* Superset link button between exercises */}
-            {index < blocks.length - 1 && (
+            {/* Superset link button between exercises (only when the next
+                exercise also renders in this list, not in "Up next") */}
+            {index < blocks.length - 1 && isBlockInMainList(index + 1) && (
               <div className="flex justify-center -my-1">
                 <button
                   onClick={(e) => {
@@ -3926,6 +4067,99 @@ export default function WorkoutPage() {
           </React.Fragment>
           );
         })}
+
+        {/* Up next - compact rows for exercises not started yet */}
+        {upNextEntries.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-surface-500">
+              Up next
+            </p>
+            {upNextEntries.map(({ block, index }) => {
+              const isSkipped = skippedBlockIds.has(block.id);
+              const isBeingDragged = draggedBlockIndex === index;
+              const translateY = getDragTranslateY(index, isBeingDragged);
+              const muscleLabel = block.exercise.primaryMuscle.replace(/_/g, ' ');
+
+              if (isSkipped) {
+                return (
+                  <div
+                    key={block.id}
+                    className="flex items-center gap-3 bg-surface-800/30 rounded-lg px-3 py-2.5 opacity-60"
+                  >
+                    <span className="text-[13px] text-surface-400 line-through truncate flex-1">
+                      {block.exercise.name}
+                    </span>
+                    <span className="text-[11px] text-surface-500 flex-shrink-0">Skipped today</span>
+                    <button
+                      onClick={() => handleUnskipBlock(block.id)}
+                      className="text-[11px] font-medium text-primary-400 hover:text-primary-300 transition-colors flex-shrink-0"
+                    >
+                      Undo
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={block.id}
+                  data-block-index={index}
+                  style={{ transform: translateY ? `translateY(${translateY}px)` : undefined }}
+                  className={`flex items-center gap-3 bg-surface-800/50 rounded-lg px-3 py-2.5 transition-transform duration-200 ease-out cursor-pointer hover:bg-surface-800 ${
+                    isBeingDragged ? 'opacity-0 pointer-events-none' : ''
+                  }`}
+                  onClick={(e) => {
+                    if (isDraggingBlock) return;
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button, [data-drag-handle]')) return;
+                    setCurrentBlockIndex(index);
+                    setCurrentSetNumber(getSetsForBlock(block.id).length + 1);
+                  }}
+                >
+                  <span className="text-[13px] text-surface-200 truncate flex-1">
+                    {block.exercise.name}
+                  </span>
+                  <span className="text-[11px] text-surface-500 flex-shrink-0">
+                    {block.targetSets} sets · {muscleLabel}
+                  </span>
+                  <button
+                    onClick={() => handleSkipBlock(block.id)}
+                    className="text-[11px] text-surface-500 hover:text-warning-400 transition-colors flex-shrink-0"
+                    title="Skip this exercise today"
+                  >
+                    Skip today
+                  </button>
+                  {/* Drag handle - hold to reorder (wired to the existing block drag state) */}
+                  <div
+                    data-drag-handle
+                    className="text-surface-500 cursor-grab active:cursor-grabbing p-1.5 -m-1 touch-none flex-shrink-0"
+                    onTouchStart={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressStart(index, e.touches[0].clientY);
+                    }}
+                    onTouchEnd={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressEnd();
+                      handleBlockDragEnd();
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressStart(index, e.clientY);
+                    }}
+                    onMouseUp={(e) => {
+                      e.stopPropagation();
+                      handleBlockLongPressEnd();
+                      handleBlockDragEnd();
+                    }}
+                    onMouseLeave={handleBlockLongPressEnd}
+                  >
+                    <IconGripVertical size={16} stroke={2} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Floating drag preview */}

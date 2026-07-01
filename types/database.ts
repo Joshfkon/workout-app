@@ -231,6 +231,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      saved_meals: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          items: Json;
+          total_calories: number;
+          total_protein: number;
+          total_carbs: number;
+          total_fat: number;
+          times_logged: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          items?: Json;
+          total_calories?: number;
+          total_protein?: number;
+          total_carbs?: number;
+          total_fat?: number;
+          times_logged?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          items?: Json;
+          total_calories?: number;
+          total_protein?: number;
+          total_carbs?: number;
+          total_fat?: number;
+          times_logged?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       session_muscle_feedback: {
         Row: {
           id: string;
@@ -286,6 +328,7 @@ export interface Database {
           note: string | null;
           dropsets_per_set: number;
           drop_percentage: number;
+          skipped_at: string | null;
         };
         Insert: {
           id?: string;
@@ -305,6 +348,7 @@ export interface Database {
           note?: string | null;
           dropsets_per_set?: number;
           drop_percentage?: number;
+          skipped_at?: string | null;
         };
         Update: {
           id?: string;
@@ -324,6 +368,7 @@ export interface Database {
           note?: string | null;
           dropsets_per_set?: number;
           drop_percentage?: number;
+          skipped_at?: string | null;
         };
         Relationships: [];
       };
