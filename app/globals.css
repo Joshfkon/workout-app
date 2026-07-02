@@ -336,6 +336,25 @@
   50% { transform: translateY(-6px); }
 }
 
+/* ================================================
+   NATIVE BARCODE SCANNER (@capacitor-mlkit/barcode-scanning)
+   The camera preview renders BEHIND the WebView during startScan().
+   While scanning we hide the whole app (visibility, so backgrounds are
+   not painted) and keep only the scanner overlay visible.
+   ================================================ */
+html.barcode-scanner-active,
+html.barcode-scanner-active body {
+  background: transparent !important;
+}
+
+body.barcode-scanner-active {
+  visibility: hidden;
+}
+
+body.barcode-scanner-active .barcode-scanner-overlay {
+  visibility: visible;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

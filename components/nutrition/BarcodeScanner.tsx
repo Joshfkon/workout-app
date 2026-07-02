@@ -2,9 +2,175 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Capacitor } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
 import { Button, LoadingAnimation } from '@/components/ui';
 import { lookupBarcode, type BarcodeSearchResult } from '@/services/openFoodFactsService';
 import { createUntypedClient } from '@/lib/supabase/client';
+
+// ML Kit barcode scanning (native only) - loaded via dynamic import so the
+// plugin never ends up in web bundles that don't need it.
+type MLKitBarcodeModule = typeof import('@capacitor-mlkit/barcode-scanning');
+
+/** Ignore repeat decodes of the same barcode within this window (ms). */
+const SCAN_DEBOUNCE_MS = 3000;
+
+const DEFAULT_SERVING_SIZE = '1 serving';
+
+/**
+ * Haptic + audio feedback on a successful decode.
+ * Every path is best-effort: web without Capacitor, muted devices, and
+ * browsers without WebAudio/vibrate all silently no-op.
+ */
+async function triggerScanFeedback(): Promise<void> {
+  try {
+    const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+    await Haptics.impact({ style: ImpactStyle.Medium });
+  } catch {
+    try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(60);
+      }
+    } catch {
+      // Vibration unavailable - ignore
+    }
+  }
+
+  try {
+    type WindowWithWebkitAudio = Window & { webkitAudioContext?: typeof AudioContext };
+    const AudioCtx =
+      window.AudioContext ?? (window as WindowWithWebkitAudio).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 1250;
+    gain.gain.value = 0.06;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.09);
+    oscillator.onended = () => {
+      ctx.close().catch(() => {});
+    };
+  } catch {
+    // Audio feedback is optional - ignore
+  }
+}
+
+/** Fullscreen overlay shown during a native ML Kit scan session.
+ * The camera preview renders behind the (hidden) WebView; this overlay is
+ * the only visible DOM (see `barcode-scanner-active` CSS in globals.css). */
+function NativeScanOverlay({
+  torchAvailable,
+  torchOn,
+  onToggleTorch,
+  onCancel,
+}: {
+  torchAvailable: boolean;
+  torchOn: boolean;
+  onToggleTorch: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="barcode-scanner-overlay fixed inset-0 z-[9999] flex flex-col">
+      {/* Top bar: close + torch */}
+      <div
+        className="flex items-center justify-between px-4"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1rem)' }}
+      >
+        <button
+          onClick={onCancel}
+          aria-label="Close scanner"
+          className="w-11 h-11 rounded-full bg-black/50 text-white flex items-center justify-center"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        {torchAvailable && (
+          <button
+            onClick={onToggleTorch}
+            aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition-colors ${
+              torchOn ? 'bg-primary-500 text-white' : 'bg-black/50 text-white'
+            }`}
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Scan window (camera visible through the transparent center) */}
+      <div className="flex-1 flex items-center justify-center">
+        <div
+          className="w-72 h-44 rounded-2xl border-2 border-white/80"
+          style={{ boxShadow: '0 0 0 100vmax rgba(0, 0, 0, 0.45)' }}
+        />
+      </div>
+
+      <p
+        className="text-center text-white/90 text-sm"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 2.5rem)' }}
+      >
+        Point your camera at a barcode
+      </p>
+    </div>
+  );
+}
+
+/** Error / info notice with an optional "Create Custom Food" CTA. */
+function ScanErrorNotice({
+  message,
+  type,
+  showCreateCustom,
+  onCreateCustom,
+}: {
+  message: string;
+  type: 'info' | 'error';
+  showCreateCustom: boolean;
+  onCreateCustom: () => void;
+}) {
+  return (
+    <div className={`p-3 rounded-lg ${
+      type === 'error'
+        ? 'bg-danger-500/10 border border-danger-500/20'
+        : 'bg-surface-700/50'
+    }`}>
+      <div className="flex items-center gap-2">
+        {type === 'error' ? (
+          <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )}
+        <p className={`text-sm ${type === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
+          {message}
+        </p>
+      </div>
+
+      {showCreateCustom && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onCreateCustom}
+          className="mt-3 w-full"
+        >
+          <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Create Custom Food
+        </Button>
+      )}
+    </div>
+  );
+}
 
 // Support two modes:
 // 1. onProductFound - scanner looks up barcode and returns full product
@@ -21,16 +187,22 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   const { onClose, onCreateCustom } = props;
   const onProductFound = 'onProductFound' in props ? props.onProductFound : undefined;
   const onScan = 'onScan' in props ? props.onScan : undefined;
-  
-  const [isScanning, setIsScanning] = useState(false);
+  // Silence unused-var: kept for backward-compatible prop API
+  void onCreateCustom;
+
+  const [isScanning, setIsScanning] = useState(false); // web (html5-qrcode) camera running
+  const [isNativeScanning, setIsNativeScanning] = useState(false); // ML Kit fullscreen scan active
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<'info' | 'error'>('info');
   const [manualBarcode, setManualBarcode] = useState('');
   const [debugInfo, setDebugInfo] = useState<string>('Waiting to scan...');
   const [notFoundBarcode, setNotFoundBarcode] = useState<string | null>(null);
-  
-  // Custom food creation state
+  const [torchSupported, setTorchSupported] = useState(false); // web torch
+  const [nativeTorchAvailable, setNativeTorchAvailable] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+
+  // Custom food creation state (barcode-not-found micro-form)
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customFood, setCustomFood] = useState({
     name: '',
@@ -38,29 +210,55 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     protein: '',
     carbs: '',
     fat: '',
-    servingSize: '1 serving',
   });
   const [isSavingCustom, setIsSavingCustom] = useState(false);
-  
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const mlkitRef = useRef<MLKitBarcodeModule | null>(null);
+  const nativeListenersRef = useRef<PluginListenerHandle[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const isMountedRef = useRef(true);
   const isProcessingRef = useRef(false);
-  const lastScannedRef = useRef<string | null>(null);
+  // Time-based duplicate-scan debounce (barcode -> last seen timestamp).
+  // Unlike a permanent identity check, this allows deliberately re-scanning
+  // the same product after a short pause.
+  const recentScansRef = useRef<Map<string, number>>(new Map());
 
   // Cleanup on unmount
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      // Stop scanner on unmount
+      // Stop web scanner
       const scanner = scannerRef.current;
       if (scanner) {
         scannerRef.current = null;
         scanner.stop().catch(() => {});
       }
+      // Stop native scanner
+      document.documentElement.classList.remove('barcode-scanner-active');
+      document.body.classList.remove('barcode-scanner-active');
+      const listeners = nativeListenersRef.current;
+      nativeListenersRef.current = [];
+      for (const listener of listeners) {
+        listener.remove().catch(() => {});
+      }
+      const mlkit = mlkitRef.current;
+      mlkitRef.current = null;
+      if (mlkit) {
+        mlkit.BarcodeScanner.stopScan().catch(() => {});
+      }
     };
   }, []);
+
+  /** Returns true if this decode should be processed (not a too-recent duplicate). */
+  const shouldProcessScan = (barcode: string): boolean => {
+    const now = Date.now();
+    const lastSeen = recentScansRef.current.get(barcode) ?? 0;
+    if (now - lastSeen < SCAN_DEBOUNCE_MS) return false;
+    recentScansRef.current.set(barcode, now);
+    return true;
+  };
 
   // Check custom foods database first
   const checkCustomFoods = async (barcode: string): Promise<BarcodeSearchResult['product'] | null> => {
@@ -79,7 +277,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       if (data) {
         return {
           name: data.food_name,
-          servingSize: data.serving_size || '1 serving',
+          servingSize: data.serving_size || DEFAULT_SERVING_SIZE,
           servingQuantity: 1,
           calories: data.calories || 0,
           protein: data.protein || 0,
@@ -95,10 +293,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     return null;
   };
 
-  // Save custom food with barcode
+  // Save custom food with barcode, then immediately log it
   const saveCustomFood = async () => {
-    if (!notFoundBarcode || !customFood.name.trim()) return;
-    
+    if (!notFoundBarcode || !customFood.name.trim() || !customFood.calories) return;
+
     setIsSavingCustom(true);
     try {
       const supabase = createUntypedClient();
@@ -108,7 +306,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       const { error } = await supabase.from('custom_foods').insert({
         user_id: user.id,
         food_name: customFood.name.trim(),
-        serving_size: customFood.servingSize || '1 serving',
+        serving_size: DEFAULT_SERVING_SIZE,
         calories: parseInt(customFood.calories) || 0,
         protein: parseFloat(customFood.protein) || 0,
         carbs: parseFloat(customFood.carbs) || 0,
@@ -118,11 +316,11 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
       if (error) throw error;
 
-      // Now pass the custom food to the parent
+      // Now pass the custom food to the parent so it gets logged
       if (onProductFound) {
         onProductFound({
           name: customFood.name.trim(),
-          servingSize: customFood.servingSize || '1 serving',
+          servingSize: DEFAULT_SERVING_SIZE,
           servingQuantity: 1,
           calories: parseInt(customFood.calories) || 0,
           protein: parseFloat(customFood.protein) || 0,
@@ -146,7 +344,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       return;
     }
     isProcessingRef.current = true;
-    
+
     setDebugInfo(`Processing: ${barcode}`);
     setIsLookingUp(true);
     setError(null);
@@ -162,7 +360,6 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           setDebugInfo(`onScan complete`);
           setIsLookingUp(false);
         }
-        isProcessingRef.current = false;
         return;
       }
 
@@ -174,23 +371,21 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         if (onProductFound) {
           onProductFound(customFood);
         }
-        isProcessingRef.current = false;
         return;
       }
 
       // Mode 2: Look up barcode in public databases
       setDebugInfo(`Looking up in databases: ${barcode}...`);
-      
+
       const result = await lookupBarcode(barcode);
-      
+
       if (!isMountedRef.current) {
-        isProcessingRef.current = false;
         return;
       }
 
       if (result && result.found && result.product) {
         setDebugInfo(`Found: ${result.product.name}`);
-        
+
         if (onProductFound) {
           // This will cause parent to re-render and unmount us
           onProductFound(result.product);
@@ -200,14 +395,14 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         const resultInfo = result ? JSON.stringify(result, null, 2) : 'null';
         setDebugInfo(`Not found.\nBarcode: ${barcode}\nResult: ${resultInfo}`);
         setNotFoundBarcode(barcode);
-        
+
         const errorText = result?.error || '';
         // Check for actual connection/server errors (not 404 which just means not found)
-        const isConnectionError = errorText.includes('fetch') || 
+        const isConnectionError = errorText.includes('fetch') ||
                                    errorText.includes('network') ||
                                    errorText.includes('500') ||
                                    errorText.includes('503');
-        
+
         if (isConnectionError) {
           setError('Unable to reach food database. Check your connection.');
           setErrorType('error');
@@ -220,7 +415,6 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       }
     } catch (err) {
       if (!isMountedRef.current) {
-        isProcessingRef.current = false;
         return;
       }
       const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
@@ -230,16 +424,169 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       setIsLookingUp(false);
     } finally {
       isProcessingRef.current = false;
+      // Restart the debounce window once the lookup settles so the camera
+      // doesn't immediately re-trigger on a barcode still in frame.
+      recentScansRef.current.set(barcode, Date.now());
     }
   };
 
-  const startScanner = async () => {
+  // ---------------------------------------------------------------------------
+  // Native path: ML Kit barcode scanning (Capacitor)
+  // ---------------------------------------------------------------------------
+
+  const stopNativeScanner = async () => {
+    document.documentElement.classList.remove('barcode-scanner-active');
+    document.body.classList.remove('barcode-scanner-active');
+    if (isMountedRef.current) {
+      setIsNativeScanning(false);
+      setNativeTorchAvailable(false);
+      setTorchOn(false);
+    }
+    const listeners = nativeListenersRef.current;
+    nativeListenersRef.current = [];
+    for (const listener of listeners) {
+      try {
+        await listener.remove();
+      } catch {
+        // Listener may already be removed
+      }
+    }
+    const mlkit = mlkitRef.current;
+    mlkitRef.current = null;
+    if (mlkit) {
+      try {
+        await mlkit.BarcodeScanner.stopScan();
+      } catch (err) {
+        console.debug('[BarcodeScanner] Native stopScan error (usually safe to ignore):', err);
+      }
+    }
+  };
+
+  const startNativeScanner = async (): Promise<void> => {
+    setDebugInfo('Starting native ML Kit scanner...');
+
+    let mlkit: MLKitBarcodeModule;
+    try {
+      mlkit = await import('@capacitor-mlkit/barcode-scanning');
+    } catch {
+      // Plugin not installed in this native shell - fall back to the web scanner
+      setDebugInfo('ML Kit plugin unavailable, falling back to web scanner');
+      await startWebScanner();
+      return;
+    }
+
+    const { BarcodeScanner: MLKitScanner, BarcodeFormat, LensFacing } = mlkit;
+
+    try {
+      const { supported } = await MLKitScanner.isSupported();
+      if (!supported) {
+        setDebugInfo('ML Kit not supported on this device, falling back to web scanner');
+        await startWebScanner();
+        return;
+      }
+
+      // Permission flow: check, then request if needed
+      let permission = await MLKitScanner.checkPermissions();
+      if (permission.camera !== 'granted' && permission.camera !== 'limited') {
+        permission = await MLKitScanner.requestPermissions();
+      }
+      if (permission.camera !== 'granted' && permission.camera !== 'limited') {
+        setErrorType('info');
+        setError('Camera permission denied. Enter barcode manually below.');
+        setDebugInfo(`Camera permission: ${permission.camera}`);
+        return;
+      }
+
+      mlkitRef.current = mlkit;
+
+      // Register listeners before starting the scan
+      const scannedListener = await MLKitScanner.addListener('barcodesScanned', async (event) => {
+        const barcode = event.barcodes[0];
+        const value = barcode?.rawValue ?? barcode?.displayValue;
+        if (!value) return;
+        if (isProcessingRef.current) return;
+        if (!shouldProcessScan(value)) return;
+
+        void triggerScanFeedback();
+
+        // Close the fullscreen camera before handing off to the lookup UI
+        await stopNativeScanner();
+
+        if (isMountedRef.current) {
+          setDebugInfo(`Scanned (native): ${value}`);
+          await processBarcode(value);
+        }
+      });
+      nativeListenersRef.current.push(scannedListener);
+
+      const errorListener = await MLKitScanner.addListener('scanError', async (event) => {
+        console.warn('[BarcodeScanner] Native scan error:', event.message);
+        await stopNativeScanner();
+        if (isMountedRef.current) {
+          setErrorType('error');
+          setError('Scanner error. Try again or enter the barcode manually.');
+          setDebugInfo(`Native scan error: ${event.message}`);
+        }
+      });
+      nativeListenersRef.current.push(errorListener);
+
+      // The camera renders BEHIND the WebView; CSS in globals.css hides the
+      // app while `barcode-scanner-active` is set (our overlay stays visible).
+      document.documentElement.classList.add('barcode-scanner-active');
+      document.body.classList.add('barcode-scanner-active');
+      setIsNativeScanning(true);
+
+      await MLKitScanner.startScan({
+        formats: [
+          BarcodeFormat.Ean13,
+          BarcodeFormat.Ean8,
+          BarcodeFormat.UpcA,
+          BarcodeFormat.UpcE,
+          BarcodeFormat.Code128,
+          BarcodeFormat.Code39,
+        ],
+        lensFacing: LensFacing.Back,
+      });
+
+      // Torch is only queryable during an active scan session
+      try {
+        const { available } = await MLKitScanner.isTorchAvailable();
+        if (isMountedRef.current) setNativeTorchAvailable(available);
+      } catch {
+        // Torch not available on this device
+      }
+
+      setDebugInfo('Native camera ready. Point at barcode.');
+    } catch (err) {
+      await stopNativeScanner();
+      const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      setDebugInfo(`Native scanner error: ${errMsg}. Falling back to web scanner.`);
+      // Defensive: any native failure falls back to the proven web path
+      await startWebScanner();
+    }
+  };
+
+  const toggleNativeTorch = async () => {
+    const mlkit = mlkitRef.current;
+    if (!mlkit) return;
+    try {
+      await mlkit.BarcodeScanner.toggleTorch();
+      const { enabled } = await mlkit.BarcodeScanner.isTorchEnabled();
+      if (isMountedRef.current) setTorchOn(enabled);
+    } catch (err) {
+      console.debug('[BarcodeScanner] Torch toggle error:', err);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Web path: html5-qrcode
+  // ---------------------------------------------------------------------------
+
+  const startWebScanner = async () => {
     if (!isMountedRef.current) return;
-    
-    setError(null);
+
     setIsScanning(true);
     setDebugInfo('Starting camera...');
-    setShowCustomForm(false);
 
     try {
       // Only scan barcode formats commonly used on food products
@@ -270,49 +617,46 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
           qrbox: { width: 300, height: 180 },  // Larger scan area for easier alignment
           aspectRatio: 1.777778,
         },
-        async (decodedText) => {
-          // Prevent duplicate scans
-          if (decodedText === lastScannedRef.current) return;
+        (decodedText) => {
+          // Time-based duplicate debounce + single lookup at a time
           if (isProcessingRef.current) return;
-          
-          lastScannedRef.current = decodedText;
-          
+          if (!shouldProcessScan(decodedText)) return;
+
+          void triggerScanFeedback();
+
           if (isMountedRef.current) {
             setDebugInfo(`Scanned: ${decodedText}`);
           }
 
-          // Stop scanner first
-          const scanner = scannerRef.current;
-          if (scanner) {
-            scannerRef.current = null;
-            try {
-              await scanner.stop();
-            } catch (e) {
-              console.warn('[Scanner] Stop error:', e);
-            }
-          }
-          
-          if (isMountedRef.current) {
-            setIsScanning(false);
-            await processBarcode(decodedText);
-          }
+          // Continuous scanning: keep the camera running while we look the
+          // product up. On success the parent unmounts us (cleanup stops the
+          // camera); on "not found" scanning resumes automatically.
+          void processBarcode(decodedText);
         },
         () => {
-          // QR code not found - fires continuously, ignore
+          // Barcode not found in frame - fires continuously, ignore
         }
       );
-      
+
       if (isMountedRef.current) {
         setDebugInfo('Camera ready. Point at barcode.');
       }
+
+      // Feature-detect torch support (v2.3.8 camera capabilities API)
+      try {
+        const torchFeature = html5QrCode.getRunningTrackCameraCapabilities().torchFeature();
+        if (isMountedRef.current) setTorchSupported(torchFeature.isSupported());
+      } catch {
+        if (isMountedRef.current) setTorchSupported(false);
+      }
     } catch (err) {
       if (!isMountedRef.current) return;
-      
+
       setIsScanning(false);
       const errMsg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       setDebugInfo(`Camera error: ${errMsg}`);
       setErrorType('info');
-      
+
       if (err instanceof Error) {
         if (err.message.includes('Permission')) {
           setError('Camera permission denied. Enter barcode manually below.');
@@ -327,7 +671,21 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     }
   };
 
-  const stopScanner = async () => {
+  const toggleWebTorch = async () => {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    try {
+      const torchFeature = scanner.getRunningTrackCameraCapabilities().torchFeature();
+      if (!torchFeature.isSupported()) return;
+      const next = !(torchFeature.value() ?? false);
+      await torchFeature.apply(next);
+      if (isMountedRef.current) setTorchOn(next);
+    } catch (err) {
+      console.debug('[BarcodeScanner] Web torch toggle error:', err);
+    }
+  };
+
+  const stopWebScanner = async () => {
     const scanner = scannerRef.current;
     if (scanner) {
       scannerRef.current = null;
@@ -340,6 +698,25 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     }
     if (isMountedRef.current) {
       setIsScanning(false);
+      setTorchSupported(false);
+      setTorchOn(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Shared entry point: native ML Kit on device, html5-qrcode on web
+  // ---------------------------------------------------------------------------
+
+  const startScanner = async () => {
+    if (!isMountedRef.current) return;
+
+    setError(null);
+    setShowCustomForm(false);
+
+    if (Capacitor.isNativePlatform()) {
+      await startNativeScanner();
+    } else {
+      await startWebScanner();
     }
   };
 
@@ -348,14 +725,14 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     processBarcode(manualBarcode.trim());
   };
 
-  // Show custom food creation form
+  // Show custom food creation micro-form (barcode not found)
   if (showCustomForm && notFoundBarcode) {
     return (
       <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
         <div className="flex items-center justify-between p-3 border-b border-surface-700">
           <div className="flex items-center gap-2">
             <span className="text-lg">📝</span>
-            <span className="font-medium text-surface-100">Create Custom Food</span>
+            <span className="font-medium text-surface-100">New Food</span>
           </div>
           <button onClick={() => setShowCustomForm(false)} className="p-1 text-surface-400 hover:text-surface-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -363,48 +740,43 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
             </svg>
           </button>
         </div>
-        
+
         <div className="p-4 space-y-3">
-          <p className="text-xs text-surface-400 mb-2">
+          <p className="text-xs text-surface-400">
             Barcode: <span className="font-mono text-surface-300">{notFoundBarcode}</span>
           </p>
-          
+
           <input
             type="text"
+            autoFocus
             value={customFood.name}
             onChange={(e) => setCustomFood(prev => ({ ...prev, name: e.target.value }))}
             placeholder="Food name *"
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
           />
-          
+
           <input
-            type="text"
-            value={customFood.servingSize}
-            onChange={(e) => setCustomFood(prev => ({ ...prev, servingSize: e.target.value }))}
-            placeholder="Serving size (e.g., 1 cup, 100g)"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={customFood.calories}
+            onChange={(e) => setCustomFood(prev => ({ ...prev, calories: e.target.value }))}
+            placeholder="Calories (per serving) *"
             className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
           />
-          
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-xs text-surface-500 mb-1">Calories *</label>
-              <input
-                type="number"
-                value={customFood.calories}
-                onChange={(e) => setCustomFood(prev => ({ ...prev, calories: e.target.value }))}
-                placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
-              />
-            </div>
+
+          {/* Optional macros - default to 0 when left blank */}
+          <div className="grid grid-cols-3 gap-2">
             <div>
               <label className="block text-xs text-surface-500 mb-1">Protein (g)</label>
               <input
                 type="number"
                 step="0.1"
+                min="0"
                 value={customFood.protein}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, protein: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
               />
             </div>
             <div>
@@ -412,10 +784,11 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               <input
                 type="number"
                 step="0.1"
+                min="0"
                 value={customFood.carbs}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, carbs: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
               />
             </div>
             <div>
@@ -423,30 +796,26 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               <input
                 type="number"
                 step="0.1"
+                min="0"
                 value={customFood.fat}
                 onChange={(e) => setCustomFood(prev => ({ ...prev, fat: e.target.value }))}
                 placeholder="0"
-                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100"
+                className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500"
               />
             </div>
           </div>
-          
-          <div className="flex gap-2 pt-2">
-            <Button 
-              onClick={saveCustomFood} 
-              isLoading={isSavingCustom}
-              disabled={!customFood.name.trim() || !customFood.calories}
-              className="flex-1"
-            >
-              Save & Add
-            </Button>
-            <Button variant="secondary" onClick={() => setShowCustomForm(false)}>
-              Cancel
-            </Button>
-          </div>
-          
+
+          <Button
+            onClick={saveCustomFood}
+            isLoading={isSavingCustom}
+            disabled={!customFood.name.trim() || !customFood.calories}
+            className="w-full"
+          >
+            Save &amp; log
+          </Button>
+
           <p className="text-[10px] text-surface-500 text-center">
-            This food will be saved and automatically found when you scan this barcode again.
+            Logged as {DEFAULT_SERVING_SIZE}. Saved to your foods — scanning this barcode again logs it instantly.
           </p>
         </div>
       </div>
@@ -455,6 +824,15 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
   return (
     <div className="bg-surface-800 rounded-lg border border-surface-700 overflow-hidden">
+      {isNativeScanning && (
+        <NativeScanOverlay
+          torchAvailable={nativeTorchAvailable}
+          torchOn={torchOn}
+          onToggleTorch={() => { void toggleNativeTorch(); }}
+          onCancel={() => { void stopNativeScanner(); }}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-surface-700">
         <div className="flex items-center gap-2">
@@ -472,7 +850,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
       {/* Scanner area */}
       <div className="p-4 space-y-4">
-        {isLookingUp ? (
+        {isLookingUp && !isScanning ? (
           <div className="flex flex-col items-center justify-center py-8">
             <LoadingAnimation type="dots" size="md" />
             <p className="mt-3 text-surface-400">Looking up product...</p>
@@ -480,13 +858,13 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         ) : (
           <>
             {/* Camera scanner */}
-            <div 
+            <div
               ref={containerRef}
               className="relative bg-surface-900 rounded-lg overflow-hidden"
               style={{ minHeight: isScanning ? '200px' : 'auto' }}
             >
               <div id="barcode-reader" className={isScanning ? 'block' : 'hidden'} />
-              
+
               {!isScanning && (
                 <div className="flex flex-col items-center justify-center py-8 px-4">
                   <div className="w-16 h-16 rounded-full bg-primary-500/20 flex items-center justify-center mb-4">
@@ -508,11 +886,36 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
               )}
 
               {isScanning && (
-                <div className="absolute bottom-2 left-0 right-0 flex justify-center">
-                  <Button onClick={stopScanner} variant="secondary" size="sm">
-                    Stop Scanner
-                  </Button>
-                </div>
+                <>
+                  {/* Lookup-in-progress banner (camera keeps running) */}
+                  {isLookingUp && (
+                    <div className="absolute top-2 left-2 right-2 flex items-center justify-center gap-2 bg-black/60 rounded-lg px-3 py-2">
+                      <LoadingAnimation type="dots" size="sm" />
+                      <span className="text-xs text-white">Looking up product...</span>
+                    </div>
+                  )}
+
+                  {/* Torch toggle (only when the camera supports it) */}
+                  {torchSupported && (
+                    <button
+                      onClick={() => { void toggleWebTorch(); }}
+                      aria-label={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+                      className={`absolute bottom-2 right-2 w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                        torchOn ? 'bg-primary-500 text-white' : 'bg-black/50 text-white'
+                      }`}
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </button>
+                  )}
+
+                  <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+                    <Button onClick={stopWebScanner} variant="secondary" size="sm">
+                      Stop Scanner
+                    </Button>
+                  </div>
+                </>
               )}
             </div>
 
@@ -538,41 +941,12 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
             {/* Error/Info message with Create Custom button */}
             {error && (
-              <div className={`p-3 rounded-lg ${
-                errorType === 'error' 
-                  ? 'bg-danger-500/10 border border-danger-500/20' 
-                  : 'bg-surface-700/50'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {errorType === 'error' ? (
-                    <svg className="w-4 h-4 text-danger-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4 text-surface-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  )}
-                  <p className={`text-sm ${errorType === 'error' ? 'text-danger-400' : 'text-surface-300'}`}>
-                    {error}
-                  </p>
-                </div>
-                
-                {/* Show create custom button if barcode not found */}
-                {notFoundBarcode && errorType === 'info' && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setShowCustomForm(true)}
-                    className="mt-3 w-full"
-                  >
-                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Create Custom Food
-                  </Button>
-                )}
-              </div>
+              <ScanErrorNotice
+                message={error}
+                type={errorType}
+                showCreateCustom={!!notFoundBarcode && errorType === 'info'}
+                onCreateCustom={() => setShowCustomForm(true)}
+              />
             )}
           </>
         )}
