@@ -977,24 +977,32 @@ export const ExerciseCard = memo(function ExerciseCard({
     }
   };
 
-  // Reason sentence + plain-language explanation for the SuggestionBanner.
-  // Primary reason from the within-session recommender rationale (or the
-  // last-session comparison for the first set); calibration / readiness
-  // modifiers are flagged inline and fully explained in the info sheet.
-  const buildSuggestionInfo = (isAmrap: boolean): { reason: string; explanation: string[] } => {
+  // Suggested weight/reps + reason sentence + plain-language explanation for
+  // the SuggestionBanner. Computed fresh from the within-session recommender
+  // (NOT from the editable pendingInputs, which only START as the suggestion)
+  // so the banner keeps showing the AI suggestion after the user edits the
+  // logger fields below it. Calibration / readiness modifiers are flagged
+  // inline and fully explained in the info sheet.
+  const buildSuggestionInfo = (
+    isAmrap: boolean
+  ): { weight: string; reps: string; reason: string; explanation: string[] } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
+    let weight = '';
+    let reps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
 
     const deltaLabel = (deltaKg: number) =>
       `${deltaKg > 0 ? '+' : '-'}${convertWeightForDisplay(Math.abs(deltaKg), unit)} ${weightLabel}`;
 
     if (lastCompleted) {
-      const rec = recommendNext({
-        weightKg: lastCompleted.weightKg,
-        reps: lastCompleted.reps,
-        rpe: lastCompleted.rpe,
-      });
+      const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
+      const rec = recommendNext(lastSetData);
+      weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
+      reps = rec.reps;
+      if (isAmrap && lastCompleted.rpe) {
+        reps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), reps);
+      }
       const deltaKg = rec.weightKg - lastCompleted.weightKg;
       if (rec.rationale === 'increase_load') {
         reason = `up ${deltaLabel(deltaKg)} — last set was clearly too light`;
@@ -1007,9 +1015,21 @@ export const ExerciseCard = memo(function ExerciseCard({
         `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prediction works back from.`
       );
     } else {
+      // Mirror the pending-input seed: previous-session set for this slot
+      // first, then the block/profile-level suggested weight.
+      const prevSet = previousSets[completedSets.length];
+      let weightKg = 0;
+      if (prevSet) {
+        weightKg = prevSet.weightKg;
+        reps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
+      } else if (suggestedWeight > 0) {
+        weightKg = suggestedWeight;
+      }
+      weight = seedWeightString(weightKg, prevSet?.weightKg);
+
       const lastSessionTop = exerciseHistory?.lastWorkoutSets?.[0];
-      if (lastSessionTop && suggestedWeight > 0) {
-        const deltaKg = suggestedWeight - lastSessionTop.weightKg;
+      if (lastSessionTop && weightKg > 0) {
+        const deltaKg = weightKg - lastSessionTop.weightKg;
         reason =
           Math.abs(deltaKg) < 0.25
             ? 'matching your last session'
@@ -1017,7 +1037,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         explanation.push(
           `Anchored to your last session: ${displayWeight(lastSessionTop.weightKg, true)} ${weightLabel} × ${lastSessionTop.reps}.`
         );
-      } else if (suggestedWeight > 0) {
+      } else if (weightKg > 0) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else {
@@ -1047,7 +1067,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       explanation.push('Last set: push to failure (AMRAP) so the app can calibrate how you rate effort.');
     }
 
-    return { reason, explanation };
+    return { weight, reps: String(reps), reason, explanation };
   };
 
   // Single meta line under the exercise name (mockup 2.4):
@@ -1739,21 +1759,21 @@ export const ExerciseCard = memo(function ExerciseCard({
           const loggerTargetRir = activeIsAmrap ? 0 : effectiveTargetRir;
           const usesBwLoad = isBodyweightExercise && weightMode !== 'bodyweight';
 
+          const suggestion = buildSuggestionInfo(activeIsAmrap);
           const bannerWeight = isBodyweightExercise
             ? weightMode === 'bodyweight'
               ? 'BW'
               : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
-            : `${input.weight || '—'} ${weightLabel}`;
-          const { reason, explanation } = buildSuggestionInfo(activeIsAmrap);
+            : `${suggestion.weight || '—'} ${weightLabel}`;
 
           return (
             <div className="space-y-2 pt-1">
               <SuggestionBanner
                 weightLabel={bannerWeight}
-                repsLabel={`${input.reps || '—'}${isDurationBased ? 's' : ''}`}
+                repsLabel={`${suggestion.reps || '—'}${isDurationBased ? 's' : ''}`}
                 rir={Math.max(0, Math.min(3, loggerTargetRir))}
-                reason={reason}
-                explanation={explanation}
+                reason={suggestion.reason}
+                explanation={suggestion.explanation}
               />
               <SetLoggerRow
                 setNumber={activeSetNumber}

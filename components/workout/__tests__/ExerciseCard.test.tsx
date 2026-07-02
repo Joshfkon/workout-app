@@ -436,6 +436,39 @@ describe('ExerciseCard', () => {
       ).toBeInTheDocument();
     });
 
+    it('keeps showing the AI suggestion in the banner after the user edits the weight input', async () => {
+      const user = userEvent.setup();
+
+      // 100 kg × 10 @ RPE 8 (2 RIR) exactly matches the 8-12 @ 2 RIR target,
+      // so the recommender holds 100 kg and predicts 9 reps for the next set.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 }),
+      ];
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={sets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+
+      // Type a completely different weight into the logger input
+      await user.click(screen.getByRole('button', { name: /Weight: 100 kg/ }));
+      const weightInput = screen.getByRole('spinbutton', { name: 'Weight' });
+      await user.clear(weightInput);
+      await user.type(weightInput, '999');
+
+      // The logger reflects the edit, but the banner must NOT echo it —
+      // it keeps showing what the recommender actually suggested.
+      expect(weightInput).toHaveValue(999);
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR/)).toBeInTheDocument();
+      expect(screen.queryByText(/999 kg ×/)).not.toBeInTheDocument();
+    });
+
     it('shows the suggestion banner with a reason', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       // No history and a target weight -> profile-based starting point reason

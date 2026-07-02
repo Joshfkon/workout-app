@@ -3,11 +3,17 @@
 /**
  * /dashboard/log — the app's landing surface.
  *
- * Opening the app drops the user into a blank-workout logger:
- *   1. Quick-route cards: continue/start today's mesocycle workout, log food.
- *   2. "Start logging": exercise search + suggested list. No workout_sessions
- *      row exists until the user taps an exercise (lazy session creation,
- *      mirroring /dashboard/workout/quick's insert shape).
+ * Opening the app drops the user into a four-choice launcher:
+ *   1. Continue card (only when a session is in_progress today).
+ *   2. Log food -> /dashboard/nutrition.
+ *   3. Mesocycle workout -> start today's scheduled session (or route to the
+ *      mesocycle pages on rest days / when there is no active mesocycle).
+ *   4. Blank workout -> reveals the exercise search + suggested list inline.
+ *      No workout_sessions row exists until the user taps an exercise (lazy
+ *      session creation, mirroring /dashboard/workout/quick's insert shape).
+ *   5. AI suggested workout -> builds a plan from muscle recovery + weekly
+ *      volume (services/suggestedWorkout, pure), previews it in a bottom
+ *      sheet, and only writes the session/blocks when the user taps Start.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -17,9 +23,12 @@ import {
   IconBarbell,
   IconChevronRight,
   IconHistory,
-  IconPlayerPlay,
+  IconLoader2,
+  IconPlus,
   IconSalad,
   IconSearch,
+  IconSparkles,
+  IconX,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
@@ -27,11 +36,19 @@ import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import {
+  buildSuggestedWorkout,
+  type SuggestedWorkoutPlan,
+} from '@/services/suggestedWorkout';
+import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
+import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
+import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
+import { BottomSheet } from '@/components/workout/BottomSheet';
 import type { ExerciseOverride } from '@/services/mesocycleHelpers';
+import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { Experience, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
 
 // Normalize exercise search terms for better matching (local copy of the
@@ -125,33 +142,90 @@ async function getOrCreateTodaySession(
   return { sessionId: newSession.id, isNewSession: true };
 }
 
-/** Suggested working weight via the same helper the mesocycle start path uses (kg in, kg out). */
-async function getSuggestedWeightKg(
+/** The users-table fields quickWeightEstimate needs. */
+interface EstimationProfile {
+  weight_kg: number | null;
+  height_cm: number | null;
+  body_fat_percent: number | null;
+  experience: string | null;
+}
+
+async function fetchEstimationProfile(
   supabase: UntypedSupabase,
-  userId: string,
-  exerciseName: string,
-  repRange: [number, number],
-  targetRir: number
-): Promise<number> {
-  const { data: userData } = await supabase
+  userId: string
+): Promise<EstimationProfile | null> {
+  const { data } = await supabase
     .from('users')
     .select('weight_kg, height_cm, body_fat_percent, experience')
     .eq('id', userId)
     .single();
+  return (data as EstimationProfile | null) ?? null;
+}
 
-  if (!userData?.weight_kg || !userData?.height_cm) return 0;
+/** Suggested working weight via the same helper the mesocycle start path uses (kg in, kg out). */
+function estimateWeightKg(
+  profile: EstimationProfile | null,
+  exerciseName: string,
+  repRange: [number, number],
+  targetRir: number
+): number {
+  if (!profile?.weight_kg || !profile?.height_cm) return 0;
 
   const weightRec = quickWeightEstimate(
     exerciseName,
     { min: repRange[0], max: repRange[1] },
     targetRir,
-    userData.weight_kg,
-    userData.height_cm,
-    userData.body_fat_percent || 20,
-    (userData.experience || 'intermediate') as Experience
+    profile.weight_kg,
+    profile.height_cm,
+    profile.body_fat_percent || 20,
+    (profile.experience || 'intermediate') as Experience
   );
   if (weightRec.confidence === 'find_working_weight') return 0;
   return weightRec.recommendedWeight || 0;
+}
+
+/** Rep range / RIR / rest defaults shared by the blank + AI create paths. */
+function blockDefaults(exercise: LogExercise): {
+  isCompound: boolean;
+  repRange: [number, number];
+  targetRir: number;
+} {
+  const isCompound = exercise.mechanic === 'compound';
+  const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
+    ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
+    : isCompound
+      ? [6, 10]
+      : [10, 15]) as [number, number];
+  return { isCompound, repRange, targetRir: exercise.default_rir ?? 2 };
+}
+
+/** Warmup protocol for the session's first exercise (same shape everywhere). */
+function warmupForFirstExercise(
+  exercise: LogExercise,
+  isCompound: boolean,
+  repRange: [number, number],
+  targetRir: number,
+  workingWeightKg: number
+): WarmupSet[] {
+  return generateWarmupProtocol({
+    workingWeight: workingWeightKg > 0 ? workingWeightKg : 60,
+    exercise: {
+      id: exercise.id,
+      name: exercise.name,
+      primaryMuscle: (exercise.primary_muscle || 'chest') as MuscleGroup,
+      secondaryMuscles: [],
+      mechanic: isCompound ? 'compound' : 'isolation',
+      defaultRepRange: repRange,
+      defaultRir: targetRir,
+      minWeightIncrementKg: 2.5,
+      formCues: [],
+      commonMistakes: [],
+      equipmentRequired: [],
+      setupNote: '',
+      movementPattern: isCompound ? 'compound' : 'isolation',
+    },
+    isFirstExercise: true,
+  });
 }
 
 export default function LogPage() {
@@ -169,6 +243,17 @@ export default function LogPage() {
   const [isStartingMeso, setIsStartingMeso] = useState(false);
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Blank workout accordion
+  const [showBlank, setShowBlank] = useState(false);
+
+  // AI suggested workout
+  const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
+  const { volumeData, isLoading: volumeLoading } = useWeeklyVolume();
+  const [aiRequested, setAiRequested] = useState(false);
+  const [aiPlan, setAiPlan] = useState<SuggestedWorkoutPlan | null>(null);
+  const [showAiSheet, setShowAiSheet] = useState(false);
+  const [isStartingAi, setIsStartingAi] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -322,6 +407,23 @@ export default function LogPage() {
 
   const rows = searchResults ?? suggested;
 
+  // Next scheduled training day (for the rest-day mesocycle card subtitle).
+  const nextWorkout = useMemo(() => {
+    if (!activeMeso || todayWorkout) return null;
+    const todayDow = new Date().getDay() || 7;
+    for (let offset = 1; offset <= 7; offset++) {
+      const dow = ((todayDow - 1 + offset) % 7) + 1;
+      const workout = getWorkoutForDay(
+        activeMeso.split_type,
+        dow,
+        activeMeso.days_per_week,
+        activeMeso.preferred_workout_days
+      );
+      if (workout) return workout;
+    }
+    return null;
+  }, [activeMeso, todayWorkout]);
+
   const handleStartMesoWorkout = async () => {
     if (!activeMeso || isStartingMeso) return;
     setIsStartingMeso(true);
@@ -369,43 +471,13 @@ export default function LogPage() {
         order = (maxOrderResult?.order || 0) + 1;
       }
 
-      const isCompound = exercise.mechanic === 'compound';
-      const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
-        ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
-        : isCompound
-          ? [6, 10]
-          : [10, 15]) as [number, number];
-      const targetRir = exercise.default_rir ?? 2;
-
-      const suggestedWeight = await getSuggestedWeightKg(
-        supabase,
-        user.id,
-        exercise.name,
-        repRange,
-        targetRir
-      );
+      const { isCompound, repRange, targetRir } = blockDefaults(exercise);
+      const profile = await fetchEstimationProfile(supabase, user.id);
+      const suggestedWeight = estimateWeightKg(profile, exercise.name, repRange, targetRir);
 
       let warmupSets: WarmupSet[] = [];
       if (isNewSession) {
-        warmupSets = generateWarmupProtocol({
-          workingWeight: suggestedWeight > 0 ? suggestedWeight : 60,
-          exercise: {
-            id: exercise.id,
-            name: exercise.name,
-            primaryMuscle: (exercise.primary_muscle || 'chest') as MuscleGroup,
-            secondaryMuscles: [],
-            mechanic: isCompound ? 'compound' : 'isolation',
-            defaultRepRange: repRange,
-            defaultRir: targetRir,
-            minWeightIncrementKg: 2.5,
-            formCues: [],
-            commonMistakes: [],
-            equipmentRequired: [],
-            setupNote: '',
-            movementPattern: isCompound ? 'compound' : 'isolation',
-          },
-          isFirstExercise: true,
-        });
+        warmupSets = warmupForFirstExercise(exercise, isCompound, repRange, targetRir, suggestedWeight);
       }
 
       const { error: blockError } = await supabase.from('exercise_blocks').insert({
@@ -431,11 +503,145 @@ export default function LogPage() {
     }
   };
 
+  // AI suggestion: compute on tap (once recovery/volume/exercise data is in),
+  // then preview in a bottom sheet. NOTHING is written until Start.
+  useEffect(() => {
+    if (!aiRequested || recoveryLoading || volumeLoading || isLoading) return;
+
+    const volumeByMuscle = new Map(volumeData.map((v) => [v.muscleGroup, v]));
+    const plan = buildSuggestedWorkout({
+      muscles: recoveryStatus.map((r) => ({
+        muscle: r.muscle,
+        recoveryStatus: r.isReady ? 'ready' : r.recoveryPercent < 50 ? 'sore' : 'recovering',
+        weeklySets: volumeByMuscle.get(r.muscle)?.totalSets ?? 0,
+        targetSets: volumeByMuscle.get(r.muscle)?.landmarks.mav ?? 10,
+      })),
+      exercises: exercises.map((ex) => ({
+        id: ex.id,
+        name: ex.name,
+        primaryMuscle: ex.primary_muscle,
+        tier: ex.hypertrophy_tier,
+        mechanic: ex.mechanic,
+      })),
+      recentExerciseIds: Array.from(lastDone.entries())
+        .sort((a, b) => b[1].getTime() - a[1].getTime())
+        .map(([id]) => id),
+    });
+
+    setAiRequested(false);
+    if (plan.exercises.length === 0) {
+      setError('Could not build a suggestion — try a blank workout instead.');
+      return;
+    }
+    setAiPlan(plan);
+    setShowAiSheet(true);
+  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone]);
+
+  const handleRemoveAiPick = (exerciseId: string) => {
+    setAiPlan((plan) =>
+      plan
+        ? { ...plan, exercises: plan.exercises.filter((p) => p.exerciseId !== exerciseId) }
+        : plan
+    );
+  };
+
+  // Materialize the previewed AI plan: same session + block creation path as
+  // the blank workout (lazy create, quickWeightEstimate, warmups on the
+  // session's first exercise).
+  const handleStartAiWorkout = async () => {
+    if (!aiPlan || aiPlan.exercises.length === 0 || isStartingAi) return;
+    setIsStartingAi(true);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { sessionId, isNewSession } = await getOrCreateTodaySession(supabase, user.id);
+
+      let order = 1;
+      if (!isNewSession) {
+        const { data: maxOrderResult } = await supabase
+          .from('exercise_blocks')
+          .select('order')
+          .eq('workout_session_id', sessionId)
+          .order('order', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        order = (maxOrderResult?.order || 0) + 1;
+      }
+
+      const profile = await fetchEstimationProfile(supabase, user.id);
+      const exerciseById = new Map(exercises.map((ex) => [ex.id, ex]));
+      const blocks = [];
+      for (const pick of aiPlan.exercises) {
+        const exercise = exerciseById.get(pick.exerciseId);
+        if (!exercise) continue;
+
+        const { isCompound, repRange, targetRir } = blockDefaults(exercise);
+        const suggestedWeight = estimateWeightKg(profile, exercise.name, repRange, targetRir);
+
+        let warmupSets: WarmupSet[] = [];
+        if (isNewSession && blocks.length === 0) {
+          warmupSets = warmupForFirstExercise(exercise, isCompound, repRange, targetRir, suggestedWeight);
+        }
+
+        blocks.push({
+          workout_session_id: sessionId,
+          exercise_id: exercise.id,
+          order: order++,
+          target_sets: isCompound ? 4 : 3,
+          target_rep_range: repRange,
+          target_rir: targetRir,
+          target_weight_kg: suggestedWeight,
+          target_rest_seconds: isCompound ? 180 : 90,
+          suggestion_reason: pick.reason,
+          warmup_protocol: { sets: warmupSets },
+        });
+      }
+
+      if (blocks.length === 0) throw new Error('No exercises to start');
+
+      const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
+      if (blocksError) throw blocksError;
+
+      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+    } catch (err) {
+      console.error('Failed to start suggested workout:', err);
+      setError('Failed to start workout. Please try again.');
+      setIsStartingAi(false);
+    }
+  };
+
   const dateLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
   });
+
+  const launcherCardClass =
+    'w-full flex items-center gap-3 p-4 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors';
+
+  const mesoStartable = Boolean(activeMeso && todayWorkout);
+  const mesoSubtitle = !activeMeso
+    ? 'Plan a mesocycle'
+    : todayWorkout
+      ? isStartingMeso
+        ? 'Starting...'
+        : `Today: ${todayWorkout.dayName}`
+      : `Rest day · next: ${nextWorkout?.dayName ?? 'view plan'}`;
+
+  const handleMesoCardTap = () => {
+    if (!activeMeso) {
+      router.push('/dashboard/mesocycle/new');
+    } else if (todayWorkout) {
+      handleStartMesoWorkout();
+    } else {
+      router.push('/dashboard/mesocycle');
+    }
+  };
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
@@ -451,102 +657,164 @@ export default function LogPage() {
         </div>
       )}
 
-      {/* Quick-route cards */}
-      <div className="space-y-2">
-        {inProgress ? (
-          <button
-            onClick={() => router.push(`/dashboard/workout/${inProgress.id}`)}
-            className="w-full flex items-center gap-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-left hover:bg-warning-500/15 transition-colors"
-          >
-            <IconBarbell size={18} className="text-warning-400 flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block text-[13px] font-medium text-warning-300 truncate">
-                Continue {inProgress.name}
-              </span>
-              <span className="block text-[11px] text-surface-400">
-                {inProgress.setsDone}/{inProgress.setsTarget} sets
-              </span>
-            </span>
-            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-          </button>
-        ) : activeMeso && todayWorkout ? (
-          <button
-            onClick={handleStartMesoWorkout}
-            disabled={isStartingMeso}
-            className="w-full flex items-center gap-3 p-3 rounded-xl bg-primary-500/10 border border-primary-500/30 text-left hover:bg-primary-500/15 transition-colors disabled:opacity-60"
-          >
-            <IconPlayerPlay size={18} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
-            <span className="flex-1 min-w-0">
-              <span className="block text-[13px] font-medium text-primary-300 truncate">
-                Today: {todayWorkout.dayName}
-              </span>
-              <span className="block text-[11px] text-surface-400">
-                {isStartingMeso ? 'Starting...' : 'start workout'}
-              </span>
-            </span>
-            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-          </button>
-        ) : null}
-
+      {/* Continue card (only when a session is in progress today) */}
+      {inProgress && (
         <button
-          onClick={() => router.push('/dashboard/nutrition')}
-          className="w-full flex items-center gap-3 p-3 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+          onClick={() => router.push(`/dashboard/workout/${inProgress.id}`)}
+          className="w-full flex items-center gap-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-left hover:bg-warning-500/15 transition-colors"
         >
-          <IconSalad size={18} className="text-success-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 text-[13px] font-medium text-surface-200">Log food</span>
+          <IconBarbell size={18} className="text-warning-400 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[13px] font-medium text-warning-300 truncate">
+              Continue {inProgress.name}
+            </span>
+            <span className="block text-[11px] text-surface-400">
+              {inProgress.setsDone}/{inProgress.setsTarget} sets
+            </span>
+          </span>
           <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+        </button>
+      )}
+
+      {/* Four launcher cards */}
+      <div className="space-y-2">
+        {/* 1. Log food */}
+        <button onClick={() => router.push('/dashboard/nutrition')} className={launcherCardClass}>
+          <IconSalad size={20} className="text-success-400 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-medium text-surface-100">Log food</span>
+            <span className="block text-[12px] text-surface-500">
+              Meals, barcode, describe with AI
+            </span>
+          </span>
+          <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+        </button>
+
+        {/* 2. Mesocycle workout */}
+        <button
+          onClick={handleMesoCardTap}
+          disabled={isStartingMeso}
+          className={
+            mesoStartable
+              ? 'w-full flex items-center gap-3 p-4 rounded-xl bg-primary-500/10 border border-primary-500/30 text-left hover:bg-primary-500/15 transition-colors disabled:opacity-60'
+              : launcherCardClass
+          }
+        >
+          <IconBarbell
+            size={20}
+            className={`${mesoStartable ? 'text-primary-400' : 'text-surface-400'} flex-shrink-0`}
+            aria-hidden="true"
+          />
+          <span className="flex-1 min-w-0">
+            <span
+              className={`block text-[15px] font-medium ${mesoStartable ? 'text-primary-300' : 'text-surface-100'}`}
+            >
+              Mesocycle workout
+            </span>
+            <span className="block text-[12px] text-surface-500 truncate">{mesoSubtitle}</span>
+          </span>
+          {isStartingMeso ? (
+            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+          )}
+        </button>
+
+        {/* 3. Blank workout (accordion toggle) */}
+        <button
+          onClick={() => setShowBlank((open) => !open)}
+          aria-expanded={showBlank}
+          className={launcherCardClass}
+        >
+          <IconPlus size={20} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-medium text-surface-100">Blank workout</span>
+            <span className="block text-[12px] text-surface-500">
+              Search and add exercises as you go
+            </span>
+          </span>
+          <IconChevronRight
+            size={16}
+            className={`text-surface-500 flex-shrink-0 transition-transform ${showBlank ? 'rotate-90' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+
+        {/* 4. AI suggested workout */}
+        <button
+          onClick={() => setAiRequested(true)}
+          disabled={aiRequested}
+          className={`${launcherCardClass} disabled:opacity-60`}
+        >
+          <IconSparkles size={20} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-medium text-surface-100">
+              AI suggested workout
+            </span>
+            <span className="block text-[12px] text-surface-500">
+              {aiRequested ? 'Building suggestion...' : 'Built from your recovery and weekly volume'}
+            </span>
+          </span>
+          {aiRequested ? (
+            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
       </div>
 
-      {/* Blank workout: search + suggested exercises */}
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-2">
-          Start logging
-        </p>
-        <div className="relative mb-2">
-          <IconSearch
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500"
-            aria-hidden="true"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search exercises..."
-            className="w-full pl-9 pr-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-[13px] text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500/50"
-          />
-        </div>
-        <div className="rounded-xl border border-surface-800 bg-surface-900 overflow-hidden">
-          {isLoading ? (
-            <p className="p-4 text-center text-xs text-surface-500">Loading exercises...</p>
-          ) : rows.length === 0 ? (
-            <p className="p-4 text-center text-xs text-surface-500">No exercises found</p>
-          ) : (
-            rows.map((ex) => (
-              <button
-                key={ex.id}
-                onClick={() => handlePickExercise(ex)}
-                disabled={creatingId !== null}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left border-b border-surface-800/50 last:border-b-0 hover:bg-surface-800/50 transition-colors disabled:opacity-60"
-              >
-                <span className="min-w-0">
-                  <span className="block text-[13px] text-surface-200 truncate">{ex.name}</span>
-                  <span className="block text-[11px] text-surface-500">
-                    <span className="capitalize">{ex.primary_muscle || 'other'}</span>
-                    {ex.hypertrophy_tier ? ` · ${ex.hypertrophy_tier}-tier` : ''}
+      {/* Blank workout: search + suggested exercises (revealed by card 3) */}
+      {showBlank && (
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-2">
+            Start logging
+          </p>
+          <div className="relative mb-2">
+            <IconSearch
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search exercises..."
+              autoFocus
+              className="w-full pl-9 pr-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-[13px] text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500/50"
+            />
+          </div>
+          <div className="rounded-xl border border-surface-800 bg-surface-900 overflow-hidden">
+            {isLoading ? (
+              <p className="p-4 text-center text-xs text-surface-500">Loading exercises...</p>
+            ) : rows.length === 0 ? (
+              <p className="p-4 text-center text-xs text-surface-500">No exercises found</p>
+            ) : (
+              rows.map((ex) => (
+                <button
+                  key={ex.id}
+                  onClick={() => handlePickExercise(ex)}
+                  disabled={creatingId !== null}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left border-b border-surface-800/50 last:border-b-0 hover:bg-surface-800/50 transition-colors disabled:opacity-60"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[13px] text-surface-200 truncate">{ex.name}</span>
+                    <span className="block text-[11px] text-surface-500">
+                      <span className="capitalize">{ex.primary_muscle || 'other'}</span>
+                      {ex.hypertrophy_tier ? ` · ${ex.hypertrophy_tier}-tier` : ''}
+                    </span>
                   </span>
-                </span>
-                {creatingId === ex.id ? (
-                  <span className="text-[11px] text-primary-400 flex-shrink-0">Starting...</span>
-                ) : (
-                  <IconChevronRight size={14} className="text-surface-600 flex-shrink-0" aria-hidden="true" />
-                )}
-              </button>
-            ))
-          )}
+                  {creatingId === ex.id ? (
+                    <span className="text-[11px] text-primary-400 flex-shrink-0">Starting...</span>
+                  ) : (
+                    <IconChevronRight size={14} className="text-surface-600 flex-shrink-0" aria-hidden="true" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Old Train page stays reachable */}
       <Link
@@ -557,6 +825,75 @@ export default function LogPage() {
         <span>Workout history &amp; planned sessions</span>
         <IconChevronRight size={14} className="ml-auto" aria-hidden="true" />
       </Link>
+
+      {/* AI suggested workout preview: nothing is created until Start */}
+      <BottomSheet
+        isOpen={showAiSheet && aiPlan !== null}
+        onClose={() => setShowAiSheet(false)}
+        title="Suggested workout"
+      >
+        {aiPlan && (
+          <div className="space-y-3">
+            <p className="text-[13px] text-surface-300">{aiPlan.focus}</p>
+
+            <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
+              {aiPlan.exercises.map((pick) => {
+                const exercise = exercises.find((ex) => ex.id === pick.exerciseId);
+                if (!exercise) return null;
+                const setsPlanned = exercise.mechanic === 'compound' ? 4 : 3;
+                return (
+                  <div
+                    key={pick.exerciseId}
+                    className="flex items-center gap-2 px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[13px] text-surface-200 truncate">
+                        {exercise.name}
+                      </span>
+                      <span className="block text-[11px] text-surface-500">
+                        {STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle} · {setsPlanned}{' '}
+                        sets
+                      </span>
+                      <span className="block text-[11px] text-surface-500">{pick.reason}</span>
+                    </span>
+                    <button
+                      onClick={() => handleRemoveAiPick(pick.exerciseId)}
+                      className="p-1.5 rounded-lg text-surface-500 hover:text-surface-300 hover:bg-surface-800 transition-colors flex-shrink-0"
+                      aria-label={`Remove ${exercise.name}`}
+                    >
+                      <IconX size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                );
+              })}
+              {aiPlan.exercises.length === 0 && (
+                <p className="p-4 text-center text-xs text-surface-500">
+                  All exercises removed — cancel and try again.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <button
+                onClick={handleStartAiWorkout}
+                disabled={isStartingAi || aiPlan.exercises.length === 0}
+                className="w-full py-2.5 rounded-lg bg-primary-500 text-white text-[13px] font-medium hover:bg-primary-600 transition-colors disabled:opacity-60"
+              >
+                {isStartingAi
+                  ? 'Starting...'
+                  : `Start workout (${aiPlan.exercises.length} ${aiPlan.exercises.length === 1 ? 'exercise' : 'exercises'})`}
+              </button>
+              <button
+                onClick={() => setShowAiSheet(false)}
+                disabled={isStartingAi}
+                className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </BottomSheet>
     </div>
   );
 }

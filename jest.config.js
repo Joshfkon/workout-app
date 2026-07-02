@@ -90,6 +90,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/suggestedWorkout.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
   },
 };
 
