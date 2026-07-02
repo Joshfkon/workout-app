@@ -6,11 +6,17 @@ import { cn } from '@/lib/utils';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface ToastProps {
   id: string;
   type: ToastType;
   message: string;
   duration?: number;
+  action?: ToastAction;
   onDismiss: (id: string) => void;
 }
 
@@ -22,6 +28,7 @@ export const Toast = memo(function Toast({
   type,
   message,
   duration = 5000,
+  action,
   onDismiss,
 }: ToastProps) {
   const [isExiting, setIsExiting] = useState(false);
@@ -114,6 +121,19 @@ export const Toast = memo(function Toast({
             {message}
           </p>
 
+          {/* Action button (e.g. Undo) */}
+          {action && (
+            <button
+              onClick={() => {
+                action.onClick();
+                handleDismiss();
+              }}
+              className={cn('flex-shrink-0 text-sm font-semibold hover:underline', styles.icon)}
+            >
+              {action.label}
+            </button>
+          )}
+
           {/* Close button */}
           <button
             onClick={handleDismiss}
@@ -136,6 +156,7 @@ export interface ToastItem {
   type: ToastType;
   message: string;
   duration?: number;
+  action?: ToastAction;
 }
 
 export interface ToastContainerProps {
@@ -168,6 +189,7 @@ export const ToastContainer = memo(function ToastContainer({
           type={toast.type}
           message={toast.message}
           duration={toast.duration}
+          action={toast.action}
           onDismiss={onDismiss}
         />
       ))}
@@ -185,9 +207,9 @@ ToastContainer.displayName = 'ToastContainer';
 export function useToasts() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string, duration?: number) => {
+  const addToast = useCallback((type: ToastType, message: string, duration?: number, action?: ToastAction) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    setToasts((prev) => [...prev, { id, type, message, duration }]);
+    setToasts((prev) => [...prev, { id, type, message, duration, action }]);
     return id;
   }, []);
 

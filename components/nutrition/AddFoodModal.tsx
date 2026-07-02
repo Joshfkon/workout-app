@@ -6,8 +6,8 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { searchFoods, type FoodSearchResult, type FoodSearchResultWithServings, type ParsedServing } from '@/services/usdaService';
-import { getFoodDetails } from '@/services/usdaService';
+import type { FoodSearchResult, FoodSearchResultWithServings, ParsedServing } from '@/services/usdaService';
+import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
 import { BarcodeScanner } from './BarcodeScanner';
 import { IconSearch, IconScan, IconPencil, IconX, IconToolsKitchen2 } from '@tabler/icons-react';
@@ -157,7 +157,7 @@ export function AddFoodModal({
     let cancelled = false;
     setIsSearchingUsda(true);
     setUsdaError('');
-    searchFoods(debouncedQuery)
+    searchFoodsAction(debouncedQuery)
       .then((result) => {
         if (cancelled) return;
         if (result.error && result.foods.length === 0) {
@@ -266,7 +266,7 @@ export function AddFoodModal({
     if (food.foodId && !hasServings) {
       setIsLoadingDetails(true);
       try {
-        const result = await getFoodDetails(food.foodId);
+        const result = await getFoodDetailsAction(food.foodId);
         if (result.food) {
           setSelectedFood(result.food);
         }

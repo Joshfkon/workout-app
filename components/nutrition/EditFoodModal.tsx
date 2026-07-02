@@ -124,11 +124,10 @@ export function EditFoodModal({
     }
   };
 
+  // No confirm dialog: deletion shows an Undo toast, so it's recoverable
   const handleDelete = () => {
-    if (confirm('Delete this food entry?')) {
-      onDelete(entry.id);
-      onClose();
-    }
+    onDelete(entry.id);
+    onClose();
   };
 
   // Quick portion buttons

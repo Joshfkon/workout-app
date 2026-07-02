@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -51,6 +51,7 @@ import {
   IconChevronRight,
   IconSettings,
   IconPlus,
+  IconMinus,
   IconCopy,
   IconBookmarkPlus,
   IconX,
@@ -180,7 +181,12 @@ export default function NutritionPage() {
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
-  const { toasts, dismissToast, showSuccess } = useToasts();
+  const { toasts, dismissToast, showSuccess, addToast } = useToasts();
+
+  // Pending debounced DB writes for the inline serving stepper, keyed by entry id
+  const servingFlushTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Lazy one-time load of the system food library (only needed once a food modal opens)
+  const systemFoodsLoadedRef = useRef(false);
 
   const supabase = createUntypedClient();
 
@@ -236,7 +242,6 @@ export default function NutritionPage() {
         weightResult,
         customFoodsResult,
         frequentResult,
-        systemFoodsResult,
         userResult,
         dexaResult,
         mesocycleResult,
@@ -278,19 +283,13 @@ export default function NutritionPage() {
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false }),
-        // Frequent foods (aggregated from food_log)
+        // Frequent foods (aggregated from recent food_log rows; logged_at is indexed)
         supabase
           .from('food_log')
           .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(500),
-        // System foods
-        supabase
-          .from('system_foods')
-          .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
-          .eq('is_active', true)
-          .order('name'),
+          .order('logged_at', { ascending: false })
+          .limit(200),
         // User profile data - use maybeSingle() to handle missing data
         supabase
           .from('users')
@@ -356,10 +355,6 @@ export default function NutritionPage() {
       // Set weight unit preference
       if (prefsResult.data?.weight_unit) {
         setWeightUnit(prefsResult.data.weight_unit as 'lb' | 'kg');
-      }
-
-      if (systemFoodsResult.data) {
-        setSystemFoods(systemFoodsResult.data as SystemFood[]);
       }
 
       // Process frequent foods
@@ -547,12 +542,12 @@ export default function NutritionPage() {
    * (add-food modal, describe, saved meals, frequent chips, copy yesterday)
    * goes through here.
    */
-  async function insertFoodEntry(food: FoodLogInsert) {
+  async function insertFoodEntry(food: FoodLogInsert): Promise<FoodLogEntry> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Not signed in');
     if (!selectedDate) throw new Error('Date not initialized');
 
-    const { error } = await supabase.from('food_log').insert({
+    const { data, error } = await supabase.from('food_log').insert({
       user_id: user.id,
       logged_at: selectedDate,
       meal_type: food.meal_type,
@@ -566,12 +561,111 @@ export default function NutritionPage() {
       source: food.source || 'manual',
       food_id: food.food_id,
       nutritionix_id: food.nutritionix_id,
-    });
+    }).select().single();
 
     if (error) {
       console.error('Error adding food:', error);
       throw error;
     }
+    return data as FoodLogEntry;
+  }
+
+  /**
+   * Apply freshly inserted rows to local state instead of refetching the
+   * whole 13-query loadData() tree. Keeps today's list, daily totals, and
+   * the frequent-food chips in sync after a save.
+   */
+  function applyInsertedEntries(rows: FoodLogEntry[]) {
+    if (rows.length === 0) return;
+    setFoodEntries((prev) => [...prev, ...rows]);
+    setFrequentFoods((prev) => {
+      const map = new Map(prev.map((f) => [`${f.meal_type}:${f.food_name}`, { ...f }]));
+      for (const row of rows) {
+        if (!row.food_name) continue;
+        const key = `${row.meal_type}:${row.food_name}`;
+        const servingsNum = row.servings || 1;
+        const existing = map.get(key);
+        if (existing) {
+          const totalLogs = existing.times_logged + 1;
+          existing.avg_calories = (existing.avg_calories * existing.times_logged + (row.calories || 0) / servingsNum) / totalLogs;
+          existing.avg_protein = (existing.avg_protein * existing.times_logged + (row.protein || 0) / servingsNum) / totalLogs;
+          existing.avg_carbs = (existing.avg_carbs * existing.times_logged + (row.carbs || 0) / servingsNum) / totalLogs;
+          existing.avg_fat = (existing.avg_fat * existing.times_logged + (row.fat || 0) / servingsNum) / totalLogs;
+          existing.times_logged = totalLogs;
+          existing.last_logged = new Date().toISOString();
+        } else {
+          map.set(key, {
+            user_id: row.user_id,
+            meal_type: row.meal_type as MealType,
+            food_name: row.food_name,
+            serving_size: row.serving_size,
+            avg_calories: (row.calories || 0) / servingsNum,
+            avg_protein: (row.protein || 0) / servingsNum,
+            avg_carbs: (row.carbs || 0) / servingsNum,
+            avg_fat: (row.fat || 0) / servingsNum,
+            times_logged: 1,
+            last_logged: new Date().toISOString(),
+          });
+        }
+      }
+      return Array.from(map.values());
+    });
+  }
+
+  /**
+   * Refresh only the data a weight or target change can affect (weight list,
+   * nutrition targets, adaptive TDEE) — 2 queries + 1 server action instead
+   * of the full loadData() tree.
+   */
+  async function refreshWeightAndTargets() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const [weightResult, targetsResult] = await Promise.all([
+      supabase
+        .from('weight_log')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('logged_at', getLocalDateString(thirtyDaysAgo))
+        .order('logged_at', { ascending: false }),
+      supabase
+        .from('nutrition_targets')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ]);
+
+    if (weightResult.data) setWeightEntries(weightResult.data);
+    if (!targetsResult.error) setNutritionTargets(targetsResult.data);
+
+    try {
+      const tdee = await getAdaptiveTDEE(targetsResult.data?.calories);
+      setTdeeData(tdee);
+    } catch (tdeeError) {
+      console.error('[Nutrition] Error refreshing TDEE data:', tdeeError);
+    }
+  }
+
+  /** Load the system food library once, on first food-modal open */
+  async function ensureSystemFoodsLoaded() {
+    if (systemFoodsLoadedRef.current) return;
+    systemFoodsLoadedRef.current = true;
+
+    const { data, error } = await supabase
+      .from('system_foods')
+      .select('id, name, category, subcategory, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g')
+      .eq('is_active', true)
+      .order('name');
+
+    if (error) {
+      console.error('Error loading system foods:', error);
+      systemFoodsLoadedRef.current = false;
+      return;
+    }
+    setSystemFoods((data as SystemFood[]) || []);
   }
 
   async function handleAddFood(food: FoodLogInsert & { barcode?: string }) {
@@ -583,7 +677,8 @@ export default function NutritionPage() {
       return;
     }
 
-    await insertFoodEntry(food);
+    const inserted = await insertFoodEntry(food);
+    applyInsertedEntries([inserted]);
 
     // Save scanned barcode products to custom_foods for future search
     if (food.barcode) {
@@ -602,7 +697,7 @@ export default function NutritionPage() {
         const perServingCarbs = Math.round((food.carbs / food.servings) * 10) / 10;
         const perServingFat = Math.round((food.fat / food.servings) * 10) / 10;
 
-        const { error: customError } = await supabase.from('custom_foods').insert({
+        const { data: customFood, error: customError } = await supabase.from('custom_foods').insert({
           user_id: user.id,
           food_name: food.food_name,
           serving_size: food.serving_size,
@@ -611,51 +706,55 @@ export default function NutritionPage() {
           carbs: perServingCarbs,
           fat: perServingFat,
           barcode: food.barcode,
-        });
+        }).select().single();
 
-        if (!customError) {
+        if (!customError && customFood) {
+          setCustomFoods((prev) => [customFood as CustomFood, ...prev]);
           showSuccess('Saved to your foods');
         }
       }
     }
-
-    await loadData();
   }
 
-  /** Describe flow: log all AI-parsed items to the chosen meal, single refresh */
+  /** Describe flow: log all AI-parsed items to the chosen meal in parallel */
   async function handleLogParsedItems(items: ParsedMealItem[], mealType: MealType) {
-    for (const item of items) {
-      await insertFoodEntry({
-        food_name: item.name,
-        serving_size: item.quantity || '1 serving',
-        servings: 1,
-        calories: item.calories,
-        protein: item.protein,
-        carbs: item.carbs,
-        fat: item.fat,
-        meal_type: mealType,
-        source: 'manual',
-      });
-    }
-    await loadData();
+    const inserted = await Promise.all(
+      items.map((item) =>
+        insertFoodEntry({
+          food_name: item.name,
+          serving_size: item.quantity || '1 serving',
+          servings: 1,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          meal_type: mealType,
+          source: 'manual',
+        })
+      )
+    );
+    applyInsertedEntries(inserted);
   }
 
   /** Saved meals: one tap logs every item to the time-appropriate meal */
   async function handleLogSavedMeal(meal: SavedMeal) {
     const targetMeal = getMealTypeForNow();
-    for (const item of meal.items) {
-      await insertFoodEntry({
-        food_name: item.name,
-        serving_size: item.serving_size || '1 serving',
-        servings: item.servings || 1,
-        calories: item.calories,
-        protein: item.protein,
-        carbs: item.carbs,
-        fat: item.fat,
-        meal_type: targetMeal,
-        source: 'manual',
-      });
-    }
+    const inserted = await Promise.all(
+      meal.items.map((item) =>
+        insertFoodEntry({
+          food_name: item.name,
+          serving_size: item.serving_size || '1 serving',
+          servings: item.servings || 1,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          meal_type: targetMeal,
+          source: 'manual',
+        })
+      )
+    );
+    applyInsertedEntries(inserted);
 
     const { error } = await supabase
       .from('saved_meals')
@@ -664,8 +763,6 @@ export default function NutritionPage() {
     if (error) {
       console.error('Error incrementing saved meal count:', error);
     }
-
-    await loadData();
   }
 
   /** Snapshot a meal's current entries into saved_meals */
@@ -716,21 +813,23 @@ export default function NutritionPage() {
     const entries = yesterdayEntries.filter((entry) => entry.meal_type === mealType);
     if (entries.length === 0) return;
 
-    for (const entry of entries) {
-      await insertFoodEntry({
-        food_name: entry.food_name,
-        serving_size: entry.serving_size || '1 serving',
-        servings: entry.servings || 1,
-        calories: entry.calories || 0,
-        protein: entry.protein || 0,
-        carbs: entry.carbs || 0,
-        fat: entry.fat || 0,
-        meal_type: mealType,
-        source: entry.source || 'manual',
-        food_id: entry.food_id || undefined,
-      });
-    }
-    await loadData();
+    const inserted = await Promise.all(
+      entries.map((entry) =>
+        insertFoodEntry({
+          food_name: entry.food_name,
+          serving_size: entry.serving_size || '1 serving',
+          servings: entry.servings || 1,
+          calories: entry.calories || 0,
+          protein: entry.protein || 0,
+          carbs: entry.carbs || 0,
+          fat: entry.fat || 0,
+          meal_type: mealType,
+          source: entry.source || 'manual',
+          food_id: entry.food_id || undefined,
+        })
+      )
+    );
+    applyInsertedEntries(inserted);
   }
 
   /** Frequent chip: one tap logs to the time-appropriate meal */
@@ -749,6 +848,7 @@ export default function NutritionPage() {
   }
 
   async function handleDeleteFood(id: string) {
+    const entry = foodEntries.find((e) => e.id === id);
     const { error } = await supabase.from('food_log').delete().eq('id', id);
 
     if (error) {
@@ -756,7 +856,72 @@ export default function NutritionPage() {
       return;
     }
 
-    await loadData();
+    setFoodEntries((prev) => prev.filter((e) => e.id !== id));
+
+    if (entry) {
+      addToast('info', `Removed ${toTitleCase(entry.food_name)}`, 6000, {
+        label: 'Undo',
+        onClick: () => {
+          void (async () => {
+            try {
+              const restored = await insertFoodEntry({
+                food_name: entry.food_name,
+                serving_size: entry.serving_size || '1 serving',
+                servings: entry.servings || 1,
+                calories: entry.calories || 0,
+                protein: entry.protein || 0,
+                carbs: entry.carbs || 0,
+                fat: entry.fat || 0,
+                meal_type: entry.meal_type,
+                source: entry.source || 'manual',
+                food_id: entry.food_id || undefined,
+              });
+              setFoodEntries((prev) => [...prev, restored]);
+            } catch (restoreError) {
+              console.error('Error restoring food:', restoreError);
+            }
+          })();
+        },
+      });
+    }
+  }
+
+  /**
+   * Inline ±0.5 serving stepper on entry rows. State updates instantly;
+   * the DB write is debounced per entry so rapid taps produce one update.
+   */
+  function adjustServings(entry: FoodLogEntry, delta: number) {
+    const currentServings = entry.servings || 1;
+    const newServings = Math.max(0.5, Math.round((currentServings + delta) * 2) / 2);
+    if (newServings === currentServings) return;
+
+    const factor = newServings / currentServings;
+    const updates = {
+      servings: newServings,
+      calories: Math.round((entry.calories || 0) * factor),
+      protein: Math.round((entry.protein || 0) * factor * 10) / 10,
+      carbs: Math.round((entry.carbs || 0) * factor * 10) / 10,
+      fat: Math.round((entry.fat || 0) * factor * 10) / 10,
+    };
+
+    setFoodEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...updates } : e)));
+
+    const timers = servingFlushTimers.current;
+    const pending = timers.get(entry.id);
+    if (pending) clearTimeout(pending);
+    timers.set(
+      entry.id,
+      setTimeout(() => {
+        timers.delete(entry.id);
+        supabase
+          .from('food_log')
+          .update(updates)
+          .eq('id', entry.id)
+          .then(({ error }: { error: unknown }) => {
+            if (error) console.error('Error updating servings:', error);
+          });
+      }, 600)
+    );
   }
 
   async function handleUpdateFood(id: string, updates: {
@@ -782,7 +947,7 @@ export default function NutritionPage() {
       throw error;
     }
 
-    await loadData();
+    setFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
   }
 
   function openEditFood(entry: FoodLogEntry) {
@@ -796,7 +961,7 @@ export default function NutritionPage() {
 
     if (editingCustomFood) {
       // Update existing
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('custom_foods')
         .update({
           food_name: food.food_name,
@@ -814,15 +979,18 @@ export default function NutritionPage() {
           fat_per_ref: food.fat_per_ref,
           barcode: food.barcode,
         })
-        .eq('id', editingCustomFood.id);
+        .eq('id', editingCustomFood.id)
+        .select()
+        .single();
 
       if (error) {
         console.error('Error updating custom food:', error);
         throw error;
       }
+      setCustomFoods((prev) => prev.map((f) => (f.id === editingCustomFood.id ? (updated as CustomFood) : f)));
     } else {
       // Create new
-      const { error } = await supabase.from('custom_foods').insert({
+      const { data: created, error } = await supabase.from('custom_foods').insert({
         user_id: user.id,
         food_name: food.food_name,
         serving_size: food.serving_size,
@@ -838,15 +1006,14 @@ export default function NutritionPage() {
         carbs_per_ref: food.carbs_per_ref,
         fat_per_ref: food.fat_per_ref,
         barcode: food.barcode,
-      });
+      }).select().single();
 
       if (error) {
         console.error('Error creating custom food:', error);
         throw error;
       }
+      setCustomFoods((prev) => [created as CustomFood, ...prev]);
     }
-
-    await loadData();
   }
 
   async function handleSaveWeight(weight: number, date: string, notes?: string) {
@@ -947,7 +1114,7 @@ export default function NutritionPage() {
       console.error('Failed to recalculate TDEE/macros:', e);
     }
 
-    await loadData();
+    await refreshWeightAndTargets();
   }
 
   async function handleUpdateWeight(weight: number, date: string, notes?: string) {
@@ -976,7 +1143,7 @@ export default function NutritionPage() {
     }
 
     setEditingWeight(null);
-    await loadData();
+    await refreshWeightAndTargets();
   }
 
   async function handleDeleteWeight(id: string) {
@@ -993,7 +1160,8 @@ export default function NutritionPage() {
       throw error;
     }
 
-    await loadData();
+    setWeightEntries((prev) => prev.filter((e) => e.id !== id));
+    await refreshWeightAndTargets();
   }
 
   async function handleSaveTargets(targets: {
@@ -1052,11 +1220,12 @@ export default function NutritionPage() {
       throw error;
     }
 
-    // Reload data to show updated targets
-    await loadData();
+    // Refresh targets + TDEE without reloading the whole page tree
+    await refreshWeightAndTargets();
   }
 
   function openAddFood(mealType: MealType, tab: AddFoodTab = 'search') {
+    void ensureSystemFoodsLoaded();
     setSelectedMealType(mealType);
     setAddFoodTab(tab);
     setShowAddFood(true);
@@ -1385,27 +1554,49 @@ export default function NutritionPage() {
                     key={entry.id}
                     onDelete={() => handleDeleteFood(entry.id)}
                   >
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        openEditFood(entry);
-                      }}
-                      className="w-full flex items-center justify-between gap-3 py-1.5 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
-                    >
-                      <div className="flex items-baseline gap-1.5 min-w-0">
-                        <span className="text-[13px] text-surface-200 truncate">
-                          {toTitleCase(entry.food_name)}
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openEditFood(entry);
+                        }}
+                        className="flex-1 min-w-0 flex items-center justify-between gap-3 py-1.5 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
+                      >
+                        <div className="flex items-baseline gap-1.5 min-w-0">
+                          <span className="text-[13px] text-surface-200 truncate">
+                            {toTitleCase(entry.food_name)}
+                          </span>
+                          <span className="text-[12px] text-surface-500 flex-shrink-0">
+                            · {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
+                          </span>
+                        </div>
+                        <span className="text-[13px] text-surface-300 flex-shrink-0">
+                          {Math.round(entry.calories)}
                         </span>
-                        <span className="text-[12px] text-surface-500 flex-shrink-0">
-                          · {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
-                        </span>
+                      </button>
+                      {/* Inline serving stepper: ±0.5 servings without opening the edit modal */}
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => adjustServings(entry, -0.5)}
+                          disabled={(entry.servings || 1) <= 0.5}
+                          className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                          aria-label={`Decrease ${entry.food_name} servings`}
+                        >
+                          <IconMinus size={13} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => adjustServings(entry, 0.5)}
+                          className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition-colors"
+                          aria-label={`Increase ${entry.food_name} servings`}
+                        >
+                          <IconPlus size={13} aria-hidden="true" />
+                        </button>
                       </div>
-                      <span className="text-[13px] text-surface-300 flex-shrink-0">
-                        {Math.round(entry.calories)}
-                      </span>
-                    </button>
+                    </div>
                   </SwipeableRow>
                 ))}
               </div>

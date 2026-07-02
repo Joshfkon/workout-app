@@ -65,6 +65,14 @@ export interface BarcodeSearchResult {
   error?: string;
 }
 
+// Session cache: product data is static, so repeat scans of the same barcode
+// (or re-opening the scanner) skip the OFF/USDA round trips entirely.
+const barcodeCache = new Map<string, { result: BarcodeSearchResult; expiresAt: number }>();
+const FOUND_TTL_MS = 24 * 60 * 60 * 1000;
+// Short TTL for misses: absorbs duplicate scans without blocking retries
+// after a transient network failure (misses and failures look the same here).
+const NOT_FOUND_TTL_MS = 30 * 1000;
+
 /**
  * Look up a food product by its barcode
  * Tries Open Food Facts first (better international coverage), then falls back to USDA
@@ -72,10 +80,25 @@ export interface BarcodeSearchResult {
 export async function lookupBarcode(barcode: string): Promise<BarcodeSearchResult> {
   // Clean the barcode - remove any non-numeric characters
   const cleanBarcode = barcode.replace(/\D/g, '');
-  
+
   if (!cleanBarcode || cleanBarcode.length < 8) {
     return { found: false, error: `Invalid barcode (${cleanBarcode.length} digits) - must be at least 8` };
   }
+
+  const cached = barcodeCache.get(cleanBarcode);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.result;
+  }
+
+  const result = await lookupBarcodeUncached(cleanBarcode);
+  barcodeCache.set(cleanBarcode, {
+    result,
+    expiresAt: Date.now() + (result.found ? FOUND_TTL_MS : NOT_FOUND_TTL_MS),
+  });
+  return result;
+}
+
+async function lookupBarcodeUncached(cleanBarcode: string): Promise<BarcodeSearchResult> {
 
   let offError: string | undefined;
   let usdaError: string | undefined;
