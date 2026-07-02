@@ -18,6 +18,7 @@ import type {
   HypertrophyTier,
   HypertrophyRating
 } from '@/types/schema';
+import { muscleMatchesGroup } from '@/types/schema';
 import {
   fetchAllExercises,
   insertCustomExercise,
@@ -205,9 +206,10 @@ export async function getExercisesForMuscle(
 ): Promise<Exercise[]> {
   const all = await getExercises();
   return all.filter(e => {
-    // Primary muscle match
-    const muscleMatch = e.primaryMuscle === muscle || 
-      (includeSecondary && e.secondaryMuscles.includes(muscle));
+    // Primary muscle match (overlap-aware: a 'shoulders' request matches
+    // exercises tagged 'lateral_delts', and vice versa)
+    const muscleMatch = muscleMatchesGroup(e.primaryMuscle, muscle) ||
+      (includeSecondary && e.secondaryMuscles.some(m => muscleMatchesGroup(m, muscle)));
     
     // Equipment filter
     const equipmentMatch = !equipment || equipment.length === 0 || 
@@ -262,7 +264,7 @@ export async function searchExercises(
   
   return all.filter(e => {
     const nameMatch = e.name.toLowerCase().includes(lowerQuery);
-    const muscleMatch = !muscle || e.primaryMuscle === muscle;
+    const muscleMatch = !muscle || muscleMatchesGroup(e.primaryMuscle, muscle);
     const equipmentMatch = !equipment || equipment.length === 0 || 
       equipment.includes(e.equipment);
     return nameMatch && muscleMatch && equipmentMatch;
@@ -740,7 +742,7 @@ export function getExercisesForMuscleSync(
 ): Exercise[] {
   const all = getExercisesSync();
   return all.filter(e => {
-    const muscleMatch = e.primaryMuscle === muscle;
+    const muscleMatch = muscleMatchesGroup(e.primaryMuscle, muscle);
     const equipmentMatch = !equipment || equipment.length === 0 || 
       equipment.includes(e.equipment);
     return muscleMatch && equipmentMatch;

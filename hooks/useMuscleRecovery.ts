@@ -8,9 +8,9 @@ import { useAuthUser } from '@/hooks/useAuthUser';
 import {
   STANDARD_MUSCLE_GROUPS,
   STANDARD_MUSCLE_DISPLAY_NAMES,
+  resolveMuscleToStandard,
   type StandardMuscleGroup
 } from '@/types/schema';
-import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import type { ExerciseBlockFull, SetLogRow } from '@/types/database-queries';
 
 /**
@@ -236,20 +236,22 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
             // If completedAt < existing.lastTrained, ignore (older session)
           };
 
-          // Update primary muscle (convert to standard format)
-          if (primaryMuscle) {
-            const standardMuscle = toStandardMuscleForVolume(primaryMuscle);
-            if (standardMuscle) {
-              updateMuscleData(standardMuscle, true);
-            }
-          }
+          // Update primary muscle(s). A legacy coarse tag ('chest') resolves
+          // to EVERY standard muscle it covers — a chest session trains both
+          // heads for recovery purposes, and taking only the first match left
+          // the siblings permanently reported as "Ready"/never trained.
+          const primaryStandards = primaryMuscle ? resolveMuscleToStandard(primaryMuscle) : [];
+          primaryStandards.forEach((standardMuscle) => {
+            updateMuscleData(standardMuscle, true);
+          });
 
           // Update secondary muscles (convert to standard format)
           secondaryMuscles.forEach((muscle: string) => {
-            const standardMuscle = toStandardMuscleForVolume(muscle);
-            if (standardMuscle) {
+            resolveMuscleToStandard(muscle).forEach((standardMuscle) => {
+              // Already credited as primary for this block
+              if (primaryStandards.includes(standardMuscle)) return;
               updateMuscleData(standardMuscle, false);
-            }
+            });
           });
         });
       }

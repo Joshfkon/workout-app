@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from '
 import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
-import { rpeToRir } from '@/types/schema';
+import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { recommendSet } from '@/services/setRecommender';
@@ -23,7 +23,7 @@ import { SetLoggerRow } from './SetLoggerRow';
 import { SuggestionBanner } from './SuggestionBanner';
 import { BottomSheet } from './BottomSheet';
 
-const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
+const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs'];
 
 // Read an exercise's primary muscle defensively: different call sites feed
 // ExerciseCard either camelCase (primaryMuscle, mapped) or raw snake_case
@@ -2222,7 +2222,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                       // Search filter
                       if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
                       // Muscle filter (normalized: tolerate camel/snake + casing)
-                      if (swapMuscleFilter && exercisePrimaryMuscle(ex) !== swapMuscleFilter.toLowerCase()) return false;
+                      if (swapMuscleFilter && !muscleMatchesGroup(exercisePrimaryMuscle(ex), swapMuscleFilter)) return false;
                       return true;
                     })
                     .sort((a, b) => {
@@ -2286,7 +2286,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {availableExercises.filter(ex => {
                     if (ex.id === exercise.id) return false;
                     if (swapSearch && !ex.name.toLowerCase().includes(swapSearch.toLowerCase())) return false;
-                    if (swapMuscleFilter && exercisePrimaryMuscle(ex) !== swapMuscleFilter.toLowerCase()) return false;
+                    if (swapMuscleFilter && !muscleMatchesGroup(exercisePrimaryMuscle(ex), swapMuscleFilter)) return false;
                     return true;
                   }).length === 0 && (
                     <p className="p-8 text-center text-surface-500">

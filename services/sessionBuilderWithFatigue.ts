@@ -27,7 +27,7 @@ import type {
   FullProgramRecommendation,
   Split,
 } from '@/types/schema';
-import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
 const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
@@ -77,7 +77,7 @@ import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseSe
  */
 function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
   const isCompound = exercise.pattern !== 'isolation';
-  const isAbExercise = exercise.primaryMuscle === 'abs';
+  const isAbExercise = toLegacyMuscleGroup(exercise.primaryMuscle) === 'abs';
 
   // Ab exercises need shorter rest periods (recover faster)
   if (isAbExercise) {
@@ -192,10 +192,11 @@ function selectExercisesWithFatigue(
   // Get exercises from unified service (DB-backed with fallback)
   const allExercises = getExercisesSync();
 
-  // Filter available exercises
+  // Filter available exercises (overlap-aware so precisely-tagged exercises
+  // like 'lateral_delts' still match a legacy 'shoulders' target)
   let candidates = allExercises.filter(
     (e) =>
-      e.primaryMuscle === muscle &&
+      muscleMatchesGroup(e.primaryMuscle, muscle) &&
       profile.availableEquipment.includes(e.equipment) &&
       !profile.injuryHistory.includes(muscle)
   );
@@ -232,12 +233,12 @@ function selectExercisesWithFatigue(
 
   if (candidates.length === 0) {
     candidates = allExercises.filter(
-      (e) => e.primaryMuscle === muscle && profile.availableEquipment.includes(e.equipment)
+      (e) => muscleMatchesGroup(e.primaryMuscle, muscle) && profile.availableEquipment.includes(e.equipment)
     );
   }
 
   if (candidates.length === 0) {
-    candidates = allExercises.filter((e) => e.primaryMuscle === muscle);
+    candidates = allExercises.filter((e) => muscleMatchesGroup(e.primaryMuscle, muscle));
   }
 
   // Sort by: 1) Hypertrophy tier (S > A > B > C > D > F), 2) Compound/isolation, 3) SFR

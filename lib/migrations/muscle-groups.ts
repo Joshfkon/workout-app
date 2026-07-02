@@ -12,11 +12,10 @@
 
 import type { DetailedMuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import {
-  DETAILED_TO_STANDARD_MAP,
   isDetailedMuscle,
   isStandardMuscle,
   isLegacyMuscle,
-  legacyToStandardMuscles,
+  resolveMuscleToStandard,
 } from '@/types/schema';
 
 /**
@@ -210,32 +209,18 @@ export function needsMigration(exercise: { primaryMuscle: string }): boolean {
 }
 
 /**
- * Get the standard muscle group for volume tracking from any muscle format
+ * Get A standard muscle group for any muscle format (detailed, standard, or
+ * legacy). For legacy coarse tokens that map to multiple standard muscles
+ * this returns only the FIRST match, so it is suitable for labels/lookups but
+ * NOT for volume credit — use resolveMuscleToStandard (all matches) or
+ * volumeTracker's resolvePrimaryMuscleCredits (weighted) for counting sets.
  *
  * @param muscle - Any muscle format (detailed, standard, or legacy)
- * @returns The corresponding StandardMuscleGroup for volume tracking
+ * @returns The corresponding StandardMuscleGroup, or null if unrecognized
  */
 export function toStandardMuscleForVolume(muscle: string): StandardMuscleGroup | null {
-  const lowerMuscle = muscle.toLowerCase().trim();
-
-  // If it's a detailed muscle, use the mapping
-  if (isDetailedMuscle(lowerMuscle)) {
-    return DETAILED_TO_STANDARD_MAP[lowerMuscle as DetailedMuscleGroup];
-  }
-
-  // If it's already a standard muscle
-  if (isStandardMuscle(lowerMuscle)) {
-    return lowerMuscle as StandardMuscleGroup;
-  }
-
-  // If it's a legacy muscle, convert to standard using the canonical mapping
-  if (isLegacyMuscle(lowerMuscle)) {
-    // Use legacyToStandardMuscles for consistency - takes first match
-    const standardMuscles = legacyToStandardMuscles(lowerMuscle);
-    return standardMuscles[0] ?? null;
-  }
-
-  return null;
+  const standards = resolveMuscleToStandard(muscle);
+  return standards[0] ?? null;
 }
 
 /**

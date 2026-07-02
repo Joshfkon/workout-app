@@ -9,8 +9,8 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
-import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
+import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT, type MuscleVolumeData } from '@/services/volumeTracker';
+import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, resolveMuscleToStandard, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
@@ -103,6 +103,73 @@ function getMevForMuscle(muscle: string): number {
     return MEV_TARGETS[standardMuscle];
   }
   return 4; // Default MEV
+}
+
+/** Per-muscle weekly volume accumulator shared by both dashboard fetch paths. */
+type VolumeAccumulator = Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }>;
+
+/**
+ * Credit one exercise block's working sets to the volume accumulator:
+ * weighted direct credit for the standard muscle(s) the primary resolves to
+ * (legacy 'chest' splits across chest_upper/chest_lower rather than dumping
+ * everything on the first match) plus SECONDARY_MUSCLE_CREDIT (0.5) per set
+ * for each secondary muscle.
+ */
+function accumulateExerciseVolume(
+  volumeByMuscle: VolumeAccumulator,
+  exercise: { id: string; name: string; primary_muscle?: string | null; secondary_muscles?: string[] | null },
+  workingSets: number
+): void {
+  if (!exercise.primary_muscle || workingSets === 0) return;
+
+  const addCredit = (muscle: string, sets: number) => {
+    if (!volumeByMuscle[muscle]) {
+      volumeByMuscle[muscle] = { sets: 0, exercises: new Map() };
+    }
+    volumeByMuscle[muscle].sets += sets;
+    const existing = volumeByMuscle[muscle].exercises.get(exercise.id);
+    if (existing) {
+      existing.sets += sets;
+    } else {
+      volumeByMuscle[muscle].exercises.set(exercise.id, { id: exercise.id, name: exercise.name, sets });
+    }
+  };
+
+  const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
+  const primarySet = new Set<string>(primaryCredits.map((c) => c.muscle));
+  if (primaryCredits.length > 0) {
+    primaryCredits.forEach(({ muscle, weight }) => addCredit(muscle, workingSets * weight));
+  } else {
+    // Unrecognized token (e.g. free-text custom exercise) - keep it visible
+    // under its raw name rather than dropping the volume.
+    addCredit(exercise.primary_muscle.toLowerCase(), workingSets);
+  }
+
+  (exercise.secondary_muscles || []).forEach((secondary) => {
+    const standards = resolveMuscleToStandard(secondary);
+    if (standards.length === 0) return;
+    const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
+    standards.forEach((standardMuscle) => {
+      if (primarySet.has(standardMuscle)) return; // already credited as primary
+      addCredit(standardMuscle, workingSets * creditPerMuscle);
+    });
+  });
+}
+
+/** Convert the accumulator into display stats (integer sets, low/optimal/high). */
+function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): MuscleVolumeStats[] {
+  return Object.entries(volumeByMuscle)
+    .map(([muscle, data]) => {
+      const sets = Math.round(data.sets);
+      const target = getMevForMuscle(muscle);
+      const status: 'low' | 'optimal' | 'high' = sets < target ? 'low' : sets > target * 1.5 ? 'high' : 'optimal';
+      const exercises = Array.from(data.exercises.values())
+        .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
+        .filter((ex) => ex.sets > 0);
+      return { muscle, sets, target, status, exercises };
+    })
+    .filter((stat) => stat.sets > 0)
+    .sort((a, b) => b.sets - a.sets);
 }
 
 interface NutritionTotals {
@@ -737,37 +804,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             if (systemFoodsResult.data) {
               setSystemFoods(systemFoodsResult.data as SystemFood[]);
             }
-            // Process weekly volume
+            // Process weekly volume (weighted primary + 0.5x secondary credit,
+            // matching the main fetch path — this fast path previously counted
+            // only primary muscles under their raw legacy names)
             if (weeklyBlocksResult.data && weeklyBlocksResult.data.length > 0) {
-              const volumeMap = new Map<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }>();
+              const volumeByMuscle: VolumeAccumulator = {};
               for (const block of weeklyBlocksResult.data) {
                 const exercise = (block as any).exercises;
                 if (!exercise) continue;
                 const workingSets = ((block as any).set_logs || []).filter((s: any) => !s.is_warmup).length;
-                if (workingSets === 0) continue;
-                const primaryMuscle = exercise.primary_muscle?.toLowerCase();
-                if (!primaryMuscle) continue;
-                if (!volumeMap.has(primaryMuscle)) {
-                  volumeMap.set(primaryMuscle, { sets: 0, exercises: new Map() });
-                }
-                const data = volumeMap.get(primaryMuscle)!;
-                data.sets += workingSets;
-                const exKey = exercise.id;
-                if (data.exercises.has(exKey)) {
-                  data.exercises.get(exKey)!.sets += workingSets;
-                } else {
-                  data.exercises.set(exKey, { id: exercise.id, name: exercise.name, sets: workingSets });
-                }
+                accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
               }
-              const stats: MuscleVolumeStats[] = Array.from(volumeMap.entries())
-                .map(([muscle, data]) => {
-                  const target = getMevForMuscle(muscle);
-                  const status: 'low' | 'optimal' | 'high' = data.sets < target ? 'low' : data.sets > target * 1.5 ? 'high' : 'optimal';
-                  const exercises = Array.from(data.exercises.values());
-                  return { muscle, sets: data.sets, target, status, exercises };
-                })
-                .sort((a, b) => b.sets - a.sets);
-              setMuscleVolume(stats);
+              setMuscleVolume(volumeAccumulatorToStats(volumeByMuscle));
             }
           }).catch(() => {});
           return;
@@ -1054,55 +1102,20 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         // Process weekly volume (accounting for compound exercises - secondary muscles get 0.5x credit)
-        // Aggregate by standard muscle groups for consistent tracking
+        // Aggregate by standard muscle groups for consistent tracking. Legacy
+        // coarse primaries ('chest', 'shoulders') distribute weighted credit
+        // across the standard muscles they cover instead of dumping everything
+        // on the first match (which left chest_lower / lateral_delts / etc.
+        // falsely reported as not worked).
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
-          const volumeByMuscle: Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }> = {};
+          const volumeByMuscle: VolumeAccumulator = {};
 
           weeklyBlocks.forEach((block: any) => {
-            const primaryMuscle = block.exercises?.primary_muscle;
-            const secondaryMuscles = block.exercises?.secondary_muscles || [];
-            const exerciseId = block.exercises?.id;
-            const exerciseName = block.exercises?.name;
-            if (!primaryMuscle || !exerciseId) return;
-
+            const exercise = block.exercises;
+            if (!exercise) return;
             const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
-            if (workingSets === 0) return;
-
-            // Primary muscle: convert to standard and give full credit (1.0x)
-            const standardPrimary = toStandardMuscleForVolume(primaryMuscle) ?? primaryMuscle;
-            if (!volumeByMuscle[standardPrimary]) {
-              volumeByMuscle[standardPrimary] = { sets: 0, exercises: new Map() };
-            }
-            volumeByMuscle[standardPrimary].sets += workingSets;
-
-            const existingPrimary = volumeByMuscle[standardPrimary].exercises.get(exerciseId);
-            if (existingPrimary) {
-              existingPrimary.sets += workingSets;
-            } else {
-              volumeByMuscle[standardPrimary].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: workingSets });
-            }
-
-            // Secondary muscles: convert to standard and give partial credit (0.5x)
-            secondaryMuscles.forEach((secondaryMuscle: string) => {
-              const standardSecondary = toStandardMuscleForVolume(secondaryMuscle.toLowerCase()) ?? secondaryMuscle.toLowerCase();
-              // Skip if same as primary (already counted)
-              if (standardSecondary === standardPrimary) return;
-
-              if (!volumeByMuscle[standardSecondary]) {
-                volumeByMuscle[standardSecondary] = { sets: 0, exercises: new Map() };
-              }
-              // Give 0.5x credit (round up to at least 1 set if workingSets > 0)
-              const indirectSets = Math.max(1, Math.round(workingSets * 0.5));
-              volumeByMuscle[standardSecondary].sets += indirectSets;
-
-              const existingSecondary = volumeByMuscle[standardSecondary].exercises.get(exerciseId);
-              if (existingSecondary) {
-                existingSecondary.sets += indirectSets;
-              } else {
-                volumeByMuscle[standardSecondary].exercises.set(exerciseId, { id: exerciseId, name: exerciseName, sets: indirectSets });
-              }
-            });
+            accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
           });
 
           // Volume targets per standard muscle group
@@ -1117,13 +1130,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
             .map(([muscle, data]) => {
+              const sets = Math.round(data.sets);
               const target = volumeTargets[muscle] || 10;
               const mev = getMevForMuscle(muscle);
               // Use MEV as the threshold for 'low' status to be consistent with AtrophyRiskAlert
-              const status: 'low' | 'optimal' | 'high' = data.sets < mev ? 'low' : data.sets > target * 1.3 ? 'high' : 'optimal';
-              const exercises = Array.from(data.exercises.values()).sort((a, b) => b.sets - a.sets);
-              return { muscle, sets: data.sets, target, status, exercises };
+              const status: 'low' | 'optimal' | 'high' = sets < mev ? 'low' : sets > target * 1.3 ? 'high' : 'optimal';
+              const exercises = Array.from(data.exercises.values())
+                .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
+                .filter((ex) => ex.sets > 0)
+                .sort((a, b) => b.sets - a.sets);
+              return { muscle, sets, target, status, exercises };
             })
+            .filter((stat) => stat.sets > 0)
             .sort((a, b) => b.sets - a.sets);
 
           setMuscleVolume(stats);

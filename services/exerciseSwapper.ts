@@ -10,6 +10,7 @@ import type {
   SwapSuggestion,
   MovementPattern,
 } from '@/types/schema';
+import { muscleMatchesGroup } from '@/types/schema';
 import { BASE_SFR } from './fatigueBudgetEngine';
 
 // ============================================
@@ -57,9 +58,12 @@ export function calculateSimilarityScore(
 ): number {
   let score = 0;
 
-  // Same primary muscle: 40 points
+  // Same primary muscle: 40 points (exact tag), 30 points when the tags
+  // overlap at the standard-muscle level (e.g. legacy 'chest' vs 'chest_upper')
   if (source.primaryMuscle === candidate.primaryMuscle) {
     score += 40;
+  } else if (muscleMatchesGroup(candidate.primaryMuscle, source.primaryMuscle)) {
+    score += 30;
   }
 
   // Same movement pattern: 30 points
@@ -272,7 +276,7 @@ export function getBodyweightAlternatives(
   return allExercises.filter(
     (e) =>
       e.id !== source.id &&
-      e.primaryMuscle === source.primaryMuscle &&
+      muscleMatchesGroup(e.primaryMuscle, source.primaryMuscle) &&
       (e.equipmentRequired.length === 0 ||
         e.equipmentRequired.includes('bodyweight') ||
         e.equipmentRequired.every((eq) =>
@@ -344,7 +348,7 @@ export function analyzeSwapOptions(
   const patternCandidates = allExercises.filter(
     (e) =>
       e.id !== source.id &&
-      e.primaryMuscle === source.primaryMuscle &&
+      muscleMatchesGroup(e.primaryMuscle, source.primaryMuscle) &&
       relatedPatterns.includes(e.movementPattern as MovementPattern)
   );
   const patternVariations = patternCandidates.slice(0, 3).map((exercise) => ({

@@ -3,11 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { useUserStore } from '@/stores';
-import { calculateWeeklyVolume, assessVolumeStatus, type MuscleVolumeData } from '@/services/volumeTracker';
-import type { WeeklyMuscleVolume, SetLog, ExerciseBlock, Exercise } from '@/types/schema';
+import {
+  assessVolumeStatus,
+  resolvePrimaryMuscleCredits,
+  SECONDARY_MUSCLE_CREDIT,
+  type MuscleVolumeData,
+} from '@/services/volumeTracker';
 import type { WeeklyMuscleVolumeRow } from '@/types/database-queries';
-import { STANDARD_MUSCLE_GROUPS } from '@/types/schema';
-import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import { STANDARD_MUSCLE_GROUPS, resolveMuscleToStandard, type StandardMuscleGroup } from '@/types/schema';
 import { getLocalDateString } from '@/lib/utils';
 
 interface UseWeeklyVolumeOptions {
@@ -44,20 +47,28 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
         .eq('week_start', weekStart);
 
       if (storedVolume && storedVolume.length > 0) {
-        // Use stored volume data - convert to standard muscle groups
-        const mapped: MuscleVolumeData[] = [];
+        // Use stored volume data - convert to standard muscle groups.
+        // Stored rows may use legacy coarse groups ('chest'); distribute their
+        // sets across the standard muscles they cover instead of assigning
+        // everything to the first match.
+        const storedSets = new Map<StandardMuscleGroup, number>();
         storedVolume.forEach((row: WeeklyMuscleVolumeRow) => {
-          const standardMuscle = toStandardMuscleForVolume(row.muscle_group);
-          if (!standardMuscle) return; // Skip if can't convert
+          resolvePrimaryMuscleCredits(row.muscle_group).forEach(({ muscle, weight }) => {
+            storedSets.set(muscle, (storedSets.get(muscle) ?? 0) + row.total_sets * weight);
+          });
+        });
+        const mapped: MuscleVolumeData[] = [];
+        storedSets.forEach((sets, standardMuscle) => {
+          const totalSets = Math.round(sets);
           const landmarks = getVolumeLandmarks(standardMuscle);
           mapped.push({
             muscleGroup: standardMuscle,
-            totalSets: row.total_sets,
-            directSets: row.total_sets, // Not tracked separately in DB
+            totalSets,
+            directSets: totalSets, // Not tracked separately in DB
             indirectSets: 0,
             landmarks,
-            status: row.status,
-            percentOfMrv: Math.round((row.total_sets / landmarks.mrv) * 100),
+            status: assessVolumeStatus(totalSets, landmarks),
+            percentOfMrv: Math.round((totalSets / landmarks.mrv) * 100),
           });
         });
         setVolumeData(mapped);
@@ -99,8 +110,12 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
           .eq('workout_sessions.state', 'completed');
 
         if (blocks && blocks.length > 0) {
-          // Calculate volume from blocks
-          const volumeByMuscle = new Map<string, number>();
+          // Calculate volume from blocks: weighted direct credit for the
+          // primary muscle(s) plus partial credit for secondary muscles
+          // (previously secondaries were fetched but never counted, so e.g.
+          // rows contributed nothing to biceps/rear delts).
+          const directByMuscle = new Map<StandardMuscleGroup, number>();
+          const indirectByMuscle = new Map<StandardMuscleGroup, number>();
 
           blocks.forEach((block: any) => {
             const exercise = block.exercises;
@@ -111,26 +126,40 @@ export function useWeeklyVolume(options: UseWeeklyVolumeOptions = {}) {
 
             if (workingSets.length === 0) return;
 
-            const primaryMuscle = exercise.primary_muscle?.toLowerCase();
+            const primaryMuscle = exercise.primary_muscle;
             if (!primaryMuscle) return;
 
-            // Convert to standard muscle group
-            const standardMuscle = toStandardMuscleForVolume(primaryMuscle);
-            if (!standardMuscle) return;
+            const primaryCredits = resolvePrimaryMuscleCredits(primaryMuscle);
+            const primarySet = new Set(primaryCredits.map((c) => c.muscle));
+            primaryCredits.forEach(({ muscle, weight }) => {
+              directByMuscle.set(muscle, (directByMuscle.get(muscle) ?? 0) + workingSets.length * weight);
+            });
 
-            const currentSets = volumeByMuscle.get(standardMuscle) || 0;
-            volumeByMuscle.set(standardMuscle, currentSets + workingSets.length);
+            (exercise.secondary_muscles || []).forEach((secondary: string) => {
+              const standards = resolveMuscleToStandard(secondary);
+              if (standards.length === 0) return;
+              const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
+              standards.forEach((standardMuscle) => {
+                if (primarySet.has(standardMuscle)) return;
+                indirectByMuscle.set(
+                  standardMuscle,
+                  (indirectByMuscle.get(standardMuscle) ?? 0) + workingSets.length * creditPerMuscle
+                );
+              });
+            });
           });
 
           // Convert to MuscleVolumeData format with all standard muscles
           const calculatedData: MuscleVolumeData[] = STANDARD_MUSCLE_GROUPS.map((muscle) => {
-            const totalSets = volumeByMuscle.get(muscle) || 0;
+            const directSets = Math.round(directByMuscle.get(muscle) ?? 0);
+            const indirectSets = Math.round(indirectByMuscle.get(muscle) ?? 0);
+            const totalSets = directSets + indirectSets;
             const landmarks = getVolumeLandmarks(muscle);
             return {
               muscleGroup: muscle,
               totalSets,
-              directSets: totalSets,
-              indirectSets: 0,
+              directSets,
+              indirectSets,
               landmarks,
               status: assessVolumeStatus(totalSets, landmarks),
               percentOfMrv: Math.round((totalSets / landmarks.mrv) * 100),

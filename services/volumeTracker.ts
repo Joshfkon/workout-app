@@ -17,16 +17,13 @@ import type {
   VolumeStatus,
   WeeklyMuscleVolume,
   StandardMuscleGroup,
-  DetailedMuscleGroup,
 } from '@/types/schema';
 import {
   STANDARD_MUSCLE_GROUPS,
-  DETAILED_TO_STANDARD_MAP,
   DEFAULT_VOLUME_LANDMARKS,
-  isDetailedMuscle,
-  isStandardMuscle,
   isLegacyMuscle,
-  legacyToStandardMuscles,
+  normalizeMuscleToken,
+  resolveMuscleToStandard,
 } from '@/types/schema';
 
 // ============================================
@@ -35,6 +32,59 @@ import {
 
 /** Fractional set credit given to a secondary (indirect) muscle per working set. */
 export const SECONDARY_MUSCLE_CREDIT = 0.5;
+
+/**
+ * How a LEGACY coarse primary muscle distributes its direct-set credit across
+ * standard muscle groups. A legacy tag can't tell us which head the exercise
+ * emphasizes (a flat and an incline press are both just 'chest'), so credit is
+ * split across the plausible heads instead of the old winner-takes-all
+ * behavior (which sent ALL 'chest' volume to chest_upper, ALL 'shoulders'
+ * volume to front_delts, and ALL 'back' volume to lats — leaving the sibling
+ * muscles falsely reported as "not worked").
+ *
+ * 'glutes' and 'abs' intentionally do NOT split: crediting glute_med/obliques
+ * from every glute/ab exercise would over-credit muscles that usually need
+ * direct work, and their MEV defaults already assume indirect fill.
+ */
+const LEGACY_PRIMARY_VOLUME_WEIGHTS: Record<string, Partial<Record<StandardMuscleGroup, number>>> = {
+  chest: { chest_upper: 0.5, chest_lower: 0.5 },
+  back: { lats: 0.5, upper_back: 0.5 },
+  shoulders: { front_delts: 1 / 3, lateral_delts: 1 / 3, rear_delts: 1 / 3 },
+  glutes: { glutes: 1 },
+  abs: { abs: 1 },
+};
+
+/** One standard muscle's share of an exercise's primary (direct) credit. */
+export interface PrimaryMuscleCredit {
+  muscle: StandardMuscleGroup;
+  /** Fraction of each working set credited to this muscle (weights sum to 1). */
+  weight: number;
+}
+
+/**
+ * Resolve an exercise's primary muscle (any format: detailed, standard, or
+ * legacy) into weighted standard-muscle credits. Non-legacy tokens resolve to
+ * a single muscle at full weight; legacy coarse tokens split per
+ * LEGACY_PRIMARY_VOLUME_WEIGHTS. Returns [] for unrecognized tokens.
+ */
+export function resolvePrimaryMuscleCredits(muscle: string): PrimaryMuscleCredit[] {
+  const token = normalizeMuscleToken(muscle);
+
+  if (isLegacyMuscle(token)) {
+    const weights = LEGACY_PRIMARY_VOLUME_WEIGHTS[token];
+    if (weights) {
+      return (Object.entries(weights) as Array<[StandardMuscleGroup, number]>).map(
+        ([m, weight]) => ({ muscle: m, weight })
+      );
+    }
+    // Legacy tokens that map 1:1 ('biceps', 'quads', ...)
+    const standards = resolveMuscleToStandard(token);
+    return standards.length > 0 ? [{ muscle: standards[0], weight: 1 }] : [];
+  }
+
+  const standards = resolveMuscleToStandard(token);
+  return standards.length > 0 ? [{ muscle: standards[0], weight: 1 }] : [];
+}
 
 // ============================================
 // TYPES
@@ -70,41 +120,6 @@ export interface CalculateVolumeInput {
     completedSets: SetLog[];
   }>;
   userLandmarks: Record<string, VolumeLandmarks>;
-}
-
-/**
- * Convert any muscle string (detailed, standard, or legacy) to StandardMuscleGroup(s)
- * Returns an array because legacy muscles may map to multiple standard muscles
- */
-function resolveToStandardMuscles(muscle: string): StandardMuscleGroup[] {
-  const lowerMuscle = muscle.toLowerCase();
-
-  // Check if it's a detailed muscle
-  if (isDetailedMuscle(lowerMuscle)) {
-    return [DETAILED_TO_STANDARD_MAP[lowerMuscle as DetailedMuscleGroup]];
-  }
-
-  // Check if it's already a standard muscle
-  if (isStandardMuscle(lowerMuscle)) {
-    return [lowerMuscle as StandardMuscleGroup];
-  }
-
-  // Check if it's a legacy muscle
-  if (isLegacyMuscle(lowerMuscle)) {
-    return legacyToStandardMuscles(lowerMuscle);
-  }
-
-  // Unknown muscle - return empty array
-  return [];
-}
-
-/**
- * Convert any muscle string to a single StandardMuscleGroup (primary only)
- * For primary muscles, we only want one result
- */
-function resolveToStandardMuscle(muscle: string): StandardMuscleGroup | null {
-  const results = resolveToStandardMuscles(muscle);
-  return results.length > 0 ? results[0] : null;
 }
 
 /**
@@ -147,12 +162,17 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
 
     if (setCount === 0) continue;
 
-    // Primary muscle: convert to standard and give full credit
-    const primaryStandard = resolveToStandardMuscle(exercise.primaryMuscle);
-    if (primaryStandard && volumeMap.has(primaryStandard)) {
-      const data = volumeMap.get(primaryStandard)!;
-      data.directSets += setCount;
-      data.totalSets += setCount;
+    // Primary muscle: distribute direct credit across the standard muscles it
+    // resolves to (legacy coarse tags like 'chest' split across their heads,
+    // precise tags get full credit — see resolvePrimaryMuscleCredits).
+    const primaryCredits = resolvePrimaryMuscleCredits(exercise.primaryMuscle);
+    const primaryStandardSet = new Set(primaryCredits.map((c) => c.muscle));
+    if (primaryCredits.length > 0) {
+      for (const { muscle, weight } of primaryCredits) {
+        const data = volumeMap.get(muscle);
+        if (!data) continue;
+        data.directSets += setCount * weight;
+      }
     } else if (process.env.NODE_ENV !== 'production') {
       // A primary muscle that doesn't map to a canonical group silently drops
       // volume; surface it in dev so the exercise data can be corrected.
@@ -167,15 +187,15 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     const secondaryStandardCredits = new Map<StandardMuscleGroup, number>();
 
     for (const secondary of exercise.secondaryMuscles) {
-      const secondaryStandards = resolveToStandardMuscles(secondary);
+      const secondaryStandards = resolveMuscleToStandard(secondary);
       // Distribute 0.5 credit proportionally among mapped standard muscles
       const creditPerMuscle = secondaryStandards.length > 0
-        ? 0.5 / secondaryStandards.length
+        ? SECONDARY_MUSCLE_CREDIT / secondaryStandards.length
         : 0;
 
       for (const secondaryStandard of secondaryStandards) {
-        // Don't count secondary if it's the same standard group as primary
-        if (secondaryStandard === primaryStandard) continue;
+        // Don't count secondary if the primary already credits that group
+        if (primaryStandardSet.has(secondaryStandard)) continue;
 
         // Accumulate credit for this standard muscle
         const existing = secondaryStandardCredits.get(secondaryStandard) ?? 0;
@@ -189,17 +209,16 @@ export function calculateWeeklyVolume(input: CalculateVolumeInput): Map<Standard
     secondaryStandardCredits.forEach((credit, standardMuscle) => {
       if (volumeMap.has(standardMuscle)) {
         const data = volumeMap.get(standardMuscle)!;
-        const indirectCredit = setCount * credit;
-        data.indirectSets += indirectCredit;
-        data.totalSets += indirectCredit;
+        data.indirectSets += setCount * credit;
       }
     });
   }
 
   // Calculate status for each muscle group
-  // Round indirect sets and totals now that all accumulation is complete
+  // Round direct/indirect sets and totals now that all accumulation is complete
   // This prevents losing fractional volume from small per-exercise credits
   volumeMap.forEach((data) => {
+    data.directSets = Math.round(data.directSets);
     data.indirectSets = Math.round(data.indirectSets);
     data.totalSets = data.directSets + data.indirectSets;
     data.status = assessVolumeStatus(data.totalSets, data.landmarks);

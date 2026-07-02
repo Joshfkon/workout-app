@@ -9,6 +9,7 @@
  */
 
 import type { Exercise } from '@/types/schema';
+import { muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 import type { InjuryArea } from '@/types/training';
 
 export type { InjuryArea };
@@ -200,7 +201,9 @@ const EXPLICIT_SAFE: Record<string, string[]> = {
 export function getInjuryRisk(exercise: Exercise, injuryArea: InjuryArea): InjuryRisk {
   const normalizedArea = normalizeInjuryArea(injuryArea);
   const nameLower = exercise.name.toLowerCase();
-  const muscleLower = exercise.primaryMuscle.toLowerCase();
+  // Injury heuristics reason in the coarse legacy system ('chest', not
+  // 'chest_upper'), so map precise tags back to their coarse group.
+  const muscleLower = toLegacyMuscleGroup(exercise.primaryMuscle) ?? exercise.primaryMuscle.toLowerCase();
   
   // Check explicit avoid list first
   const avoidList = EXPLICIT_AVOID[normalizedArea] || [];
@@ -223,7 +226,8 @@ export function getInjuryRisk(exercise: Exercise, injuryArea: InjuryArea): Injur
  */
 function inferInjuryRisk(exercise: Exercise, injury: string): InjuryRisk {
   const nameLower = exercise.name.toLowerCase();
-  const muscleLower = exercise.primaryMuscle.toLowerCase();
+  // Coarse legacy group for the heuristics below ('chest_upper' -> 'chest')
+  const muscleLower = toLegacyMuscleGroup(exercise.primaryMuscle) ?? exercise.primaryMuscle.toLowerCase();
   const mechanic = exercise.mechanic;
   const pattern = exercise.movementPattern?.toLowerCase() || '';
   const equipment = exercise.equipmentRequired?.[0]?.toLowerCase() || '';
@@ -596,10 +600,11 @@ export function getSafeAlternatives(
   allExercises: Exercise[],
   injuries: InjuryContext[]
 ): InjurySafeSwap[] {
-  // Get exercises that match the same primary muscle
+  // Get exercises that match the same primary muscle (overlap-aware so a
+  // legacy 'chest' source still matches precisely-tagged 'chest_upper' etc.)
   const sameMuscle = allExercises.filter(
-    ex => ex.id !== source.id && 
-          ex.primaryMuscle === source.primaryMuscle &&
+    ex => ex.id !== source.id &&
+          muscleMatchesGroup(ex.primaryMuscle, source.primaryMuscle) &&
           ex.name !== source.name
   );
   

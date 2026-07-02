@@ -35,7 +35,7 @@ import type {
   FatigueBudgetConfig,
   RepRangeConfig,
 } from '@/types/schema';
-import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
 
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
@@ -951,9 +951,10 @@ export function selectExercises(
   // Read live exercise data on each call (DB-backed with fallback)
   const exerciseDb = getExerciseDatabase();
 
-  // Filter available exercises
+  // Filter available exercises (overlap-aware so precisely-tagged exercises
+  // like 'lateral_delts' still match a legacy 'shoulders' target)
   let candidates = exerciseDb.filter(e =>
-    e.primaryMuscle === muscle &&
+    muscleMatchesGroup(e.primaryMuscle, muscle) &&
     profile.availableEquipment.includes(e.equipment) &&
     !profile.injuryHistory.includes(muscle)  // Be cautious with injured areas
   );
@@ -976,14 +977,14 @@ export function selectExercises(
   if (candidates.length === 0) {
     // Fallback: allow any difficulty but still respect equipment
     candidates = exerciseDb.filter(e =>
-      e.primaryMuscle === muscle &&
+      muscleMatchesGroup(e.primaryMuscle, muscle) &&
       profile.availableEquipment.includes(e.equipment)
     );
   }
 
   if (candidates.length === 0) {
     // Ultimate fallback: any exercise for this muscle
-    candidates = exerciseDb.filter(e => e.primaryMuscle === muscle);
+    candidates = exerciseDb.filter(e => muscleMatchesGroup(e.primaryMuscle, muscle));
   }
   
   // Sort by: 1) Hypertrophy tier (if enabled), 2) Compound vs isolation, 3) Fatigue rating
@@ -1070,7 +1071,7 @@ function getRepRange(exercise: ExerciseEntry, goal: Goal): string {
  */
 function getRestPeriod(exercise: ExerciseEntry, goal: Goal): number {
   const isCompound = exercise.pattern !== 'isolation';
-  const isAbExercise = exercise.primaryMuscle === 'abs';
+  const isAbExercise = toLegacyMuscleGroup(exercise.primaryMuscle) === 'abs';
 
   // Ab exercises need shorter rest periods (recover faster)
   if (isAbExercise) {
@@ -1114,10 +1115,11 @@ export function generateWarmup(primaryMuscle: MuscleGroup): string[] {
     ]
   };
   
-  if (['quads', 'hamstrings', 'glutes', 'calves'].includes(primaryMuscle)) {
+  const coarse = toLegacyMuscleGroup(primaryMuscle) ?? primaryMuscle;
+  if (['quads', 'hamstrings', 'glutes', 'calves', 'adductors'].includes(coarse)) {
     return warmups.lower;
   }
-  if (['chest', 'back', 'shoulders', 'biceps', 'triceps'].includes(primaryMuscle)) {
+  if (['chest', 'back', 'shoulders', 'biceps', 'triceps', 'traps', 'forearms'].includes(coarse)) {
     return warmups.upper;
   }
   return warmups.full;
@@ -1498,7 +1500,7 @@ export function getRecommendedExercises(
   muscleGroup: string,
   mechanic: 'compound' | 'isolation' | 'both' = 'both'
 ): string[] {
-  const exercises = getExerciseDatabase().filter(e => e.primaryMuscle === muscleGroup);
+  const exercises = getExerciseDatabase().filter(e => muscleMatchesGroup(e.primaryMuscle, muscleGroup));
   
   if (mechanic === 'compound') {
     return exercises.filter(e => e.pattern !== 'isolation').map(e => e.name);

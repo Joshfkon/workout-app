@@ -1639,6 +1639,115 @@ export function legacyToStandardMuscles(legacy: string): StandardMuscleGroup[] {
 }
 
 /**
+ * Normalize a raw muscle token from the DB / user input so it can be matched
+ * against the canonical taxonomies: lowercase, trimmed, spaces and hyphens
+ * collapsed to underscores (e.g. "Rear Delts" -> "rear_delts").
+ */
+export function normalizeMuscleToken(value: string): string {
+  return value.toLowerCase().trim().replace(/[\s-]+/g, '_');
+}
+
+/**
+ * Resolve ANY muscle string (detailed, standard, or legacy — in any casing,
+ * with spaces or underscores) to the standard muscle group(s) it maps to.
+ * Returns an empty array for unrecognized tokens.
+ *
+ * This is the canonical resolver — volume tracking, recovery tracking, and
+ * exercise matching should all agree on this mapping.
+ */
+export function resolveMuscleToStandard(muscle: string): StandardMuscleGroup[] {
+  const token = normalizeMuscleToken(muscle);
+
+  // Standard first: some standard ids ("glutes", "abs") are also legacy-map
+  // keys, and expanding those would wrongly credit sibling muscles.
+  if (isStandardMuscle(token)) {
+    return [token as StandardMuscleGroup];
+  }
+
+  if (isDetailedMuscle(token)) {
+    return [DETAILED_TO_STANDARD_MAP[token as DetailedMuscleGroup]];
+  }
+
+  if (isLegacyMuscle(token)) {
+    return LEGACY_TO_STANDARD_MAP[token] ?? [];
+  }
+
+  return [];
+}
+
+/**
+ * Whether an exercise's muscle (any format) belongs to a target muscle group
+ * (any format). True when the two resolve to overlapping standard muscles —
+ * e.g. muscleMatchesGroup('lateral_delts', 'shoulders') and
+ * muscleMatchesGroup('chest', 'chest_upper') are both true.
+ *
+ * Use this instead of raw string equality when filtering exercises by muscle,
+ * so legacy-coarse targets ('shoulders') keep matching precisely-tagged
+ * exercises ('lateral_delts') and vice versa.
+ */
+export function muscleMatchesGroup(exerciseMuscle: string, targetGroup: string): boolean {
+  const targetToken = normalizeMuscleToken(targetGroup);
+  if (normalizeMuscleToken(exerciseMuscle) === targetToken) return true;
+  const a = resolveMuscleToStandard(exerciseMuscle);
+  if (a.length === 0) return false;
+  // The TARGET side expands legacy-first: a 'glutes' or 'abs' filter is a
+  // coarse group request and should also match glute_med / obliques
+  // exercises. (The exercise side stays standard-first so a specific
+  // 'glutes' exercise never counts as 'glute_med'.)
+  const targetStandards = isLegacyMuscle(targetToken)
+    ? LEGACY_TO_STANDARD_MAP[targetToken] ?? []
+    : resolveMuscleToStandard(targetToken);
+  const b = new Set(targetStandards);
+  return a.some((m) => b.has(m));
+}
+
+/**
+ * Expand a muscle-group filter value into every token that could appear in
+ * exercises.primary_muscle for that group (legacy + standard + detailed),
+ * for use with SQL `IN (...)` filters. E.g. 'shoulders' expands to
+ * ['shoulders', 'front_delts', 'lateral_delts', 'rear_delts'].
+ */
+export function expandMuscleGroupForFilter(group: string): string[] {
+  const token = normalizeMuscleToken(group);
+  const expanded = new Set<string>([token]);
+
+  const standards = isLegacyMuscle(token)
+    ? LEGACY_TO_STANDARD_MAP[token] ?? []
+    : resolveMuscleToStandard(token);
+
+  for (const standard of standards) {
+    expanded.add(standard);
+    // Include detailed tokens (custom/AI-completed exercises may use them)
+    for (const detailed of DETAILED_MUSCLE_GROUPS) {
+      if (DETAILED_TO_STANDARD_MAP[detailed] === standard) expanded.add(detailed);
+    }
+  }
+
+  return Array.from(expanded);
+}
+
+/**
+ * Map any muscle token back to its coarse legacy MuscleGroup (e.g.
+ * 'chest_upper' -> 'chest', 'lateral_delts' -> 'shoulders'). Used by legacy
+ * code paths (injury heuristics, warmup selection) that reason in the
+ * 13-muscle system. Returns null for unrecognized tokens.
+ */
+export function toLegacyMuscleGroup(muscle: string): MuscleGroup | null {
+  const token = normalizeMuscleToken(muscle);
+  if ((MUSCLE_GROUPS as readonly string[]).includes(token)) {
+    return token as MuscleGroup;
+  }
+  const standards = resolveMuscleToStandard(token);
+  if (standards.length === 0) return null;
+  // Find the legacy group whose standard expansion contains the first match
+  for (const [legacy, stds] of Object.entries(LEGACY_TO_STANDARD_MAP)) {
+    if (stds.includes(standards[0])) return legacy as MuscleGroup;
+  }
+  // Standard muscles with no legacy parent (e.g. 'erectors', 'obliques')
+  return null;
+}
+
+/**
  * Display names for Standard muscle groups (user-facing)
  */
 export const STANDARD_MUSCLE_DISPLAY_NAMES: Record<StandardMuscleGroup, string> = {

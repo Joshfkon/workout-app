@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { MUSCLE_GROUPS, type MuscleGroup, legacyToStandardMuscles, type StandardMuscleGroup } from '@/types/schema';
+import { MUSCLE_GROUPS, type MuscleGroup, legacyToStandardMuscles, toLegacyMuscleGroup, expandMuscleGroupForFilter, muscleMatchesGroup, type StandardMuscleGroup } from '@/types/schema';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
@@ -98,8 +98,9 @@ type Goal = 'bulk' | 'cut' | 'maintain';
  * Get rest period based on exercise type and user's goal
  */
 function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
-  // Ab exercises need shorter rest periods (recover faster)
-  if (primaryMuscle === 'abs') {
+  // Ab exercises need shorter rest periods (recover faster); 'obliques'
+  // primaries (Pallof press, Russian twist) count as ab work too.
+  if (primaryMuscle && toLegacyMuscleGroup(primaryMuscle) === 'abs') {
     return goal === 'cut' ? 30 : 45;
   }
 
@@ -552,17 +553,20 @@ function NewWorkoutContent() {
           const primaryMuscle = block.exercises?.primary_muscle;
           const secondaryMuscles = block.exercises?.secondary_muscles || [];
           
+          // This suggester ranks the coarse legacy groups, so coarse-grain
+          // precise tags ('lateral_delts' counts as 'shoulders' trained).
           if (primaryMuscle) {
-            trainedMuscles[primaryMuscle] = (trainedMuscles[primaryMuscle] || 0) + 1;
-            const existing = muscleLastTrained[primaryMuscle];
+            const coarsePrimary = toLegacyMuscleGroup(primaryMuscle) ?? primaryMuscle.toLowerCase();
+            trainedMuscles[coarsePrimary] = (trainedMuscles[coarsePrimary] || 0) + 1;
+            const existing = muscleLastTrained[coarsePrimary];
             if (!existing || workoutDate > existing) {
-              muscleLastTrained[primaryMuscle] = workoutDate;
+              muscleLastTrained[coarsePrimary] = workoutDate;
             }
           }
-          
+
           secondaryMuscles.forEach((secondaryMuscle: string) => {
-            const secondaryMuscleLower = secondaryMuscle.toLowerCase();
-            trainedMuscles[secondaryMuscleLower] = (trainedMuscles[secondaryMuscleLower] || 0) + 0.5;
+            const coarseSecondary = toLegacyMuscleGroup(secondaryMuscle) ?? secondaryMuscle.toLowerCase();
+            trainedMuscles[coarseSecondary] = (trainedMuscles[coarseSecondary] || 0) + 0.5;
           });
         });
       });
@@ -626,7 +630,7 @@ function NewWorkoutContent() {
       const { data: exercisesData } = await supabase
         .from('exercises')
         .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required')
-        .in('primary_muscle', suggestedMuscles)
+        .in('primary_muscle', suggestedMuscles.flatMap(expandMuscleGroupForFilter))
         .order('name');
       
       if (!exercisesData || exercisesData.length === 0) {
@@ -1243,7 +1247,7 @@ function NewWorkoutContent() {
         const { data, error } = await supabase
           .from('exercises')
           .select('id, name, primary_muscle, mechanic, hypertrophy_tier, equipment_required')
-          .in('primary_muscle', selectedMuscles)
+          .in('primary_muscle', selectedMuscles.flatMap(expandMuscleGroupForFilter))
           .order('name');
 
         if (data && !error) {
@@ -1518,7 +1522,7 @@ function NewWorkoutContent() {
 
   // Group exercises by muscle, filtered by search term
   const exercisesByMuscle = selectedMuscles.reduce((acc, muscle) => {
-    const muscleExercises = exercises.filter((e) => e.primary_muscle === muscle);
+    const muscleExercises = exercises.filter((e) => muscleMatchesGroup(e.primary_muscle, muscle));
     // Apply search filter if search term exists
     if (exerciseSearch.trim()) {
       const searchLower = exerciseSearch.toLowerCase().trim();

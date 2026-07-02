@@ -11,6 +11,7 @@ import {
   calculateVolumeProgression,
   getVolumeSummary,
   toWeeklyMuscleVolume,
+  resolvePrimaryMuscleCredits,
   type CalculateVolumeInput,
   type MuscleVolumeData,
 } from '../volumeTracker';
@@ -316,6 +317,82 @@ describe('calculateWeeklyVolume', () => {
     expect(result.get('triceps')!.indirectSets).toBe(1);
   });
 
+  it('splits a legacy coarse primary across its standard muscles', () => {
+    // Legacy 'chest' can't tell us which head, so 4 sets credit 2 upper + 2
+    // lower instead of the old winner-takes-all (4 upper, 0 lower).
+    const flatBench = createMockExercise('chest', ['front_delts', 'triceps']);
+    const block = createMockBlock(flatBench.id);
+    const sets = Array.from({ length: 4 }, () => createMockSetLog(block.id));
+
+    const input: CalculateVolumeInput = {
+      exerciseBlocks: [{ block, exercise: flatBench, completedSets: sets }],
+      userLandmarks: defaultLandmarks,
+    };
+
+    const result = calculateWeeklyVolume(input);
+    expect(result.get('chest_upper')!.directSets).toBe(2);
+    expect(result.get('chest_lower')!.directSets).toBe(2);
+    // Secondaries still work at 0.5
+    expect(result.get('front_delts')!.indirectSets).toBe(2);
+    expect(result.get('triceps')!.indirectSets).toBe(2);
+  });
+
+  it('does not split legacy glutes/abs primaries onto sibling muscles', () => {
+    const hipThrust = createMockExercise('glutes', ['hamstrings']);
+    const crunch = createMockExercise('abs');
+    const block1 = createMockBlock(hipThrust.id);
+    const block2 = createMockBlock(crunch.id);
+    const sets = (b: string) => Array.from({ length: 4 }, () => createMockSetLog(b));
+
+    const result = calculateWeeklyVolume({
+      exerciseBlocks: [
+        { block: block1, exercise: hipThrust, completedSets: sets(block1.id) },
+        { block: block2, exercise: crunch, completedSets: sets(block2.id) },
+      ],
+      userLandmarks: defaultLandmarks,
+    });
+
+    expect(result.get('glutes')!.directSets).toBe(4);
+    expect(result.get('glute_med')!.totalSets).toBe(0);
+    expect(result.get('abs')!.directSets).toBe(4);
+    expect(result.get('obliques')!.totalSets).toBe(0);
+  });
+
+  it('normalizes secondary tokens with spaces ("rear delts")', () => {
+    // The seed data historically stored 'rear delts' (space); that token used
+    // to resolve to nothing and silently dropped the credit.
+    const row = createMockExercise('back', ['biceps', 'rear delts']);
+    const block = createMockBlock(row.id);
+    const sets = Array.from({ length: 4 }, () => createMockSetLog(block.id));
+
+    const result = calculateWeeklyVolume({
+      exerciseBlocks: [{ block, exercise: row, completedSets: sets }],
+      userLandmarks: defaultLandmarks,
+    });
+
+    expect(result.get('rear_delts')!.indirectSets).toBe(2);
+    // Legacy 'back' primary splits between lats and upper_back
+    expect(result.get('lats')!.directSets).toBe(2);
+    expect(result.get('upper_back')!.directSets).toBe(2);
+  });
+
+  it('skips secondary credit for muscles already covered by a split primary', () => {
+    // 'chest' primary already credits chest_upper; a chest_upper secondary
+    // must not double-count.
+    const press = createMockExercise('chest', ['chest_upper', 'triceps']);
+    const block = createMockBlock(press.id);
+    const sets = Array.from({ length: 4 }, () => createMockSetLog(block.id));
+
+    const result = calculateWeeklyVolume({
+      exerciseBlocks: [{ block, exercise: press, completedSets: sets }],
+      userLandmarks: defaultLandmarks,
+    });
+
+    expect(result.get('chest_upper')!.directSets).toBe(2);
+    expect(result.get('chest_upper')!.indirectSets).toBe(0);
+    expect(result.get('triceps')!.indirectSets).toBe(2);
+  });
+
   it('resolves muscle names case-insensitively', () => {
     // The resolver lowercases before matching, so capitalized canonical names
     // ("Quads"/"Hamstrings") map to quads/hamstrings.
@@ -331,6 +408,46 @@ describe('calculateWeeklyVolume', () => {
     const result = calculateWeeklyVolume(input);
     expect(result.get('quads')!.directSets).toBe(4);
     expect(result.get('hamstrings')!.indirectSets).toBe(2); // Math.round(4 * 0.5) = 2
+  });
+});
+
+// ============================================
+// PRIMARY MUSCLE CREDIT RESOLUTION
+// ============================================
+
+describe('resolvePrimaryMuscleCredits', () => {
+  it('splits legacy chest/back across their standard muscles', () => {
+    expect(resolvePrimaryMuscleCredits('chest')).toEqual([
+      { muscle: 'chest_upper', weight: 0.5 },
+      { muscle: 'chest_lower', weight: 0.5 },
+    ]);
+    expect(resolvePrimaryMuscleCredits('back')).toEqual([
+      { muscle: 'lats', weight: 0.5 },
+      { muscle: 'upper_back', weight: 0.5 },
+    ]);
+  });
+
+  it('splits legacy shoulders three ways', () => {
+    const credits = resolvePrimaryMuscleCredits('shoulders');
+    expect(credits).toHaveLength(3);
+    expect(credits.map((c) => c.muscle).sort()).toEqual(['front_delts', 'lateral_delts', 'rear_delts']);
+    credits.forEach((c) => expect(c.weight).toBeCloseTo(1 / 3));
+  });
+
+  it('gives full credit for precise standard/detailed tags', () => {
+    expect(resolvePrimaryMuscleCredits('lateral_delts')).toEqual([{ muscle: 'lateral_delts', weight: 1 }]);
+    expect(resolvePrimaryMuscleCredits('chest_upper')).toEqual([{ muscle: 'chest_upper', weight: 1 }]);
+    expect(resolvePrimaryMuscleCredits('triceps_long')).toEqual([{ muscle: 'triceps', weight: 1 }]);
+  });
+
+  it('does not leak legacy glutes/abs onto glute_med/obliques', () => {
+    expect(resolvePrimaryMuscleCredits('glutes')).toEqual([{ muscle: 'glutes', weight: 1 }]);
+    expect(resolvePrimaryMuscleCredits('abs')).toEqual([{ muscle: 'abs', weight: 1 }]);
+  });
+
+  it('resolves 1:1 legacy tokens and rejects unknown tokens', () => {
+    expect(resolvePrimaryMuscleCredits('biceps')).toEqual([{ muscle: 'biceps', weight: 1 }]);
+    expect(resolvePrimaryMuscleCredits('not a muscle')).toEqual([]);
   });
 });
 
