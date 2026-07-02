@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -8,6 +9,7 @@ import { BottomNavigation } from './BottomNavigation';
 import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 import { ResumeWorkoutBanner } from '@/components/workout';
+import { flushSetOutbox } from '@/lib/offline/setOutbox';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -15,6 +17,15 @@ interface DashboardLayoutClientProps {
 
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
   const router = useRouter();
+
+  // Offline outbox (P0-2): flush queued set writes whenever connectivity
+  // returns, from ANY dashboard tab — not just the workout page.
+  useEffect(() => {
+    const flush = () => { void flushSetOutbox(createUntypedClient()); };
+    window.addEventListener('online', flush);
+    if (navigator.onLine) flush();
+    return () => window.removeEventListener('online', flush);
+  }, []);
 
   const handleSignOut = async () => {
     const supabase = createUntypedClient();
