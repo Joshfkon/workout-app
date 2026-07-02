@@ -21,12 +21,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   IconBarbell,
+  IconCalendarStats,
   IconChevronRight,
   IconHistory,
+  IconListDetails,
   IconLoader2,
   IconPlus,
   IconSalad,
   IconSparkles,
+  IconTemplate,
   IconX,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -678,13 +681,35 @@ export default function LogPage() {
         </button>
       </div>
 
-      {/* Old Train page stays reachable */}
+      {/* Training tools: the rest of the Train tab lives behind these */}
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { name: 'Mesocycle plan', href: '/dashboard/mesocycle', icon: IconCalendarStats },
+          { name: 'History', href: '/dashboard/history', icon: IconHistory },
+          { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
+          { name: 'Exercises', href: '/dashboard/exercises', icon: IconListDetails },
+        ].map((tool) => {
+          const ToolIcon = tool.icon;
+          return (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className="flex items-center gap-2 p-3 rounded-xl bg-surface-900 border border-surface-800 hover:bg-surface-800/70 transition-colors"
+            >
+              <ToolIcon size={16} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
+              <span className="text-[13px] font-medium text-surface-200 truncate">{tool.name}</span>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* Old Train page (planned sessions, recovery) stays reachable */}
       <Link
         href="/dashboard/workout"
         className="flex items-center gap-2 px-1 py-2 text-xs text-surface-500 hover:text-surface-300 transition-colors"
       >
-        <IconHistory size={14} aria-hidden="true" />
-        <span>Workout history &amp; planned sessions</span>
+        <IconBarbell size={14} aria-hidden="true" />
+        <span>Planned sessions &amp; recovery</span>
         <IconChevronRight size={14} className="ml-auto" aria-hidden="true" />
       </Link>
 

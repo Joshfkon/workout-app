@@ -34,7 +34,7 @@ const primaryNavigation: SidebarNavItem[] = [
     name: 'Train',
     href: '/dashboard/log',
     icon: IconBarbell,
-    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
+    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history', '/dashboard/exercises'],
   },
   { name: 'Eat', href: '/dashboard/nutrition', icon: IconSalad },
   { name: 'Progress', href: '/dashboard/analytics', icon: IconChartLine },
