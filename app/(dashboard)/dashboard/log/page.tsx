@@ -8,9 +8,9 @@
  *   2. Log food -> /dashboard/nutrition.
  *   3. Mesocycle workout -> start today's scheduled session (or route to the
  *      mesocycle pages on rest days / when there is no active mesocycle).
- *   4. Blank workout -> reveals the exercise search + suggested list inline.
- *      No workout_sessions row exists until the user taps an exercise (lazy
- *      session creation, mirroring /dashboard/workout/quick's insert shape).
+ *   4. Blank workout -> creates/reuses today's session (no exercise blocks)
+ *      and opens the workout page, where the user adds exercises via the
+ *      search-first picker. Repeat taps reuse the same session.
  *   5. AI suggested workout -> builds a plan from muscle recovery + weekly
  *      volume (services/suggestedWorkout, pure), previews it in a bottom
  *      sheet, and only writes the session/blocks when the user taps Start.
@@ -26,7 +26,6 @@ import {
   IconLoader2,
   IconPlus,
   IconSalad,
-  IconSearch,
   IconSparkles,
   IconX,
 } from '@tabler/icons-react';
@@ -34,7 +33,6 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
-import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import {
   buildSuggestedWorkout,
   type SuggestedWorkoutPlan,
@@ -50,18 +48,6 @@ import { BottomSheet } from '@/components/workout/BottomSheet';
 import type { ExerciseOverride } from '@/services/mesocycleHelpers';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { Experience, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
-
-// Normalize exercise search terms for better matching (local copy of the
-// AddExercisePicker approach): "situps" vs "sit up" vs "sit-up".
-function normalizeForSearch(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[-\s]/g, '')
-    .replace(/s$/, '');
-}
-
-const SUGGESTED_COUNT = 8;
-const MAJOR_MUSCLES = ['chest', 'back', 'quads', 'shoulders', 'hamstrings', 'biceps', 'triceps', 'glutes'];
 
 interface LogExercise {
   id: string;
@@ -239,13 +225,10 @@ export default function LogPage() {
   const [exercises, setExercises] = useState<LogExercise[]>([]);
   const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
   const [lastDone, setLastDone] = useState<Map<string, Date>>(new Map());
-  const [search, setSearch] = useState('');
   const [isStartingMeso, setIsStartingMeso] = useState(false);
-  const [creatingId, setCreatingId] = useState<string | null>(null);
+  const [isStartingBlank, setIsStartingBlank] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Blank workout accordion
-  const [showBlank, setShowBlank] = useState(false);
 
   // AI suggested workout
   const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
@@ -345,68 +328,8 @@ export default function LogPage() {
     }
   }
 
-  const stapleIds = useMemo(
-    () =>
-      computeStapleExerciseIds(
-        exercises.map((ex) => ({ id: ex.id, muscle: ex.primary_muscle, tier: ex.hypertrophy_tier }))
-      ),
-    [exercises]
-  );
-
   // Suggested list: recent/frequent exercises first, topped up with staples
   // spread round-robin across the major muscle groups.
-  const suggested = useMemo(() => {
-    const picked: LogExercise[] = [];
-    const pickedIds = new Set<string>();
-
-    const used = exercises
-      .filter((ex) => (usageCounts.get(ex.id) ?? 0) > 0)
-      .sort((a, b) => {
-        const diff = (usageCounts.get(b.id) ?? 0) - (usageCounts.get(a.id) ?? 0);
-        if (diff !== 0) return diff;
-        return (lastDone.get(b.id)?.getTime() ?? 0) - (lastDone.get(a.id)?.getTime() ?? 0);
-      });
-    for (const ex of used) {
-      if (picked.length >= SUGGESTED_COUNT) break;
-      picked.push(ex);
-      pickedIds.add(ex.id);
-    }
-
-    if (picked.length < SUGGESTED_COUNT) {
-      const staplesByMuscle = new Map<string, LogExercise[]>();
-      for (const ex of exercises) {
-        if (!stapleIds.has(ex.id) || pickedIds.has(ex.id)) continue;
-        const muscle = (ex.primary_muscle ?? '').toLowerCase();
-        const list = staplesByMuscle.get(muscle);
-        if (list) list.push(ex);
-        else staplesByMuscle.set(muscle, [ex]);
-      }
-      let added = true;
-      while (picked.length < SUGGESTED_COUNT && added) {
-        added = false;
-        for (const muscle of MAJOR_MUSCLES) {
-          if (picked.length >= SUGGESTED_COUNT) break;
-          const next = staplesByMuscle.get(muscle)?.shift();
-          if (next) {
-            picked.push(next);
-            pickedIds.add(next.id);
-            added = true;
-          }
-        }
-      }
-    }
-
-    return picked;
-  }, [exercises, usageCounts, lastDone, stapleIds]);
-
-  const searchResults = useMemo(() => {
-    const q = normalizeForSearch(search.trim());
-    if (!q) return null;
-    return exercises.filter((ex) => normalizeForSearch(ex.name).includes(q)).slice(0, 50);
-  }, [search, exercises]);
-
-  const rows = searchResults ?? suggested;
-
   // Next scheduled training day (for the rest-day mesocycle card subtitle).
   const nextWorkout = useMemo(() => {
     if (!activeMeso || todayWorkout) return null;
@@ -442,13 +365,12 @@ export default function LogPage() {
     }
   };
 
-  // Lazy session creation: nothing is written until an exercise is tapped.
-  // Session insert mirrors /dashboard/workout/quick (reuse today's session if
-  // one exists); block insert mirrors the workout page's add-exercise shape,
-  // with the suggested weight from quickWeightEstimate (kg in, kg out).
-  const handlePickExercise = async (exercise: LogExercise) => {
-    if (creatingId) return;
-    setCreatingId(exercise.id);
+  // Blank workout: create/reuse today's session (no exercise blocks) and open
+  // the workout page — exercises get added there via the search-first picker.
+  // Repeat taps reuse the same session, so backing out never litters empties.
+  const handleStartBlank = async () => {
+    if (isStartingBlank) return;
+    setIsStartingBlank(true);
     setError(null);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -456,50 +378,12 @@ export default function LogPage() {
         router.push('/login');
         return;
       }
-
-      const { sessionId, isNewSession } = await getOrCreateTodaySession(supabase, user.id);
-
-      let order = 1;
-      if (!isNewSession) {
-        const { data: maxOrderResult } = await supabase
-          .from('exercise_blocks')
-          .select('order')
-          .eq('workout_session_id', sessionId)
-          .order('order', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        order = (maxOrderResult?.order || 0) + 1;
-      }
-
-      const { isCompound, repRange, targetRir } = blockDefaults(exercise);
-      const profile = await fetchEstimationProfile(supabase, user.id);
-      const suggestedWeight = estimateWeightKg(profile, exercise.name, repRange, targetRir);
-
-      let warmupSets: WarmupSet[] = [];
-      if (isNewSession) {
-        warmupSets = warmupForFirstExercise(exercise, isCompound, repRange, targetRir, suggestedWeight);
-      }
-
-      const { error: blockError } = await supabase.from('exercise_blocks').insert({
-        workout_session_id: sessionId,
-        exercise_id: exercise.id,
-        order,
-        target_sets: isCompound ? 4 : 3,
-        target_rep_range: repRange,
-        target_rir: targetRir,
-        target_weight_kg: suggestedWeight,
-        target_rest_seconds: isCompound ? 180 : 90,
-        suggestion_reason: 'Quick log',
-        warmup_protocol: { sets: warmupSets },
-      });
-
-      if (blockError) throw blockError;
-
+      const { sessionId } = await getOrCreateTodaySession(supabase, user.id);
       router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
     } catch (err) {
-      console.error('Failed to start workout:', err);
+      console.error('Failed to start blank workout:', err);
       setError('Failed to start workout. Please try again.');
-      setCreatingId(null);
+      setIsStartingBlank(false);
     }
   };
 
@@ -524,7 +408,11 @@ export default function LogPage() {
         mechanic: ex.mechanic,
       })),
       recentExerciseIds: Array.from(lastDone.entries())
-        .sort((a, b) => b[1].getTime() - a[1].getTime())
+        .sort(
+          (a, b) =>
+            b[1].getTime() - a[1].getTime() ||
+            (usageCounts.get(b[0]) ?? 0) - (usageCounts.get(a[0]) ?? 0)
+        )
         .map(([id]) => id),
     });
 
@@ -535,7 +423,7 @@ export default function LogPage() {
     }
     setAiPlan(plan);
     setShowAiSheet(true);
-  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone]);
+  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone, usageCounts]);
 
   const handleRemoveAiPick = (exerciseId: string) => {
     setAiPlan((plan) =>
@@ -720,24 +608,24 @@ export default function LogPage() {
           )}
         </button>
 
-        {/* 3. Blank workout (accordion toggle) */}
+        {/* 3. Blank workout: straight into the workout page */}
         <button
-          onClick={() => setShowBlank((open) => !open)}
-          aria-expanded={showBlank}
-          className={launcherCardClass}
+          onClick={handleStartBlank}
+          disabled={isStartingBlank}
+          className={`${launcherCardClass} disabled:opacity-60`}
         >
           <IconPlus size={20} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
           <span className="flex-1 min-w-0">
             <span className="block text-[15px] font-medium text-surface-100">Blank workout</span>
             <span className="block text-[12px] text-surface-500">
-              Search and add exercises as you go
+              {isStartingBlank ? 'Starting...' : 'Add exercises as you go'}
             </span>
           </span>
-          <IconChevronRight
-            size={16}
-            className={`text-surface-500 flex-shrink-0 transition-transform ${showBlank ? 'rotate-90' : ''}`}
-            aria-hidden="true"
-          />
+          {isStartingBlank ? (
+            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
 
         {/* 4. AI suggested workout */}
@@ -762,59 +650,6 @@ export default function LogPage() {
           )}
         </button>
       </div>
-
-      {/* Blank workout: search + suggested exercises (revealed by card 3) */}
-      {showBlank && (
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-surface-500 mb-2">
-            Start logging
-          </p>
-          <div className="relative mb-2">
-            <IconSearch
-              size={16}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-500"
-              aria-hidden="true"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search exercises..."
-              autoFocus
-              className="w-full pl-9 pr-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-[13px] text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500/50"
-            />
-          </div>
-          <div className="rounded-xl border border-surface-800 bg-surface-900 overflow-hidden">
-            {isLoading ? (
-              <p className="p-4 text-center text-xs text-surface-500">Loading exercises...</p>
-            ) : rows.length === 0 ? (
-              <p className="p-4 text-center text-xs text-surface-500">No exercises found</p>
-            ) : (
-              rows.map((ex) => (
-                <button
-                  key={ex.id}
-                  onClick={() => handlePickExercise(ex)}
-                  disabled={creatingId !== null}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left border-b border-surface-800/50 last:border-b-0 hover:bg-surface-800/50 transition-colors disabled:opacity-60"
-                >
-                  <span className="min-w-0">
-                    <span className="block text-[13px] text-surface-200 truncate">{ex.name}</span>
-                    <span className="block text-[11px] text-surface-500">
-                      <span className="capitalize">{ex.primary_muscle || 'other'}</span>
-                      {ex.hypertrophy_tier ? ` · ${ex.hypertrophy_tier}-tier` : ''}
-                    </span>
-                  </span>
-                  {creatingId === ex.id ? (
-                    <span className="text-[11px] text-primary-400 flex-shrink-0">Starting...</span>
-                  ) : (
-                    <IconChevronRight size={14} className="text-surface-600 flex-shrink-0" aria-hidden="true" />
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Old Train page stays reachable */}
       <Link
