@@ -350,7 +350,7 @@ describe('ExerciseCard', () => {
         <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
       );
 
-      await user.click(screen.getByRole('button', { name: '0 reps in reserve' }));
+      await user.click(screen.getByRole('button', { name: '0 reps in reserve (maxed)' }));
       await user.click(screen.getByRole('button', { name: 'Log set' }));
 
       expect(onSetComplete).toHaveBeenCalledWith(
@@ -375,7 +375,7 @@ describe('ExerciseCard', () => {
         />
       );
 
-      expect(screen.getByRole('button', { name: '0 reps in reserve' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '0 reps in reserve (maxed)' })).toHaveAttribute(
         'aria-pressed',
         'true'
       );
@@ -490,7 +490,7 @@ describe('ExerciseCard', () => {
 
       expect(screen.getByText(/eased for readiness/)).toBeInTheDocument();
       // Target RIR 2 + readiness delta 1 -> chip 3 pre-selected
-      expect(screen.getByRole('button', { name: '3 reps in reserve' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '3 reps in reserve (easy)' })).toHaveAttribute(
         'aria-pressed',
         'true'
       );

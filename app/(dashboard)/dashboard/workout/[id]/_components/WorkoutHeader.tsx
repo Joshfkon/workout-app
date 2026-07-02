@@ -135,14 +135,14 @@ export function WorkoutHeader({
           </div>
           <button
             onClick={onFinishWorkout}
-            className="px-3.5 py-1.5 rounded-lg bg-primary-500 text-white text-xs font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
+            className="px-4 min-h-[44px] rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
           >
             Finish
           </button>
           <div className="relative">
             <button
               onClick={onToggleToolsMenu}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`w-11 h-11 flex items-center justify-center rounded-lg transition-colors ${
                 injuryCount > 0
                   ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
                   : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
@@ -152,7 +152,7 @@ export function WorkoutHeader({
               aria-haspopup="menu"
               aria-expanded={showToolsMenu}
             >
-              <IconDotsVertical size={18} stroke={2} />
+              <IconDotsVertical size={20} stroke={2} />
             </button>
             {showToolsMenu && (
               <>
