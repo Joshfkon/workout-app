@@ -88,8 +88,14 @@ interface InProgressBlockRow {
 type UntypedSupabase = ReturnType<typeof createUntypedClient>;
 
 /**
- * Reuse today's planned/in-progress session or create a fresh one (mirrors
+ * Reuse today's ad-hoc (non-mesocycle) session or create a fresh one (mirrors
  * /dashboard/workout/quick's session insert shape).
+ *
+ * A reused session with exercise blocks but NO logged sets is a discarded/
+ * abandoned workout — its blocks are wiped so "blank workout" is actually
+ * blank. Sessions with logged sets are reused as-is (that's a real workout in
+ * progress; the Continue card points at it too). Mesocycle sessions are never
+ * touched here.
  */
 async function getOrCreateTodaySession(
   supabase: UntypedSupabase,
@@ -99,15 +105,36 @@ async function getOrCreateTodaySession(
 
   const { data: existingSessions } = await supabase
     .from('workout_sessions')
-    .select('id')
+    .select('id, state')
     .eq('user_id', userId)
     .eq('planned_date', today)
+    .is('mesocycle_id', null)
     .in('state', ['planned', 'in_progress'])
     .limit(1);
 
-  const existingId: string | undefined = existingSessions?.[0]?.id;
-  if (existingId) {
-    return { sessionId: existingId, isNewSession: false };
+  const existing: { id: string; state: string } | undefined = existingSessions?.[0];
+  if (existing) {
+    const { data: blockRows } = await supabase
+      .from('exercise_blocks')
+      .select('id, set_logs(id)')
+      .eq('workout_session_id', existing.id);
+    const blocks = (blockRows ?? []) as { id: string; set_logs: { id: string }[] | null }[];
+    const hasLoggedSets = blocks.some((b) => (b.set_logs?.length ?? 0) > 0);
+
+    if (!hasLoggedSets && blocks.length > 0) {
+      await supabase
+        .from('exercise_blocks')
+        .delete()
+        .in('id', blocks.map((b) => b.id));
+    }
+    if (existing.state === 'planned') {
+      await supabase
+        .from('workout_sessions')
+        .update({ state: 'in_progress', started_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    }
+    // After a wipe the session is effectively fresh (warmups, order restart).
+    return { sessionId: existing.id, isNewSession: !hasLoggedSets };
   }
 
   const { data: newSession, error: createError } = await supabase

@@ -2999,15 +2999,26 @@ export default function WorkoutPage() {
           .in('exercise_block_id', blockIds);
       }
 
-      // Reset session state back to planned
-      await supabase
-        .from('workout_sessions')
-        .update({
-          state: 'planned',
-          started_at: null,
-          pre_workout_check_in: null,
-        })
-        .eq('id', session.id);
+      if (!session.mesocycleId) {
+        // Ad-hoc session (blank/quick/AI): cancelling means discard — delete
+        // the blocks and the session so it can't resurface as a pre-loaded
+        // "blank" workout later today.
+        if (blockIds.length > 0) {
+          await supabase.from('exercise_blocks').delete().in('id', blockIds);
+        }
+        await supabase.from('workout_sessions').delete().eq('id', session.id);
+      } else {
+        // Mesocycle session: keep the programmed plan restartable — reset the
+        // session back to planned with its blocks intact.
+        await supabase
+          .from('workout_sessions')
+          .update({
+            state: 'planned',
+            started_at: null,
+            pre_workout_check_in: null,
+          })
+          .eq('id', session.id);
+      }
 
       // Clear store state and navigate back to dashboard
       endWorkoutSession();
