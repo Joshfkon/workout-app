@@ -12,6 +12,16 @@ import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT, type MuscleVolumeData } from '@/services/volumeTracker';
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, resolveMuscleToStandard, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
+import {
+  MEV_TARGETS,
+  ALL_MUSCLE_GROUPS,
+  getMevForMuscle,
+  accumulateExerciseVolume,
+  volumeAccumulatorToStats,
+  type VolumeAccumulator,
+  type MuscleVolumeStats,
+} from './_lib/weeklyVolume';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import {
@@ -58,10 +68,14 @@ const CardioTracker = dynamic(
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
-const AtrophyRiskAlert = dynamic(
-  () => import('@/components/analytics/AtrophyRiskAlert').then(mod => ({ default: mod.AtrophyRiskAlert })),
-  { ssr: false, loading: () => <CardSkeleton /> }
-);
+// Static import (item 6): AtrophyRiskAlert is the dashboard's LCP element.
+// As a next/dynamic component it was code-split, and during hydration the
+// dynamic boundary flashed its `loading` skeleton over the SSR'd card until
+// its separate chunk finished downloading (~6s under Lighthouse's 4x/slow-4G
+// throttle) — so LCP was recorded when the card re-appeared, not at first
+// paint. Bundling it statically (small component, UI-only imports) removes
+// the extra chunk and the swap; with weekly volume already in server
+// initialData, the card now paints with the initial HTML.
 
 const WEIGHT_HISTORY_CACHE_KEY = 'weight_history_cache';
 const WEIGHT_HISTORY_CACHE_TTL = 60 * 60 * 1000; // 1 hour
@@ -82,96 +96,9 @@ interface DashboardCacheData {
   dateKey: string; // To invalidate cache on new day
 }
 
-// MEV targets (minimum effective volume per muscle) - defined outside component for stable reference
-// Uses StandardMuscleGroup (20 muscles) for consistent volume tracking
-const MEV_TARGETS: Record<StandardMuscleGroup, number> = {
-  chest_upper: 4, chest_lower: 4,
-  front_delts: 4, lateral_delts: 6, rear_delts: 4,
-  lats: 6, upper_back: 4, traps: 4,
-  biceps: 4, triceps: 4, forearms: 4,
-  quads: 6, hamstrings: 4, glutes: 4, glute_med: 2, adductors: 4, calves: 6,
-  abs: 6, obliques: 4, erectors: 4,
-};
-
-// All muscle groups to check (including those with 0 sets)
-// Uses STANDARD_MUSCLE_GROUPS from schema for consistent typing
-const ALL_MUSCLE_GROUPS: readonly StandardMuscleGroup[] = STANDARD_MUSCLE_GROUPS;
-
-// Helper to get MEV for any muscle format (legacy, standard, or detailed)
-function getMevForMuscle(muscle: string): number {
-  const standardMuscle = toStandardMuscleForVolume(muscle);
-  if (standardMuscle && standardMuscle in MEV_TARGETS) {
-    return MEV_TARGETS[standardMuscle];
-  }
-  return 4; // Default MEV
-}
-
-/** Per-muscle weekly volume accumulator shared by both dashboard fetch paths. */
-type VolumeAccumulator = Record<string, { sets: number; exercises: Map<string, { id: string; name: string; sets: number }> }>;
-
-/**
- * Credit one exercise block's working sets to the volume accumulator:
- * weighted direct credit for the standard muscle(s) the primary resolves to
- * (legacy 'chest' splits across chest_upper/chest_lower rather than dumping
- * everything on the first match) plus SECONDARY_MUSCLE_CREDIT (0.5) per set
- * for each secondary muscle.
- */
-function accumulateExerciseVolume(
-  volumeByMuscle: VolumeAccumulator,
-  exercise: { id: string; name: string; primary_muscle?: string | null; secondary_muscles?: string[] | null },
-  workingSets: number
-): void {
-  if (!exercise.primary_muscle || workingSets === 0) return;
-
-  const addCredit = (muscle: string, sets: number) => {
-    if (!volumeByMuscle[muscle]) {
-      volumeByMuscle[muscle] = { sets: 0, exercises: new Map() };
-    }
-    volumeByMuscle[muscle].sets += sets;
-    const existing = volumeByMuscle[muscle].exercises.get(exercise.id);
-    if (existing) {
-      existing.sets += sets;
-    } else {
-      volumeByMuscle[muscle].exercises.set(exercise.id, { id: exercise.id, name: exercise.name, sets });
-    }
-  };
-
-  const primaryCredits = resolvePrimaryMuscleCredits(exercise.primary_muscle);
-  const primarySet = new Set<string>(primaryCredits.map((c) => c.muscle));
-  if (primaryCredits.length > 0) {
-    primaryCredits.forEach(({ muscle, weight }) => addCredit(muscle, workingSets * weight));
-  } else {
-    // Unrecognized token (e.g. free-text custom exercise) - keep it visible
-    // under its raw name rather than dropping the volume.
-    addCredit(exercise.primary_muscle.toLowerCase(), workingSets);
-  }
-
-  (exercise.secondary_muscles || []).forEach((secondary) => {
-    const standards = resolveMuscleToStandard(secondary);
-    if (standards.length === 0) return;
-    const creditPerMuscle = SECONDARY_MUSCLE_CREDIT / standards.length;
-    standards.forEach((standardMuscle) => {
-      if (primarySet.has(standardMuscle)) return; // already credited as primary
-      addCredit(standardMuscle, workingSets * creditPerMuscle);
-    });
-  });
-}
-
-/** Convert the accumulator into display stats (integer sets, low/optimal/high). */
-function volumeAccumulatorToStats(volumeByMuscle: VolumeAccumulator): MuscleVolumeStats[] {
-  return Object.entries(volumeByMuscle)
-    .map(([muscle, data]) => {
-      const sets = Math.round(data.sets);
-      const target = getMevForMuscle(muscle);
-      const status: 'low' | 'optimal' | 'high' = sets < target ? 'low' : sets > target * 1.5 ? 'high' : 'optimal';
-      const exercises = Array.from(data.exercises.values())
-        .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
-        .filter((ex) => ex.sets > 0);
-      return { muscle, sets, target, status, exercises };
-    })
-    .filter((stat) => stat.sets > 0)
-    .sort((a, b) => b.sets - a.sets);
-}
+// MEV_TARGETS, ALL_MUSCLE_GROUPS, accumulateExerciseVolume, volumeAccumulatorToStats,
+// VolumeAccumulator, MuscleVolumeStats now live in ./_lib/weeklyVolume (shared with
+// the server initial-data path, item 6). Imported above.
 
 interface NutritionTotals {
   calories: number;
@@ -188,19 +115,7 @@ interface NutritionTargets {
   cardio_prescription?: any;
 }
 
-interface ExerciseVolume {
-  id: string;
-  name: string;
-  sets: number;
-}
-
-interface MuscleVolumeStats {
-  muscle: string;
-  sets: number;
-  target: number;
-  status: 'low' | 'optimal' | 'high';
-  exercises: ExerciseVolume[];
-}
+// ExerciseVolume / MuscleVolumeStats imported from ./_lib/weeklyVolume.
 
 interface ActiveMesocycle {
   id: string;
@@ -275,6 +190,8 @@ interface DashboardInitialData {
   weightUnit: 'lb' | 'kg';
   userGoal: 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
   completedWorkoutsCount: number;
+  /** Weekly per-muscle volume (item 6): seeds the atrophy card server-side. */
+  muscleVolume?: MuscleVolumeStats[];
 }
 
 interface DashboardClientProps {
@@ -366,7 +283,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   });
   const [nutritionTotals, setNutritionTotals] = useState<NutritionTotals>(initialData?.nutritionTotals ?? { calories: 0, protein: 0, carbs: 0, fat: 0 });
   const [nutritionTargets, setNutritionTargets] = useState<NutritionTargets | null>(initialData?.nutritionTargets ?? null);
-  const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>([]);
+  // Seed from server initialData (item 6) so the atrophy card renders in the
+  // SSR HTML — it's the dashboard's LCP element and previously waited on a
+  // post-hydration weekly-volume fetch. The client fetch below still runs to
+  // refresh, but no longer gates first paint.
+  const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>(initialData?.muscleVolume ?? []);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialData?.weightUnit ?? 'lb');
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(initialData?.todaysWeight ?? null);
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>(initialData?.weightHistory ?? []);

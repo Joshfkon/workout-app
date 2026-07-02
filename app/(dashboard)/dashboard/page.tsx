@@ -8,6 +8,7 @@ import {
   fetchWeightData,
   fetchUserGoal,
   fetchCompletedWorkoutsCount,
+  fetchWeeklyMuscleVolume,
 } from '@/lib/actions/dashboard';
 
 // Loading fallback for the entire dashboard
@@ -66,12 +67,14 @@ async function DashboardWithData() {
     weightData,
     userGoal,
     completedWorkoutsCount,
+    muscleVolume,
   ] = await Promise.all([
     fetchMesocycleData(user.id),
     fetchNutritionData(user.id),
     fetchWeightData(user.id),
     fetchUserGoal(user.id),
     fetchCompletedWorkoutsCount(user.id),
+    fetchWeeklyMuscleVolume(user.id),
   ]);
 
   // Pass server-fetched data to client component as initial props
@@ -88,6 +91,7 @@ async function DashboardWithData() {
         weightUnit: weightData.preferredUnit,
         userGoal: userGoal as any,
         completedWorkoutsCount,
+        muscleVolume,
       }}
     />
   );
