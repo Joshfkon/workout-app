@@ -5,7 +5,7 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/compon
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import nextDynamic from 'next/dynamic';
@@ -79,6 +79,60 @@ function HistoryPageContent() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Inline past-set editing (P1-3)
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editWeight, setEditWeight] = useState('');
+  const [editReps, setEditReps] = useState('');
+  const [savingSetEdit, setSavingSetEdit] = useState(false);
+
+  const startSetEdit = (set: SetDetail) => {
+    setEditingSetId(set.id);
+    setEditWeight(String(convertWeightForDisplay(set.weight_kg, unit)));
+    setEditReps(String(set.reps));
+  };
+
+  const saveSetEdit = async (workoutId: string, exerciseBlockId: string, setId: string) => {
+    const weightNum = parseFloat(editWeight);
+    const repsNum = parseInt(editReps, 10);
+    if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 999) return;
+
+    setSavingSetEdit(true);
+    try {
+      const weightKg = inputWeightToKg(weightNum, unit);
+      const supabase = createUntypedClient();
+      const { error } = await supabase
+        .from('set_logs')
+        .update({ weight_kg: weightKg, reps: repsNum })
+        .eq('id', setId);
+      if (error) {
+        console.error('Failed to update set:', error);
+        return;
+      }
+
+      // Update local card state + recompute the workout's volume total.
+      // (E1RM, PRs, weekly volume, and future suggestions all derive from
+      // set_logs at read time — no stored aggregates to fix up.)
+      setWorkouts(prev =>
+        prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: ex.sets.map(s => (s.id === setId ? { ...s, weight_kg: weightKg, reps: repsNum } : s)) }
+          );
+          const totalVolume = exercises.reduce(
+            (sum, ex) => sum + ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0),
+            0
+          );
+          return { ...w, exercises, totalVolume };
+        })
+      );
+      setEditingSetId(null);
+    } finally {
+      setSavingSetEdit(false);
+    }
+  };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
@@ -1059,10 +1113,52 @@ function HistoryPageContent() {
 
                             {exercise.sets.length > 0 ? (
                               <div className="space-y-1">
-                                {exercise.sets.map((set, idx) => (
+                                {exercise.sets.map((set, idx) =>
+                                  editingSetId === set.id ? (
+                                    /* Inline set editor (P1-3): fix a fat-fingered
+                                       weight after the session is done. E1RM, PRs,
+                                       volume and future suggestions all derive from
+                                       set_logs at read time, so saving self-heals. */
+                                    <div key={set.id} className="flex items-center gap-2 text-sm py-1 px-2 rounded bg-surface-700/40">
+                                      <span className="text-surface-500 w-8">#{idx + 1}</span>
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        value={editWeight}
+                                        onChange={(e) => setEditWeight(e.target.value)}
+                                        aria-label="Weight"
+                                        className="w-20 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                      />
+                                      <span className="text-surface-500 text-xs">{unit}</span>
+                                      <span className="text-surface-400">×</span>
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={editReps}
+                                        onChange={(e) => setEditReps(e.target.value)}
+                                        aria-label="Reps"
+                                        className="w-16 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                      />
+                                      <button
+                                        onClick={() => saveSetEdit(workout.id, exercise.id, set.id)}
+                                        disabled={savingSetEdit}
+                                        aria-label="Save set"
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-primary-400 hover:bg-surface-700 font-semibold"
+                                      >
+                                        {savingSetEdit ? '…' : '✓'}
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingSetId(null)}
+                                        aria-label="Cancel edit"
+                                        className="min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:bg-surface-700"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
                                   <div
                                     key={set.id}
-                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50"
+                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50 group/set"
                                   >
                                     <span className="text-surface-500 w-8">#{idx + 1}</span>
                                     <span className="text-surface-200 font-medium">
@@ -1081,8 +1177,21 @@ function HistoryPageContent() {
                                         RPE {set.rpe}
                                       </span>
                                     )}
+                                    {workout.state === 'completed' && !isSelectMode && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          startSetEdit(set);
+                                        }}
+                                        aria-label={`Edit set ${idx + 1}`}
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
+                                      >
+                                        ✎
+                                      </button>
+                                    )}
                                   </div>
-                                ))}
+                                  )
+                                )}
                               </div>
                             ) : (
                               <p className="text-sm text-surface-500">No sets recorded</p>
