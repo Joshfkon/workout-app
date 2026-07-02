@@ -48,7 +48,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
-import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -3380,7 +3380,7 @@ export default function WorkoutPage() {
         })();
       }
 
-      // Calculate and save workout calories (set-based HyperTracker method) in
+      // Calculate and save workout calories (set-based HyperTrack method) in
       // the background. It runs several sequential DB round-trips and the
       // result isn't needed to leave the summary, so awaiting it here just
       // stalls the "Finish" tap. Fire-and-forget; it's okay if it fails.
@@ -3628,7 +3628,7 @@ export default function WorkoutPage() {
     if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
     if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
     if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
-    return muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+    return muscles.map(formatMuscleName).join(' & ');
   })();
   const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
     isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'

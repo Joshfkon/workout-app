@@ -27,7 +27,7 @@ export default function ProgressiveOverloadArticle() {
         </div>
         <h1 className="text-3xl font-bold text-surface-100 mb-3">Progressive Overload Explained</h1>
         <p className="text-lg text-surface-400">
-          The fundamental principle of muscle growth and how HyperTracker automates your progression.
+          The fundamental principle of muscle growth and how HyperTrack automates your progression.
         </p>
       </div>
 

@@ -7,7 +7,7 @@ const features = [
   {
     icon: '🧠',
     title: 'AI-Powered Mesocycle Planning',
-    description: 'Unlike basic workout trackers, HyperTracker uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
+    description: 'Unlike basic workout trackers, HyperTrack uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
     competitors: 'Most apps just let you log workouts. We plan them for you.',
   },
   {
@@ -61,7 +61,7 @@ const features = [
   {
     icon: '🔄',
     title: 'Reactive Deload Detection',
-    description: 'HyperTracker monitors performance trends, sleep quality, motivation, and joint health to automatically suggest deloads before you overtrain—not on a fixed schedule.',
+    description: 'HyperTrack monitors performance trends, sleep quality, motivation, and joint health to automatically suggest deloads before you overtrain—not on a fixed schedule.',
     competitors: 'Fixed "deload every 4th week" ignores individual recovery.',
   },
   {
@@ -73,7 +73,7 @@ const features = [
   {
     icon: '🏋️',
     title: 'Intelligent Volume Landmarks',
-    description: 'Set personalized MEV (Minimum Effective Volume) and MRV (Maximum Recoverable Volume) for each muscle group. HyperTracker keeps you in the productive zone.',
+    description: 'Set personalized MEV (Minimum Effective Volume) and MRV (Maximum Recoverable Volume) for each muscle group. HyperTrack keeps you in the productive zone.',
     competitors: 'Cookie-cutter volume prescriptions waste your time.',
   },
   {
@@ -131,7 +131,7 @@ export default function AboutPage() {
       {/* Hero */}
       <div className="text-center space-y-4">
         <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-purple-400 to-pink-400">
-          HyperTracker
+          HyperTrack
         </h1>
         <p className="text-xl text-surface-300 max-w-2xl mx-auto">
           The most scientifically advanced hypertrophy training and nutrition app ever built. 
@@ -148,7 +148,7 @@ export default function AboutPage() {
             or track calories in isolation, maybe show a graph, and call it a day. But data without intelligence is just busywork.
           </p>
           <p>
-            HyperTracker integrates <strong className="text-surface-100">training AND nutrition</strong> into one intelligent system built on the latest science: 
+            HyperTrack integrates <strong className="text-surface-100">training AND nutrition</strong> into one intelligent system built on the latest science: 
             Renaissance Periodization&apos;s volume landmarks, Mike Israetel&apos;s SFR concepts, Greg Nuckols&apos; periodization research, 
             Brad Schoenfeld&apos;s hypertrophy mechanisms, and evidence-based nutrition protocols. Our AI coaching ties it all together.
           </p>
@@ -188,7 +188,7 @@ export default function AboutPage() {
               <thead>
                 <tr className="bg-surface-800/50">
                   <th className="text-left p-4 text-surface-300 font-medium">Feature</th>
-                  <th className="text-center p-4 text-primary-400 font-bold">HyperTracker</th>
+                  <th className="text-center p-4 text-primary-400 font-bold">HyperTrack</th>
                   <th className="text-center p-4 text-surface-400 font-medium">Strong</th>
                   <th className="text-center p-4 text-surface-400 font-medium">Hevy</th>
                   <th className="text-center p-4 text-surface-400 font-medium">Fitbod</th>
@@ -229,7 +229,7 @@ export default function AboutPage() {
 
       {/* Who It's For */}
       <Card className="p-8">
-        <h2 className="text-2xl font-bold text-surface-100 mb-6 text-center">Who Is HyperTracker For?</h2>
+        <h2 className="text-2xl font-bold text-surface-100 mb-6 text-center">Who Is HyperTrack For?</h2>
         <div className="grid md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-4xl mb-3">🏆</div>
@@ -320,7 +320,7 @@ export default function AboutPage() {
 
       {/* Footer note */}
       <p className="text-center text-xs text-surface-600">
-        HyperTracker is continuously evolving. Built with ❤️ for the lifting community.
+        HyperTrack is continuously evolving. Built with ❤️ for the lifting community.
       </p>
     </div>
   );

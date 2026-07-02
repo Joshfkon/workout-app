@@ -1125,7 +1125,7 @@ function HistoryPageContent() {
                             )}
                             <span>{workout.exercises.length} exercises</span>
                             <span>{workout.totalSets} sets</span>
-                            <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                            <span>{formatWeight(workout.totalVolume, unit, 0)} total</span>
                           </div>
                         </div>
                       </div>
@@ -1161,7 +1161,7 @@ function HistoryPageContent() {
                           )}
                           <span>{workout.exercises.length} exercises</span>
                           <span>{workout.totalSets} sets</span>
-                          <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                          <span>{formatWeight(workout.totalVolume, unit, 0)} total</span>
                           {workout.session_rpe && (
                             <span className="flex items-center gap-1">
                               RPE: <span className={workout.session_rpe >= 8 ? 'text-danger-400' : workout.session_rpe >= 6 ? 'text-warning-400' : 'text-surface-300'}>{workout.session_rpe}</span>

@@ -5,7 +5,7 @@ import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
-import { convertWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
+import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -1230,7 +1230,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           className="mt-1 flex items-center justify-between w-full gap-2 text-left"
         >
           <p className="min-w-0 text-[11px] text-surface-500 truncate">
-            <span className="capitalize">{exercise.primaryMuscle}</span>
+            <span>{formatMuscleName(exercise.primaryMuscle)}</span>
             {isBodyweightExercise && ' · bodyweight'}
             {lastSessionMeta && <> · {lastSessionMeta}</>}
           </p>
@@ -2224,7 +2224,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           )}
                         </div>
                         <p className="text-xs text-surface-500 capitalize">
-                          {alt.primaryMuscle} • {alt.mechanic}
+                          {formatMuscleName(alt.primaryMuscle)} • {alt.mechanic}
                         </p>
                         {injuryRisk.isRisky && injuryRisk.reasons.length > 0 && (
                           <p className="text-[10px] text-danger-400/70 mt-0.5">

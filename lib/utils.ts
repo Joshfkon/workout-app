@@ -86,6 +86,18 @@ export function formatDistanceToNow(date: string | Date): string {
 /**
  * Format time duration in seconds to mm:ss format
  */
+/**
+ * Muscle keys are snake_case ("lateral_delts") — humanize for display
+ * ("Lateral Delts"). P2-1: raw keys were leaking into workout titles,
+ * the exercise picker, and card subtitles.
+ */
+export function formatMuscleName(muscle: string): string {
+  return muscle
+    .split(/[_\s]+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
 export function formatDuration(seconds: number): string {
   // Handle negative, NaN, or invalid values
   if (!Number.isFinite(seconds) || seconds < 0) {

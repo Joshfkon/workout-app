@@ -82,17 +82,20 @@ export default async function Home({
 
         {/* CTA buttons */}
         <div className="flex flex-col sm:flex-row gap-4 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+          {/* P2-5: primary CTA creates an account (new visitors); returning
+              users get an explicit Log in. Previously Get Started pointed at
+              /login and the secondary duplicated the header's Sign Up. */}
           <Link
-            href="/login"
+            href="/register"
             className="btn-primary px-8 py-4 text-lg rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all"
           >
             Get Started
           </Link>
           <Link
-            href="/register"
+            href="/login"
             className="btn-secondary px-8 py-4 text-lg rounded-xl border border-surface-700"
           >
-            Create Account
+            Log In
           </Link>
         </div>
 

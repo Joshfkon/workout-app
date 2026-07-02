@@ -26,7 +26,19 @@ export default function LoginPage() {
       });
 
       if (error) {
-        setError(error.message);
+        // Map raw Supabase strings to human copy (P2-3)
+        const msg = error.message.toLowerCase();
+        if (msg.includes('invalid login credentials')) {
+          setError('Email or password is incorrect. Try again or reset your password.');
+        } else if (msg.includes('missing email')) {
+          setError('Please enter your email address.');
+        } else if (msg.includes('email not confirmed')) {
+          setError('Please confirm your email first — check your inbox for the confirmation link.');
+        } else if (/fetch|network/.test(msg)) {
+          setError('Can’t reach the server — check your connection and try again.');
+        } else {
+          setError('Sign-in failed. Please try again.');
+        }
       } else {
         router.push('/dashboard/log');
         router.refresh();
@@ -107,12 +119,6 @@ export default function LoginPage() {
         </div>
       </Card>
 
-      {/* Demo credentials hint */}
-      <div className="mt-4 text-center">
-        <p className="text-xs text-surface-600">
-          For testing: create an account or use Supabase dashboard
-        </p>
-      </div>
     </div>
   );
 }

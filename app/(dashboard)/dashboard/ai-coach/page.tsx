@@ -325,7 +325,8 @@ export default function AICoachPage() {
             Send
           </Button>
         </div>
-        <p className="text-xs text-surface-400 mt-2">
+        {/* Keyboard hint is desktop-only copy (P2-8) */}
+        <p className="hidden sm:block text-xs text-surface-400 mt-2">
           Press Enter to send, Shift+Enter for new line
         </p>
       </div>

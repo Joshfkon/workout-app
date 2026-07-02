@@ -116,14 +116,25 @@ export function UserRankCard({ userRank, type, units }: UserRankCardProps) {
         {/* Divider */}
         <div className="w-px h-12 bg-surface-700" />
 
-        {/* Percentile */}
+        {/* Percentile — suppressed for tiny cohorts (P2: "Top 1% of 1 lifters") */}
         <div className="text-center">
-          <p className="text-2xl font-bold text-primary-400">
-            Top {percentile > 0 ? percentile : 1}%
-          </p>
-          <p className="text-xs text-surface-400">
-            of {total_participants} lifters
-          </p>
+          {total_participants >= 10 ? (
+            <>
+              <p className="text-2xl font-bold text-primary-400">
+                Top {percentile > 0 ? percentile : 1}%
+              </p>
+              <p className="text-xs text-surface-400">
+                of {total_participants} lifters
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-bold text-primary-400">
+                {rank} of {total_participants}
+              </p>
+              <p className="text-xs text-surface-400">this board</p>
+            </>
+          )}
         </div>
       </div>
     </Card>
