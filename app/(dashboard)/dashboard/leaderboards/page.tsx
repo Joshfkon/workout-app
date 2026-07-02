@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { LeaderboardTable, UserRankCard } from '@/components/social/leaderboards';
 import { useLeaderboard } from '@/hooks/useLeaderboard';
 import { useUserStore } from '@/stores';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { cn } from '@/lib/utils';
 import type { LeaderboardType } from '@/types/social';
 
@@ -58,7 +59,9 @@ const LEADERBOARD_TABS: Array<{
 export default function LeaderboardsPage() {
   const [selectedType, setSelectedType] = useState<LeaderboardType>('total_volume_week');
   const userId = useUserStore((state) => state.user?.id);
-  const units = useUserStore((state) => state.user?.preferences.units ?? 'kg');
+  // P1-8: DB-backed units (kg showed to lb users when the store was cold)
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
 
   const {
     entries,
