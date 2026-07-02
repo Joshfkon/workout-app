@@ -166,10 +166,19 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
               <button
                 aria-label="Weight: 60 kg. Tap to type"
-                class="w-full min-w-0 min-h-[52px] font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
-                60 kg
+                <span
+                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                >
+                  60
+                </span>
+                <span
+                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                >
+                  kg
+                </span>
               </button>
               <button
                 aria-label="Increase weight"
@@ -223,11 +232,20 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 </svg>
               </button>
               <button
-                aria-label="Reps: 10. Tap to type"
-                class="w-full min-w-0 min-h-[52px] font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                aria-label="Reps: 10 reps. Tap to type"
+                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
-                10
+                <span
+                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                >
+                  10
+                </span>
+                <span
+                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                >
+                  reps
+                </span>
               </button>
               <button
                 aria-label="Increase reps"

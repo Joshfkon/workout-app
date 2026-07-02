@@ -225,7 +225,8 @@ export function SetLoggerRow({
     displayText: string,
     value: string,
     onChange: (v: string) => void,
-    ariaLabel: string
+    ariaLabel: string,
+    unitText?: string
   ) => {
     if (editingField === field) {
       return (
@@ -256,10 +257,13 @@ export function SetLoggerRow({
         type="button"
         onClick={() => setEditingField(field)}
         disabled={disabled}
-        aria-label={`${ariaLabel}: ${displayText}. Tap to type`}
-        className="w-full min-w-0 min-h-[52px] font-mono text-[15px] text-surface-100 whitespace-nowrap"
+        aria-label={`${ariaLabel}: ${displayText}${unitText ? ` ${unitText}` : ''}. Tap to type`}
+        className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
       >
-        {displayText}
+        <span className="font-mono text-[15px] text-surface-100 whitespace-nowrap">{displayText}</span>
+        {unitText && (
+          <span className="text-[10px] uppercase tracking-wide text-surface-500">{unitText}</span>
+        )}
       </button>
     );
   };
@@ -295,10 +299,11 @@ export function SetLoggerRow({
             </button>
             {renderValue(
               'weight',
-              `${isBodyweight && weightMode === 'assisted' ? '-' : isBodyweight && weightMode === 'weighted' ? '+' : ''}${weight || '0'} ${unitLabel}`,
+              `${isBodyweight && weightMode === 'assisted' ? '-' : isBodyweight && weightMode === 'weighted' ? '+' : ''}${weight || '0'}`,
               weight,
               onWeightChange,
-              'Weight'
+              'Weight',
+              unitLabel
             )}
             <button
               type="button"
@@ -328,7 +333,8 @@ export function SetLoggerRow({
             `${reps || '0'}${isDurationBased ? 's' : ''}`,
             reps,
             onRepsChange,
-            isDurationBased ? 'Seconds' : 'Reps'
+            isDurationBased ? 'Seconds' : 'Reps',
+            isDurationBased ? undefined : 'reps'
           )}
           <button
             type="button"
