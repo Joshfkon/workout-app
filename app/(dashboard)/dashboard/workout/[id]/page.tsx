@@ -448,17 +448,27 @@ export default function WorkoutPage() {
     startedAt: session?.startedAt ?? null,
   });
 
-  // Clear timer when session changes or component unmounts
+  // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
+  // unmount cleanup (P0-3): minimizing the workout must leave the persisted
+  // countdown running so the Resume pill can show "rest m:ss" and resuming
+  // restores the timer mid-count. The mount-time dismiss above still protects
+  // a new workout from inheriting an old session's timer — but only when the
+  // store points at a different session; a same-session remount (minimize →
+  // resume) keeps the countdown.
   useEffect(() => {
-    // Clear timer when sessionId changes (new workout started)
-    restTimer.dismiss();
-
-    return () => {
-      // Cleanup: dismiss timer when leaving the workout page
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('workout_rest_timer_session') : null;
+    if (stored !== sessionId) {
       restTimer.dismiss();
-    };
+      localStorage.setItem('workout_rest_timer_session', sessionId);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
+
+  // If the hook restored a running countdown (minimize -> resume, or app
+  // relaunch), surface the sticky timer bar again (P0-3/P0-5).
+  useEffect(() => {
+    if (restTimer.isRunning) setShowRestTimer(true);
+  }, [restTimer.isRunning]);
 
   // Track workout progress for navigation protection (using ref to avoid re-running effect)
   const hasWorkoutProgressRef = useRef(false);
@@ -3338,9 +3348,21 @@ export default function WorkoutPage() {
         {/* Same header as normal workout */}
         <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-              <p className="text-surface-400">0 of 0 sets completed</p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => router.push('/dashboard/log')}
+                aria-label="Minimize workout"
+                title="Minimize workout"
+                className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+                <p className="text-surface-400">0 of 0 sets completed</p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
               <Button
@@ -3532,6 +3554,7 @@ export default function WorkoutPage() {
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
         onFinishWorkout={handleWorkoutComplete}
+        onMinimize={() => router.push('/dashboard/log')}
       />
 
       {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
