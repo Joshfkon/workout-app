@@ -11,7 +11,6 @@ import {
   IconDots,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
-import { useWorkoutStore } from '@/stores/workoutStore';
 
 interface NavItem {
   name: string;
@@ -67,13 +66,13 @@ const navItems: NavItem[] = [
 
 export function BottomNavigation() {
   const pathname = usePathname();
-  const activeSession = useWorkoutStore((state) => state.activeSession);
 
-  // Hide bottom nav during active workout
-  // Check both store state AND pathname to handle hydration race conditions
+  // Hide bottom nav only while on the active workout page itself.
+  // An in-progress session alone must not hide the nav — the user can
+  // navigate away (e.g. back to Home) and still needs the tab bar.
   const isInActiveWorkoutPage = pathname?.match(/^\/dashboard\/workout\/[^/]+$/);
 
-  if (activeSession || isInActiveWorkoutPage) {
+  if (isInActiveWorkoutPage) {
     return null;
   }
 
