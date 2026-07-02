@@ -1,0 +1,50 @@
+{
+  "label": "after-new-comparator",
+  "cardsMounted": 2,
+  "mountedIds": [
+    "card-0",
+    "card-5"
+  ],
+  "interactions": {
+    "typing": {
+      "totalRenders": 8,
+      "totalMs": 2.2,
+      "perCard": {
+        "card-5": 8
+      },
+      "siblingCardsReRendered": [
+        "card-5"
+      ]
+    },
+    "logset": {
+      "totalRenders": 9,
+      "totalMs": 3,
+      "perCard": {
+        "card-5": 9
+      },
+      "siblingCardsReRendered": [
+        "card-5"
+      ]
+    },
+    "idle": {
+      "totalRenders": 13,
+      "totalMs": 0,
+      "perCard": {
+        "card-5": 13
+      },
+      "siblingCardsReRendered": [
+        "card-5"
+      ]
+    },
+    "scroll": {
+      "totalRenders": 3,
+      "totalMs": 0.2,
+      "perCard": {
+        "card-5": 3
+      },
+      "siblingCardsReRendered": [
+        "card-5"
+      ]
+    }
+  }
+}

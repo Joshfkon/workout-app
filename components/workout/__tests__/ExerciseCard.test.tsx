@@ -80,6 +80,7 @@ jest.mock('@/lib/utils', () => ({
     return to === 'lb' ? w * 2.20462 : w / 2.20462;
   }),
   formatWeight: jest.fn((w, unit) => `${w}${unit}`),
+  formatMuscleName: jest.fn((m: string) => m.split(/[_\s]+/).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' ')),
   formatWeightValue: jest.fn((w, unit) => (unit === 'lb' ? Math.round((w * 2.20462) / 2.5) * 2.5 : w)),
   convertWeightForDisplay: jest.fn((w, unit) =>
     unit === 'lb' ? Math.round(w * 2.20462 * 10) / 10 : Math.round(w * 10) / 10

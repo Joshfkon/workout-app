@@ -2535,8 +2535,13 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
-    // Write-status map (P0-2): reference-compared; the page replaces the
-    // object on every status change so saved/saving/queued glyphs update.
-    prevProps.setSyncStatus === nextProps.setSyncStatus
+    // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
+    // whole shared map by reference. setSyncStatus is one object shared by every
+    // card, so a reference check would re-render all cards whenever any set's
+    // status flips; this narrow comparison re-renders a card only when one of
+    // its own sets changes saved/saving/queued.
+    prevProps.sets.every(
+      (s) => prevProps.setSyncStatus?.[s.id] === nextProps.setSyncStatus?.[s.id]
+    )
   );
 });

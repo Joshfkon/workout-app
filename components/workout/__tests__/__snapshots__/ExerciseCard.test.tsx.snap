@@ -46,10 +46,8 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -566,10 +564,8 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            back
+          <span>
+            Back
           </span>
            · bodyweight
         </p>
@@ -796,10 +792,8 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1005,10 +999,8 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1214,10 +1206,8 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1456,10 +1446,8 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
            · 
           last session 100 kg × 10, × 9 @ 2 RIR
@@ -1689,10 +1677,8 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1904,10 +1890,8 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
