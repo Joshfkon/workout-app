@@ -73,6 +73,31 @@ export async function getOrCreateTodaySession(
   return { sessionId: newSession.id, isNewSession: true };
 }
 
+/** How old an empty ad-hoc session must be before auto-discard (ms). */
+export const STALE_ADHOC_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+/**
+ * True iff a loaded session is an abandoned empty ad-hoc shell that should be
+ * auto-discarded on open (P0-1). ALL of:
+ *   - state is in_progress (not planned/completed/skipped),
+ *   - not part of a mesocycle (ad-hoc only — programmed sessions are kept),
+ *   - 0 exercise blocks AND 0 logged sets,
+ *   - started more than STALE_ADHOC_AGE_MS ago.
+ * Pure + exported so the guard is unit-testable in isolation.
+ */
+export function isStaleEmptyAdhocSession(
+  input: { state: string; mesocycleId: string | null; startedAt: string | null },
+  blockCount: number,
+  setCount: number,
+  now: number = Date.now()
+): boolean {
+  if (input.state !== 'in_progress') return false;
+  if (input.mesocycleId) return false;
+  if (blockCount !== 0 || setCount !== 0) return false;
+  if (!input.startedAt) return false;
+  return now - new Date(input.startedAt).getTime() > STALE_ADHOC_AGE_MS;
+}
+
 /**
  * Look up today's ad-hoc session WITHOUT creating or mutating anything.
  * Used by the quick-workout confirm screen to label its CTA.

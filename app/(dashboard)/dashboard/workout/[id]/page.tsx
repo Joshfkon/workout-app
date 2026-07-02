@@ -90,6 +90,7 @@ import {
   type RecentMuscleSession,
 } from './_lib/muscleFeedbackWrites';
 import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
+import { isStaleEmptyAdhocSession } from '../_lib/adhocSession';
 import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
 import type {
   AvailableExercise,
@@ -641,16 +642,21 @@ export default function WorkoutPage() {
           .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
           .map(mapLoadedBlockRow);
 
-        // Stale-session auto-discard (P0-1): an ad-hoc session with no blocks
-        // (hence no sets) that started >4h ago is an abandoned empty shell —
-        // discard it (same delete handleCancelWorkout performs for ad-hoc
-        // sessions) instead of resuming into a phantom "Continue workout".
+        // Stale-session auto-discard (P0-1): an abandoned empty ad-hoc shell
+        // (0 blocks, 0 sets, in_progress, >4h old) is discarded instead of
+        // resuming into a phantom "Continue workout". Predicate is the pure
+        // isStaleEmptyAdhocSession (unit-tested); 0 blocks already implies 0
+        // sets, but both are passed explicitly to make the guard unmistakable.
         if (
-          transformedSession.state === 'in_progress' &&
-          !transformedSession.mesocycleId &&
-          (blocksData || []).length === 0 &&
-          transformedSession.startedAt &&
-          Date.now() - new Date(transformedSession.startedAt).getTime() > 4 * 60 * 60 * 1000
+          isStaleEmptyAdhocSession(
+            {
+              state: transformedSession.state,
+              mesocycleId: transformedSession.mesocycleId,
+              startedAt: transformedSession.startedAt,
+            },
+            (blocksData || []).length,
+            0 // no blocks -> no sets; querying sets separately would be redundant
+          )
         ) {
           await supabase.from('workout_sessions').delete().eq('id', sessionId);
           endWorkoutSession();
