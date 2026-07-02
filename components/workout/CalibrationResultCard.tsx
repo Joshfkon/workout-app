@@ -51,8 +51,8 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
 
   return (
     <Card
-      variant="bordered"
-      className={cn('border-2', colors.border, colors.bg)}
+      variant="elevated"
+      className={cn('border-2', colors.border)}
     >
       <CardHeader>
         <div className="flex items-center justify-between">
