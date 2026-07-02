@@ -4,6 +4,10 @@ import Link from 'next/link';
 import type { Icon as TablerIcon } from '@tabler/icons-react';
 import {
   IconUsers,
+  IconUser,
+  IconCompass,
+  IconTrophy,
+  IconCreditCard,
   IconSparkles,
   IconTemplate,
   IconBook,
@@ -20,13 +24,19 @@ interface MoreLink {
 }
 
 // Every route verified to exist under app/(dashboard)/dashboard/
+// P1-9: Profile, Discover, Leaderboards, and Plans were reachable only by
+// typing the URL — they now have a nav path.
 const moreLinks: MoreLink[] = [
+  { name: 'Profile', href: '/dashboard/profile', icon: IconUser },
   { name: 'Social Feed', href: '/dashboard/feed', icon: IconUsers },
+  { name: 'Discover Workouts', href: '/dashboard/discover', icon: IconCompass },
+  { name: 'Leaderboards', href: '/dashboard/leaderboards', icon: IconTrophy },
   { name: 'AI Coach', href: '/dashboard/ai-coach', icon: IconSparkles },
   { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
   { name: 'Learn', href: '/dashboard/learn', icon: IconBook },
   { name: 'Glossary', href: '/dashboard/glossary', icon: IconVocabulary },
   { name: 'Science', href: '/dashboard/science', icon: IconFlask },
+  { name: 'Plans & Billing', href: '/dashboard/pricing', icon: IconCreditCard },
   { name: 'Settings', href: '/dashboard/settings', icon: IconSettings },
 ];
 
