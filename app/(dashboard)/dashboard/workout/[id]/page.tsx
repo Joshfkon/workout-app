@@ -772,6 +772,10 @@ export default function WorkoutPage() {
                 .eq('workout_sessions.user_id', sessionData.user_id)
                 .eq('workout_sessions.state', 'completed')
                 .order('workout_sessions(completed_at)', { ascending: false })
+                // P1-2 (perf): suggestions only look at recent sessions —
+                // cap the rows instead of loading a full training history
+                // (~10 recent blocks per exercise is ample for E1RM/last-time).
+                .limit(Math.min(exerciseIds.length * 10, 120))
             : Promise.resolve({ data: null }),
         ]);
 

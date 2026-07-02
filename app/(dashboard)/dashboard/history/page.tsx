@@ -8,7 +8,14 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import nextDynamic from 'next/dynamic';
+
+// P1-2 (perf): keep recharts (~100KB) out of history's first-load — the chart
+// only renders inside the exercise-detail modal.
+const E1RMProgressChart = nextDynamic(() => import('./_components/E1RMProgressChart'), {
+  ssr: false,
+  loading: () => <div className="h-full flex items-center justify-center text-sm text-surface-500">Loading chart…</div>,
+});
 
 interface SetDetail {
   id: string;
@@ -69,6 +76,9 @@ function HistoryPageContent() {
 
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
@@ -445,11 +455,14 @@ function HistoryPageContent() {
     }
   };
 
-  useEffect(() => {
-    async function fetchHistory() {
+  // P1-2 (perf): history is paginated — PAGE_SIZE sessions per fetch instead
+  // of every session the user has ever logged. Older pages load on demand.
+  const PAGE_SIZE = 20;
+
+  const fetchHistoryPage = async (pageIndex: number) => {
       const supabase = createUntypedClient();
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (!user) {
         setIsLoading(false);
         return;
@@ -486,7 +499,8 @@ function HistoryPageContent() {
         `)
         .eq('user_id', user.id)
         .in('state', ['completed', 'in_progress'])
-        .order('completed_at', { ascending: false, nullsFirst: false });
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
 
       if (data) {
         const transformed: WorkoutHistory[] = data.map((workout: any) => {
@@ -530,14 +544,28 @@ function HistoryPageContent() {
             totalVolume,
           };
         });
-        setWorkouts(transformed);
+        setWorkouts(prev => (pageIndex === 0 ? transformed : [...prev, ...transformed]));
+        setHasMore(transformed.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
       }
 
       setIsLoading(false);
-    }
+      setIsLoadingMore(false);
+  };
 
-    fetchHistory();
+  useEffect(() => {
+    fetchHistoryPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleLoadMore = () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    setPage(nextPage);
+    void fetchHistoryPage(nextPage);
+  };
 
   // Auto-fetch exercise from query parameter (from analytics page)
   useEffect(() => {
@@ -660,54 +688,16 @@ function HistoryPageContent() {
                   </div>
                 </div>
 
-                {/* Progress chart */}
+                {/* Progress chart (recharts loads on demand — P1-2) */}
                 {chartData.length > 1 && (
                   <div className="bg-surface-800 rounded-lg p-4">
                     <h3 className="text-sm font-semibold text-surface-300 mb-4">Estimated 1RM Progress</h3>
                     <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis 
-                            dataKey="date" 
-                            stroke="#9CA3AF" 
-                            tick={{ fontSize: 11 }}
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis 
-                            stroke="#9CA3AF" 
-                            tick={{ fontSize: 11 }}
-                            domain={['auto', 'auto']}
-                            tickFormatter={(value) => `${value}`}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: '#1F2937',
-                              border: '1px solid #374151',
-                              borderRadius: '8px',
-                            }}
-                            labelStyle={{ color: '#9CA3AF' }}
-                            formatter={(value: number, name: string) => [
-                              `${value} ${unit}`,
-                              name === 'e1rm' ? 'Est. 1RM' : 'Best Weight'
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="e1rm"
-                            stroke="#8B5CF6"
-                            strokeWidth={2}
-                            dot={{ fill: '#8B5CF6', strokeWidth: 0, r: 4 }}
-                            activeDot={{ r: 6 }}
-                          />
-                          <ReferenceLine 
-                            y={Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))} 
-                            stroke="#22C55E" 
-                            strokeDasharray="5 5"
-                            label={{ value: 'PR', fill: '#22C55E', fontSize: 11 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <E1RMProgressChart
+                        chartData={chartData}
+                        unit={unit}
+                        prLine={Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))}
+                      />
                     </div>
                   </div>
                 )}
@@ -1136,6 +1126,18 @@ function HistoryPageContent() {
               </Card>
             );
           })}
+
+          {/* Older sessions load on demand (P1-2 pagination) */}
+          {hasMore && (
+            <Button
+              variant="ghost"
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              className="w-full min-h-[48px]"
+            >
+              {isLoadingMore ? 'Loading…' : 'Load older workouts'}
+            </Button>
+          )}
         </div>
       )}
 

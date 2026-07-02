@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -359,6 +359,10 @@ export default function AnalyticsPage() {
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  // Per-time-range result cache (P1-2) — lives for the page's lifetime.
+  const analyticsRangeCacheRef = useRef(
+    new Map<string, { analytics: AnalyticsData; plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> }>()
+  );
   const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
   const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
   const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
@@ -843,10 +847,19 @@ export default function AnalyticsPage() {
     fetchWellnessData();
   }, [userId, timeRange]);
 
-  // Fetch workout analytics data
+  // Fetch workout analytics data.
+  // P1-2 (perf): results are cached per time range for the page's lifetime —
+  // flipping 7d -> 30d -> 7d no longer refetches the whole nested query tree.
   useEffect(() => {
     async function fetchAnalytics() {
       try {
+        const cached = analyticsRangeCacheRef.current.get(timeRange);
+        if (cached) {
+          setAnalytics(cached.analytics);
+          setPlateauAlerts(cached.plateauAlerts);
+          return;
+        }
+
         const supabase = createUntypedClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -1125,7 +1138,7 @@ export default function AnalyticsPage() {
           }
         }
 
-        setAnalytics({
+        const analyticsResult = {
           totalWorkouts,
           totalSets,
           totalVolume,
@@ -1135,6 +1148,11 @@ export default function AnalyticsPage() {
           weeklyMuscleVolume,
           topExercises,
           currentStreak,
+        };
+        setAnalytics(analyticsResult);
+        analyticsRangeCacheRef.current.set(timeRange, {
+          analytics: analyticsResult,
+          plateauAlerts: detectedPlateauAlerts,
         });
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
