@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useRef } from 'react';
 import { Badge } from '@/components/ui/Badge';
 import type { FailureSafetyTier } from '@/services/exerciseSafety';
 import { getTierDisplayInfo } from '@/services/exerciseSafety';
@@ -35,31 +35,57 @@ export const SafetyTierBadge = memo(function SafetyTierBadge({
     red: 'danger' as const,
   }[info.color];
 
-  const handleMouseEnter = useCallback(() => {
-    if (showTooltip) setIsTooltipVisible(true);
-  }, [showTooltip]);
+  // Hover applies only to real mouse pointers; touch taps go through onClick.
+  // (A tap fires emulated hover events before click, so handling both for
+  // touch would show the tooltip and immediately toggle it back off.)
+  const isMouseHoveringRef = useRef(false);
 
-  const handleMouseLeave = useCallback(() => {
-    setIsTooltipVisible(false);
+  const handlePointerEnter = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.pointerType === 'mouse') {
+        isMouseHoveringRef.current = true;
+        if (showTooltip) setIsTooltipVisible(true);
+      }
+    },
+    [showTooltip]
+  );
+
+  const handlePointerLeave = useCallback((e: React.PointerEvent) => {
+    // Touch pointers "leave" on every finger lift (before the click event),
+    // so only mouse leave should dismiss — touch dismissal happens via click
+    if (e.pointerType === 'mouse') {
+      isMouseHoveringRef.current = false;
+      setIsTooltipVisible(false);
+    }
   }, []);
+
+  // Tap-to-toggle for touch devices, where hover alone can't dismiss the tooltip
+  const handleClick = useCallback(() => {
+    if (showTooltip && !isMouseHoveringRef.current) {
+      setIsTooltipVisible((v) => !v);
+    }
+  }, [showTooltip]);
 
   const label = variant === 'full' ? info.label : info.shortLabel;
 
   return (
     <div
       className={cn('relative inline-flex', className)}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      onClick={handleClick}
     >
       <Badge variant={badgeVariant} size="sm">
         {info.emoji} {label}
       </Badge>
 
-      {/* Tooltip */}
+      {/* Tooltip — opens downward: the badge sits at the top of cards whose
+          overflow-hidden edge and the sticky workout header (z-30) both clip
+          anything rendered above it */}
       {showTooltip && isTooltipVisible && (
         <div
           className={cn(
-            'absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2',
+            'absolute z-50 top-full left-1/2 -translate-x-1/2 mt-2',
             'w-64 p-3 rounded-lg',
             'bg-surface-800 border border-surface-700 shadow-lg',
             'text-xs text-surface-300',
@@ -72,10 +98,10 @@ export const SafetyTierBadge = memo(function SafetyTierBadge({
           {/* Arrow */}
           <div
             className={cn(
-              'absolute top-full left-1/2 -translate-x-1/2',
+              'absolute bottom-full left-1/2 -translate-x-1/2',
               'w-0 h-0',
-              'border-l-8 border-r-8 border-t-8',
-              'border-l-transparent border-r-transparent border-t-surface-800'
+              'border-l-8 border-r-8 border-b-8',
+              'border-l-transparent border-r-transparent border-b-surface-800'
             )}
           />
         </div>
