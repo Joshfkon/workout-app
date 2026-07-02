@@ -8,6 +8,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
+import HistoryCalendar from './_components/HistoryCalendar';
 import nextDynamic from 'next/dynamic';
 
 // P1-2 (perf): keep recharts (~100KB) out of history's first-load — the chart
@@ -45,6 +46,52 @@ interface WorkoutHistory {
   totalVolume: number;
 }
 
+/** Nested session rows -> WorkoutHistory cards (shared by list + calendar-day fetches). */
+function transformSessions(data: any[]): WorkoutHistory[] {
+  return data.map((workout: any) => {
+    const exercises: ExerciseDetail[] = (workout.exercise_blocks || [])
+      .sort((a: any, b: any) => a.order - b.order)
+      .filter((block: any) => block.exercises)
+      .map((block: any) => {
+        const workingSets = (block.set_logs || [])
+          .filter((set: any) => !set.is_warmup)
+          .sort((a: any, b: any) => a.set_number - b.set_number);
+
+        return {
+          id: block.id,
+          exerciseId: block.exercise_id,
+          name: block.exercises.name,
+          primaryMuscle: block.exercises.primary_muscle,
+          sets: workingSets.map((set: any) => ({
+            id: set.id,
+            weight_kg: set.weight_kg,
+            reps: set.reps,
+            rpe: set.rpe,
+          })),
+        };
+      });
+
+    const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+    const totalVolume = exercises.reduce(
+      (sum, ex) => sum + ex.sets.reduce((setSum, set) => setSum + set.weight_kg * set.reps, 0),
+      0
+    );
+
+    return {
+      id: workout.id,
+      planned_date: workout.planned_date,
+      completed_at: workout.completed_at,
+      state: workout.state,
+      session_rpe: workout.session_rpe,
+      session_notes: workout.session_notes,
+      pump_rating: workout.pump_rating,
+      exercises,
+      totalSets,
+      totalVolume,
+    };
+  });
+}
+
 interface ExerciseHistoryEntry {
   date: string;
   displayDate: string;
@@ -79,6 +126,78 @@ function HistoryPageContent() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Calendar view + filters (P1-6)
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calMonth, setCalMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [monthDots, setMonthDots] = useState<Set<string>>(new Set());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dayWorkouts, setDayWorkouts] = useState<WorkoutHistory[] | null>(null);
+  const [exerciseFilter, setExerciseFilter] = useState<string | null>(null);
+
+  // Dot markers: one lightweight query per visible month (completed_at only).
+  useEffect(() => {
+    if (viewMode !== 'calendar') return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const start = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+      const end = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select('completed_at')
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .gte('completed_at', start.toISOString())
+        .lt('completed_at', end.toISOString());
+      if (!cancelled) {
+        setMonthDots(
+          new Set(((data ?? []) as { completed_at: string }[]).map(r => getLocalDateString(new Date(r.completed_at))))
+        );
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewMode, calMonth]);
+
+  // Selecting a day fetches that day's sessions (they may be outside the
+  // paginated list) using the same nested select + transform as the list.
+  useEffect(() => {
+    if (!selectedDay) { setDayWorkouts(null); return; }
+    let cancelled = false;
+    (async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const dayStart = new Date(`${selectedDay}T00:00:00`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select(SESSION_SELECT)
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .gte('completed_at', dayStart.toISOString())
+        .lt('completed_at', dayEnd.toISOString())
+        .order('completed_at', { ascending: false });
+      if (!cancelled) setDayWorkouts(transformSessions(data ?? []));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDay]);
+
+  // What the cards section shows: day selection replaces the paginated list;
+  // the exercise chip filters either source client-side.
+  const baseWorkouts = selectedDay && viewMode === 'calendar' ? (dayWorkouts ?? []) : workouts;
+  const displayedWorkouts = exerciseFilter
+    ? baseWorkouts.filter(w => w.exercises.some(ex => ex.name === exerciseFilter))
+    : baseWorkouts;
+  const exerciseChips = Array.from(
+    new Set(workouts.flatMap(w => w.exercises.map(ex => ex.name)))
+  ).sort().slice(0, 12);
 
   // Inline past-set editing (P1-3)
   const [editingSetId, setEditingSetId] = useState<string | null>(null);
@@ -513,18 +632,8 @@ function HistoryPageContent() {
   // of every session the user has ever logged. Older pages load on demand.
   const PAGE_SIZE = 20;
 
-  const fetchHistoryPage = async (pageIndex: number) => {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
-
-      const { data } = await supabase
-        .from('workout_sessions')
-        .select(`
+  // Shared nested select for session cards (list pages + calendar day fetch)
+  const SESSION_SELECT = `
           id,
           planned_date,
           completed_at,
@@ -550,54 +659,27 @@ function HistoryPageContent() {
               is_warmup
             )
           )
-        `)
+        `;
+
+  const fetchHistoryPage = async (pageIndex: number) => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select(SESSION_SELECT)
         .eq('user_id', user.id)
         .in('state', ['completed', 'in_progress'])
         .order('completed_at', { ascending: false, nullsFirst: false })
         .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
 
       if (data) {
-        const transformed: WorkoutHistory[] = data.map((workout: any) => {
-          const exercises: ExerciseDetail[] = (workout.exercise_blocks || [])
-            .sort((a: any, b: any) => a.order - b.order)
-            .filter((block: any) => block.exercises)
-            .map((block: any) => {
-              const workingSets = (block.set_logs || [])
-                .filter((set: any) => !set.is_warmup)
-                .sort((a: any, b: any) => a.set_number - b.set_number);
-              
-              return {
-                id: block.id,
-                exerciseId: block.exercise_id,
-                name: block.exercises.name,
-                primaryMuscle: block.exercises.primary_muscle,
-                sets: workingSets.map((set: any) => ({
-                  id: set.id,
-                  weight_kg: set.weight_kg,
-                  reps: set.reps,
-                  rpe: set.rpe,
-                })),
-              };
-            });
-
-          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-          const totalVolume = exercises.reduce((sum, ex) => 
-            sum + ex.sets.reduce((setSum, set) => setSum + (set.weight_kg * set.reps), 0), 0
-          );
-
-          return {
-            id: workout.id,
-            planned_date: workout.planned_date,
-            completed_at: workout.completed_at,
-            state: workout.state,
-            session_rpe: workout.session_rpe,
-            session_notes: workout.session_notes,
-            pump_rating: workout.pump_rating,
-            exercises,
-            totalSets,
-            totalVolume,
-          };
-        });
+        const transformed = transformSessions(data);
         setWorkouts(prev => (pageIndex === 0 ? transformed : [...prev, ...transformed]));
         setHasMore(transformed.length === PAGE_SIZE);
       } else {
@@ -860,6 +942,66 @@ function HistoryPageContent() {
         )}
       </div>
 
+      {/* List / Calendar toggle (P1-6) — flat list stays the default */}
+      {workouts.length > 0 && (
+        <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl w-fit">
+          {(['list', 'calendar'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                if (mode === 'list') setSelectedDay(null);
+              }}
+              aria-pressed={viewMode === mode}
+              className={`px-5 min-h-[44px] rounded-lg text-sm font-medium capitalize transition-all ${
+                viewMode === mode
+                  ? 'bg-surface-700 text-surface-100 shadow-sm'
+                  : 'text-surface-400 hover:text-surface-200'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'calendar' && (
+        <HistoryCalendar
+          month={calMonth}
+          dotDates={monthDots}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          onMonthChange={setCalMonth}
+        />
+      )}
+
+      {/* Exercise filter chips (P1-6) */}
+      {workouts.length > 0 && exerciseChips.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {exerciseChips.map((name) => (
+            <button
+              key={name}
+              onClick={() => setExerciseFilter(exerciseFilter === name ? null : name)}
+              aria-pressed={exerciseFilter === name}
+              className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
+                exerciseFilter === name
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'calendar' && selectedDay && displayedWorkouts.length === 0 && (
+        <p className="text-sm text-surface-500 text-center py-4">
+          No {exerciseFilter ? `${exerciseFilter} ` : ''}workouts on{' '}
+          {new Date(`${selectedDay}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+        </p>
+      )}
+
       {workouts.length === 0 ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
@@ -877,7 +1019,7 @@ function HistoryPageContent() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {workouts.map((workout) => {
+          {displayedWorkouts.map((workout) => {
             const isExpanded = expandedWorkout === workout.id;
             
             const isSelected = selectedWorkouts.has(workout.id);
@@ -1236,8 +1378,9 @@ function HistoryPageContent() {
             );
           })}
 
-          {/* Older sessions load on demand (P1-2 pagination) */}
-          {hasMore && (
+          {/* Older sessions load on demand (P1-2 pagination) — hidden while a
+              calendar day or exercise filter narrows the list */}
+          {hasMore && viewMode === 'list' && !exerciseFilter && (
             <Button
               variant="ghost"
               onClick={handleLoadMore}
