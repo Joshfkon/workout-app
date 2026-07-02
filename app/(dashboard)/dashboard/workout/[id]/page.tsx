@@ -3483,8 +3483,10 @@ export default function WorkoutPage() {
     return 0;
   };
 
+  const restBarVisible = showRestTimer && !pendingDropset;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-8">
+    <div className={`max-w-2xl mx-auto space-y-6 ${restBarVisible ? 'pb-32' : 'pb-8'}`}>
       {/* Pause overlay - shown when workout is paused */}
       <PauseOverlay
         isPaused={workoutTimer.isPaused}
@@ -3991,20 +3993,7 @@ export default function WorkoutPage() {
                     }}
                   />
 
-                  {/* Rest timer - single slim bar below the active exercise */}
-                  {isCurrent && showRestTimer && !pendingDropset && (
-                    <RestTimer
-                      seconds={restTimer.seconds}
-                      initialSeconds={restTimer.initialSeconds}
-                      isRunning={restTimer.isRunning}
-                      isFinished={restTimer.isFinished}
-                      onAddTime={restTimer.addTime}
-                      onSkip={() => {
-                        restTimer.skip();
-                        setShowRestTimer(false);
-                      }}
-                    />
-                  )}
+                  {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
                   {amrapSuggestion && amrapSuggestion.blockId === block.id && (
@@ -4312,6 +4301,35 @@ export default function WorkoutPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Sticky rest timer (P0-5): fixed to the bottom so the countdown stays
+          visible while scrolling. Tap the bar to jump back to the current
+          exercise. The container gets pb-32 while this is shown. */}
+      {restBarVisible && (
+        <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto">
+          <RestTimer
+            seconds={restTimer.seconds}
+            initialSeconds={restTimer.initialSeconds}
+            isRunning={restTimer.isRunning}
+            isFinished={restTimer.isFinished}
+            onAddTime={restTimer.addTime}
+            onSkip={() => {
+              restTimer.skip();
+              setShowRestTimer(false);
+            }}
+            nextLabel={
+              currentBlock
+                ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
+                : undefined
+            }
+            onBarTap={() => {
+              document
+                .getElementById(`exercise-${currentBlockIndex}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          />
+        </div>
+      )}
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
