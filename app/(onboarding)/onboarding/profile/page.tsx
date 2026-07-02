@@ -199,7 +199,7 @@ function ProfileSetupContent() {
     if (shouldShowInOnboarding()) {
       router.push(`/onboarding/install?session=${sessionId}`);
     } else {
-      router.push('/dashboard');
+      router.push('/dashboard/log');
     }
   };
 
@@ -208,7 +208,7 @@ function ProfileSetupContent() {
     if (shouldShowInOnboarding()) {
       router.push(`/onboarding/install?session=${sessionId}`);
     } else {
-      router.push('/dashboard');
+      router.push('/dashboard/log');
     }
   };
 

@@ -44,6 +44,7 @@ import {
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import { toLegacyMuscleGroup } from '@/types/schema';
 import type {
   Experience,
   FullProgramRecommendation,
@@ -198,8 +199,9 @@ export function getWorkoutForDay(
  * - Bulking: full rest for maximum performance
  */
 export function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: MuscleGroup): number {
-  // Ab exercises need shorter rest periods (recover faster)
-  if (primaryMuscle === 'abs') {
+  // Ab exercises need shorter rest periods (recover faster); 'obliques'
+  // primaries (Pallof press, Russian twist) count as ab work too.
+  if (primaryMuscle && toLegacyMuscleGroup(primaryMuscle) === 'abs') {
     return goal === 'cut' ? 30 : 45;
   }
 

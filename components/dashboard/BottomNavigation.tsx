@@ -30,9 +30,9 @@ const navItems: NavItem[] = [
   },
   {
     name: 'Train',
-    href: '/dashboard/workout',
+    href: '/dashboard/log',
     icon: IconBarbell,
-    matchPaths: ['/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
+    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
   },
   {
     name: 'Eat',

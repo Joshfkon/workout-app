@@ -11,19 +11,19 @@ function InstallContent() {
   const sessionId = searchParams.get('session');
   const { pwaContext, shouldShowInOnboarding, isLoading } = usePWA();
 
-  // Redirect to dashboard if already installed or shouldn't show
+  // Redirect to the log landing page if already installed or shouldn't show
   useEffect(() => {
     if (!isLoading && !shouldShowInOnboarding()) {
-      router.push('/dashboard');
+      router.push('/dashboard/log');
     }
   }, [isLoading, shouldShowInOnboarding, router]);
 
   const handleComplete = () => {
-    router.push('/dashboard');
+    router.push('/dashboard/log');
   };
 
   const handleSkip = () => {
-    router.push('/dashboard');
+    router.push('/dashboard/log');
   };
 
   if (isLoading) {

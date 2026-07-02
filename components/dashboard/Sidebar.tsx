@@ -23,12 +23,19 @@ interface SidebarNavItem {
   name: string;
   href: string;
   icon: TablerIcon;
+  /** Additional paths that should highlight this item (mirrors the bottom nav). */
+  matchPaths?: string[];
 }
 
 // Primary destinations — mirror the bottom nav
 const primaryNavigation: SidebarNavItem[] = [
   { name: 'Home', href: '/dashboard', icon: IconHome },
-  { name: 'Train', href: '/dashboard/workout', icon: IconBarbell },
+  {
+    name: 'Train',
+    href: '/dashboard/log',
+    icon: IconBarbell,
+    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
+  },
   { name: 'Eat', href: '/dashboard/nutrition', icon: IconSalad },
   { name: 'Progress', href: '/dashboard/analytics', icon: IconChartLine },
 ];
@@ -53,7 +60,9 @@ export function Sidebar({ onSignOut }: SidebarProps) {
     // For Home (/dashboard), only match exactly to avoid highlighting when on subpages
     const isActive = item.href === '/dashboard'
       ? pathname === '/dashboard'
-      : pathname === item.href || pathname.startsWith(item.href + '/');
+      : (item.matchPaths || [item.href]).some(
+          (path) => pathname === path || pathname.startsWith(path + '/')
+        );
     const Icon = item.icon;
 
     return (

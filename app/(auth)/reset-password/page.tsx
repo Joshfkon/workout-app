@@ -136,7 +136,7 @@ export default function ResetPasswordPage() {
         setSuccess(true);
         // Redirect to dashboard after 2 seconds
         setTimeout(() => {
-          router.push('/dashboard');
+          router.push('/dashboard/log');
         }, 2000);
       }
     } catch (err) {

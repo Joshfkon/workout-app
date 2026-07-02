@@ -4242,6 +4242,7 @@ export default function WorkoutPage() {
           stapleExerciseIds={stapleExerciseIds}
           frequentExerciseIds={frequentExerciseIds}
           lastDoneExercises={lastDoneExercises}
+          planMuscles={blocks.map((b) => b.exercise.primaryMuscle)}
           selectedExercisesToAdd={selectedExercisesToAdd}
           onToggleExerciseSelection={toggleExerciseSelection}
           isAddingExercise={isAddingExercise}
