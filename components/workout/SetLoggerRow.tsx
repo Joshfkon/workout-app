@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
+import { IconBarbell, IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
 import { DiscomfortLogger } from './DiscomfortLogger';
@@ -58,6 +58,12 @@ interface SetLoggerRowProps {
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
   }) => void;
+  /**
+   * Opens the plate calculator pre-filled with the current weight (P1-5).
+   * The calculator has existed since the audit — this is its first
+   * discoverable trigger at the point of use.
+   */
+  onPlateCalculatorOpen?: () => void;
 }
 
 /** Clamp a prescribed RIR to the 0-3 chip range. */
@@ -99,6 +105,7 @@ export function SetLoggerRow({
   weightMode = 'bodyweight',
   userBodyweightKg,
   onLog,
+  onPlateCalculatorOpen,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
@@ -274,11 +281,30 @@ export function SetLoggerRow({
       role="group"
       aria-label={`Set ${setNumber} logger`}
     >
+      {/* Row 0: set label + plate calculator affordance (P1-5, mockup 02) */}
+      {onPlateCalculatorOpen && (
+        <div className="flex items-center justify-between -mb-1">
+          <span className="text-[11px] text-surface-500">Set {setNumber}</span>
+          <button
+            type="button"
+            onClick={onPlateCalculatorOpen}
+            disabled={disabled}
+            aria-label="Open plate calculator"
+            className="min-h-[44px] -my-2.5 px-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+          >
+            <IconBarbell size={14} aria-hidden="true" />
+            Plates
+          </button>
+        </div>
+      )}
+
       {/* Row 1: set number, weight stepper, reps stepper */}
       <div className="flex items-center gap-1.5">
-        <span className="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center">
-          {setNumber}
-        </span>
+        {!onPlateCalculatorOpen && (
+          <span className="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center">
+            {setNumber}
+          </span>
+        )}
 
         {/* Weight */}
         {isPlainBodyweight ? (

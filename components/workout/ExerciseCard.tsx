@@ -1818,6 +1818,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
+                onPlateCalculatorOpen={
+                  onPlateCalculatorOpen && !isBodyweightExercise
+                    ? () => {
+                        const w = parseFloat(usesBwLoad ? bwLoadInput : input.weight);
+                        onPlateCalculatorOpen(
+                          !isNaN(w) && w > 0 ? inputWeightToKg(w, unit) : undefined
+                        );
+                      }
+                    : undefined
+                }
               />
             </div>
           );
