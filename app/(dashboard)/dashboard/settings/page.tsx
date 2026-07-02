@@ -391,14 +391,15 @@ export default function SettingsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
+            className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-2 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-md text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.id
                 ? 'bg-primary-500 text-white shadow-lg'
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700/50'
             }`}
           >
             {tab.icon}
-            <span className="hidden sm:inline">{tab.label}</span>
+            {/* P1-7: labels always visible on mobile too */}
+            <span className="text-[10px] leading-tight sm:text-sm">{tab.label}</span>
           </button>
         ))}
       </div>

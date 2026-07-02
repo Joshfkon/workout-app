@@ -1227,14 +1227,15 @@ export default function AnalyticsPage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-surface-700 text-surface-100 shadow-sm'
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
             }`}
           >
-            <span>{tab.icon}</span>
-            <span className="hidden sm:inline">{tab.label}</span>
+            <span aria-hidden="true">{tab.icon}</span>
+            {/* P1-7: labels always visible — icon-only tabs hid five sections' worth of features */}
+            <span className="text-[10px] leading-tight sm:text-sm text-center">{tab.label}</span>
           </button>
         ))}
       </div>
