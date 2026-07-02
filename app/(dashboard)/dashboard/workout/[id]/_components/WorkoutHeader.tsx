@@ -89,7 +89,8 @@ export function WorkoutHeader({
     'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left';
 
   return (
-    <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
+    // z-30: must sit above ExerciseCard's sticky header (z-10) and its menus (z-20) so the overflow menu isn't clipped
+    <div className="sticky top-0 z-30 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
       <div className="flex items-center gap-3">
         {/* Left: name + elapsed / position meta */}
         <div className="flex-1 min-w-0">

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, Input, Select, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -222,6 +223,9 @@ function NewWorkoutContent() {
   const [gymLocations, setGymLocations] = useState<Array<{ id: string; name: string; is_default: boolean }>>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [isLoadingLocations, setIsLoadingLocations] = useState(true);
+  const [isAddingLocation, setIsAddingLocation] = useState(false);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [isSavingLocation, setIsSavingLocation] = useState(false);
   
   // Custom exercise modal state
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
@@ -1061,6 +1065,38 @@ function NewWorkoutContent() {
     loadGymLocations();
   }, []);
 
+  const handleAddLocation = async () => {
+    const name = newLocationName.trim();
+    if (!name || isSavingLocation) return;
+
+    setIsSavingLocation(true);
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const realLocations = gymLocations.filter((l) => l.id !== 'fallback');
+      const { data: created, error } = await supabase
+        .from('gym_locations')
+        .insert({
+          user_id: user.id,
+          name,
+          is_default: realLocations.length === 0,
+        })
+        .select()
+        .single();
+
+      if (!error && created) {
+        setGymLocations([...realLocations, created]);
+        setSelectedLocationId(created.id);
+        setNewLocationName('');
+        setIsAddingLocation(false);
+      }
+    } finally {
+      setIsSavingLocation(false);
+    }
+  };
+
   // Load variety preferences on mount
   useEffect(() => {
     const loadVarietyPrefs = async () => {
@@ -1596,9 +1632,56 @@ function NewWorkoutContent() {
                         )}
                       </button>
                     ))}
+                    {!isAddingLocation && (
+                      <button
+                        onClick={() => setIsAddingLocation(true)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium border border-dashed border-surface-600 text-surface-400 hover:border-surface-500 hover:text-surface-200 transition-colors"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </div>
+                  {isAddingLocation && (
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newLocationName}
+                        onChange={(e) => setNewLocationName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddLocation();
+                          if (e.key === 'Escape') {
+                            setIsAddingLocation(false);
+                            setNewLocationName('');
+                          }
+                        }}
+                        placeholder="Location name (e.g. Hotel Gym)"
+                        autoFocus
+                        className="flex-1 px-3 py-2 rounded-lg bg-surface-800 border border-surface-600 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:border-primary-500"
+                      />
+                      <button
+                        onClick={handleAddLocation}
+                        disabled={!newLocationName.trim() || isSavingLocation}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isSavingLocation ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsAddingLocation(false);
+                          setNewLocationName('');
+                        }}
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-surface-800 text-surface-300 hover:bg-surface-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                   <p className="text-xs text-surface-500 mt-2">
-                    Exercises will be filtered based on equipment available at this location
+                    Exercises will be filtered based on equipment available at this location.
+                    Set up equipment for each location in{' '}
+                    <Link href="/dashboard/settings" className="text-primary-400 hover:underline">
+                      Settings
+                    </Link>
                   </p>
                 </div>
               )}
