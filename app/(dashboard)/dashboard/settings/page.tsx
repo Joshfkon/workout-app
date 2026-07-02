@@ -16,6 +16,7 @@ import { usePWA } from '@/hooks/usePWA';
 import { TIER_FEATURES } from '@/lib/stripe';
 import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { deleteAccount } from '@/lib/actions/account';
+import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
@@ -80,6 +81,8 @@ export default function SettingsPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [goal, setGoal] = useState<Goal>('maintenance');
+  // Last persisted goal — phase sync (macro settings + targets) runs only when it changes
+  const [savedGoal, setSavedGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
   // Store values in user's display units, convert on load/save
   const [heightDisplay, setHeightDisplay] = useState('');
@@ -156,6 +159,7 @@ export default function SettingsPage() {
 
         if (data) {
           setGoal(data.goal || 'maintenance');
+          setSavedGoal(data.goal || 'maintenance');
           setExperience(data.experience || 'intermediate');
           
           // Get unit preference first
@@ -315,7 +319,24 @@ export default function SettingsPage() {
 
       if (error) throw error;
 
-      setSaveMessage({ type: 'success', text: 'Settings saved successfully!' });
+      // Goal changed: sync the nutrition side (macro_settings.goal + targets)
+      // through the unified phase action. The upsert above already wrote
+      // users.goal, so the action's own profile write is a same-value no-op.
+      let successText = 'Settings saved successfully!';
+      if (goal !== savedGoal) {
+        const phase: TrainingPhase = goal === 'recomp' ? 'maintenance' : goal;
+        const phaseResult = await updateTrainingPhase(phase);
+        if (phaseResult.success) {
+          setSavedGoal(goal);
+          if (phaseResult.newTargets) {
+            successText = `Settings saved! Macro targets updated to match your new goal (${phaseResult.newTargets.calories} cal).`;
+          }
+        } else {
+          successText = 'Settings saved, but nutrition targets could not be synced to the new goal.';
+        }
+      }
+
+      setSaveMessage({ type: 'success', text: successText });
     } catch (err) {
       setSaveMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to save settings' });
     } finally {

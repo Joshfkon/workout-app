@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 interface GlanceHeaderProps {
   /** Time-based greeting ("Good morning" etc.), computed client-side by the caller. */
   greeting: string;
@@ -9,6 +11,8 @@ interface GlanceHeaderProps {
   weekContext?: string | null;
   /** Readiness score (0-100) from today's check-in; pill hidden when null. */
   readinessScore?: number | null;
+  /** Phase chip (bulk/cut/maintain selector), rendered left of the readiness pill. */
+  phaseChip?: ReactNode;
 }
 
 function readinessPillClasses(score: number): string {
@@ -23,7 +27,7 @@ function readinessPillClasses(score: number): string {
  * The caller gates rendering on its client-only clock (to avoid SSR hydration
  * mismatch) and passes the derived strings down.
  */
-export function GlanceHeader({ greeting, todayLabel, weekContext, readinessScore }: GlanceHeaderProps) {
+export function GlanceHeader({ greeting, todayLabel, weekContext, readinessScore, phaseChip }: GlanceHeaderProps) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
@@ -33,11 +37,14 @@ export function GlanceHeader({ greeting, todayLabel, weekContext, readinessScore
           {weekContext ? ` · ${weekContext}` : ''}
         </p>
       </div>
-      {typeof readinessScore === 'number' && (
-        <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${readinessPillClasses(readinessScore)}`}>
-          Readiness {readinessScore}
-        </span>
-      )}
+      <div className="flex items-center gap-2">
+        {phaseChip}
+        {typeof readinessScore === 'number' && (
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium whitespace-nowrap ${readinessPillClasses(readinessScore)}`}>
+            Readiness {readinessScore}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

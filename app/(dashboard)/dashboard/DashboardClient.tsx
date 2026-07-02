@@ -20,8 +20,9 @@ import {
   fetchDeloadRecommendation,
   type DeloadRecommendation,
 } from '@/lib/training/deloadRecommendation';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector } from '@/components/dashboard/home';
 import type { TodaysWorkout, GlanceVolumeSummary } from '@/components/dashboard/home';
+import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
 const CardSkeleton = () => (
@@ -666,7 +667,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
   // Helper function to update the dashboard cache after data mutations
   // This prevents stale data from being shown on page reload
-  const updateDashboardCache = useCallback((updates: Partial<Pick<DashboardCacheData, 'nutritionTotals' | 'todaysWeight'>>) => {
+  const updateDashboardCache = useCallback((updates: Partial<Pick<DashboardCacheData, 'nutritionTotals' | 'todaysWeight' | 'userGoal' | 'nutritionTargets'>>) => {
     try {
       const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
       if (cached) {
@@ -731,6 +732,24 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     if (userGoal === 'recomp') return 'maintenance'; // Recomp treated as maintenance for atrophy risk
     return userGoal as 'bulk' | 'cut' | 'maintenance';
   }, [userGoal]);
+
+  // Current phase for the header chip — same normalization (legacy 'maintain'/'recomp'
+  // values collapse to 'maintenance', matching the users.goal DB enum).
+  const currentPhase: TrainingPhase = normalizedGoal;
+
+  // Phase chip save handler: the PhaseSelector already persisted the change via
+  // the unified server action (users.goal + macro_settings.goal + targets);
+  // here we just sync local state and the dashboard cache.
+  const handlePhaseChanged = (phase: TrainingPhase, newTargets?: UpdatePhaseResult['newTargets']) => {
+    setUserGoal(phase);
+    // Merge over previous targets to preserve cardio_prescription
+    const mergedTargets = newTargets ? { ...(nutritionTargets ?? {}), ...newTargets } : null;
+    if (mergedTargets) setNutritionTargets(mergedTargets);
+    updateDashboardCache({
+      userGoal: phase,
+      ...(mergedTargets ? { nutritionTargets: mergedTargets } : {}),
+    });
+  };
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -1412,6 +1431,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           todayLabel={todayLabel}
           weekContext={weekContext}
           readinessScore={checkInStatus === 'done' ? checkInReadiness : null}
+          phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} />}
         />
       )}
 

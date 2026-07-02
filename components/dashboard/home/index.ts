@@ -5,3 +5,4 @@ export { MetricTile } from './MetricTile';
 export { MetricTileGrid } from './MetricTileGrid';
 export type { GlanceNutritionTotals, GlanceVolumeSummary, GlanceWeightTrend } from './MetricTileGrid';
 export { QuickLogRow } from './QuickLogRow';
+export { PhaseSelector } from './PhaseSelector';
