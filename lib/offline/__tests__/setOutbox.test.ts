@@ -194,6 +194,95 @@ describe('setOutbox', () => {
     });
   });
 
+  describe('exactly-once effect under ugly failures', () => {
+    /**
+     * Stateful fake Supabase: actually "commits" rows into a Set (honoring
+     * ON CONFLICT DO NOTHING semantics) and can drop the RESPONSE after the
+     * commit — the lost-ack case a 200-based scheme cannot survive.
+     */
+    function makeStatefulServer() {
+      const committed = new Set<string>();
+      let dropNextResponses = 0;
+      const client: OutboxSupabase = {
+        from: () => ({
+          upsert: (row: Record<string, unknown>) => {
+            // Server-side apply happens FIRST (the commit)…
+            committed.add(row.id as string);
+            // …then the response may be lost on the wire.
+            if (dropNextResponses > 0) {
+              dropNextResponses -= 1;
+              return Promise.resolve({ error: { message: 'TypeError: Failed to fetch' } });
+            }
+            return Promise.resolve({ error: null });
+          },
+        }),
+      };
+      return { client, committed, dropResponses: (n: number) => { dropNextResponses = n; } };
+    }
+
+    it('server commits but client never sees the 200 -> retry -> exactly one row', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      const server = makeStatefulServer();
+
+      server.dropResponses(1); // commit lands, ack lost
+      const first = await flushSetOutbox(server.client);
+      expect(first.flushedIds).toEqual([]); // client rightly thinks it failed
+      expect(await outboxCount()).toBe(1); // entry retained for retry
+      expect(server.committed.size).toBe(1); // …but the row IS on the server
+
+      const second = await flushSetOutbox(server.client); // reconnect retry
+      expect(second.flushedIds).toEqual(['a']);
+      expect(await outboxCount()).toBe(0);
+      expect(server.committed.size).toBe(1); // still exactly one row
+    });
+
+    it('app killed mid-flush (commit landed, queue delete never ran) -> reopen -> flush -> no dupes', async () => {
+      // Simulate the post-kill state directly: the process died between the
+      // server committing 'a' and the client deleting 'a' from the queue.
+      // IndexedDB persisted the queue, so on reopen BOTH entries are present
+      // while 'a' already exists server-side.
+      const server = makeStatefulServer();
+      server.committed.add('a'); // landed before the kill
+      await enqueueSetInsert('a', { id: 'a', reps: 8 }); // still queued (delete never ran)
+      await enqueueSetInsert('b', { id: 'b', reps: 9 }); // never attempted
+
+      const result = await flushSetOutbox(server.client);
+
+      expect(result.flushedIds).toEqual(['a', 'b']);
+      expect(await outboxCount()).toBe(0);
+      expect(server.committed.size).toBe(2); // a (once), b — no duplicate a
+    });
+
+    it('two tabs flushing the same persisted queue -> exactly one row per entry', async () => {
+      // Two tabs are two module instances: the in-flight mutex does NOT span
+      // them. They share IndexedDB (here: the same driver) and the same
+      // server. Load a second copy of the module and race the flushes.
+      const sharedDriver = memoryDriver();
+      __setDriverForTests(sharedDriver);
+      await enqueueSetInsert('a', { id: 'a', reps: 8 });
+      await enqueueSetInsert('b', { id: 'b', reps: 9 });
+
+      let tabB!: typeof import('../setOutbox');
+      jest.isolateModules(() => {
+        tabB = require('../setOutbox'); // second module instance = second tab
+      });
+      tabB.__setDriverForTests(sharedDriver);
+
+      const server = makeStatefulServer();
+      const [r1, r2] = await Promise.all([
+        flushSetOutbox(server.client), // tab A
+        tabB.flushSetOutbox(server.client), // tab B — separate mutex
+      ]);
+
+      expect(server.committed.size).toBe(2); // one row per entry, ever
+      expect(await outboxCount()).toBe(0);
+      // Between the two tabs every entry was flushed at least once
+      const allFlushed = new Set([...r1.flushedIds, ...r2.flushedIds]);
+      expect(allFlushed).toEqual(new Set(['a', 'b']));
+      tabB.__setDriverForTests(null);
+    });
+  });
+
   describe('isNetworkError', () => {
     it.each([
       ['Failed to fetch', true],
