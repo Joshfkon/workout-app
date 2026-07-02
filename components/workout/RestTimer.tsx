@@ -38,19 +38,25 @@ export function RestTimer({
     initialSeconds > 0 ? Math.min(1, Math.max(0, (initialSeconds - seconds) / initialSeconds)) : 0;
 
   const buttonClass =
-    'px-2.5 py-1 rounded-md text-xs font-medium bg-surface-800 text-surface-300 hover:bg-surface-700 hover:text-surface-100 transition-colors';
+    'px-3 py-1.5 rounded-lg text-sm font-semibold bg-surface-800 text-surface-200 hover:bg-surface-700 hover:text-surface-100 transition-colors';
 
   return (
-    <div className="flex items-center gap-3 bg-surface-900 border border-surface-800 rounded-xl px-3.5 py-2.5">
+    <div
+      className={`flex items-center gap-3 rounded-xl px-4 py-3 border-2 ${
+        isFinished
+          ? 'bg-success-500/10 border-success-500'
+          : 'bg-primary-500/10 border-primary-500/60'
+      }`}
+    >
       <IconClock
-        size={18}
-        stroke={2}
+        size={22}
+        stroke={2.25}
         className={isFinished ? 'text-success-400' : 'text-primary-400'}
         aria-hidden="true"
       />
-      {/* 4px progress bar - elapsed fraction */}
+      {/* Progress bar - elapsed fraction */}
       <div
-        className="flex-1 h-1 rounded-full bg-surface-800 overflow-hidden"
+        className="flex-1 h-2 rounded-full bg-surface-800 overflow-hidden"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -65,8 +71,8 @@ export function RestTimer({
         />
       </div>
       <span
-        className={`text-[15px] font-medium tabular-nums ${
-          isFinished ? 'text-success-400' : 'text-surface-100'
+        className={`text-2xl font-bold tabular-nums ${
+          isFinished ? 'text-success-400' : 'text-primary-400'
         }`}
       >
         {isFinished ? 'Done' : formatDuration(seconds)}
