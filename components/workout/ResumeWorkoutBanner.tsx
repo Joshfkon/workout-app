@@ -69,6 +69,9 @@ export function ResumeWorkoutBanner() {
 
   return (
     <>
+      {/* In-flow spacer so page content can scroll clear of the fixed banner */}
+      <div className="h-24" aria-hidden="true" />
+
       {/* Resume Workout Banner */}
       <div className="fixed bottom-20 left-0 right-0 z-50 px-4 lg:left-64 lg:bottom-4">
         <div className="max-w-2xl mx-auto">
