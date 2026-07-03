@@ -184,17 +184,17 @@ and closed; two flagged items executed; merge-prep run complete.
   branch is a pure fast-forward, no conflicts.
 - **Review guide:** fixes/REVIEW.md (riskiest-first walkthrough).
 
-### Open for you (also in REVIEW.md)
+### Round 2 (same day, after your blanket go-ahead)
 
-1. `npx supabase db push` for the archive migration (or say no and it keeps
-   hard-deleting).
-2. LCP < 2.5s on /dashboard + /dashboard/log: pick bundle-split vs
-   static-card-hoist vs defer.
-3. Merge go-ahead (fast-forward).
-4. Housekeeping note: `.env.local` has `SUPABASE_SERVICE_ROLE_KEY==eyJ…` (a
-   doubled `=`) — any server code reading it via `process.env` gets a value
-   with a leading `=` and will fail auth. Left untouched; worth checking
-   which env file production actually uses.
+| Item | Commit | Result |
+|---|---|---|
+| Archive migration | `4866612` | **Pushed + E2E-verified.** Only pending migration, zero drift. Stale open → row `auto_discarded` (not deleted) → invisible everywhere → archived-URL revisit redirects → test row removed, orphan check clean. |
+| /dashboard + /dashboard/log LCP | `d631071` | **Under 2.5s under real throttling.** Corrected diagnosis: LCP card streamed as a hidden Suspense segment revealed by the body's LAST inline $RC script, which queues behind chunk execution (no-JS load: `<main>` empty). Removed page Suspense + route loading.tsx (fetch → TTFB, card in visible first flush) and the fast-path client volume re-fetch that replaced the SSR'd card post-hydration. Bundle-split lever retracted — 725KB is react-dom/@supabase/Next runtime; page code is 43KB. **Real devtools throttle: /dashboard 1.7–2.2s (observed LCP == FCP), /log 2.1–2.2s.** Lantern-simulated stays ~4.7s by construction (folds fast-localhost JS into the LCP graph) — both methods in final-lighthouse.md. |
+
+Open items: AMRAP-cancel orphan bug (spun off as a background task);
+`.env.local` `SUPABASE_SERVICE_ROLE_KEY==eyJ…` doubled `=` (server code
+reading `process.env` gets a broken key — check what production uses);
+merge via the open PR.
 
 ### Environment notes from this session (local machine, not app bugs)
 

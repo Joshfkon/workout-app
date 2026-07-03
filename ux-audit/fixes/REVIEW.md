@@ -1,10 +1,10 @@
 # ux-audit-fixes — review guide
 
-31 commits, 92 files, +5038/−747. Branch is a **fast-forward from main**
-(merge-base == main HEAD, origin/main unchanged, zero conflicts). Every
-functional commit has evidence under `ux-audit/fixes/<id>/`, verified the way
-the audit measured (Playwright DOM at 390×844, Lighthouse mobile-throttled
-production builds, DB probes, unit tests).
+35 commits. Branch is a **fast-forward from main** (merge-base == main HEAD,
+origin/main unchanged, zero conflicts). Every functional commit has evidence
+under `ux-audit/fixes/<id>/`, verified the way the audit measured (Playwright
+DOM at 390×844, Lighthouse mobile-throttled production builds, DB probes,
+unit tests).
 
 Review order below is **riskiest first**, not chronological. Doc-only commits
 (`docs:` prefixed — d9778f8, 98e5ff0, 7ec71c1, 72bc216, 58e8670) carry no code
@@ -39,17 +39,18 @@ corrected history E1RM. Migration `20260703000001_set_logs_edited_at` is
 `RecalcTargetsBanner`. **Evidence:** `fixes/P1-3/` incl.
 POST-MIGRATION-VERIFY.md (100kg typo → banner → recalc → 68kg).
 
-### 3. `d4dae16` — P0-1 archive instead of delete (NEW, migration NOT pushed)
+### 3. `d4dae16` + `4866612` — P0-1 archive instead of delete (migration APPLIED)
 Auto-discard of stale empty ad-hoc sessions now soft-deletes to
 `state='auto_discarded'` so support can recover; falls back to the old hard
 DELETE **only** on the two pre-migration error codes (22P02 enum missing /
-42703 column missing), so the app is correct whether or not
-`20260703000002_session_auto_discard.sql` has been applied. All session lists
-use positive state allowlists → archived rows invisible everywhere. Revisiting
-an archived session's URL redirects like a deleted one.
-**Tests:** 5 new in `adhocSession.test.ts` (archive, both fallback codes,
-no-delete on unrelated errors, fallback failure). **Awaiting your
-`npx supabase db push` go-ahead.**
+42703 column missing). All session lists use positive state allowlists →
+archived rows invisible everywhere. Revisiting an archived session's URL
+redirects like a deleted one.
+**Tests:** 5 new in `adhocSession.test.ts`. **Migration
+`20260703000002_session_auto_discard` was pushed July 3 (only pending one,
+zero drift) and the archive path E2E-verified** — stale open → row archived
+not deleted → invisible everywhere → revisit redirects
+(`fixes/P0-1/archive-proposal.md` top section, `ux-audit/archive-e2e.mjs`).
 
 ## Tier 2 — core-flow behavior
 
@@ -104,29 +105,47 @@ was removing the unmount `dismiss()` that killed the countdown on navigation
   reproducible (3× Lighthouse: CLS 0, zero LayoutShift events — see
   `fixes/mesocycle-cls/EVIDENCE.md`).
 - `9a41edc` — perf item 6: dashboard weekly-volume server-rendered into
-  initialData; LCP diagnosis (93% Render Delay = bundle hydration, not data).
+  initialData; original LCP diagnosis (superseded — see the corrected
+  section below and `d631071`).
+- `d631071` — dashboard LCP fix (Suspense/loading.tsx removal + redundant
+  volume re-fetch removal). **Review note:** removing the route-level
+  loading.tsx also means child routes without their own loading.tsx
+  (history, mesocycle, settings, log) keep the previous screen during
+  client-side navigation instead of showing a skeleton — App Router default,
+  deliberate trade documented in the page comment.
 
-## Perf item 6 / PERF item 5 status (flagged, not silently dropped)
+## Perf item 6 / PERF item 5 — RESOLVED (`d631071`); diagnosis corrected
 
-Server-render-first-paint was executed for `/dashboard` and `/dashboard/log`;
-**neither is under 2.5s LCP** because the LCP text sits inside the
-hydration-gated 650KB client tree — three independent fetch-side changes
-moved LCP 0ms (trace in `fixes/perf-item6.md`). Getting under 2.5s requires
-bundle-splitting `DashboardClient` or hoisting a static LCP card above the
-Suspense boundary — both structural, both scoped in that doc, awaiting your
-pick. Fresh Lighthouse artifacts: `fixes/final-lighthouse.md` +
-`lh-results/`.
+The original item-6 conclusion ("bundle-hydration-bound, needs a
+bundle-split") was **wrong in the mechanism and the remedy** — the addendum
+in `fixes/perf-item6.md` documents the correction:
+
+- The LCP card streamed as a **hidden Suspense segment** revealed by the
+  body's last inline `$RC` script, which queues behind async-chunk execution
+  under CPU throttle (a no-JS load showed `<main>` empty).
+- Fix: removed the page's Suspense boundary + route `loading.tsx`; the
+  ~450ms data fetch moved into TTFB and the card ships as visible
+  first-flush HTML. Also removed the fast-path client re-fetch of weekly
+  volume that replaced the SSR'd card after hydration.
+- Bundle-split had **no headroom anyway**: the 725KB is react-dom 169 +
+  @supabase-js 222 + Next runtime 122 + shared UI; page code is 43KB and
+  modals were already dynamic.
+- **Measured (real devtools throttle, remote Supabase): /dashboard
+  1.7–2.2s (observed LCP == FCP), /dashboard/log 2.1–2.2s — both under the
+  2.5s target.** Lantern-simulated numbers stay ~4.7s by construction (it
+  folds all fast-localhost JS into the LCP graph); both methods are in
+  `fixes/final-lighthouse.md`, raw lhr in
+  `lh-results/dashboard-devtools.json` / `log-devtools.json`.
 
 ## Open items for you
 
-1. **`npx supabase db push`** for `20260703000002_session_auto_discard.sql`
-   (archive behavior activates; hard-delete fallback until then).
-2. Perf: pick bundle-split vs static-card-hoist (or defer) for the two
-   sub-2.5s routes.
-3. Pre-existing flagged bug (out of scope): cancelling an AMRAP workout
-   orphans `amrap_calibrations` rows (FK ON DELETE SET NULL) —
+1. Pre-existing flagged bug (spun off as a background task): cancelling an
+   AMRAP workout orphans `amrap_calibrations` rows (FK ON DELETE SET NULL) —
    `fixes/P0-1/archive-proposal.md` bottom section.
-4. Merge: branch is fast-forward; no rebase needed. Say the word.
+2. `.env.local` has `SUPABASE_SERVICE_ROLE_KEY==eyJ…` (doubled `=`) — code
+   reading it via `process.env` gets a broken key; check what production
+   uses.
+3. Merge: branch is fast-forward; PR is open with this document as the body.
 
 ## Final verification numbers
 
