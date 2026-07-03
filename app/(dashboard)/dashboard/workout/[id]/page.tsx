@@ -91,6 +91,7 @@ import {
 } from './_lib/muscleFeedbackWrites';
 import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
 import { isStaleEmptyAdhocSession } from '../_lib/adhocSession';
+import { computeSupersetAdvance } from './_lib/supersetFlow';
 import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
 import type {
   AvailableExercise,
@@ -1767,6 +1768,34 @@ export default function WorkoutPage() {
         } else {
           // Final drop complete - NOW start rest timer
           setPendingDropset(null);
+          setShowRestTimer(true);
+          setRestTimerDuration(null);
+          restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+        }
+      } else if (currentBlock.supersetGroupId) {
+        // Superset flow (pairs, manual, rest-after-last) — decision in the pure
+        // computeSupersetAdvance so the round-robin is unit-tested. completedByBlock
+        // must include the just-logged set for the current block.
+        setPendingDropset(null);
+        const completedByBlock: Record<string, number> = {};
+        for (const s of completedSets) {
+          if (s.isWarmup || s.setType === 'warmup') continue;
+          completedByBlock[s.exerciseBlockId] = (completedByBlock[s.exerciseBlockId] ?? 0) + 1;
+        }
+        completedByBlock[currentBlock.id] = (completedByBlock[currentBlock.id] ?? 0) + 1; // include this set
+        const step = computeSupersetAdvance(blocks, currentBlockIndex, completedByBlock);
+        if (step) {
+          setShowRestTimer(step.startRest);
+          if (step.startRest) {
+            setRestTimerDuration(null);
+            restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+          }
+          if (step.nextIndex !== currentBlockIndex) {
+            setCurrentBlockIndex(step.nextIndex);
+            setCurrentSetNumber(step.nextSetNumber);
+          }
+        } else {
+          // Degenerate group -> normal rest.
           setShowRestTimer(true);
           setRestTimerDuration(null);
           restTimer.start(currentBlock?.targetRestSeconds ?? 180);
