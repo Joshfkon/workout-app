@@ -1611,7 +1611,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           const completedWeight = set.bodyweightData
             ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
             : displayWeight(set.weightKg, true);
-          const rirValue = rpeToRir(set.rpe);
+          const rirValue = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
 
           return (
             <React.Fragment key={set.id}>

@@ -38,12 +38,12 @@ const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => 
 const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
-import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot } from '@/types/schema';
+import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank } from '@/types/schema';
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, rirToRpe } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -495,6 +495,7 @@ export default function WorkoutPage() {
   
   // Cancel workout modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   // Dropset chain state - tracks pending drops after a main set
@@ -2090,8 +2091,9 @@ export default function WorkoutPage() {
           ? 'Some form breakdown'
           : 'Form breakdown';
 
-    // Convert RIR to RPE
-    const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
+    // Convert RIR to RPE (rirToRpe handles all RepsInTank values incl. 3 → 7;
+    // an inline ternary here previously collapsed RIR 3 to RPE 10)
+    const rpe = rirToRpe(feedback.repsInTank);
 
     // Queued-but-unsynced set (P0-2): patch the outbox row instead of the DB.
     const patchedQueued = await updateQueuedSet(setId, {
@@ -2141,7 +2143,16 @@ export default function WorkoutPage() {
     // Use provided bodyweightData if available, otherwise preserve existing
     const existingSet = completedSets.find(s => s.id === setId);
     const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
-    
+
+    // Keep feedback's RIR consistent with the edited RPE — the completed-set
+    // display prefers feedback.repsInTank over the RPE-derived value.
+    const updatedFeedback: SetFeedback | undefined = existingSet?.feedback
+      ? {
+          ...existingSet.feedback,
+          repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
+        }
+      : undefined;
+
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set =>
       set.id === setId
@@ -2152,6 +2163,7 @@ export default function WorkoutPage() {
             rpe: data.rpe,
             quality,
             bodyweightData: updatedBodyweightData,
+            feedback: updatedFeedback ?? set.feedback,
           }
         : set
     ));
@@ -2164,6 +2176,7 @@ export default function WorkoutPage() {
         rpe: data.rpe,
         quality,
         bodyweightData: updatedBodyweightData,
+        ...(updatedFeedback ? { feedback: updatedFeedback } : {}),
       });
     }
 
@@ -2180,6 +2193,10 @@ export default function WorkoutPage() {
       // Update bodyweight_data if provided or if it exists
       if (updatedBodyweightData) {
         updateData.bodyweight_data = updatedBodyweightData;
+      }
+
+      if (updatedFeedback) {
+        updateData.feedback = JSON.stringify(updatedFeedback);
       }
 
       if (await updateQueuedSet(setId, updateData)) {
@@ -3409,7 +3426,14 @@ export default function WorkoutPage() {
     }
   };
 
+  // Finishing is easy to hit by accident (header + bottom bar) and the
+  // summary screen has no way back, so always confirm first.
   const handleWorkoutComplete = () => {
+    setShowFinishConfirm(true);
+  };
+
+  const confirmFinishWorkout = () => {
+    setShowFinishConfirm(false);
     setPhase('summary');
   };
 
@@ -3775,6 +3799,18 @@ export default function WorkoutPage() {
             onConfirm={handleCancelWorkout}
           />
         )}
+
+        {/* Finish confirmation — same early-return branch caveat as above */}
+        <ConfirmModal
+          isOpen={showFinishConfirm}
+          onClose={() => setShowFinishConfirm(false)}
+          onConfirm={confirmFinishWorkout}
+          title="Finish Workout?"
+          message="No sets have been logged yet. Finish anyway?"
+          confirmText="Finish"
+          cancelText="Keep Training"
+          variant="warning"
+        />
       </div>
     );
   }
@@ -5198,6 +5234,22 @@ export default function WorkoutPage() {
           onConfirm={handleCancelWorkout}
         />
       )}
+
+      {/* Finish Workout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showFinishConfirm}
+        onClose={() => setShowFinishConfirm(false)}
+        onConfirm={confirmFinishWorkout}
+        title="Finish Workout?"
+        message={
+          totalCompletedSets < totalPlannedSets
+            ? `You've logged ${totalCompletedSets} of ${totalPlannedSets} sets. Remaining sets won't be logged.`
+            : `All ${totalPlannedSets} sets logged. Wrap up and rate your session.`
+        }
+        confirmText="Finish"
+        cancelText="Keep Training"
+        variant={totalCompletedSets < totalPlannedSets ? 'warning' : 'default'}
+      />
       
       {/* Exercise Details Modal */}
       <ExerciseDetailsModal
