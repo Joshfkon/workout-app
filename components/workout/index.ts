@@ -23,6 +23,7 @@ export { PlateCalculatorModal } from './PlateCalculatorModal';
 
 // Resume Banner
 export { ResumeWorkoutBanner } from './ResumeWorkoutBanner';
+export { RecalcTargetsBanner } from './RecalcTargetsBanner';
 
 // Pause Overlay
 export { PauseOverlay } from './PauseOverlay';

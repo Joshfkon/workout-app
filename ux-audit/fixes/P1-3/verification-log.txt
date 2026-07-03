@@ -1,0 +1,7 @@
+Created throwaway completed session a8652c8e-dd34-4e08-80a5-bb0cded1bc39
+Set before edit: {"id":"25acfedb-d2e6-47e8-b49f-63f0759578ab","weight_kg":65.77,"reps":8}
+Edit affordance on past set: PASS
+Set after edit: {"id":"25acfedb-d2e6-47e8-b49f-63f0759578ab","weight_kg":62.37,"reps":9}
+DB updated (weight 137.5 lb -> ~62.37 kg, reps 9): PASS
+UI reflects edited value: PASS
+Cleanup: session rows left: 0 (expect 0)

@@ -92,6 +92,13 @@ import {
 import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
 import { isStaleEmptyAdhocSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
+import {
+  findStaleTargetBlocks,
+  computeRecalcChanges,
+  type PlannedTargetBlock,
+  type RecalcChange,
+} from '../_lib/staleTargets';
+import { RecalcTargetsBanner } from '@/components/workout';
 import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
 import type {
   AvailableExercise,
@@ -419,6 +426,14 @@ export default function WorkoutPage() {
   const [showCoachMessage, setShowCoachMessage] = useState(true);
   const [coachMessage, setCoachMessage] = useState<ReturnType<typeof generateCoachMessage> | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
+
+  // P1-3 recalc banner (detection A). Dormant until the set_logs.edited_at
+  // migration is applied — the detection query returns nothing without it.
+  const [staleTargetChanges, setStaleTargetChanges] = useState<RecalcChange[]>([]);
+  const [staleTargetCount, setStaleTargetCount] = useState(0);
+  const [recalcDismissed, setRecalcDismissed] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
   const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
   const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
   const [aiCoachNotesEnabled, setAiCoachNotesEnabled] = useState(false);
@@ -553,6 +568,104 @@ export default function WorkoutPage() {
   useEffect(() => {
     if (restTimer.isRunning) setShowRestTimer(true);
   }, [restTimer.isRunning]);
+
+  // P1-3 recalc detection (detection A). Runs once per session load when the
+  // workout hasn't been logged into yet, on planned (target-bearing) blocks.
+  // Fully defensive: if set_logs.edited_at doesn't exist (migration not
+  // applied), the query errors, we swallow it, and the banner stays hidden.
+  useEffect(() => {
+    if (phase !== 'workout' || blocks.length === 0 || completedSets.length > 0) return;
+    const targetBlocks = blocks.filter((b) => b.targetWeightKg > 0 && b.exercise);
+    if (targetBlocks.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const exerciseIds = Array.from(new Set(targetBlocks.map((b) => b.exerciseId)));
+        // Latest edited_at per exercise across the user's completed-session sets.
+        const { data, error } = await supabase
+          .from('set_logs')
+          .select('edited_at, exercise_blocks!inner(exercise_id, workout_sessions!inner(user_id, state))')
+          .not('edited_at', 'is', null)
+          .in('exercise_blocks.exercise_id', exerciseIds)
+          .eq('exercise_blocks.workout_sessions.state', 'completed');
+        if (error || !data || cancelled) return; // column missing / no edits -> dormant
+        const latestByExercise: Record<string, string | null> = {};
+        for (const row of data as any[]) {
+          const exId = row.exercise_blocks?.exercise_id;
+          const ea = row.edited_at as string | null;
+          if (!exId || !ea) continue;
+          if (!latestByExercise[exId] || ea > (latestByExercise[exId] as string)) latestByExercise[exId] = ea;
+        }
+        const plannedInfos: PlannedTargetBlock[] = targetBlocks.map((b) => ({
+          id: b.id,
+          exerciseId: b.exerciseId,
+          exerciseName: b.exercise.name,
+          createdAt: (b as any).createdAt ?? new Date(0).toISOString(),
+          targetWeightKg: b.targetWeightKg,
+        }));
+        const stale = findStaleTargetBlocks(plannedInfos, latestByExercise);
+        if (stale.length === 0 || cancelled) return;
+        const changes = userProfile
+          ? computeRecalcChanges(stale, (blk) => estimateBlockTargetKg(blk))
+          : [];
+        if (cancelled) return;
+        setStaleTargetCount(stale.length);
+        setStaleTargetChanges(changes);
+      } catch {
+        // dormant on any failure
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, blocks, userProfile]);
+
+  // Re-run quickWeightEstimate for a stale block against the corrected history.
+  const estimateBlockTargetKg = (blk: PlannedTargetBlock): number => {
+    const block = blocks.find((b) => b.id === blk.id);
+    if (!block || !userProfile?.weightKg || !userProfile?.heightCm) return 0;
+    const rec = quickWeightEstimate(
+      block.exercise.name,
+      { min: block.targetRepRange[0], max: block.targetRepRange[1] },
+      block.targetRir,
+      userProfile.weightKg,
+      userProfile.heightCm,
+      userProfile.bodyFatPercent,
+      userProfile.experience,
+      userProfile.regionalData,
+      preferences.units,
+      undefined
+    );
+    if (!rec || rec.confidence === 'find_working_weight' || !rec.recommendedWeight) return 0;
+    return inputWeightToKg(rec.recommendedWeight, preferences.units);
+  };
+
+  // Apply the recalc (mitigation a: all targets are engine output -> all stale
+  // blocks eligible; the banner's confirm dialog already listed the changes).
+  const applyRecalc = async () => {
+    if (staleTargetChanges.length === 0) return;
+    setIsRecalculating(true);
+    try {
+      const supabase = createUntypedClient();
+      for (const change of staleTargetChanges) {
+        await supabase.from('exercise_blocks').update({ target_weight_kg: change.newKg }).eq('id', change.blockId);
+      }
+      setBlocks((prev) =>
+        prev.map((b) => {
+          const c = staleTargetChanges.find((x) => x.blockId === b.id);
+          return c ? { ...b, targetWeightKg: c.newKg } : b;
+        })
+      );
+      setStaleTargetCount(0);
+      setStaleTargetChanges([]);
+      showSuccess(`Updated ${staleTargetChanges.length} target${staleTargetChanges.length !== 1 ? 's' : ''}`);
+    } catch (err) {
+      console.error('Recalc failed:', err);
+      showError('Could not update targets — please try again');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
 
   // Track workout progress for navigation protection (using ref to avoid re-running effect)
   const hasWorkoutProgressRef = useRef(false);
@@ -2047,7 +2160,7 @@ export default function WorkoutPage() {
       }
 
       const { error: updateError } = await supabase.from('set_logs').update(updateData).eq('id', setId);
-      
+
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
@@ -2055,6 +2168,16 @@ export default function WorkoutPage() {
         // For now, just show error; user can refresh if needed
       } else {
         setError(null);
+        // P1-3 detection A: stamp edited_at (best-effort, dormant until the
+        // set_logs.edited_at migration is applied). Separate update so a
+        // missing column can't break in-session editing.
+        await supabase
+          .from('set_logs')
+          .update({ edited_at: new Date().toISOString() })
+          .eq('id', setId)
+          .then(({ error: stampErr }: { error: unknown }) => {
+            if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
+          });
       }
     } catch (err) {
       console.error('Failed to update set:', err);
@@ -3714,6 +3837,19 @@ export default function WorkoutPage() {
             {outboxSize > 0 && ` ${outboxSize} set${outboxSize !== 1 ? 's' : ''} queued.`}
           </span>
         </div>
+      )}
+
+      {/* Recalc banner (P1-3): planned targets derived from since-edited
+          history. Dormant until the set_logs.edited_at migration is applied. */}
+      {!recalcDismissed && staleTargetCount > 0 && (
+        <RecalcTargetsBanner
+          staleCount={staleTargetCount}
+          changes={staleTargetChanges}
+          unit={preferences.units}
+          isApplying={isRecalculating}
+          onApply={applyRecalc}
+          onDismiss={() => setRecalcDismissed(true)}
+        />
       )}
 
       {/* Pause overlay - shown when workout is paused */}

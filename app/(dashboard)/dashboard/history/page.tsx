@@ -229,6 +229,18 @@ function HistoryPageContent() {
         return;
       }
 
+      // P1-3 detection A: stamp edited_at (best-effort). Separate from the
+      // essential update above so editing never breaks — dormant until the
+      // set_logs.edited_at migration is applied; an unknown-column error just
+      // returns { error } which we ignore.
+      await supabase
+        .from('set_logs')
+        .update({ edited_at: new Date().toISOString() })
+        .eq('id', setId)
+        .then(({ error: stampErr }: { error: unknown }) => {
+          if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
+        });
+
       // Update local card state + recompute the workout's volume total.
       // (E1RM, PRs, weekly volume, and future suggestions all derive from
       // set_logs at read time — no stored aggregates to fix up.)
