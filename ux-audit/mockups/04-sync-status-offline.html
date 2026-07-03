@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup 04 — Save Status & Offline Queue</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .setline { display: flex; align-items: center; gap: 10px; padding: 12px 4px; border-bottom: 1px solid var(--surface-800); font-size: 15px; }
+  .status { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+  .st-saved { color: var(--success-400); }
+  .st-saving { color: var(--surface-400); }
+  .st-queued { color: var(--warning-400); }
+  .spin { width: 12px; height: 12px; border: 2px solid var(--surface-600); border-top-color: var(--surface-300); border-radius: 50%; animation: r 0.9s linear infinite; display: inline-block; }
+  @keyframes r { to { transform: rotate(360deg) } }
+  .offline-banner { display: flex; align-items: center; gap: 10px; background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.45); border-radius: 12px; padding: 10px 14px; font-size: 13px; color: var(--warning-400); }
+  .toast { position: absolute; left: 16px; right: 16px; bottom: 84px; background: var(--surface-900); border: 1px solid var(--surface-700); border-radius: 12px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.6); }
+</style>
+</head>
+<body>
+<div style="padding:24px 32px 0">
+  <h1 style="font-size:20px">04 · Did my set save? — visible write status + offline queue</h1>
+  <p class="mock-note" style="max-width:880px;margin-top:8px">
+    Sets are written to Supabase one-by-one, but there is <em>zero</em> save/sync feedback — and the service
+    worker is network-only for API calls, so in a basement gym the write silently fails with a toast error at
+    best. Hevy and Strong both queue offline writes. Proposed: per-set status glyphs (saving → saved → queued),
+    an offline banner, and an IndexedDB outbox the SW flushes on reconnect. Undo lives in the same toast
+    pattern nutrition already uses.
+  </p>
+</div>
+<div class="mock-wrap">
+  <div class="mock-col">
+    <span class="mock-label good">Online — quiet confirmation per set</span>
+    <div class="phone" style="min-height:auto;padding:16px">
+      <div class="card" style="padding:14px">
+        <div style="font-weight:700">Barbell Bench Press</div>
+        <div class="setline"><span style="color:var(--success-400)">✓</span> Set 1 · 145 lbs × 8 <span class="status st-saved">✓ saved</span></div>
+        <div class="setline"><span style="color:var(--success-400)">✓</span> Set 2 · 145 lbs × 7 <span class="status st-saving"><span class="spin"></span> saving…</span></div>
+        <div class="setline" style="border-bottom:none;color:var(--surface-500)">Set 3 · target 6–10</div>
+      </div>
+      <div class="toast">
+        <span style="color:var(--success-400)">✓</span> Set 2 logged
+        <button class="btn-ghost" style="margin-left:auto;padding:6px 14px;min-height:36px;color:var(--primary-400)">Undo</button>
+      </div>
+    </div>
+  </div>
+  <div class="mock-col">
+    <span class="mock-label good">Offline — honest state, nothing lost</span>
+    <div class="phone" style="min-height:auto;padding:16px;display:flex;flex-direction:column;gap:12px">
+      <div class="offline-banner">
+        <span>⚠</span> You're offline — sets are saved on this phone and will sync automatically.
+      </div>
+      <div class="card" style="padding:14px">
+        <div style="font-weight:700">Barbell Bench Press</div>
+        <div class="setline"><span style="color:var(--success-400)">✓</span> Set 1 · 145 lbs × 8 <span class="status st-saved">✓ saved</span></div>
+        <div class="setline"><span style="color:var(--success-400)">✓</span> Set 2 · 145 lbs × 7 <span class="status st-queued">⏸ queued</span></div>
+        <div class="setline" style="border-bottom:none"><span style="color:var(--success-400)">✓</span> Set 3 · 150 lbs × 6 <span class="status st-queued">⏸ queued</span></div>
+      </div>
+      <div class="card" style="padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:13px">
+        <span class="muted">Outbox</span>
+        <b>2 sets</b>
+        <span class="muted" style="margin-left:auto">flushes on reconnect</span>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="mock-note" style="margin:0 32px 32px">
+  Implementation sketch: wrap the set-log Supabase insert in an outbox (IndexedDB) with a background-sync
+  retry; status field per local set record drives the glyph. The banner reuses the warning palette already
+  used by "Insufficient Volume".
+</p>
+</body>
+</html>

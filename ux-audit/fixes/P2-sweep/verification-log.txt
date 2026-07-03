@@ -1,0 +1,6 @@
+P2-4 login dev copy removed: PASS
+P2-3 friendly auth error: PASS
+P2-5 landing CTAs (Get Started->register, Log In->login): PASS
+P2-2 no "HyperTracker" on science page: PASS
+P2-1 picker shows "Lateral Delts" not "Lateral_delts": FAIL (raw:1 fmt:1)
+P2-9 desktop brand appears once: count=2P2-1 recheck: raw=0 formatted=2 PASS (chip + row + subtitle all humanized)

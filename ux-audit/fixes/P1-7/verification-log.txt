@@ -1,0 +1,4 @@
+analytics tab label "Goals" visible at 390px: PASS
+analytics tab label "Strength" visible at 390px: PASS
+analytics tab label "Wellness" visible at 390px: PASS
+settings labeled tabs visible: 3 PASS

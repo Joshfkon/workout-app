@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HyperTrack UX Audit — Mockups</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .idx { max-width: 720px; margin: 48px auto; padding: 0 24px; }
+  .idx a { display: block; text-decoration: none; color: inherit; margin-top: 14px; }
+  .idx .card { padding: 18px 20px; transition: border-color .15s; }
+  .idx .card:hover { border-color: var(--primary-500); }
+  .sev { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; margin-right: 10px; }
+  .p0 { background: rgba(239,68,68,.15); color: var(--danger-400); }
+  .p1 { background: rgba(234,179,8,.15); color: var(--warning-400); }
+</style>
+</head>
+<body>
+<div class="idx">
+  <h1 style="font-size:24px">HyperTrack UX Audit — Mockups</h1>
+  <p class="muted" style="margin-top:6px">Five highest-impact fixes, side-by-side with current screenshots. See ../REPORT.md for full findings.</p>
+  <a href="01-rest-timer.html"><div class="card"><span class="sev p0">P0-5</span><b>Sticky rest timer</b><div class="muted" style="font-size:13px;margin-top:4px">Countdown invisible after logging a set → fixed bottom bar with mm:ss and 44px controls</div></div></a>
+  <a href="02-set-logger-ergonomics.html"><div class="card"><span class="sev p0">P0-4</span><b>Set logger tap targets + plate calculator</b><div class="muted" style="font-size:13px;margin-top:4px">26px RIR chips → 56px labeled controls; wire the already-built plate calculator</div></div></a>
+  <a href="03-workout-navigation.html"><div class="card"><span class="sev p0">P0-3</span><b>Escape the workout trap</b><div class="muted" style="font-size:13px;margin-top:4px">No back button, hidden nav → minimize + persistent Resume pill</div></div></a>
+  <a href="04-sync-status-offline.html"><div class="card"><span class="sev p0">P0-2</span><b>Save status + offline queue</b><div class="muted" style="font-size:13px;margin-top:4px">Silent write failures → per-set status glyphs, offline banner, IndexedDB outbox</div></div></a>
+  <a href="05-history-edit.html"><div class="card"><span class="sev p1">P1-3</span><b>Editable workout history</b><div class="muted" style="font-size:13px;margin-top:4px">Completed sessions frozen → inline set editing with recalculation</div></div></a>
+</div>
+</body>
+</html>

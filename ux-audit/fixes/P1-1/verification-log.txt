@@ -1,0 +1,8 @@
+/dashboard/history hydration errors: 0 PASS (other console errors: 0)
+/dashboard/mesocycle hydration errors: 0 PASS (other console errors: 0)
+/dashboard/templates hydration errors: 0 PASS (other console errors: 0)
+/dashboard/exercises hydration errors: 0 PASS (other console errors: 0)
+/dashboard/settings hydration errors: 0 PASS (other console errors: 0)
+/dashboard/body-composition hydration errors: 0 PASS (other console errors: 4)
+/dashboard/coaching hydration errors: 0 PASS (other console errors: 4)
+/dashboard/analytics hydration errors: 0 PASS (other console errors: 4)

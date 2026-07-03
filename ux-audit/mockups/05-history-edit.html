@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup 05 — Editable Workout History</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .set-row { display: grid; grid-template-columns: 34px 1fr 1fr 64px 44px; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--surface-800); font-size: 15px; }
+  .set-row .n { color: var(--surface-500); font-size: 13px; }
+  .cell { background: var(--surface-800); border-radius: 10px; min-height: 44px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); }
+  .cell.editing { outline: 2px solid var(--primary-500); }
+  .pencil { width: 44px; height: 44px; background: none; border: none; color: var(--surface-500); font-size: 16px; cursor: pointer; }
+  .chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--surface-800); color: var(--surface-300); }
+</style>
+</head>
+<body>
+<div style="padding:24px 32px 0">
+  <h1 style="font-size:20px">05 · Past workouts: read-only → tap-to-fix</h1>
+  <p class="mock-note" style="max-width:860px;margin-top:8px">
+    Once a session is completed it becomes immutable — the only affordance is "Restart Workout".
+    Typo'd 415 instead of 145 on your last set? It permanently poisons E1RM, PRs, volume, and the
+    auto-progression suggestions built on them. Strong and Hevy both allow retroactive edits.
+    Proposed: history detail gets inline editable weight/reps cells with an audit-friendly
+    "edited" marker; deletes get the same undo-toast nutrition already has.
+  </p>
+</div>
+<div class="mock-wrap">
+  <div class="mock-col">
+    <span class="mock-label bad">Current — completed = frozen (Restart only)</span>
+    <img class="current-shot" src="../screenshots/flow-history-01-list.png" alt="Current history card with Restart only">
+  </div>
+  <div class="mock-col">
+    <span class="mock-label good">Proposed — inline set editing in history detail</span>
+    <div class="phone" style="min-height:auto;padding:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <button class="btn-ghost" style="width:44px;height:44px;font-size:18px">‹</button>
+        <div>
+          <div style="font-weight:700;font-size:17px">Thursday, July 2</div>
+          <div class="muted" style="font-size:12px">Upper B · 9 exercises · 22 sets · 31,897 lbs</div>
+        </div>
+      </div>
+      <div class="card" style="padding:14px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-weight:700">Barbell Bench Press</div>
+          <span class="chip">Chest</span>
+          <span class="chip" style="margin-left:auto">E1RM 182 lbs</span>
+        </div>
+        <div class="set-row" style="margin-top:8px;color:var(--surface-500);font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:none">
+          <span></span><span style="text-align:center">weight</span><span style="text-align:center">reps</span><span style="text-align:center">rir</span><span></span>
+        </div>
+        <div class="set-row">
+          <span class="n">1</span>
+          <div class="cell">145</div><div class="cell">8</div><div class="cell">2</div>
+          <button class="pencil">✎</button>
+        </div>
+        <div class="set-row">
+          <span class="n">2</span>
+          <div class="cell editing">415</div><div class="cell">7</div><div class="cell">2</div>
+          <button class="pencil" style="color:var(--primary-400)">✔</button>
+        </div>
+        <div class="set-row" style="border-bottom:none">
+          <span class="n">3</span>
+          <div class="cell">145</div><div class="cell">6</div><div class="cell">1</div>
+          <button class="pencil">✎</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:8px">Set 2 edited · recalculates E1RM, PRs &amp; weekly volume on save</div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn-ghost" style="flex:1;min-height:48px">Restart workout</button>
+        <button class="btn-primary" style="flex:1;min-height:48px">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

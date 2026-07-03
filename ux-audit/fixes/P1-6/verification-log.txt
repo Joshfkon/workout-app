@@ -1,0 +1,7 @@
+Calendar toggle visible: PASS
+Month grid renders (July 2026): PASS
+Days with workout dots this month: 1 PASS
+Day selection shows that day's workout card(s): 1 PASS
+Exercise filter chips visible: PASS
+Chip "Arnold Press" toggled (aria-pressed): true
+Back to list view, cards render: PASS

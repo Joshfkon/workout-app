@@ -1,0 +1,18 @@
+A) ad-hoc sessions before visit: 1
+A) ad-hoc sessions after visit: 1
+A) PASS — GET created no session
+B) ad-hoc sessions after Start tap: 1 (expected 1)
+B) session URL: /dashboard/workout/c3c6874c-bd20-48d5-a642-0761f7018e1e?fromCreate=true
+B) ad-hoc sessions after in-app discard: 1
+C) inserted synthetic stale session 1a6a8f65-1c75-4d45-943e-c415c089facc (started 5h ago)
+C) landed on: /dashboard/log
+C) PASS — stale session auto-discarded and redirected
+B-redo) in-app discard of c3c6874c-bd20-48d5-a642-0761f7018e1e: PASS (row deleted)
+
+FINAL RESULT (2026-07-02)
+A) PASS — visiting /dashboard/workout/quick creates no session row (count unchanged, confirm screen shown: A-confirm-screen.png)
+B) PASS — session created only on explicit Start tap (count 0->1); in-app "Cancel Workout" discard deletes the row (B2-B4 screenshots).
+   NOTE: discovered+fixed a latent bug during verification — the empty-workout branch rendered the Cancel button but not the
+   confirmation modal, so Cancel Workout was a no-op on empty workouts. Modal extracted to CancelWorkoutModal, rendered in both branches.
+C) PASS — synthetic ad-hoc session with 0 blocks/0 sets started 5h ago auto-discards on open and redirects to /dashboard/log; row deleted.
+Tests: npm test exit 0. tsc --noEmit clean. next lint: pre-existing warnings only.
