@@ -1,0 +1,18 @@
+=== Set-logger controls (390px viewport, production build) ===
+RIR chip 3 (easy)      57x52  PASS
+RIR chip 2 (good)      57x52  PASS
+RIR chip 1 (hard)      57x52  PASS
+RIR chip 0 (maxed)     57x52  PASS
+Weight - stepper       44x52  PASS
+Weight + stepper       44x52  PASS
+Reps - stepper         44x52  PASS
+Reps + stepper         44x52  PASS
+Log set                310x52  PASS
+Set feedback           52x52  PASS
+Finish (header)        69x44  PASS
+Overflow ⋮ (header)    44x44  PASS
+Taps to log with accepted suggestion: 1 (rows 0 -> 1) PASS
+=== Rest timer controls ===
++15s (timer)           61x44  PASS
+Skip (timer)           59x44  PASS
+Cleanup: session discarded in-app (now at http://localhost:3001/dashboard)

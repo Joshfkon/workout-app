@@ -142,3 +142,75 @@ path). **P1-3 verified end-to-end:** real history edit stamps edited_at → bann
 appears on a stale planned session → confirm lists old→new → recalc rewrites the
 target 100 → 68kg (~150lb, history-based). No migrations left pending; test data
 cleaned.
+
+---
+
+## Merge-prep session (July 3, second session — fresh context, evidence-audited)
+
+Orientation re-verified every prior claim from artifacts before proceeding.
+Outbox idempotency and comparator Profiler evidence held up. Two gaps found
+and closed; two flagged items executed; merge-prep run complete.
+
+| Item | Commit | Evidence | Result |
+|---|---|---|---|
+| Orphaned working-tree diff (error.tsx ChunkLoadError recovery + sw.js v3→v4) — left uncommitted, unmentioned by the prior session | `a866c93` | fixes/chunk-recovery/ | **Adopted.** Logic extracted to `lib/utils/staleDeployRecovery.ts` (jsdom can't mock `location.reload`; behavior identical), 17 new tests: 4 detection patterns + 3 non-matches, cache-clear→reload, 60s reload-loop guard both sides, Cache-API-missing/rejecting. |
+| Item-6 Lighthouse evidence gap (all lh-results predated the item-6 commit) | — | fixes/final-lighthouse.md + lh-results/ (July 3) | **Closed.** Fresh full-suite run on the final build; diagnosis unchanged (Render-Delay-bound). |
+| P0-1 archive (delete → soft-delete) | `d4dae16` | fixes/P0-1/archive-proposal.md (updated) | **Built + STOPPED at push.** `discardStaleSession` archives to `state='auto_discarded'`; hard-delete fallback on the 2 pre-migration error codes so the app is safe either way; archived-URL revisit redirects. 5 tests. **Migration `20260703000002_session_auto_discard.sql` written, NOT pushed — your call.** |
+| Home "0 exercises · 0/0 sets" (note 4) | `c869338` | 4 unit tests; flow screenshot in fixes/final-regression-2/ | **Fixed.** Block-less planned session shows the scheduled split-day name (same source as the no-session card); explanatory fallback copy when none. |
+| Mesocycle CLS 0.417 (note 3) | `68d4c2c` | fixes/mesocycle-cls/EVIDENCE.md | **Not reproducible** (3× runs: CLS 0, zero LayoutShift trace events, same account state) — honest read: original was timing-dependent, nothing to bisect. **Skeleton loading state applied anyway** as a structural guard; post-change CLS 0 (2 diag runs + full suite), Lighthouse score 57 → 79. |
+
+### Final verification (July 3, production build)
+
+- **Tests:** 1841 green (+27 this session), `tsc --noEmit` clean, lint: no
+  errors (pre-existing complexity warnings only). One flake observed only
+  while Jest ran concurrently with Lighthouse (CPU contention); passed twice
+  cleanly after.
+- **Flow regression** (fixes/final-regression-2/verification-log.txt):
+  quick-confirm no-auto-create ✓ · 1-tap logging ✓ · undo toast ✓ · sticky
+  fixed timer ✓ · saved glyph ✓ · resume pill on nutrition ✓ · nutrition
+  quick-add surface ✓ · resume restores set ✓ · reload keeps set ✓ · in-app
+  discard ✓ · Home hero shows no "0 exercises · 0/0 sets" ✓.
+- **Tap targets** (fixes/final-regression-2/tap-target-table.txt): all 16
+  controls re-measured on the final production build — identical to the P0-4
+  table (RIR 57×52, steppers 44×52, Log set 310×52, timer 61/59×44, Finish
+  69×44, ⋮ 44×44). **Taps-to-log with accepted suggestion: 1.**
+- **Lighthouse:** fixes/final-lighthouse.md (mesocycle 57→79/CLS 0;
+  settings + nutrition improved; dashboard/log unchanged per the item-6
+  diagnosis).
+- **Test data:** created and discarded exclusively through the app UI;
+  orphan check (read-only, service role) after each round: sessions in
+  window 0 · ad-hoc today 0 · set_logs in window 0 · detached amrap 0.
+- **Rebase check:** origin/main unchanged; merge-base == main HEAD — the
+  branch is a pure fast-forward, no conflicts.
+- **Review guide:** fixes/REVIEW.md (riskiest-first walkthrough).
+
+### Open for you (also in REVIEW.md)
+
+1. `npx supabase db push` for the archive migration (or say no and it keeps
+   hard-deleting).
+2. LCP < 2.5s on /dashboard + /dashboard/log: pick bundle-split vs
+   static-card-hoist vs defer.
+3. Merge go-ahead (fast-forward).
+4. Housekeeping note: `.env.local` has `SUPABASE_SERVICE_ROLE_KEY==eyJ…` (a
+   doubled `=`) — any server code reading it via `process.env` gets a value
+   with a leading `=` and will fail auth. Left untouched; worth checking
+   which env file production actually uses.
+
+### Environment notes from this session (local machine, not app bugs)
+
+- **`.next` is shared by every server in this folder.** Running `next build`
+  while a dev server is up breaks both (the prior session's :3000 `next
+  start` is now serving stale chunks for the same reason). Sequence used
+  here: stop servers → build → `next start -p 3001` → verify.
+- **Local `next start` wedges under sustained automated load** (Lighthouse
+  suite + repeated Playwright runs): after several minutes every route —
+  even `/login` — accepts connections but never responds; restart clears
+  it. Looks like connection/socket exhaustion in the local Node process;
+  wouldn't reproduce per-invocation on serverless, but worth remembering
+  for future local perf runs (restart the server between heavy batches).
+- Verification runners now live in `ux-audit/`: `lh-run.mjs` (full suite),
+  `lh-cls-diag.mjs` (raw LayoutShift events), `flow-regression.mjs` (crown
+  jewels), `tap-measure.mjs` (P0-4 table), `login-refresh.mjs` (re-mint
+  `auth-state.json` — Supabase refresh tokens are single-use, a stale static
+  cookie is what triggered the first wedge), `flow-cleanup.mjs`.
+  `auth-state.json` holds a live session token — never commit it.

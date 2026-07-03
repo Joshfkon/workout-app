@@ -1,0 +1,11 @@
+quick page shows confirm (no auto-create): PASS
+1-tap set logging: PASS
+undo toast: PASS
+sticky rest timer visible (fixed): PASS
+saved glyph (no queued state online): PASS
+resume pill on nutrition: PASS
+nutrition quick-add surface present: PASS
+resume restores set: PASS
+reload keeps set (per-set persistence): PASS
+in-app discard: PASS
+home hero copy (no "0 exercises · 0/0 sets"): PASS
