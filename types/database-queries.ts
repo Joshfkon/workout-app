@@ -68,7 +68,7 @@ export interface WorkoutSessionRow {
   id: string;
   user_id: string;
   mesocycle_id: string | null;
-  state: 'planned' | 'in_progress' | 'completed' | 'skipped';
+  state: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
   planned_date: string;
   started_at: string | null;
   completed_at: string | null;

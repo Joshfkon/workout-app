@@ -90,7 +90,7 @@ import {
   type RecentMuscleSession,
 } from './_lib/muscleFeedbackWrites';
 import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
-import { isStaleEmptyAdhocSession } from '../_lib/adhocSession';
+import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
   findStaleTargetBlocks,
@@ -766,11 +766,21 @@ export default function WorkoutPage() {
           .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
           .map(mapLoadedBlockRow);
 
+        // An already-archived session (deep link / back-button revisit after
+        // auto-discard) behaves like a deleted one: nothing to resume.
+        if (transformedSession.state === 'auto_discarded') {
+          endWorkoutSession();
+          router.replace('/dashboard/log');
+          return;
+        }
+
         // Stale-session auto-discard (P0-1): an abandoned empty ad-hoc shell
         // (0 blocks, 0 sets, in_progress, >4h old) is discarded instead of
         // resuming into a phantom "Continue workout". Predicate is the pure
         // isStaleEmptyAdhocSession (unit-tested); 0 blocks already implies 0
         // sets, but both are passed explicitly to make the guard unmistakable.
+        // Archived, not deleted (soft delete) once the session_auto_discard
+        // migration is applied; hard-delete fallback until then.
         if (
           isStaleEmptyAdhocSession(
             {
@@ -782,7 +792,7 @@ export default function WorkoutPage() {
             0 // no blocks -> no sets; querying sets separately would be redundant
           )
         ) {
-          await supabase.from('workout_sessions').delete().eq('id', sessionId);
+          await discardStaleSession(supabase, sessionId);
           endWorkoutSession();
           router.replace('/dashboard/log');
           return;

@@ -99,6 +99,41 @@ export function isStaleEmptyAdhocSession(
 }
 
 /**
+ * Postgres error codes meaning the 20260703000002_session_auto_discard
+ * migration hasn't been applied yet: 22P02 = invalid enum value
+ * ('auto_discarded' not in session_state), 42703 = undefined column
+ * (auto_discarded_at).
+ */
+const PRE_MIGRATION_ERROR_CODES = new Set(['22P02', '42703']);
+
+/**
+ * Discard a stale empty ad-hoc session (P0-1). Archives it as
+ * 'auto_discarded' (soft delete — recoverable by support, invisible to every
+ * session list because they all filter by positive state allowlists). Falls
+ * back to the previous hard DELETE only while the enum value / column doesn't
+ * exist yet, so the app works unchanged before the migration is applied.
+ */
+export async function discardStaleSession(
+  supabase: UntypedSupabase,
+  sessionId: string
+): Promise<'archived' | 'deleted' | 'failed'> {
+  const { error } = await supabase
+    .from('workout_sessions')
+    .update({ state: 'auto_discarded', auto_discarded_at: new Date().toISOString() })
+    .eq('id', sessionId);
+  if (!error) return 'archived';
+
+  if (PRE_MIGRATION_ERROR_CODES.has((error as { code?: string }).code ?? '')) {
+    const { error: deleteError } = await supabase
+      .from('workout_sessions')
+      .delete()
+      .eq('id', sessionId);
+    return deleteError ? 'failed' : 'deleted';
+  }
+  return 'failed';
+}
+
+/**
  * Look up today's ad-hoc session WITHOUT creating or mutating anything.
  * Used by the quick-workout confirm screen to label its CTA.
  */

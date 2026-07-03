@@ -1,4 +1,19 @@
-# Soft-delete for stale-session auto-discard — proposal (NOT applied)
+# Soft-delete for stale-session auto-discard — PREPARED, awaiting `db push`
+
+> **Status update (July 3, second session):** everything below is now
+> implemented and committed — migration file
+> `supabase/migrations/20260703000002_session_auto_discard.sql`, the
+> `discardStaleSession` helper (archive with hard-delete fallback while the
+> migration is unapplied, so the app is safe to run either way), the
+> workout-page guard for revisiting an archived session's URL, and the
+> `SessionState` type updates. 5 new unit tests cover: archive path,
+> both pre-migration fallback codes (22P02 enum / 42703 column), no-delete
+> on unrelated errors, and fallback-delete failure. **The migration has NOT
+> been pushed to the remote** — apply with `npx supabase db push` to switch
+> the behavior from delete to archive; until then the code hard-deletes
+> exactly as before.
+
+# Original proposal (context)
 
 You asked to change the auto-discard from a hard `DELETE` to an archive so
 support can recover a session if a user complains. **This needs a schema
