@@ -40,6 +40,12 @@ export interface UpdatePhaseResult {
     carbs: number;
     fat: number;
   };
+  /**
+   * Active mesocycle at the time of the change, if any. Its program was built
+   * for the previous phase (split, volume, rep ranges, rest periods all depend
+   * on goal), so callers should offer to rebuild it.
+   */
+  activeMesocycle?: { id: string; name: string | null };
 }
 
 const CUT_GOALS: NutritionGoal[] = ['aggressive_cut', 'moderate_cut', 'slow_cut'];
@@ -121,17 +127,29 @@ export async function updateTrainingPhase(
       return { success: false, macrosSynced: false, message: 'Failed to update training phase' };
     }
 
-    // 2. Nutrition goal — only exists once the user has saved macro settings
-    const { data: settings } = await supabase
-      .from('macro_settings')
-      .select('*')
-      .eq('user_id', user.id)
-      .maybeSingle();
+    // Active mesocycle check (same detection as the dashboard): its program was
+    // built for the old phase, so callers can offer a rebuild. Fetched alongside
+    // macro settings since neither depends on the other.
+    const [{ data: settings }, { data: activeMesoRows }] = await Promise.all([
+      supabase.from('macro_settings').select('*').eq('user_id', user.id).maybeSingle(),
+      supabase
+        .from('mesocycles')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .or('is_active.eq.true,state.eq.active')
+        .order('created_at', { ascending: false })
+        .limit(1),
+    ]);
+    const activeMesocycle = activeMesoRows?.[0]
+      ? { id: activeMesoRows[0].id as string, name: (activeMesoRows[0].name as string) ?? null }
+      : undefined;
 
+    // 2. Nutrition goal — only exists once the user has saved macro settings
     if (!settings) {
       return {
         success: true,
         macrosSynced: false,
+        activeMesocycle,
         message: 'Phase updated. Set up the macro calculator to sync nutrition targets too.',
       };
     }
@@ -153,12 +171,13 @@ export async function updateTrainingPhase(
       return {
         success: true,
         macrosSynced: false,
+        activeMesocycle,
         message: 'Phase updated, but nutrition settings could not be synced.',
       };
     }
 
     if (!recalculateTargets) {
-      return { success: true, macrosSynced: true, message: 'Phase updated.' };
+      return { success: true, macrosSynced: true, activeMesocycle, message: 'Phase updated.' };
     }
 
     // 3. Recalculate nutrition targets for the new phase
@@ -166,6 +185,7 @@ export async function updateTrainingPhase(
       return {
         success: true,
         macrosSynced: true,
+        activeMesocycle,
         message: 'Phase updated. Complete the macro calculator to refresh your targets.',
       };
     }
@@ -175,6 +195,7 @@ export async function updateTrainingPhase(
       return {
         success: true,
         macrosSynced: true,
+        activeMesocycle,
         message: 'Phase updated. Log a body weight to refresh your macro targets.',
       };
     }
@@ -222,6 +243,7 @@ export async function updateTrainingPhase(
       return {
         success: true,
         macrosSynced: true,
+        activeMesocycle,
         message: 'Phase updated, but macro targets could not be refreshed.',
       };
     }
@@ -230,6 +252,7 @@ export async function updateTrainingPhase(
       success: true,
       macrosSynced: true,
       newTargets,
+      activeMesocycle,
       message: `Phase updated. New targets: ${newTargets.calories} cal, ${newTargets.protein}g protein.`,
     };
   } catch (error) {
