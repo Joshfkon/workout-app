@@ -1,0 +1,6 @@
+P2-6 confirm-password field removed: PASS
+P2-6 show-password toggle (password -> text): PASS
+P2-6 toggle back to hidden: PASS
+P2-7 bulk-delete opens styled modal: PASS
+P2-7 "Keep" dismisses without deleting: PASS
+P2-16 skeleton during workout-detail load: PASS
