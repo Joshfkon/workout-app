@@ -694,60 +694,65 @@ export default function ExercisesPage() {
         </button>
       </div>
 
-      {/* Muscle filter chips */}
-      <div className="flex flex-wrap gap-2">
-        <span className="text-xs text-surface-500 uppercase tracking-wide self-center mr-1">Muscle:</span>
-        <button
-          onClick={() => setSelectedMuscle(null)}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-            !selectedMuscle
-              ? 'bg-primary-500 text-white'
-              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-          }`}
-        >
-          All
-        </button>
-        {MUSCLE_GROUPS.map((muscle) => (
+      {/* Muscle filter chips — single-row scroller on mobile so the list
+          isn't buried under a wall of wrapped chips; wraps on desktop. */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-surface-500 uppercase tracking-wide shrink-0">Muscle:</span>
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
-            key={muscle}
-            onClick={() => setSelectedMuscle(muscle)}
-            className={`px-3 py-1.5 rounded-full text-sm capitalize transition-colors ${
-              selectedMuscle === muscle
+            onClick={() => setSelectedMuscle(null)}
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+              !selectedMuscle
                 ? 'bg-primary-500 text-white'
                 : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
             }`}
           >
-            {muscle}
+            All
           </button>
-        ))}
+          {MUSCLE_GROUPS.map((muscle) => (
+            <button
+              key={muscle}
+              onClick={() => setSelectedMuscle(muscle)}
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm capitalize transition-colors ${
+                selectedMuscle === muscle
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+              }`}
+            >
+              {muscle}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Equipment filter chips */}
-      <div className="flex flex-wrap gap-2">
-        <span className="text-xs text-surface-500 uppercase tracking-wide self-center mr-1">Equipment:</span>
-        <button
-          onClick={() => setSelectedEquipment(null)}
-          className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-            !selectedEquipment
-              ? 'bg-primary-500 text-white'
-              : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
-          }`}
-        >
-          All
-        </button>
-        {EQUIPMENT_OPTIONS.map((eq) => (
+      {/* Equipment filter chips — same single-row-scroller treatment. */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-surface-500 uppercase tracking-wide shrink-0">Equipment:</span>
+        <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0">
           <button
-            key={eq.value}
-            onClick={() => setSelectedEquipment(eq.value)}
-            className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
-              selectedEquipment === eq.value
+            onClick={() => setSelectedEquipment(null)}
+            className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+              !selectedEquipment
                 ? 'bg-primary-500 text-white'
                 : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
             }`}
           >
-            {eq.label}
+            All
           </button>
-        ))}
+          {EQUIPMENT_OPTIONS.map((eq) => (
+            <button
+              key={eq.value}
+              onClick={() => setSelectedEquipment(eq.value)}
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-sm transition-colors ${
+                selectedEquipment === eq.value
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-800 text-surface-400 hover:bg-surface-700'
+              }`}
+            >
+              {eq.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Exercise list */}
