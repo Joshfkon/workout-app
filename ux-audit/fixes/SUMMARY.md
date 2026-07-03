@@ -128,3 +128,17 @@ P1-3 → detection A/B/C + mitigation a/b/c?
 
 **Final test count:** 1814 tests green (+31 from this round). Account clean,
 one-tap logging re-verified on the production of both features.
+
+---
+
+## Migration applied — P1-3 now fully live (`ab3465f`)
+
+`20260703000001_set_logs_edited_at` applied to the remote via `supabase db push`
+(only that one migration pushed; zero drift; edited_at column confirmed live).
+Running the deferred happy path caught a real defect — the recalc estimate was
+passing `knownE1RM=undefined`, ignoring the edited history (100 → 35kg
+profile-only guess). Fixed to feed the exercise's corrected E1RM (+ calibration
+path). **P1-3 verified end-to-end:** real history edit stamps edited_at → banner
+appears on a stale planned session → confirm lists old→new → recalc rewrites the
+target 100 → 68kg (~150lb, history-based). No migrations left pending; test data
+cleaned.
