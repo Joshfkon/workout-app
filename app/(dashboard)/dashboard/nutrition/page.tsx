@@ -159,6 +159,7 @@ export default function NutritionPage() {
     fat_mass_kg: number;
   } | null>(null);
   const [trainingAge, setTrainingAge] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
+  const [currentPhase, setCurrentPhase] = useState<'bulk' | 'cut' | 'maintenance' | null>(null);
 
   // Modal states
   const [showAddFood, setShowAddFood] = useState(false);
@@ -293,7 +294,7 @@ export default function NutritionPage() {
         // User profile data - use maybeSingle() to handle missing data
         supabase
           .from('users')
-          .select('height_cm, age, sex')
+          .select('height_cm, age, sex, goal')
           .eq('id', user.id)
           .maybeSingle(),
         // DEXA scan data - use maybeSingle() to handle missing scans
@@ -435,6 +436,11 @@ export default function NutritionPage() {
         }
         if (userData.sex) {
           profileData.sex = userData.sex as 'male' | 'female';
+        }
+        if (userData.goal) {
+          // Legacy 'maintain'/'recomp' values collapse to 'maintenance'
+          const g = userData.goal as string;
+          setCurrentPhase(g === 'bulk' || g === 'cut' ? g : 'maintenance');
         }
       } else {
         setHeightCm(null);
@@ -1828,6 +1834,7 @@ export default function NutritionPage() {
         } : undefined}
         userStats={userProfile}
         workoutsPerWeek={userProfile.workoutsPerWeek || 4}
+        currentPhase={currentPhase ?? undefined}
       />
 
       <EditFoodModal

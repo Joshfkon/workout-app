@@ -48,8 +48,8 @@ export default function OnboardingBodyCompPage() {
   const router = useRouter();
   const { preferences, updatePreference } = useUserPreferences();
   
-  // Step state: 'units' -> 'body-comp'
-  const [step, setStep] = useState<'units' | 'body-comp'>('units');
+  // Step state: 'units' -> 'body-comp' -> 'goal'
+  const [step, setStep] = useState<'units' | 'body-comp' | 'goal'>('units');
   const [selectedUnits, setSelectedUnits] = useState<WeightUnit>(preferences.units || 'lb');
   const units = selectedUnits;
   
@@ -71,6 +71,9 @@ export default function OnboardingBodyCompPage() {
   const [bodyFatPercent, setBodyFatPercent] = useState<string>('');
   const [useDexa, setUseDexa] = useState(false);
   const [showBodyFatGuide, setShowBodyFatGuide] = useState(false);
+  // Training goal (users.goal). Seeded from the signup selection; confirmed or
+  // changed on the goal sub-step with body-fat-aware guidance.
+  const [goal, setGoal] = useState<'bulk' | 'cut' | 'maintenance'>('maintenance');
   
   // Save unit preference and proceed
   const handleUnitsConfirm = async () => {
@@ -130,7 +133,7 @@ export default function OnboardingBodyCompPage() {
       // Get user height if available
       const { data: userData } = await supabase
         .from('users')
-        .select('height_cm, sex')
+        .select('height_cm, sex, goal')
         .eq('id', user.id)
         .single();
       
@@ -147,6 +150,9 @@ export default function OnboardingBodyCompPage() {
       }
       if (userData?.sex) {
         setSex(userData.sex as 'male' | 'female');
+      }
+      if (userData?.goal === 'bulk' || userData?.goal === 'cut' || userData?.goal === 'maintenance') {
+        setGoal(userData.goal);
       }
     }
     
@@ -219,10 +225,10 @@ export default function OnboardingBodyCompPage() {
       
       if (sessionError) throw sessionError;
       
-      // Update user profile with sex and height
+      // Update user profile with sex, height, and the confirmed training goal
       await supabase
         .from('users')
-        .update({ sex, height_cm: height, weight_kg: weight })
+        .update({ sex, height_cm: height, weight_kg: weight, goal })
         .eq('id', user.id);
       
       // Navigate to benchmark selection with session ID
@@ -342,7 +348,115 @@ export default function OnboardingBodyCompPage() {
       </div>
     );
   }
-  
+
+  // Goal selection step
+  if (step === 'goal') {
+    const bf = useDexa && existingDexa ? existingDexa.body_fat_percent : parseFloat(bodyFatPercent);
+    // Body-fat-aware guidance, mirroring the mesocycle builder's DEXA thresholds
+    const recommended: 'bulk' | 'cut' | null = !bf || isNaN(bf)
+      ? null
+      : bf >= (sex === 'male' ? 20 : 30)
+        ? 'cut'
+        : bf <= (sex === 'male' ? 12 : 20)
+          ? 'bulk'
+          : null;
+
+    const GOAL_OPTIONS: { value: 'cut' | 'maintenance' | 'bulk'; label: string; description: string }[] = [
+      { value: 'cut', label: 'Cut', description: 'Lose fat while holding on to muscle. Calorie deficit.' },
+      { value: 'maintenance', label: 'Maintain', description: 'Hold steady or recomp. Eat around maintenance.' },
+      { value: 'bulk', label: 'Bulk', description: 'Build muscle. Calorie surplus.' },
+    ];
+
+    return (
+      <div className="max-w-md mx-auto space-y-6 animate-fade-in">
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center gap-2 mb-8">
+          {[1, 2, 3, 4].map((s) => (
+            <div key={s} className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                s <= 2
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-800 text-surface-500'
+              }`}>
+                {s}
+              </div>
+              {s < 4 && (
+                <div className={`w-12 h-0.5 ${s < 2 ? 'bg-primary-500' : 'bg-surface-800'}`} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="text-center mb-6">
+          <h1 className="text-3xl font-bold text-surface-100 mb-2">What&apos;s your goal right now?</h1>
+          <p className="text-surface-400">
+            This sets your training phase — it shapes your program&apos;s volume, rep ranges, and nutrition targets.
+          </p>
+        </div>
+
+        {recommended && (
+          <div className="p-3 bg-primary-500/10 border border-primary-500/20 rounded-lg">
+            <p className="text-sm text-primary-300">
+              At ~{bf.toFixed(0)}% body fat, {recommended === 'cut'
+                ? 'a cut is a strong starting point — you’ll keep your muscle while improving your muscle-to-fat ratio.'
+                : 'you’re lean enough to bulk effectively — extra calories will go toward muscle, not fat.'}
+            </p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {GOAL_OPTIONS.map((option) => {
+            const isSelected = goal === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setGoal(option.value)}
+                aria-pressed={isSelected}
+                className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                  isSelected
+                    ? 'bg-primary-500/10 border-primary-500'
+                    : 'bg-surface-900 border-surface-800 hover:border-surface-700'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-surface-100">{option.label}</span>
+                  {recommended === option.value && (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-success-500/10 text-success-400">
+                      Recommended
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-surface-400 mt-1">{option.description}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="text-xs text-surface-500 text-center">
+          You can change this anytime from the phase chip on your dashboard.
+        </p>
+
+        <div className="flex items-center justify-between pt-2">
+          <Button variant="ghost" onClick={() => setStep('body-comp')} disabled={isLoading}>
+            Back
+          </Button>
+          <Button
+            size="lg"
+            onClick={handleContinue}
+            disabled={isLoading}
+            isLoading={isLoading}
+          >
+            Continue to Strength Testing
+            <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Progress indicator */}
@@ -678,13 +792,12 @@ export default function OnboardingBodyCompPage() {
       
       {/* Continue button */}
       <div className="flex justify-end pt-4">
-        <Button 
-          size="lg" 
-          onClick={handleContinue} 
-          disabled={!canContinue || isLoading}
-          isLoading={isLoading}
+        <Button
+          size="lg"
+          onClick={() => setStep('goal')}
+          disabled={!canContinue}
         >
-          Continue to Strength Testing
+          Continue
           <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>

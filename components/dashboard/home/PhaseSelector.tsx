@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { updateTrainingPhase, type TrainingPhase, type UpdatePhaseResult } from '@/lib/actions/phase';
@@ -45,16 +46,21 @@ interface PhaseSelectorProps {
  * calculator goal, and (optionally) recalculates nutrition targets.
  */
 export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState<TrainingPhase>(phase);
   const [syncTargets, setSyncTargets] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set after a successful save when an active mesocycle exists: its program
+  // was built for the old phase, so we offer a rebuild before closing.
+  const [staleMesocycle, setStaleMesocycle] = useState<{ id: string; name: string | null } | null>(null);
 
   const openModal = () => {
     setSelected(phase);
     setSyncTargets(true);
     setError(null);
+    setStaleMesocycle(null);
     setIsOpen(true);
   };
 
@@ -72,7 +78,11 @@ export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
         return;
       }
       onPhaseChanged(selected, result.newTargets);
-      setIsOpen(false);
+      if (result.activeMesocycle) {
+        setStaleMesocycle(result.activeMesocycle);
+      } else {
+        setIsOpen(false);
+      }
     } catch {
       setError('Failed to update phase. Please try again.');
     } finally {
@@ -93,7 +103,34 @@ export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
         {meta.label}
       </button>
 
-      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="What phase are you in?" size="sm">
+      <Modal
+        isOpen={isOpen}
+        onClose={() => setIsOpen(false)}
+        title={staleMesocycle ? 'Rebuild your training plan?' : 'What phase are you in?'}
+        size="sm"
+      >
+        {staleMesocycle ? (
+          <>
+            <p className="text-sm text-surface-300">
+              Phase updated to <span className="font-medium text-surface-100">{PHASE_META[selected].label.toLowerCase()}</span>.
+              Your current training block{staleMesocycle.name ? (
+                <> &ldquo;<span className="font-medium text-surface-100">{staleMesocycle.name}</span>&rdquo;</>
+              ) : null} was planned for your old phase &mdash; its split, volume, and rep ranges won&apos;t match the new one.
+            </p>
+            <p className="mt-2 text-xs text-surface-400">
+              Rebuilding starts a fresh block for your new phase. Your workout history and progress are kept.
+            </p>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setIsOpen(false)}>
+                Keep current plan
+              </Button>
+              <Button size="sm" onClick={() => router.push('/dashboard/mesocycle/new')}>
+                Rebuild plan
+              </Button>
+            </div>
+          </>
+        ) : (
+        <>
         <div className="space-y-2">
           {PHASE_ORDER.map((p) => {
             const option = PHASE_META[p];
@@ -139,6 +176,8 @@ export function PhaseSelector({ phase, onPhaseChanged }: PhaseSelectorProps) {
             Save phase
           </Button>
         </div>
+        </>
+        )}
       </Modal>
     </>
   );
