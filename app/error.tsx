@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
+import {
+  isStaleDeploymentError,
+  beginStaleDeployRecovery,
+} from '@/lib/utils/staleDeployRecovery';
 
 export default function Error({
   error,
@@ -11,10 +15,25 @@ export default function Error({
   reset: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
-  
+  const [recovering, setRecovering] = useState(false);
+
   useEffect(() => {
     console.error('App error:', error);
+
+    if (!isStaleDeploymentError(error)) return;
+    if (beginStaleDeployRecovery()) setRecovering(true);
   }, [error]);
+
+  if (recovering) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-950 p-4">
+        <div className="text-center max-w-md">
+          <div className="w-10 h-10 mx-auto mb-4 rounded-full border-2 border-surface-700 border-t-surface-200 animate-spin" />
+          <p className="text-surface-300">Updating to the latest version…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-surface-950 p-4">
