@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
+import { Card, Button, Badge, Input, LoadingAnimation, SkeletonExercise, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
 import {
   enqueueSetInsert,
   flushSetOutbox,
@@ -3569,13 +3569,25 @@ export default function WorkoutPage() {
   };
 
   if (phase === 'loading') {
-    // Show a minimal loading skeleton - even for fromCreate to prevent blank screen
+    // Skeleton matching the workout layout instead of a full-screen spinner
+    // (P2-16) — mirrors this route's loading.tsx so route-level and
+    // in-page loading states look identical.
     return (
-      <div className="max-w-lg mx-auto py-8 flex flex-col items-center justify-center min-h-[400px]">
-        <LoadingAnimation type="spinner" size="lg" />
-        <p className="mt-4 text-surface-400">
-          {fromCreate ? 'Starting workout...' : 'Loading workout...'}
+      <div className="max-w-2xl mx-auto space-y-4" aria-busy="true">
+        <div className="animate-pulse py-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="h-7 bg-surface-800 rounded w-40" />
+              <div className="h-4 bg-surface-800 rounded w-28" />
+            </div>
+            <div className="h-11 w-24 bg-surface-800 rounded-lg" />
+          </div>
+        </div>
+        <p className="text-sm text-surface-500">
+          {fromCreate ? 'Starting workout…' : 'Loading workout…'}
         </p>
+        <SkeletonExercise />
+        <SkeletonExercise />
       </div>
     );
   }
