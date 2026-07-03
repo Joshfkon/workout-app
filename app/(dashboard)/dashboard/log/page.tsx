@@ -639,9 +639,10 @@ export default function LogPage() {
         })}
       </div>
 
-      {/* Old Train page (planned sessions, recovery) stays reachable */}
+      {/* Planned sessions, today's programmed workout & recovery now live on
+          the mesocycle page (the old /dashboard/workout hub was retired). */}
       <Link
-        href="/dashboard/workout"
+        href="/dashboard/mesocycle"
         className="flex items-center gap-2 px-1 py-2 text-xs text-surface-500 hover:text-surface-300 transition-colors"
       >
         <IconBarbell size={14} aria-hidden="true" />
