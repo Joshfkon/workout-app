@@ -271,7 +271,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(initialData?.mesocycle ?? null);
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(initialData?.todaysWorkout ?? null);
   const [scheduledWorkout, setScheduledWorkout] = useState<ScheduledWorkout | null>(() => {
-    if (!initialData?.mesocycle || initialData.todaysWorkout) return null;
+    // Also computed when today's session exists but has no blocks yet
+    // (blocks are generated on start) — the hero card shows the scheduled
+    // day name instead of a misleading "0 exercises · 0/0 sets".
+    if (!initialData?.mesocycle) return null;
+    if (initialData.todaysWorkout && initialData.todaysWorkout.exercises > 0) return null;
     const today = new Date();
     const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
     return getWorkoutForDay(
@@ -952,7 +956,18 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               completedSets,
               totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
             });
-            setScheduledWorkout(null);
+            // Keep the scheduled-day summary around for block-less sessions —
+            // the hero card uses it in place of "0 exercises · 0/0 sets".
+            setScheduledWorkout(
+              blocks.length === 0
+                ? getWorkoutForDay(
+                    mesocycle.split_type || 'Upper/Lower',
+                    dayOfWeek,
+                    mesocycle.days_per_week || 4,
+                    mesocycle.preferred_workout_days
+                  )
+                : null
+            );
           } else {
             // No session today — clear any stale workout from the previous day (rollover refetch)
             setTodaysWorkout(null);
