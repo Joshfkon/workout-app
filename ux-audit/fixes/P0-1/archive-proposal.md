@@ -1,4 +1,13 @@
-# Soft-delete for stale-session auto-discard — PREPARED, awaiting `db push`
+# Soft-delete for stale-session auto-discard — LIVE (migration applied July 3)
+
+> **Status: APPLIED + E2E-VERIFIED.** `20260703000002_session_auto_discard`
+> pushed to the remote (only pending migration, zero drift; column confirmed
+> live). E2E via `ux-audit/archive-e2e.mjs`: UI-created empty quick session →
+> `started_at` backdated 5h (service role, test row only) → opening the URL
+> redirected to /dashboard/log AND the row flipped to `state='auto_discarded'`
+> with `auto_discarded_at` set (not deleted) → revisiting the archived URL
+> redirected again → quick page CTA back to "Start workout" (invisible via
+> allowlists) → test row deleted, orphan check clean.
 
 > **Status update (July 3, second session):** everything below is now
 > implemented and committed — migration file
