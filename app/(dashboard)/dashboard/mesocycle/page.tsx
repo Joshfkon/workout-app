@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, LoadingAnimation, Slider } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
@@ -316,9 +316,42 @@ export default function MesocyclePage() {
       </div>
 
       {isLoading ? (
-        <Card className="text-center py-12">
-          <LoadingAnimation type="random" size="md" text="Loading your training plan..." />
-        </Card>
+        // Skeletons approximating the loaded layout (today card + overview)
+        // instead of a spinner: structural guard against load-time layout
+        // shift on this page (audit: CLS 0.417) + perceived-perf (PERF item 2)
+        <>
+          <Card variant="elevated" aria-busy="true">
+            <CardContent className="p-6">
+              <div className="animate-pulse space-y-3">
+                <div className="h-4 w-28 bg-surface-800 rounded" />
+                <div className="h-6 w-48 bg-surface-800 rounded" />
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-6 w-16 bg-surface-800 rounded-full" />
+                  ))}
+                </div>
+                <div className="h-4 w-56 bg-surface-800 rounded" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card aria-busy="true">
+            <CardContent className="p-6">
+              <div className="animate-pulse space-y-6">
+                <div className="grid gap-4 grid-cols-2 sm:grid-cols-5">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="h-20 bg-surface-800 rounded-lg" />
+                  ))}
+                </div>
+                <div className="h-2 bg-surface-800 rounded-full" />
+                <div className="flex gap-2 overflow-hidden">
+                  {[0, 1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="h-16 min-w-[80px] bg-surface-800 rounded-lg" />
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
       ) : !activeMesocycle ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
