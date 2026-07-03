@@ -85,3 +85,43 @@ sufficient here — the dominant cost is client hydration of a large bundle
 (Render Delay), which server-rendering the data alone doesn't address. If you
 want me to proceed, say which lever (1 bundle-split or 2 static-card-hoist) and
 I'll scope it as its own effort.
+
+---
+
+## Addendum (July 3, second session) — corrected diagnosis + executed fix
+
+Two findings sharpen the above, one of which changes the fix:
+
+**1. /dashboard: the content was never in the *visible* first flush.** A
+no-JS Playwright load showed `<main>` completely empty. The server HTML
+carries the hero card only as a **hidden streamed Suspense segment**
+(`<div hidden id="S:0">`) that the **final inline `$RC` script in the body**
+swaps into place. Inline scripts execute in parse order on the main thread —
+and under Lighthouse's 4× CPU throttle that last script queues behind the
+async framework chunks' execution. That is the precise mechanism of the
+"93% Render Delay": all bytes arrive by ~1.4s, but the swap that makes the
+card *visible* runs at ~6s. Not hydration per se — script-execution
+contention delaying a script-driven reveal.
+
+**Fix executed:** removed the page's `<Suspense>` boundary and the
+route-level `loading.tsx` — the page now awaits its ~450ms of data before
+flushing, so the card is plain visible HTML in the first flush and LCP
+collapses toward FCP. Trade: cold-load TTFB rises by the fetch time;
+client-side tab switches keep the previous screen during load (App Router
+default), which reads as a normal page transition. Measured result in
+`fixes/final-lighthouse.md`.
+
+**2. Bundle-split headroom is near zero — lever 1 retracted.** Chunk-level
+breakdown of /dashboard's 725KB (uncompressed): react-dom 169KB +
+@supabase-js 222KB + Next runtime/polyfills 122KB + shared UI ~130KB; the
+page's own code is **43KB**, and every modal/tracker was already
+`next/dynamic`. There is no meaningful below-fold code left to split — the
+"650KB DashboardClient chunk" framing in the original doc was wrong; it's
+framework + Supabase, which hydration needs regardless.
+
+**3. /dashboard/log needs no server-render work** — its launcher (including
+the LCP element) is already plain visible HTML in the first flush (no
+template/$RC in the response). Its ~3.5s Render Delay is main-thread paint
+contention while ~700KB of shared JS executes — the only real lever left for
+it is shrinking @supabase-js/framework cost or deferring hydration, both
+platform-level projects out of scope here.

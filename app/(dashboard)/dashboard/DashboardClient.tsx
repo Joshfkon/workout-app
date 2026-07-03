@@ -688,12 +688,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         // Skip this fast path after a midnight rollover (dateKey !== initialDateKey) so the
         // full fetch below recomputes today's workout / nutrition / weight for the new day.
         if (hasInitialData && dateKey === initialDateKey) {
-          // Just fetch the deferred data that wasn't fetched server-side
-          const today = new Date();
-          const weekStart = new Date(today);
-          weekStart.setDate(today.getDate() - 6);
-
-          // Fetch deferred queries (frequent foods, system foods)
+          // Fetch only the deferred data that wasn't fetched server-side
+          // (frequent foods, system foods). Weekly volume is NOT refetched:
+          // initialData.muscleVolume was fetched server-side in this same
+          // render (item 6), and calling setMuscleVolume with a fresh array
+          // replaced the SSR'd atrophy card — the dashboard's LCP element —
+          // after hydration, moving the recorded LCP from first paint
+          // (~1.2s) to post-hydration (~4.7s).
           Promise.all([
             supabase.from('food_log')
               .select('meal_type, food_name, serving_size, calories, protein, carbs, fat, servings')
@@ -705,14 +706,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               .eq('is_active', true)
               .order('name')
               .limit(100),
-            // Weekly volume data
-            supabase.from('exercise_blocks')
-              .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
-                workout_sessions!inner (user_id, completed_at, state)`)
-              .eq('workout_sessions.user_id', user.id)
-              .eq('workout_sessions.state', 'completed')
-              .gte('workout_sessions.completed_at', weekStart.toISOString()),
-          ]).then(([frequentDataResult, systemFoodsResult, weeklyBlocksResult]) => {
+          ]).then(([frequentDataResult, systemFoodsResult]) => {
             // Process frequent foods
             if (frequentDataResult.data && frequentDataResult.data.length > 0) {
               const frequencyMap = new Map<string, FrequentFood>();
@@ -747,19 +741,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             }
             if (systemFoodsResult.data) {
               setSystemFoods(systemFoodsResult.data as SystemFood[]);
-            }
-            // Process weekly volume (weighted primary + 0.5x secondary credit,
-            // matching the main fetch path — this fast path previously counted
-            // only primary muscles under their raw legacy names)
-            if (weeklyBlocksResult.data && weeklyBlocksResult.data.length > 0) {
-              const volumeByMuscle: VolumeAccumulator = {};
-              for (const block of weeklyBlocksResult.data) {
-                const exercise = (block as any).exercises;
-                if (!exercise) continue;
-                const workingSets = ((block as any).set_logs || []).filter((s: any) => !s.is_warmup).length;
-                accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
-              }
-              setMuscleVolume(volumeAccumulatorToStats(volumeByMuscle));
             }
           }).catch(() => {});
           return;

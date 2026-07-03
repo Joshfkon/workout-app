@@ -8,7 +8,10 @@ import { launch } from 'chrome-launcher';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE = process.env.LH_BASE || 'http://localhost:3001';
-const ROUTE = process.env.LH_ROUTE || '/dashboard/mesocycle';
+// Leading slash is re-applied so Git Bash's MSYS path conversion (which
+// turns "/dashboard" into "C:/Program Files/Git/dashboard") can't break it —
+// pass LH_ROUTE without a leading slash.
+const ROUTE = '/' + (process.env.LH_ROUTE || 'dashboard/mesocycle').replace(/^[/\\]+|^.*:.*?Git[/\\]/i, '');
 
 const state = JSON.parse(fs.readFileSync(path.join(__dirname, 'auth-state.json'), 'utf8'));
 const cookieHeader = state.cookies
@@ -21,10 +24,16 @@ const chrome = await launch({
   chromeFlags: ['--headless=new'],
 });
 
+// LH_THROTTLE=devtools applies REAL 4x CPU + slow-4G throttling and reports
+// observed paints, vs the default 'simulate' (Lantern) which models them —
+// Lantern folds all JS finishing before the observed LCP into the LCP graph,
+// overestimating LCP on fast localhost + heavy-JS pages.
+const throttlingMethod = process.env.LH_THROTTLE === 'devtools' ? 'devtools' : 'simulate';
 const rr = await lighthouse(BASE + ROUTE, {
   port: chrome.port,
   output: 'json',
   onlyCategories: ['performance'],
+  throttlingMethod,
   extraHeaders: cookieHeader ? { Cookie: cookieHeader } : undefined,
 });
 chrome.kill();
