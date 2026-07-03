@@ -153,16 +153,23 @@ export async function recalculateMacrosForWeight(
   }
 }
 
+/** Collapse the 7-level nutrition goal onto the users.goal phase enum. */
+function nutritionGoalToPhase(goal: Goal): 'bulk' | 'cut' | 'maintenance' {
+  if (goal.includes('cut')) return 'cut';
+  if (goal === 'maintain') return 'maintenance';
+  return 'bulk';
+}
+
 /**
  * Save macro calculation settings for future auto-updates
  */
 export async function saveMacroSettings(
   settings: Omit<MacroSettings, 'auto_update_enabled'> & { auto_update_enabled?: boolean }
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; phaseSynced?: boolean }> {
   try {
     const supabase = await createUntypedServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       return { success: false, error: 'Not authenticated' };
     }
@@ -193,7 +200,20 @@ export async function saveMacroSettings(
       return { success: false, error: error.message };
     }
 
-    return { success: true };
+    // Keep the training-side phase (users.goal) in sync with the nutrition goal,
+    // otherwise progression, session building, and coaching keep running on the
+    // old phase after the user switches direction in the macro calculator.
+    const { error: phaseError } = await supabase
+      .from('users')
+      .update({ goal: nutritionGoalToPhase(settings.goal) })
+      .eq('id', user.id);
+
+    if (phaseError) {
+      console.error('[saveMacroSettings] users.goal sync failed:', phaseError);
+      return { success: true, phaseSynced: false };
+    }
+
+    return { success: true, phaseSynced: true };
   } catch (error) {
     console.error('[saveMacroSettings] Error:', error);
     return { success: false, error: 'Failed to save settings' };

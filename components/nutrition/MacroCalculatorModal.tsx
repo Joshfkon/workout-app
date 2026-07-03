@@ -20,7 +20,14 @@ import {
   type CardioConfig,
   type CardioModality,
 } from '@/lib/nutrition/macroCalculator';
-import { saveMacroSettings } from '@/lib/actions/nutrition';
+import { saveMacroSettings, getMacroSettings } from '@/lib/actions/nutrition';
+
+/** Default 7-level goal when all we know is the user's current phase. */
+const PHASE_TO_GOAL: Record<'bulk' | 'cut' | 'maintenance', Goal> = {
+  cut: 'moderate_cut',
+  maintenance: 'maintain',
+  bulk: 'slow_bulk',
+};
 
 interface MacroCalculatorModalProps {
   isOpen: boolean;
@@ -47,6 +54,8 @@ interface MacroCalculatorModalProps {
     bodyFatPercent?: number;
   };
   workoutsPerWeek?: number;
+  /** User's current training phase (users.goal), used to pre-select the goal. */
+  currentPhase?: 'bulk' | 'cut' | 'maintenance';
 }
 
 export function MacroCalculatorModal({
@@ -56,6 +65,7 @@ export function MacroCalculatorModal({
   existingTargets,
   userStats,
   workoutsPerWeek = 4,
+  currentPhase,
 }: MacroCalculatorModalProps) {
   // User stats
   const [weight, setWeight] = useState(userStats?.weightLbs?.toString() || '');
@@ -116,6 +126,35 @@ export function MacroCalculatorModal({
       setWorkouts(workoutsPerWeek.toString());
     }
   }, [workoutsPerWeek]);
+
+  // Seed the form from saved macro settings when the modal opens, so reopening
+  // the calculator doesn't silently reset goal/activity/peptide to defaults
+  // (applying with the stale 'maintain' default used to flip a bulking or
+  // cutting user back to maintenance). Falls back to the profile phase for
+  // users who have never saved macro settings.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    getMacroSettings()
+      .then((saved) => {
+        if (cancelled) return;
+        if (saved) {
+          if (saved.goal) setGoal(saved.goal);
+          if (saved.activity_level) setActivityLevel(saved.activity_level);
+          setPeptide(saved.peptide || 'none');
+          if (saved.workout_intensity) setWorkoutIntensity(saved.workout_intensity);
+          if (saved.avg_workout_minutes) setWorkoutDuration(saved.avg_workout_minutes.toString());
+        } else if (currentPhase) {
+          setGoal(PHASE_TO_GOAL[currentPhase]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && currentPhase) setGoal(PHASE_TO_GOAL[currentPhase]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, currentPhase]);
 
   const calculateRecommendation = () => {
     setError('');
@@ -381,6 +420,9 @@ export function MacroCalculatorModal({
           <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider">
             Your Goal
           </h3>
+          <p className="text-xs text-surface-400">
+            This also sets your training phase (bulk / cut / maintain) used for progression and volume recommendations.
+          </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {goalOptions.map((opt) => (
