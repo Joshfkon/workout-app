@@ -33,13 +33,13 @@ tests), `tsc --noEmit`, and `next lint` ran green after every commit.
 | P2-11 "2175.0 lbs" | `0623851` | — | **Fixed** (0-decimal volume totals; stepper truncation fixed in `fbf7159`) |
 | P2-13 Supabase 406s | `0623851` | — | **Fixed** (.maybeSingle ×3 in useAdaptiveVolume) |
 | Leaderboard "Top 1% of 1" | `0623851` | — | **Fixed** (percentile suppressed under 10 participants) |
-| P2-6 confirm-password field | — | — | **Skipped** (register-flow validation rework; low risk-to-value at sweep stage) |
-| P2-7 native confirm() dialogs | — | — | **Skipped** (mechanical ConfirmModal swap in history; safe standalone follow-up) |
+| P2-6 confirm-password field | `e3b5eee` | fixes/p2-sweep-2/ | **Fixed** (show-password eye toggle; field + mismatch validation removed) |
+| P2-7 native confirm() dialogs | `f7db8d4` | fixes/p2-sweep-2/ | **Fixed** (ConfirmModal for bulk/single delete + dismissible error banner replacing alert()) |
 | P2-10 shared page titles | — | — | **Skipped** — every dashboard page is a client component; per-route titles need `metadata` in per-route layouts (~30 new files). Worth doing as its own pass |
 | P2-12 duplicate workout hubs | — | — | **Recommendation (per instructions, no deletion):** keep `/dashboard/log` as the Train tab's launcher and demote `/dashboard/workout` to a plan-browser reached from "Planned sessions & recovery" — it duplicates 4 of log's 5 actions with a different visual language, and every duplicated "start" path is another place session-creation bugs (P0-1) can hide |
 | P2-14 exercises filter wall | — | — | **Skipped** (layout redesign, not sweep-sized) |
 | P2-15 no starter templates | — | — | **Skipped** (content work: needs a curated template set) |
-| P2-16 workout-detail spinner | — | — | **Skipped**; belongs with PERF item 5 skeletons |
+| P2-16 workout-detail spinner | `329ba7b` | fixes/p2-sweep-2/ | **Fixed** (layout skeleton, matches the route's loading.tsx) |
 
 ## Final numbers
 

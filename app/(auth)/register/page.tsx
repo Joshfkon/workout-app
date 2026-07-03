@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { IconEye, IconEyeOff } from '@tabler/icons-react';
 import { Button, Input, Card, Select } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { Goal, Experience } from '@/types/schema';
@@ -10,7 +11,7 @@ import type { Goal, Experience } from '@/types/schema';
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [goal, setGoal] = useState<Goal>('maintenance');
   const [experience, setExperience] = useState<Experience>('intermediate');
   const [error, setError] = useState('');
@@ -21,12 +22,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
+    // Validation (P2-6: no confirm-password field — the show-password
+    // toggle lets users verify what they typed instead of retyping it)
     if (password.length < 6) {
       setError('Password must be at least 6 characters');
       return;
@@ -114,23 +111,23 @@ export default function RegisterPage() {
 
           <Input
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             required
             hint="At least 6 characters"
             autoComplete="new-password"
-          />
-
-          <Input
-            label="Confirm Password"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            autoComplete="new-password"
+            rightIcon={
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="-m-2 p-2 text-surface-400 hover:text-surface-200 transition-colors"
+              >
+                {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+              </button>
+            }
           />
 
           <Select

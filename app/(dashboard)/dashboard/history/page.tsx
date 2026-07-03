@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/components/ui';
+import { Card, Badge, Button, FullPageLoading, LoadingAnimation, ConfirmModal } from '@/components/ui';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -265,6 +265,12 @@ function HistoryPageContent() {
     }
   };
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Styled confirmation for destructive actions (P2-7 — replaces native
+  // confirm()/alert(), which render inconsistently and block the thread)
+  const [confirmDelete, setConfirmDelete] = useState<
+    null | { kind: 'bulk' } | { kind: 'single'; workoutId: string; state: string }
+  >(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseHistoryData | null>(null);
@@ -303,13 +309,9 @@ function HistoryPageContent() {
     }
   };
 
+  // Runs AFTER the ConfirmModal confirm — no native confirm() here.
   const handleBulkDelete = async () => {
     if (selectedWorkouts.size === 0) return;
-
-    const count = selectedWorkouts.size;
-    if (!confirm(`Are you sure you want to delete ${count} workout${count > 1 ? 's' : ''}? This cannot be undone.`)) {
-      return;
-    }
 
     setIsBulkDeleting(true);
     try {
@@ -340,18 +342,14 @@ function HistoryPageContent() {
       setIsSelectMode(false);
     } catch (err) {
       console.error('Failed to delete workouts:', err);
-      alert('Failed to delete workouts. Please try again.');
+      setActionError('Failed to delete workouts. Please try again.');
     } finally {
       setIsBulkDeleting(false);
     }
   };
 
-  const handleDeleteWorkout = async (workoutId: string, state: string) => {
-    const action = state === 'in_progress' ? 'cancel' : 'delete';
-    if (!confirm(`Are you sure you want to ${action} this workout? This cannot be undone.`)) {
-      return;
-    }
-
+  // Runs AFTER the ConfirmModal confirm — no native confirm() here.
+  const handleDeleteWorkout = async (workoutId: string) => {
     setDeletingId(workoutId);
     try {
       const supabase = createUntypedClient();
@@ -372,7 +370,7 @@ function HistoryPageContent() {
       setWorkouts(workouts.filter(w => w.id !== workoutId));
     } catch (err) {
       console.error('Failed to delete workout:', err);
-      alert('Failed to delete workout. Please try again.');
+      setActionError('Failed to delete workout. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -380,7 +378,7 @@ function HistoryPageContent() {
 
   const handleRepeatWorkout = async (workout: WorkoutHistory) => {
     if (workout.exercises.length === 0) {
-      alert('This workout has no exercises to repeat.');
+      setActionError('This workout has no exercises to repeat.');
       return;
     }
 
@@ -390,7 +388,7 @@ function HistoryPageContent() {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        alert('You must be logged in to repeat a workout.');
+        setActionError('You must be logged in to repeat a workout.');
         return;
       }
 
@@ -928,7 +926,7 @@ function HistoryPageContent() {
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={handleBulkDelete}
+                    onClick={() => setConfirmDelete({ kind: 'bulk' })}
                     disabled={isBulkDeleting}
                   >
                     {isBulkDeleting ? (
@@ -1091,7 +1089,7 @@ function HistoryPageContent() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        handleDeleteWorkout(workout.id, workout.state);
+                        setConfirmDelete({ kind: 'single', workoutId: workout.id, state: workout.state });
                       }}
                       disabled={deletingId === workout.id}
                       className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-danger-500/20 text-surface-500 hover:text-danger-400 transition-all"
@@ -1407,6 +1405,49 @@ function HistoryPageContent() {
 
       {/* Exercise History Modal */}
       <ExerciseHistoryModal />
+
+      {/* Destructive-action confirmation (P2-7 — replaces native confirm()) */}
+      <ConfirmModal
+        isOpen={confirmDelete !== null}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          if (confirmDelete.kind === 'bulk') {
+            handleBulkDelete();
+          } else {
+            handleDeleteWorkout(confirmDelete.workoutId);
+          }
+          setConfirmDelete(null);
+        }}
+        title={
+          confirmDelete?.kind === 'bulk'
+            ? `Delete ${selectedWorkouts.size} workout${selectedWorkouts.size > 1 ? 's' : ''}?`
+            : confirmDelete?.state === 'in_progress'
+              ? 'Cancel this workout?'
+              : 'Delete this workout?'
+        }
+        message="This permanently removes the logged sets and cannot be undone."
+        confirmText={confirmDelete?.kind === 'single' && confirmDelete.state === 'in_progress' ? 'Cancel Workout' : 'Delete'}
+        cancelText="Keep"
+        variant="danger"
+        isLoading={isBulkDeleting || deletingId !== null}
+      />
+
+      {/* Action errors (P2-7 — replaces native alert()) */}
+      {actionError && (
+        <div className="fixed bottom-20 left-4 right-4 z-50 max-w-md mx-auto" role="alert">
+          <div className="flex items-start gap-2 p-3 rounded-xl bg-danger-500/15 border border-danger-500/40 backdrop-blur text-sm text-danger-300">
+            <span className="flex-1">{actionError}</span>
+            <button
+              onClick={() => setActionError(null)}
+              className="min-w-[44px] min-h-[24px] text-danger-200 font-medium"
+              aria-label="Dismiss error"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
