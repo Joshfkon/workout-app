@@ -2145,13 +2145,17 @@ export default function WorkoutPage() {
     const updatedBodyweightData = data.bodyweightData || existingSet?.bodyweightData;
 
     // Keep feedback's RIR consistent with the edited RPE — the completed-set
-    // display prefers feedback.repsInTank over the RPE-derived value.
-    const updatedFeedback: SetFeedback | undefined = existingSet?.feedback
-      ? {
-          ...existingSet.feedback,
-          repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
-        }
-      : undefined;
+    // display prefers feedback.repsInTank over the RPE-derived value. Only
+    // resync when the new RPE disagrees with the existing RIR: the round trip
+    // is lossy (RIR 2 → RPE 7.5 → round(2.5) = 3), so an unconditional rewrite
+    // would mutate RIR on weight/reps-only edits.
+    const updatedFeedback: SetFeedback | undefined =
+      existingSet?.feedback && rirToRpe(existingSet.feedback.repsInTank) !== data.rpe
+        ? {
+            ...existingSet.feedback,
+            repsInTank: Math.max(0, Math.min(4, Math.round(10 - data.rpe))) as RepsInTank,
+          }
+        : undefined;
 
     // Update local state using functional update to avoid stale closure
     setCompletedSets(prevSets => prevSets.map(set =>
