@@ -17,13 +17,17 @@ import type { SetDiscomfort, DiscomfortBodyPart, DiscomfortSeverity } from '@/ty
 // TEST HELPERS
 // ============================================
 
+// Single base timestamp so same-day entries are truly simultaneous — building a
+// fresh Date per entry made daysSpan flake to 2 when calls landed on different ms.
+const BASE_TIME = Date.now();
+
 function createDiscomfortEntry(
   bodyPart: DiscomfortBodyPart,
   severity: DiscomfortSeverity,
   daysAgo: number = 0,
   exerciseName: string = 'Test Exercise'
 ): DiscomfortEntry {
-  const date = new Date();
+  const date = new Date(BASE_TIME);
   date.setDate(date.getDate() - daysAgo);
 
   return {
