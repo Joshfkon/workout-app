@@ -2997,7 +2997,11 @@ export default function WorkoutPage() {
         blockIds: blocks.map(b => b.id),
       });
       if (errors.length > 0) {
+        // Treat a partial cleanup as a failed cancellation: stay on the page
+        // so the user can retry (every step is an idempotent delete/update).
         console.error('Cancel workout cleanup errors:', errors);
+        setError('Failed to cancel workout. Please try again.');
+        return;
       }
 
       // Clear store state and navigate back to dashboard
