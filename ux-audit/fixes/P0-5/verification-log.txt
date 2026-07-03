@@ -1,0 +1,7 @@
+3s after Log set: timer visible=true y=792 countdown="2:58" PASS
+after scrolling down 1200px: timer visible=true y=792 countdown="2:57" PASS
+after scrolling to top: timer visible=true y=792 PASS
+bar tap scrolls current exercise into view: PASS
++15s from sticky bar: 2:54 -> 3:08
+Skip hides the bar: PASS
+Cleanup: session discarded.

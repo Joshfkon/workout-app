@@ -76,7 +76,7 @@ const articles = [
     title: 'Progressive Overload Explained',
     subtitle: 'The science of getting stronger over time',
     description:
-      'Learn the fundamental principle of muscle growth and how HyperTracker tracks and automates your progression.',
+      'Learn the fundamental principle of muscle growth and how HyperTrack tracks and automates your progression.',
     color: 'blue',
     tag: 'Training Science',
     readTime: '4 min read',
@@ -136,7 +136,7 @@ export default function LearnPage() {
           Learn & Science
         </h1>
         <p className="text-surface-400 max-w-xl mx-auto">
-          Understand the research and algorithms that power HyperTracker. Every feature is built on
+          Understand the research and algorithms that power HyperTrack. Every feature is built on
           evidence-based science.
         </p>
       </div>

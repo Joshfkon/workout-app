@@ -1,4 +1,3 @@
-import { Suspense } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import { DashboardClient } from './DashboardClient';
@@ -8,50 +7,19 @@ import {
   fetchWeightData,
   fetchUserGoal,
   fetchCompletedWorkoutsCount,
+  fetchWeeklyMuscleVolume,
 } from '@/lib/actions/dashboard';
 
-// Loading fallback for the entire dashboard
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6 max-w-3xl mx-auto animate-pulse">
-      {/* Quick Actions skeleton */}
-      <div className="bg-surface-900 rounded-xl p-4">
-        <div className="grid grid-cols-4 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 bg-surface-700 rounded-xl" />
-              <div className="h-3 w-12 bg-surface-700 rounded" />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Workout card skeleton */}
-      <div className="bg-surface-900 rounded-xl p-6">
-        <div className="space-y-4">
-          <div className="h-5 w-32 bg-surface-700 rounded" />
-          <div className="h-12 w-full bg-surface-800 rounded-lg" />
-        </div>
-      </div>
-
-      {/* Nutrition skeleton */}
-      <div className="bg-surface-900 rounded-xl p-6">
-        <div className="space-y-4">
-          <div className="h-5 w-24 bg-surface-700 rounded" />
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="space-y-1">
-              <div className="h-4 w-full bg-surface-700 rounded" />
-              <div className="h-2 w-full bg-surface-800 rounded-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Server component that fetches initial data
-async function DashboardWithData() {
+// The page awaits its data BEFORE flushing HTML — deliberately no Suspense
+// boundary. With one, the hero card streams as a hidden segment that the
+// final inline $RC script must swap in; under mobile CPU throttle that
+// script queues behind async-chunk execution, recording ~6.5s LCP even
+// though all bytes arrive by ~1.4s (perf-item6.md addendum). The server
+// fetch is ~450ms, so trading it into TTFB puts the card in the visible
+// first flush and LCP lands at FCP. Client-side tab switches keep the
+// previous screen while this loads (App Router default without
+// loading.tsx), so navigation feel doesn't need a skeleton either.
+export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -66,12 +34,14 @@ async function DashboardWithData() {
     weightData,
     userGoal,
     completedWorkoutsCount,
+    muscleVolume,
   ] = await Promise.all([
     fetchMesocycleData(user.id),
     fetchNutritionData(user.id),
     fetchWeightData(user.id),
     fetchUserGoal(user.id),
     fetchCompletedWorkoutsCount(user.id),
+    fetchWeeklyMuscleVolume(user.id),
   ]);
 
   // Pass server-fetched data to client component as initial props
@@ -88,16 +58,8 @@ async function DashboardWithData() {
         weightUnit: weightData.preferredUnit,
         userGoal: userGoal as any,
         completedWorkoutsCount,
+        muscleVolume,
       }}
     />
-  );
-}
-
-// Main page with streaming Suspense boundary
-export default function DashboardPage() {
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <DashboardWithData />
-    </Suspense>
   );
 }

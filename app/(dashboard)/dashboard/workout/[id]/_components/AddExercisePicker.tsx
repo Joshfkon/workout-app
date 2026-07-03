@@ -26,6 +26,7 @@
 import { useState } from 'react';
 import { IconAdjustments, IconCheck, IconPlus, IconX } from '@tabler/icons-react';
 import type { AvailableExercise, GymLocation } from '../_lib/types';
+import { formatMuscleName } from '@/lib/utils';
 
 // Normalize exercise search terms for better matching
 // Handles variations like "situps" vs "sit up" vs "sit-up"
@@ -402,7 +403,7 @@ export function AddExercisePicker({
             )}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] leading-4 text-surface-500">
-            <span className="capitalize truncate">{exercise.primary_muscle}</span>
+            <span className="truncate">{formatMuscleName(exercise.primary_muscle)}</span>
             <span aria-hidden="true">&middot;</span>
             <span className="capitalize">{exercise.mechanic}</span>
             {exercise.hypertrophy_tier && (
@@ -581,7 +582,7 @@ export function AddExercisePicker({
                   }
                   className={chipClass(selectedMuscleFilter === muscle)}
                 >
-                  {muscle}
+                  {formatMuscleName(muscle)}
                 </button>
               ))}
             </div>

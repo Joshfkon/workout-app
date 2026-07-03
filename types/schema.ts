@@ -16,7 +16,7 @@ export type Experience = 'novice' | 'intermediate' | 'advanced';
 export type Mechanic = 'compound' | 'isolation';
 
 /** Current state of a workout session */
-export type SessionState = 'planned' | 'in_progress' | 'completed' | 'skipped';
+export type SessionState = 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
 
 /** Quality classification for a logged set based on RPE/RIR analysis */
 export type SetQuality = 'junk' | 'effective' | 'stimulative' | 'excessive';

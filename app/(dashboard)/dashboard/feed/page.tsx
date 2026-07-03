@@ -14,6 +14,7 @@ import { useReactions } from '@/hooks/useReactions';
 import { useSharedWorkouts } from '@/hooks/useSharedWorkouts';
 import { copySharedWorkout } from '@/lib/workout-sharing';
 import { useUserStore } from '@/stores';
+import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { createClient } from '@/lib/supabase/client';
 import { cn, formatWeight, calculateStreaks } from '@/lib/utils';
 import { formatSocialCount, getProfileUrl } from '@/lib/social';
@@ -69,7 +70,11 @@ const LEADERBOARD_TABS: Array<{
 export default function FeedPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('following');
-  const units = useUserStore((state) => state.user?.preferences.units ?? 'kg');
+  // P1-8: units come from useUserPreferences (DB-backed, same source as the
+  // logger) — the userStore fallback showed kg to lb users whenever the
+  // store hadn't been populated yet.
+  const { preferences } = useUserPreferences();
+  const units = preferences.units;
   const userId = useUserStore((state) => state.user?.id);
 
   // Feed state

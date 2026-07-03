@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 
 type AnimationType = 'barbell' | 'dumbbell' | 'pulse' | 'reps' | 'heartbeat' | 'weights' | 'kettlebell' | 'muscle' | 'spinner' | 'dots' | 'pullup' | 'squat' | 'pushup' | 'jumprope' | 'deadlift' | 'random';
 
@@ -43,15 +43,20 @@ export function LoadingAnimation({
   showTip = false 
 }: LoadingAnimationProps) {
   const [tip, setTip] = useState('');
-  
-  // Pick a random animation type on mount (stable for component lifetime)
-  const actualType = useMemo(() => {
+
+  // Random pick happens AFTER mount (P1-1): choosing with Math.random()
+  // during render made server and client markup disagree and forced a
+  // hydration failure (full client re-render + console errors) on every page
+  // that server-rendered a loading state. First paint is a deterministic
+  // 'barbell'; the variety kicks in client-only, one frame later.
+  const [randomType, setRandomType] = useState<AnimationType>('barbell');
+  useEffect(() => {
     if (type === 'random') {
-      return FITNESS_ANIMATIONS[Math.floor(Math.random() * FITNESS_ANIMATIONS.length)];
+      setRandomType(FITNESS_ANIMATIONS[Math.floor(Math.random() * FITNESS_ANIMATIONS.length)]);
     }
-    return type;
   }, [type]);
-  
+  const actualType = type === 'random' ? randomType : type;
+
   useEffect(() => {
     if (showTip) {
       setTip(LOADING_TIPS[Math.floor(Math.random() * LOADING_TIPS.length)]);

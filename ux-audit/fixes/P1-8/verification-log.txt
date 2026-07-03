@@ -1,0 +1,2 @@
+feed shows lbs: true, shows kg: false -> PASS
+leaderboards shows lbs: true, kg: false

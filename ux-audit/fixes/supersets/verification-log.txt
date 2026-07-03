@@ -1,0 +1,23 @@
+Link Superset button visible with both exercises active: PASS
+DB: both blocks share a superset_group_id: PASS ([{"o":1,"g":"5d50","so":1},{"o":2,"g":"5d50","so":2}])
+  set 1: logged on Barbell Row -> now on Barbell Row, rest=true
+  set 2: logged on Barbell Row -> now on Barbell Bench Press, rest=true
+  set 3: logged on Barbell Bench Press -> now on Barbell Row, rest=false
+  set 4: logged on Barbell Row -> now on Barbell Bench Press, rest=true
+Logger alternates between the two exercises each set: FAIL
+No rest after first-of-pair (Bench): PASS
+Rest after last-of-pair (Row): PASS
+Unlink clears superset_group_id on both: PASS
+Cleanup: session rows left: 0
+
+--- symmetric (DB-linked) run ---
+  set 1: on Barbell Bench Press -> Barbell Row, rest=false
+  set 2: on Barbell Row -> Barbell Bench Press, rest=true
+  set 3: on Barbell Bench Press -> Barbell Row, rest=false
+  set 4: on Barbell Row -> Barbell Bench Press, rest=true
+  set 5: on Barbell Bench Press -> Barbell Row, rest=false
+  set 6: on Barbell Row -> Barbell Bench Press, rest=true
+Alternates every set (from set 1): PASS
+No rest after Bench (first): PASS
+Rest after Row (last): PASS
+Cleanup: sessions left 0

@@ -46,10 +46,8 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -132,19 +130,19 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
           role="group"
         >
           <div
-            class="flex items-center gap-2"
+            class="flex items-center gap-1.5"
           >
             <span
-              class="w-5 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center"
+              class="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center"
             >
               1
             </span>
             <div
-              class="flex-1 flex items-center gap-1 min-w-0"
+              class="flex-1 flex items-center gap-0.5 min-w-0"
             >
               <button
                 aria-label="Decrease weight"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-md bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -166,14 +164,23 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
               <button
                 aria-label="Weight: 60 kg. Tap to type"
-                class="w-full min-w-0 py-2 font-mono text-sm text-surface-100 truncate"
+                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
-                60 kg
+                <span
+                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                >
+                  60
+                </span>
+                <span
+                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                >
+                  kg
+                </span>
               </button>
               <button
                 aria-label="Increase weight"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-md bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -198,11 +205,11 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
               </button>
             </div>
             <div
-              class="flex-1 flex items-center gap-1 min-w-0"
+              class="flex-1 flex items-center gap-0.5 min-w-0"
             >
               <button
                 aria-label="Decrease reps"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-md bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -223,15 +230,24 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
                 </svg>
               </button>
               <button
-                aria-label="Reps: 10. Tap to type"
-                class="w-full min-w-0 py-2 font-mono text-sm text-surface-100 truncate"
+                aria-label="Reps: 10 reps. Tap to type"
+                class="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
                 type="button"
               >
-                10
+                <span
+                  class="font-mono text-[15px] text-surface-100 whitespace-nowrap"
+                >
+                  10
+                </span>
+                <span
+                  class="text-[10px] uppercase tracking-wide text-surface-500"
+                >
+                  reps
+                </span>
               </button>
               <button
                 aria-label="Increase reps"
-                class="min-w-[40px] min-h-[40px] flex items-center justify-center rounded-md bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
+                class="min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30"
                 type="button"
               >
                 <svg
@@ -257,60 +273,91 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             </div>
           </div>
           <div
-            class="flex items-center gap-1.5"
+            class="flex items-stretch gap-2"
           >
-            <span
-              class="text-[11px] text-surface-500 mr-0.5"
-            >
-              RIR
-            </span>
             <button
-              aria-label="3 reps in reserve"
+              aria-label="3 reps in reserve (easy)"
               aria-pressed="false"
-              class="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
               type="button"
             >
-              3
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                3
+              </span>
+              <span
+                class="text-[10px] leading-tight text-surface-500"
+              >
+                easy
+              </span>
             </button>
             <button
-              aria-label="2 reps in reserve"
+              aria-label="2 reps in reserve (good)"
               aria-pressed="true"
-              class="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors bg-primary-500 text-white"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-primary-500 text-white"
               type="button"
             >
-              2
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                2
+              </span>
+              <span
+                class="text-[10px] leading-tight text-white/80"
+              >
+                good
+              </span>
             </button>
             <button
-              aria-label="1 reps in reserve"
+              aria-label="1 reps in reserve (hard)"
               aria-pressed="false"
-              class="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
               type="button"
             >
-              1
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                1
+              </span>
+              <span
+                class="text-[10px] leading-tight text-surface-500"
+              >
+                hard
+              </span>
             </button>
             <button
-              aria-label="0 reps in reserve"
+              aria-label="0 reps in reserve (maxed)"
               aria-pressed="false"
-              class="rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
+              class="flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors bg-surface-800 text-surface-300 hover:bg-surface-700"
               type="button"
             >
-              0
+              <span
+                class="text-[16px] font-semibold leading-tight"
+              >
+                0
+              </span>
+              <span
+                class="text-[10px] leading-tight text-surface-500"
+              >
+                maxed
+              </span>
             </button>
             <button
               aria-label="Add set feedback"
-              class="ml-auto relative p-1.5 rounded-lg text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors"
+              class="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800 transition-colors"
               type="button"
             >
               <svg
                 class="tabler-icon tabler-icon-message-plus "
                 fill="none"
-                height="18"
+                height="20"
                 stroke="currentColor"
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
                 viewBox="0 0 24 24"
-                width="18"
+                width="20"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <path
@@ -332,7 +379,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
             </button>
           </div>
           <button
-            class="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-40"
+            class="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-xl min-h-[52px] text-base font-semibold transition-colors disabled:opacity-40"
             type="button"
           >
             Log set
@@ -517,10 +564,8 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            back
+          <span>
+            Back
           </span>
            · bodyweight
         </p>
@@ -747,10 +792,8 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -956,10 +999,8 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1165,10 +1206,8 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1407,10 +1446,8 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
            · 
           last session 100 kg × 10, × 9 @ 2 RIR
@@ -1640,10 +1677,8 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>
@@ -1855,10 +1890,8 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         <p
           class="min-w-0 text-[11px] text-surface-500 truncate"
         >
-          <span
-            class="capitalize"
-          >
-            chest
+          <span>
+            Chest
           </span>
         </p>
       </button>

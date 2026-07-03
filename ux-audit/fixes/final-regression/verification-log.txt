@@ -1,0 +1,8 @@
+quick page shows confirm (no auto-create): PASS
+1-tap set logging: PASS
+sticky rest timer visible: PASS
+undo toast: PASS
+saved glyph or saving spinner present: PASS
+resume pill on nutrition: PASS
+resume restores set: PASS
+cleanup: session discarded

@@ -4,6 +4,16 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, Button, Badge, Input, LoadingAnimation, ConfirmModal, ToastContainer, useToasts } from '@/components/ui';
+import {
+  enqueueSetInsert,
+  flushSetOutbox,
+  isNetworkError,
+  listOutbox,
+  outboxCount,
+  removeQueuedSet,
+  updateQueuedSet,
+} from '@/lib/offline/setOutbox';
+import type { SetSyncStatus } from '@/components/workout/ExerciseCard';
 import { InlineHint } from '@/components/ui/FirstTimeHint';
 import { RestTimer, PauseOverlay } from '@/components/workout';
 import { IconGripVertical, IconX } from '@tabler/icons-react';
@@ -38,7 +48,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
-import { formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -80,6 +90,15 @@ import {
   type RecentMuscleSession,
 } from './_lib/muscleFeedbackWrites';
 import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
+import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
+import { computeSupersetAdvance } from './_lib/supersetFlow';
+import {
+  findStaleTargetBlocks,
+  computeRecalcChanges,
+  type PlannedTargetBlock,
+  type RecalcChange,
+} from '../_lib/staleTargets';
+import { RecalcTargetsBanner } from '@/components/workout';
 import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
 import type {
@@ -169,6 +188,65 @@ function getExerciseInjuryRisk(
   };
 }
 
+/**
+ * Cancel-workout confirmation. Rendered from BOTH page branches (empty and
+ * populated) — previously it only existed in the populated branch, so the
+ * empty-workout "Cancel Workout" button silently did nothing (P0-1).
+ */
+function CancelWorkoutModal({
+  totalCompletedSets,
+  isCancelling,
+  onKeepGoing,
+  onConfirm,
+}: {
+  totalCompletedSets: number;
+  isCancelling: boolean;
+  onKeepGoing: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={() => !isCancelling && onKeepGoing()}
+      />
+      <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
+        <div className="p-6 text-center">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
+            <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
+          <p className="text-sm text-surface-400 mb-6">
+            {totalCompletedSets > 0
+              ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
+              : 'This will reset the workout so you can start fresh later.'}
+          </p>
+          <div className="flex gap-3">
+            <Button
+              variant="ghost"
+              onClick={onKeepGoing}
+              disabled={isCancelling}
+              className="flex-1"
+            >
+              Keep Going
+            </Button>
+            <Button
+              variant="outline"
+              onClick={onConfirm}
+              disabled={isCancelling}
+              className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
+            >
+              {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkoutPage() {
   const params = useParams();
   const router = useRouter();
@@ -187,7 +265,79 @@ export default function WorkoutPage() {
   const setStoreBlockIndex = useWorkoutStore((state) => state.setCurrentBlock);
 
   // Toast notifications for errors
-  const { toasts, dismissToast, showError, showSuccess } = useToasts();
+  const { toasts, dismissToast, showError, showSuccess, addToast } = useToasts();
+
+  // --- Offline outbox state (P0-2) ---------------------------------------
+  // Per-set write status drives the glyphs on completed set rows; outboxSize
+  // powers the offline banner's "N sets queued".
+  const [setSync, setSetSync] = useState<Record<string, SetSyncStatus>>({});
+  const [isOnline, setIsOnline] = useState(true);
+  const [outboxSize, setOutboxSize] = useState(0);
+
+  const refreshOutboxCount = useCallback(() => {
+    void outboxCount().then(setOutboxSize).catch(() => {});
+  }, []);
+
+  // Derive per-set statuses from the outbox itself. This is the source of
+  // truth no matter WHICH listener's flush drained the queue (the dashboard
+  // layout also flushes on 'online'): id in outbox -> queued; a set we marked
+  // queued that left the outbox -> saved. 'saving' entries with an in-flight
+  // insert are left for that insert's continuation to settle.
+  const reconcileSetSync = useCallback(async () => {
+    try {
+      const entries = await listOutbox();
+      const queuedIds = new Set(entries.map(e => e.id));
+      setOutboxSize(entries.length);
+      setSetSync(prev => {
+        let changed = false;
+        const next = { ...prev };
+        for (const [id, status] of Object.entries(prev)) {
+          if (queuedIds.has(id) && status !== 'queued') {
+            next[id] = 'queued';
+            changed = true;
+          } else if (!queuedIds.has(id) && status === 'queued') {
+            next[id] = 'saved';
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    } catch {
+      // Outbox unavailable — leave statuses as they are.
+    }
+  }, []);
+
+  // Flush queued sets whenever connectivity returns (and once on mount, in
+  // case the app reopened online with a non-empty queue). A slow poll keeps
+  // the glyphs honest even if the browser never fires 'online' events.
+  useEffect(() => {
+    setIsOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
+    refreshOutboxCount();
+
+    const flush = () => {
+      const supabase = createUntypedClient();
+      void flushSetOutbox(supabase).then(() => reconcileSetSync());
+    };
+
+    const handleOnline = () => { setIsOnline(true); flush(); };
+    const handleOffline = () => { setIsOnline(false); void reconcileSetSync(); };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (typeof navigator === 'undefined' || navigator.onLine) flush();
+
+    const poll = setInterval(() => {
+      void reconcileSetSync();
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        void outboxCount().then(n => { if (n > 0) flush(); });
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(poll);
+    };
+  }, [refreshOutboxCount, reconcileSetSync]);
 
   // Delete confirmation modal state for header row delete button
   const [deleteConfirmBlock, setDeleteConfirmBlock] = useState<{ id: string; name: string } | null>(null);
@@ -277,6 +427,14 @@ export default function WorkoutPage() {
   const [showCoachMessage, setShowCoachMessage] = useState(true);
   const [coachMessage, setCoachMessage] = useState<ReturnType<typeof generateCoachMessage> | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfileForWeights | null>(null);
+
+  // P1-3 recalc banner (detection A). Dormant until the set_logs.edited_at
+  // migration is applied — the detection query returns nothing without it.
+  const [staleTargetChanges, setStaleTargetChanges] = useState<RecalcChange[]>([]);
+  const [staleTargetCount, setStaleTargetCount] = useState(0);
+  const [recalcDismissed, setRecalcDismissed] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
   const [aiCoachNotes, setAiCoachNotes] = useState<string | null>(null);
   const [isLoadingAiNotes, setIsLoadingAiNotes] = useState(false);
   const [aiCoachNotesEnabled, setAiCoachNotesEnabled] = useState(false);
@@ -390,17 +548,138 @@ export default function WorkoutPage() {
     startedAt: session?.startedAt ?? null,
   });
 
-  // Clear timer when session changes or component unmounts
+  // Clear any stale timer when a DIFFERENT session mounts. Deliberately no
+  // unmount cleanup (P0-3): minimizing the workout must leave the persisted
+  // countdown running so the Resume pill can show "rest m:ss" and resuming
+  // restores the timer mid-count. The mount-time dismiss above still protects
+  // a new workout from inheriting an old session's timer — but only when the
+  // store points at a different session; a same-session remount (minimize →
+  // resume) keeps the countdown.
   useEffect(() => {
-    // Clear timer when sessionId changes (new workout started)
-    restTimer.dismiss();
-
-    return () => {
-      // Cleanup: dismiss timer when leaving the workout page
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('workout_rest_timer_session') : null;
+    if (stored !== sessionId) {
       restTimer.dismiss();
-    };
+      localStorage.setItem('workout_rest_timer_session', sessionId);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]); // Only depend on sessionId, not restTimer to avoid loops
+
+  // If the hook restored a running countdown (minimize -> resume, or app
+  // relaunch), surface the sticky timer bar again (P0-3/P0-5).
+  useEffect(() => {
+    if (restTimer.isRunning) setShowRestTimer(true);
+  }, [restTimer.isRunning]);
+
+  // P1-3 recalc detection (detection A). Runs once per session load when the
+  // workout hasn't been logged into yet, on planned (target-bearing) blocks.
+  // Fully defensive: if set_logs.edited_at doesn't exist (migration not
+  // applied), the query errors, we swallow it, and the banner stays hidden.
+  useEffect(() => {
+    if (phase !== 'workout' || blocks.length === 0 || completedSets.length > 0) return;
+    const targetBlocks = blocks.filter((b) => b.targetWeightKg > 0 && b.exercise);
+    if (targetBlocks.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const exerciseIds = Array.from(new Set(targetBlocks.map((b) => b.exerciseId)));
+        // Latest edited_at per exercise across the user's completed-session sets.
+        const { data, error } = await supabase
+          .from('set_logs')
+          .select('edited_at, exercise_blocks!inner(exercise_id, workout_sessions!inner(user_id, state))')
+          .not('edited_at', 'is', null)
+          .in('exercise_blocks.exercise_id', exerciseIds)
+          .eq('exercise_blocks.workout_sessions.state', 'completed');
+        if (error || !data || cancelled) return; // column missing / no edits -> dormant
+        const latestByExercise: Record<string, string | null> = {};
+        for (const row of data as any[]) {
+          const exId = row.exercise_blocks?.exercise_id;
+          const ea = row.edited_at as string | null;
+          if (!exId || !ea) continue;
+          if (!latestByExercise[exId] || ea > (latestByExercise[exId] as string)) latestByExercise[exId] = ea;
+        }
+        const plannedInfos: PlannedTargetBlock[] = targetBlocks.map((b) => ({
+          id: b.id,
+          exerciseId: b.exerciseId,
+          exerciseName: b.exercise.name,
+          // Fail-safe: an unknown creation time counts as "now" so the block
+          // can never be flagged stale (an epoch-0 fallback made EVERY block
+          // look older than any edit, permanently re-triggering the banner).
+          createdAt: b.createdAt ?? new Date().toISOString(),
+          targetWeightKg: b.targetWeightKg,
+        }));
+        const stale = findStaleTargetBlocks(plannedInfos, latestByExercise);
+        if (stale.length === 0 || cancelled) return;
+        const changes = userProfile
+          ? computeRecalcChanges(stale, (blk) => estimateBlockTargetKg(blk))
+          : [];
+        if (cancelled) return;
+        setStaleTargetCount(stale.length);
+        setStaleTargetChanges(changes);
+      } catch {
+        // dormant on any failure
+      }
+    })();
+    return () => { cancelled = true; };
+    // exerciseHistories included so changes recompute with the corrected E1RM
+    // once the per-exercise history finishes loading.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, blocks, userProfile, exerciseHistories]);
+
+  // Re-run the weight estimate for a stale block against the CORRECTED history.
+  // The point of the recalc is to use the edited data, so the exercise's E1RM
+  // (recomputed from the corrected sets at load time) is passed as knownE1RM —
+  // without it the estimate would be a weak profile-only guess that ignores the
+  // very edit that triggered the banner. Uses the calibration path when lifts
+  // are calibrated, matching the live suggestion logic.
+  const estimateBlockTargetKg = (blk: PlannedTargetBlock): number => {
+    const block = blocks.find((b) => b.id === blk.id);
+    if (!block || !userProfile?.weightKg || !userProfile?.heightCm) return 0;
+    const knownE1RM = exerciseHistories[block.exerciseId]?.estimatedE1RM;
+    const repRange = { min: block.targetRepRange[0], max: block.targetRepRange[1] };
+    const rec =
+      userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0
+        ? quickWeightEstimateWithCalibration(
+            block.exercise.name, repRange, block.targetRir,
+            userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
+            userProfile.experience, userProfile.calibratedLifts, userProfile.regionalData,
+            preferences.units, knownE1RM
+          )
+        : quickWeightEstimate(
+            block.exercise.name, repRange, block.targetRir,
+            userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
+            userProfile.experience, userProfile.regionalData, preferences.units, knownE1RM
+          );
+    if (!rec || rec.confidence === 'find_working_weight' || !rec.recommendedWeight) return 0;
+    return inputWeightToKg(rec.recommendedWeight, preferences.units);
+  };
+
+  // Apply the recalc (mitigation a: all targets are engine output -> all stale
+  // blocks eligible; the banner's confirm dialog already listed the changes).
+  const applyRecalc = async () => {
+    if (staleTargetChanges.length === 0) return;
+    setIsRecalculating(true);
+    try {
+      const supabase = createUntypedClient();
+      for (const change of staleTargetChanges) {
+        await supabase.from('exercise_blocks').update({ target_weight_kg: change.newKg }).eq('id', change.blockId);
+      }
+      setBlocks((prev) =>
+        prev.map((b) => {
+          const c = staleTargetChanges.find((x) => x.blockId === b.id);
+          return c ? { ...b, targetWeightKg: c.newKg } : b;
+        })
+      );
+      setStaleTargetCount(0);
+      setStaleTargetChanges([]);
+      showSuccess(`Updated ${staleTargetChanges.length} target${staleTargetChanges.length !== 1 ? 's' : ''}`);
+    } catch (err) {
+      console.error('Recalc failed:', err);
+      showError('Could not update targets — please try again');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
 
   // Track workout progress for navigation protection (using ref to avoid re-running effect)
   const hasWorkoutProgressRef = useRef(false);
@@ -490,6 +769,38 @@ export default function WorkoutPage() {
         const transformedBlocks: ExerciseBlockWithExercise[] = (blocksData || [])
           .filter((block: LoadedBlockRow) => block.exercises) // Filter out blocks without exercises
           .map(mapLoadedBlockRow);
+
+        // An already-archived session (deep link / back-button revisit after
+        // auto-discard) behaves like a deleted one: nothing to resume.
+        if (transformedSession.state === 'auto_discarded') {
+          endWorkoutSession();
+          router.replace('/dashboard/log');
+          return;
+        }
+
+        // Stale-session auto-discard (P0-1): an abandoned empty ad-hoc shell
+        // (0 blocks, 0 sets, in_progress, >4h old) is discarded instead of
+        // resuming into a phantom "Continue workout". Predicate is the pure
+        // isStaleEmptyAdhocSession (unit-tested); 0 blocks already implies 0
+        // sets, but both are passed explicitly to make the guard unmistakable.
+        // Archived, not deleted (soft delete) once the session_auto_discard
+        // migration is applied; hard-delete fallback until then.
+        if (
+          isStaleEmptyAdhocSession(
+            {
+              state: transformedSession.state,
+              mesocycleId: transformedSession.mesocycleId,
+              startedAt: transformedSession.startedAt,
+            },
+            (blocksData || []).length,
+            0 // no blocks -> no sets; querying sets separately would be redundant
+          )
+        ) {
+          await discardStaleSession(supabase, sessionId);
+          endWorkoutSession();
+          router.replace('/dashboard/log');
+          return;
+        }
 
         setSession(transformedSession);
         setBlocks(transformedBlocks);
@@ -605,6 +916,10 @@ export default function WorkoutPage() {
                 .eq('workout_sessions.user_id', sessionData.user_id)
                 .eq('workout_sessions.state', 'completed')
                 .order('workout_sessions(completed_at)', { ascending: false })
+                // P1-2 (perf): suggestions only look at recent sessions —
+                // cap the rows instead of loading a full training history
+                // (~10 recent blocks per exercise is ample for E1RM/last-time).
+                .limit(Math.min(exerciseIds.length * 10, 120))
             : Promise.resolve({ data: null }),
         ]);
 
@@ -1417,7 +1732,7 @@ export default function WorkoutPage() {
     feedback?: SetFeedback;
     bodyweightData?: BodyweightData;
   }) => {
-    if (!currentBlock) return;
+    if (!currentBlock) return null;
 
     // Determine quality - factor in form if available
     let quality: 'stimulative' | 'effective' | 'junk';
@@ -1446,56 +1761,61 @@ export default function WorkoutPage() {
     const loggedAt = new Date().toISOString();
     const setType = data.setType || 'normal';
 
-    // Save to database first - let DB generate the UUID
+    // Offline-first persistence (P0-2): the set id is generated CLIENT-side
+    // so local state, the outbox, and the eventual DB row all agree; the
+    // insert either lands now ('saved') or waits in the IndexedDB outbox
+    // ('queued') until connectivity returns. Local/UI state never blocks on
+    // the network.
     try {
       const supabase = createUntypedClient();
+      const online = typeof navigator === 'undefined' || navigator.onLine;
 
-      // Query max set_number from database to avoid race conditions and stale state
-      const { data: maxSetResult } = await supabase
-        .from('set_logs')
-        .select('set_number')
-        .eq('exercise_block_id', currentBlock.id)
-        .eq('is_warmup', false)
-        .order('set_number', { ascending: false })
-        .limit(1)
-        .single();
-
-      // Use database max + 1, falling back to local state if no sets exist
-      const nextSetNumber = maxSetResult?.set_number != null
-        ? maxSetResult.set_number + 1
-        : currentSetNumber;
-
-      const { data: insertedData, error: insertError } = await supabase
-        .from('set_logs')
-        .insert({
-          exercise_block_id: currentBlock.id,
-          set_number: nextSetNumber,
-          weight_kg: data.weightKg,
-          reps: data.reps,
-          set_type: setType,
-          parent_set_id: data.parentSetId || null,
-          rpe: data.rpe,
-          is_warmup: false,
-          quality: quality,
-          quality_reason: qualityReason,
-          note: data.note || null,
-          logged_at: loggedAt,
-          feedback: data.feedback ? JSON.stringify(data.feedback) : null,
-          bodyweight_data: data.bodyweightData ? JSON.stringify(data.bodyweightData) : null,
-        })
-        .select('id')
-        .single();
-
-      if (insertError) {
-        console.error('Failed to save set:', insertError);
-        setError(`Failed to save set: ${insertError.message}`);
-        showError('Failed to save set - please try again');
-        return null; // Don't add to local state if save failed
+      // Prefer the DB's max set_number (avoids races/stale state); fall back
+      // to local numbering when offline.
+      let nextSetNumber = currentSetNumber;
+      if (online) {
+        try {
+          const { data: maxSetResult } = await supabase
+            .from('set_logs')
+            .select('set_number')
+            .eq('exercise_block_id', currentBlock.id)
+            .eq('is_warmup', false)
+            .order('set_number', { ascending: false })
+            .limit(1)
+            .single();
+          if (maxSetResult?.set_number != null) {
+            // Floor at the local number: a set still queued in the offline
+            // outbox isn't in the DB max yet, and reusing its number would
+            // create duplicate set_numbers in the block. DB max still wins
+            // when it's ahead (another tab/device logged sets).
+            nextSetNumber = Math.max(currentSetNumber, maxSetResult.set_number + 1);
+          }
+        } catch {
+          // Numbering probe failed (flaky network) — local numbering is fine.
+        }
       }
-      
-      // Create the set object with the database-generated ID
+
+      const setId = crypto.randomUUID();
+      const row = {
+        id: setId,
+        exercise_block_id: currentBlock.id,
+        set_number: nextSetNumber,
+        weight_kg: data.weightKg,
+        reps: data.reps,
+        set_type: setType,
+        parent_set_id: data.parentSetId || null,
+        rpe: data.rpe,
+        is_warmup: false,
+        quality: quality,
+        quality_reason: qualityReason,
+        note: data.note || null,
+        logged_at: loggedAt,
+        feedback: data.feedback ? JSON.stringify(data.feedback) : null,
+        bodyweight_data: data.bodyweightData ? JSON.stringify(data.bodyweightData) : null,
+      };
+
       const newSet: SetLog = {
-        id: insertedData.id,
+        id: setId,
         exerciseBlockId: currentBlock.id,
         setNumber: nextSetNumber,
         weightKg: data.weightKg,
@@ -1513,12 +1833,51 @@ export default function WorkoutPage() {
         bodyweightData: data.bodyweightData,
       };
 
-      // Update local state - sync currentSetNumber with database-derived value
+      // Optimistic local state first — the UI (and Zustand-persist recovery)
+      // must not depend on the write landing.
       setCompletedSets(prevSets => [...prevSets, newSet]);
       setCurrentSetNumber(nextSetNumber + 1);
-
-      // Sync to store for resume functionality
       logSetToStore(currentBlock.id, newSet);
+      setSetSync(prev => ({ ...prev, [setId]: 'saving' }));
+
+      if (!online) {
+        await enqueueSetInsert(setId, row);
+        setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
+        refreshOutboxCount();
+      } else {
+        let insertError: { message: string; code?: string } | null = null;
+        try {
+          const result = await supabase.from('set_logs').insert(row);
+          insertError = result.error;
+        } catch (e) {
+          insertError = { message: e instanceof Error ? e.message : String(e) };
+        }
+
+        if (insertError && isNetworkError(insertError)) {
+          // Connectivity died mid-write: queue it, keep the optimistic state.
+          await enqueueSetInsert(setId, row);
+          setSetSync(prev => ({ ...prev, [setId]: 'queued' }));
+          refreshOutboxCount();
+        } else if (insertError) {
+          // Real server rejection: roll the optimistic set back.
+          console.error('Failed to save set:', insertError);
+          setCompletedSets(prevSets => prevSets.filter(s => s.id !== setId));
+          setCurrentSetNumber(nextSetNumber);
+          deleteSetFromStore(currentBlock.id, setId);
+          setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
+          setError(`Failed to save set: ${insertError.message}`);
+          showError('Failed to save set - please try again');
+          return null;
+        } else {
+          setSetSync(prev => ({ ...prev, [setId]: 'saved' }));
+        }
+      }
+
+      // Undo toast (P1-4) — same pattern as nutrition's delete-undo.
+      addToast('success', `Set ${nextSetNumber} logged`, 5000, {
+        label: 'Undo',
+        onClick: () => { void undoLoggedSet(setId, currentBlock.id); },
+      });
 
       // Dropset logic: check if we need to show dropset prompt instead of rest timer
       const dropsetsConfigured = (currentBlock.dropsetsPerSet ?? 0) > 0;
@@ -1550,6 +1909,34 @@ export default function WorkoutPage() {
         } else {
           // Final drop complete - NOW start rest timer
           setPendingDropset(null);
+          setShowRestTimer(true);
+          setRestTimerDuration(null);
+          restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+        }
+      } else if (currentBlock.supersetGroupId) {
+        // Superset flow (pairs, manual, rest-after-last) — decision in the pure
+        // computeSupersetAdvance so the round-robin is unit-tested. completedByBlock
+        // must include the just-logged set for the current block.
+        setPendingDropset(null);
+        const completedByBlock: Record<string, number> = {};
+        for (const s of completedSets) {
+          if (s.isWarmup || s.setType === 'warmup') continue;
+          completedByBlock[s.exerciseBlockId] = (completedByBlock[s.exerciseBlockId] ?? 0) + 1;
+        }
+        completedByBlock[currentBlock.id] = (completedByBlock[currentBlock.id] ?? 0) + 1; // include this set
+        const step = computeSupersetAdvance(blocks, currentBlockIndex, completedByBlock);
+        if (step) {
+          setShowRestTimer(step.startRest);
+          if (step.startRest) {
+            setRestTimerDuration(null);
+            restTimer.start(currentBlock?.targetRestSeconds ?? 180);
+          }
+          if (step.nextIndex !== currentBlockIndex) {
+            setCurrentBlockIndex(step.nextIndex);
+            setCurrentSetNumber(step.nextSetNumber);
+          }
+        } else {
+          // Degenerate group -> normal rest.
           setShowRestTimer(true);
           setRestTimerDuration(null);
           restTimer.start(currentBlock?.targetRestSeconds ?? 180);
@@ -1620,30 +2007,35 @@ export default function WorkoutPage() {
               ...calibResult,
               exerciseId: currentExercise.id,
               weightKg: data.weightKg,
-              setLogId: insertedData.id,
+              setLogId: setId,
             };
             setSessionCalibrations(prev => [...prev, calibWithMeta]);
 
-            // Persist calibration to database
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              supabase.from('amrap_calibrations').insert({
-                user_id: user.id,
-                workout_session_id: sessionId,
-                set_log_id: insertedData.id,
-                exercise_id: currentExercise.id,
-                exercise_name: calibResult.exerciseName,
-                weight_kg: data.weightKg,
-                predicted_max_reps: calibResult.predictedMaxReps,
-                actual_max_reps: calibResult.actualMaxReps,
-                bias: calibResult.bias,
-                bias_interpretation: calibResult.biasInterpretation,
-                confidence_level: calibResult.confidenceLevel,
-                data_points: calibResult.dataPoints,
-                calibrated_at: calibResult.lastCalibrated.toISOString(),
-              }).then(({ error }: { error: Error | null }) => {
-                if (error) console.error('Failed to save AMRAP calibration:', error);
-              });
+            // Persist calibration to database (best-effort: skipped offline —
+            // the local calibration engine still holds the data point).
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                supabase.from('amrap_calibrations').insert({
+                  user_id: user.id,
+                  workout_session_id: sessionId,
+                  set_log_id: setId,
+                  exercise_id: currentExercise.id,
+                  exercise_name: calibResult.exerciseName,
+                  weight_kg: data.weightKg,
+                  predicted_max_reps: calibResult.predictedMaxReps,
+                  actual_max_reps: calibResult.actualMaxReps,
+                  bias: calibResult.bias,
+                  bias_interpretation: calibResult.biasInterpretation,
+                  confidence_level: calibResult.confidenceLevel,
+                  data_points: calibResult.dataPoints,
+                  calibrated_at: calibResult.lastCalibrated.toISOString(),
+                }).then(({ error }: { error: Error | null }) => {
+                  if (error) console.error('Failed to save AMRAP calibration:', error);
+                });
+              }
+            } catch (calibErr) {
+              console.error('Skipping AMRAP calibration persist (offline?):', calibErr);
             }
           }
         }
@@ -1670,7 +2062,7 @@ export default function WorkoutPage() {
       }
 
       // Return the set ID for optional feedback
-      return insertedData.id;
+      return setId;
     } catch (err) {
       console.error('Failed to save set:', err);
       setError(err instanceof Error ? err.message : 'Failed to save set - please try again');
@@ -1701,20 +2093,30 @@ export default function WorkoutPage() {
     // Convert RIR to RPE
     const rpe = feedback.repsInTank === 4 ? 6 : feedback.repsInTank === 2 ? 7.5 : feedback.repsInTank === 1 ? 9 : 10;
 
-    // Update database
-    const { error } = await supabase
-      .from('set_logs')
-      .update({
-        feedback: JSON.stringify(feedback),
-        quality,
-        quality_reason: qualityReason,
-        rpe,
-      })
-      .eq('id', setId);
+    // Queued-but-unsynced set (P0-2): patch the outbox row instead of the DB.
+    const patchedQueued = await updateQueuedSet(setId, {
+      feedback: JSON.stringify(feedback),
+      quality,
+      quality_reason: qualityReason,
+      rpe,
+    });
 
-    if (error) {
-      console.error('Failed to update set feedback:', error);
-      return;
+    if (!patchedQueued) {
+      // Update database
+      const { error } = await supabase
+        .from('set_logs')
+        .update({
+          feedback: JSON.stringify(feedback),
+          quality,
+          quality_reason: qualityReason,
+          rpe,
+        })
+        .eq('id', setId);
+
+      if (error) {
+        console.error('Failed to update set feedback:', error);
+        return;
+      }
     }
 
     // Update local state
@@ -1765,7 +2167,7 @@ export default function WorkoutPage() {
       });
     }
 
-    // Update in database
+    // Update in database (or in the outbox if the set hasn't synced yet, P0-2)
     try {
       const supabase = createUntypedClient();
       const updateData: any = {
@@ -1774,14 +2176,19 @@ export default function WorkoutPage() {
         rpe: data.rpe,
         quality,
       };
-      
+
       // Update bodyweight_data if provided or if it exists
       if (updatedBodyweightData) {
         updateData.bodyweight_data = updatedBodyweightData;
       }
-      
+
+      if (await updateQueuedSet(setId, updateData)) {
+        setError(null);
+        return;
+      }
+
       const { error: updateError } = await supabase.from('set_logs').update(updateData).eq('id', setId);
-      
+
       if (updateError) {
         console.error('Failed to update set:', updateError);
         setError(`Failed to update set: ${updateError.message}`);
@@ -1789,6 +2196,16 @@ export default function WorkoutPage() {
         // For now, just show error; user can refresh if needed
       } else {
         setError(null);
+        // P1-3 detection A: stamp edited_at (best-effort, dormant until the
+        // set_logs.edited_at migration is applied). Separate update so a
+        // missing column can't break in-session editing.
+        await supabase
+          .from('set_logs')
+          .update({ edited_at: new Date().toISOString() })
+          .eq('id', setId)
+          .then(({ error: stampErr }: { error: unknown }) => {
+            if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
+          });
       }
     } catch (err) {
       console.error('Failed to update set:', err);
@@ -1823,12 +2240,18 @@ export default function WorkoutPage() {
     if (setToDelete) {
       deleteSetFromStore(setToDelete.exerciseBlockId, setId);
     }
+    setSetSync(prev => { const next = { ...prev }; delete next[setId]; return next; });
 
-    // Delete from database
+    // Delete from database — unless the set never left the outbox (P0-2).
     try {
+      if (await removeQueuedSet(setId)) {
+        refreshOutboxCount();
+        setError(null);
+        return;
+      }
       const supabase = createUntypedClient();
       const { error: deleteError } = await supabase.from('set_logs').delete().eq('id', setId);
-      
+
       if (deleteError) {
         console.error('Failed to delete set:', deleteError);
         setError(`Failed to delete set: ${deleteError.message}`);
@@ -1839,6 +2262,12 @@ export default function WorkoutPage() {
       console.error('Failed to delete set:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete set');
     }
+  };
+
+  /** Undo the just-logged set (toast action, P1-4). */
+  const undoLoggedSet = async (setId: string, _blockId: string) => {
+    await handleDeleteSet(setId);
+    setCurrentSetNumber(prev => Math.max(1, prev - 1));
   };
 
   // State for adding extra sets beyond target
@@ -3116,7 +3545,7 @@ export default function WorkoutPage() {
         })();
       }
 
-      // Calculate and save workout calories (set-based HyperTracker method) in
+      // Calculate and save workout calories (set-based HyperTrack method) in
       // the background. It runs several sequential DB round-trips and the
       // result isn't needed to leave the summary, so awaiting it here just
       // stalls the "Finish" tap. Fire-and-forget; it's okay if it fails.
@@ -3242,9 +3671,21 @@ export default function WorkoutPage() {
         {/* Same header as normal workout */}
         <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-              <p className="text-surface-400">0 of 0 sets completed</p>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => router.push('/dashboard/log')}
+                aria-label="Minimize workout"
+                title="Minimize workout"
+                className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div>
+                <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
+                <p className="text-surface-400">0 of 0 sets completed</p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
               <Button
@@ -3311,6 +3752,17 @@ export default function WorkoutPage() {
             onAddSelected={handleAddSelectedExercises}
           />
         )}
+
+        {/* Cancel Workout confirmation — must exist in this branch too, or the
+            header button above is a no-op on empty workouts (P0-1). */}
+        {showCancelModal && (
+          <CancelWorkoutModal
+            totalCompletedSets={0}
+            isCancelling={isCancelling}
+            onKeepGoing={() => setShowCancelModal(false)}
+            onConfirm={handleCancelWorkout}
+          />
+        )}
       </div>
     );
   }
@@ -3341,7 +3793,7 @@ export default function WorkoutPage() {
     if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
     if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
     if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
-    return muscles.map(m => m.charAt(0).toUpperCase() + m.slice(1)).join(' & ');
+    return muscles.map(formatMuscleName).join(' & ');
   })();
   const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
     isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'
@@ -3376,8 +3828,37 @@ export default function WorkoutPage() {
     return 0;
   };
 
+  const restBarVisible = showRestTimer && !pendingDropset;
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-8">
+    <div className={`max-w-2xl mx-auto space-y-6 ${restBarVisible ? 'pb-32' : 'pb-8'}`}>
+      {/* Offline banner (P0-2): honest state — nothing is lost, writes queue */}
+      {!isOnline && (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border border-warning-500/45 bg-warning-500/10 px-4 py-2.5 text-[13px] text-warning-400"
+          role="status"
+        >
+          <span aria-hidden="true">⚠</span>
+          <span>
+            You&rsquo;re offline — sets are saved on this phone and will sync automatically.
+            {outboxSize > 0 && ` ${outboxSize} set${outboxSize !== 1 ? 's' : ''} queued.`}
+          </span>
+        </div>
+      )}
+
+      {/* Recalc banner (P1-3): planned targets derived from since-edited
+          history. Dormant until the set_logs.edited_at migration is applied. */}
+      {!recalcDismissed && staleTargetCount > 0 && (
+        <RecalcTargetsBanner
+          staleCount={staleTargetCount}
+          changes={staleTargetChanges}
+          unit={preferences.units}
+          isApplying={isRecalculating}
+          onApply={applyRecalc}
+          onDismiss={() => setRecalcDismissed(true)}
+        />
+      )}
+
       {/* Pause overlay - shown when workout is paused */}
       <PauseOverlay
         isPaused={workoutTimer.isPaused}
@@ -3423,6 +3904,7 @@ export default function WorkoutPage() {
         onCancelWorkout={() => setShowCancelModal(true)}
         onAddExercise={handleOpenAddExercise}
         onFinishWorkout={handleWorkoutComplete}
+        onMinimize={() => router.push('/dashboard/log')}
       />
 
       {/* Readiness modulation banner (Phase 1.3): eased targets today, with a
@@ -3882,22 +4364,10 @@ export default function WorkoutPage() {
                       setPlateCalculatorWeight(initialWeightKg);
                       setShowPlateCalculator(true);
                     }}
+                    setSyncStatus={setSync}
                   />
 
-                  {/* Rest timer - single slim bar below the active exercise */}
-                  {isCurrent && showRestTimer && !pendingDropset && (
-                    <RestTimer
-                      seconds={restTimer.seconds}
-                      initialSeconds={restTimer.initialSeconds}
-                      isRunning={restTimer.isRunning}
-                      isFinished={restTimer.isFinished}
-                      onAddTime={restTimer.addTime}
-                      onSkip={() => {
-                        restTimer.skip();
-                        setShowRestTimer(false);
-                      }}
-                    />
-                  )}
+                  {/* Rest timer renders as a fixed bottom bar at page level (P0-5) */}
 
                   {/* AMRAP Suggestion Banner - positioned below sets for better visibility when keyboard is up */}
                   {amrapSuggestion && amrapSuggestion.blockId === block.id && (
@@ -4205,6 +4675,35 @@ export default function WorkoutPage() {
           </Button>
         </div>
       </Card>
+
+      {/* Sticky rest timer (P0-5): fixed to the bottom so the countdown stays
+          visible while scrolling. Tap the bar to jump back to the current
+          exercise. The container gets pb-32 while this is shown. */}
+      {restBarVisible && (
+        <div className="fixed inset-x-3 bottom-3 z-40 max-w-2xl mx-auto">
+          <RestTimer
+            seconds={restTimer.seconds}
+            initialSeconds={restTimer.initialSeconds}
+            isRunning={restTimer.isRunning}
+            isFinished={restTimer.isFinished}
+            onAddTime={restTimer.addTime}
+            onSkip={() => {
+              restTimer.skip();
+              setShowRestTimer(false);
+            }}
+            nextLabel={
+              currentBlock
+                ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
+                : undefined
+            }
+            onBarTap={() => {
+              document
+                .getElementById(`exercise-${currentBlockIndex}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          />
+        </div>
+      )}
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
@@ -4680,45 +5179,12 @@ export default function WorkoutPage() {
 
       {/* Cancel Workout Confirmation Modal */}
       {showCancelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => !isCancelling && setShowCancelModal(false)}
-          />
-          <div className="relative w-full max-w-sm mx-4 bg-surface-900 rounded-2xl border border-surface-800 overflow-hidden">
-            <div className="p-6 text-center">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-danger-500/20 flex items-center justify-center">
-                <svg className="w-7 h-7 text-danger-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-surface-100 mb-2">Cancel Workout?</h3>
-              <p className="text-sm text-surface-400 mb-6">
-                {totalCompletedSets > 0
-                  ? `You've logged ${totalCompletedSets} set${totalCompletedSets !== 1 ? 's' : ''}. Cancelling will delete all progress and reset this workout.`
-                  : 'This will reset the workout so you can start fresh later.'}
-              </p>
-              <div className="flex gap-3">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowCancelModal(false)}
-                  disabled={isCancelling}
-                  className="flex-1"
-                >
-                  Keep Going
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleCancelWorkout}
-                  disabled={isCancelling}
-                  className="flex-1 border-danger-500/50 text-danger-400 hover:bg-danger-500/10"
-                >
-                  {isCancelling ? 'Cancelling...' : 'Cancel Workout'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CancelWorkoutModal
+          totalCompletedSets={totalCompletedSets}
+          isCancelling={isCancelling}
+          onKeepGoing={() => setShowCancelModal(false)}
+          onConfirm={handleCancelWorkout}
+        />
       )}
       
       {/* Exercise Details Modal */}

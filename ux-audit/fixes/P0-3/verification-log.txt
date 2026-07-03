@@ -1,0 +1,10 @@
+Logged 2 sets.
+Minimize chevron visible on workout page: PASS
+Minimize navigates to /dashboard/log: PASS
+Resume pill on nutrition tab: PASS — "Barbell Bench Press |  | rest 2:53 · 2/4 sets · started just now |  | Discard | Resume"
+Pill shows 2 sets progress: PASS
+Pill shows live rest countdown: PASS
+Bottom nav visible while browsing: PASS
+After resume: Set 1 visible=true, Set 2 visible=true PASS
+Rest timer bar after resume: PASS (still running)
+Cleanup: session discarded.

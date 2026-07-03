@@ -16,6 +16,7 @@ import {
   IconActivity,
   IconBandage,
   IconBarbell,
+  IconChevronLeft,
   IconChevronsDown,
   IconChevronsUp,
   IconDotsVertical,
@@ -57,6 +58,12 @@ export interface WorkoutHeaderProps {
   onCancelWorkout: () => void;
   onAddExercise: () => void;
   onFinishWorkout: () => void;
+  /**
+   * Minimize the workout (P0-3): navigate back to the Train tab WITHOUT
+   * touching session state — the session stays in_progress and the
+   * ResumeWorkoutBanner offers the way back from every other tab.
+   */
+  onMinimize: () => void;
 }
 
 const SEGMENT_CLASS: Record<ExerciseSegmentStatus, string> = {
@@ -84,6 +91,7 @@ export function WorkoutHeader({
   onCancelWorkout,
   onAddExercise,
   onFinishWorkout,
+  onMinimize,
 }: WorkoutHeaderProps) {
   const menuItemClass =
     'w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left';
@@ -92,6 +100,16 @@ export function WorkoutHeader({
     // z-30: must sit above ExerciseCard's sticky header (z-10) and its menus (z-20) so the overflow menu isn't clipped
     <div className="sticky top-0 z-30 bg-surface-950/95 backdrop-blur py-3 -mx-4 px-4">
       <div className="flex items-center gap-3">
+        {/* Minimize (back) — leaves the session running and returns to Train */}
+        <button
+          onClick={onMinimize}
+          aria-label="Minimize workout"
+          title="Minimize workout"
+          className="w-11 h-11 -ml-2 flex-shrink-0 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+        >
+          <IconChevronLeft size={22} stroke={2.25} />
+        </button>
+
         {/* Left: name + elapsed / position meta */}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-surface-100 truncate">{workoutName}</p>
@@ -135,14 +153,14 @@ export function WorkoutHeader({
           </div>
           <button
             onClick={onFinishWorkout}
-            className="px-3.5 py-1.5 rounded-lg bg-primary-500 text-white text-xs font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
+            className="px-4 min-h-[44px] rounded-lg bg-primary-500 text-white text-sm font-medium hover:bg-primary-400 active:bg-primary-600 transition-colors"
           >
             Finish
           </button>
           <div className="relative">
             <button
               onClick={onToggleToolsMenu}
-              className={`p-1.5 rounded-lg transition-colors ${
+              className={`w-11 h-11 flex items-center justify-center rounded-lg transition-colors ${
                 injuryCount > 0
                   ? 'bg-warning-500/20 text-warning-400 hover:bg-warning-500/30'
                   : 'text-surface-400 hover:bg-surface-800 hover:text-surface-200'
@@ -152,7 +170,7 @@ export function WorkoutHeader({
               aria-haspopup="menu"
               aria-expanded={showToolsMenu}
             >
-              <IconDotsVertical size={18} stroke={2} />
+              <IconDotsVertical size={20} stroke={2} />
             </button>
             {showToolsMenu && (
               <>

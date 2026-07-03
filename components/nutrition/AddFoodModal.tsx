@@ -9,7 +9,21 @@ import { Select } from '@/components/ui/Select';
 import type { FoodSearchResult, FoodSearchResultWithServings, ParsedServing } from '@/services/usdaService';
 import { searchFoodsAction, getFoodDetailsAction } from '@/lib/actions/food-search';
 import { lookupBarcode as lookupBarcodeOFF } from '@/services/openFoodFactsService';
-import { BarcodeScanner } from './BarcodeScanner';
+import dynamic from 'next/dynamic';
+
+// P1-2 (perf): html5-qrcode is ~90KB gz and only needed when the Barcode tab
+// is actually opened — load it on demand instead of in nutrition's first-load.
+const BarcodeScanner = dynamic(
+  () => import('./BarcodeScanner').then((m) => m.BarcodeScanner),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-10 text-sm text-surface-400">
+        Loading camera…
+      </div>
+    ),
+  }
+);
 import { IconSearch, IconScan, IconPencil, IconX, IconToolsKitchen2 } from '@tabler/icons-react';
 import type { MealType, CustomFood, FrequentFood, SystemFood } from '@/types/nutrition';
 

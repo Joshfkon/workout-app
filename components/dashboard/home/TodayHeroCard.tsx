@@ -67,7 +67,12 @@ export function TodayHeroCard({ workout, scheduled, hasPlan, mesocycleName, coac
             <span>Today{mesocycleName ? ` · ${mesocycleName}` : ''}</span>
           </div>
           <div className="text-base font-medium text-surface-100 mb-3">
-            {workout.exercises} exercises · {workout.completedSets}/{workout.totalSets} sets
+            {workout.exercises > 0
+              ? `${workout.exercises} exercises · ${workout.completedSets}/${workout.totalSets} sets`
+              : // Planned session whose blocks are generated on start — "0
+                // exercises · 0/0 sets" would read as an empty workout, so
+                // show the scheduled day instead.
+                scheduled?.dayName ?? 'Exercises are planned when you start'}
           </div>
           <div className={`w-full py-2.5 rounded-lg text-center text-sm font-semibold text-white ${
             workout.state === 'completed' ? 'bg-success-500' : 'bg-primary-500'

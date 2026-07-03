@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useState } from 'react';
-import { IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
+import { IconBarbell, IconMinus, IconPlus, IconMessagePlus } from '@tabler/icons-react';
 import { BottomSheet } from './BottomSheet';
 import { FormRatingSelector } from './FormRatingSelector';
 import { DiscomfortLogger } from './DiscomfortLogger';
@@ -58,6 +58,12 @@ interface SetLoggerRowProps {
     feedback: SetFeedback;
     bodyweightData?: BodyweightData;
   }) => void;
+  /**
+   * Opens the plate calculator pre-filled with the current weight (P1-5).
+   * The calculator has existed since the audit — this is its first
+   * discoverable trigger at the point of use.
+   */
+  onPlateCalculatorOpen?: () => void;
 }
 
 /** Clamp a prescribed RIR to the 0-3 chip range. */
@@ -67,6 +73,15 @@ function clampToChip(rir: number): RepsInTank {
 }
 
 const RIR_CHIPS: RepsInTank[] = [3, 2, 1, 0];
+
+/** Effort labels under the RIR numbers (matches the set-feedback semantics). */
+const RIR_LABELS: Record<RepsInTank, string> = {
+  4: 'easy', // not rendered as a chip (chips clamp to 0-3) but RepsInTank includes it
+  3: 'easy',
+  2: 'good',
+  1: 'hard',
+  0: 'maxed',
+};
 
 /**
  * One-tap set logger row (replaces the SetInputRow → SetFeedbackCard
@@ -90,6 +105,7 @@ export function SetLoggerRow({
   weightMode = 'bodyweight',
   userBodyweightKg,
   onLog,
+  onPlateCalculatorOpen,
 }: SetLoggerRowProps) {
   const [selectedRir, setSelectedRir] = useState<RepsInTank>(() => clampToChip(targetRir));
   const [editingField, setEditingField] = useState<'weight' | 'reps' | null>(null);
@@ -206,15 +222,18 @@ export function SetLoggerRow({
     setShowFeedbackSheet(false);
   };
 
+  // Gym-proof tap targets (P0-4): every interactive control in this row is
+  // ≥44px in both axes, with the primary input row at 52px tall.
   const stepperButtonClass =
-    'min-w-[40px] min-h-[40px] flex items-center justify-center rounded-md bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30';
+    'min-w-[44px] min-h-[52px] flex items-center justify-center rounded-lg bg-surface-800/50 text-surface-300 hover:text-surface-100 active:bg-surface-700 transition-colors disabled:opacity-30';
 
   const renderValue = (
     field: 'weight' | 'reps',
     displayText: string,
     value: string,
     onChange: (v: string) => void,
-    ariaLabel: string
+    ariaLabel: string,
+    unitText?: string
   ) => {
     if (editingField === field) {
       return (
@@ -236,7 +255,7 @@ export function SetLoggerRow({
           min="0"
           step={field === 'weight' ? '0.5' : '1'}
           aria-label={ariaLabel}
-          className="w-full min-w-0 px-1 py-2 bg-surface-900 border border-primary-500/50 rounded-md text-center font-mono text-sm text-surface-100 focus:outline-none"
+          className="w-full min-w-0 px-1 min-h-[52px] bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-[15px] text-surface-100 focus:outline-none"
         />
       );
     }
@@ -245,10 +264,13 @@ export function SetLoggerRow({
         type="button"
         onClick={() => setEditingField(field)}
         disabled={disabled}
-        aria-label={`${ariaLabel}: ${displayText}. Tap to type`}
-        className="w-full min-w-0 py-2 font-mono text-sm text-surface-100 truncate"
+        aria-label={`${ariaLabel}: ${displayText}${unitText ? ` ${unitText}` : ''}. Tap to type`}
+        className="w-full min-w-0 min-h-[52px] flex flex-col items-center justify-center leading-tight"
       >
-        {displayText}
+        <span className="font-mono text-[15px] text-surface-100 whitespace-nowrap">{displayText}</span>
+        {unitText && (
+          <span className="text-[10px] uppercase tracking-wide text-surface-500">{unitText}</span>
+        )}
       </button>
     );
   };
@@ -259,11 +281,30 @@ export function SetLoggerRow({
       role="group"
       aria-label={`Set ${setNumber} logger`}
     >
+      {/* Row 0: set label + plate calculator affordance (P1-5, mockup 02) */}
+      {onPlateCalculatorOpen && (
+        <div className="flex items-center justify-between -mb-1">
+          <span className="text-[11px] text-surface-500">Set {setNumber}</span>
+          <button
+            type="button"
+            onClick={onPlateCalculatorOpen}
+            disabled={disabled}
+            aria-label="Open plate calculator"
+            className="min-h-[44px] -my-2.5 px-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
+          >
+            <IconBarbell size={14} aria-hidden="true" />
+            Plates
+          </button>
+        </div>
+      )}
+
       {/* Row 1: set number, weight stepper, reps stepper */}
-      <div className="flex items-center gap-2">
-        <span className="w-5 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center">
-          {setNumber}
-        </span>
+      <div className="flex items-center gap-1.5">
+        {!onPlateCalculatorOpen && (
+          <span className="w-3 flex-shrink-0 text-[12px] font-medium text-surface-400 text-center">
+            {setNumber}
+          </span>
+        )}
 
         {/* Weight */}
         {isPlainBodyweight ? (
@@ -272,7 +313,7 @@ export function SetLoggerRow({
             {userBodyweightKg ? `${convertWeightForDisplay(userBodyweightKg, unit)} ${unitLabel}` : ''}
           </div>
         ) : (
-          <div className="flex-1 flex items-center gap-1 min-w-0">
+          <div className="flex-1 flex items-center gap-0.5 min-w-0">
             <button
               type="button"
               onClick={() => stepWeight(-1)}
@@ -284,10 +325,11 @@ export function SetLoggerRow({
             </button>
             {renderValue(
               'weight',
-              `${isBodyweight && weightMode === 'assisted' ? '-' : isBodyweight && weightMode === 'weighted' ? '+' : ''}${weight || '0'} ${unitLabel}`,
+              `${isBodyweight && weightMode === 'assisted' ? '-' : isBodyweight && weightMode === 'weighted' ? '+' : ''}${weight || '0'}`,
               weight,
               onWeightChange,
-              'Weight'
+              'Weight',
+              unitLabel
             )}
             <button
               type="button"
@@ -302,7 +344,7 @@ export function SetLoggerRow({
         )}
 
         {/* Reps / seconds */}
-        <div className="flex-1 flex items-center gap-1 min-w-0">
+        <div className="flex-1 flex items-center gap-0.5 min-w-0">
           <button
             type="button"
             onClick={() => stepReps(-1)}
@@ -317,7 +359,8 @@ export function SetLoggerRow({
             `${reps || '0'}${isDurationBased ? 's' : ''}`,
             reps,
             onRepsChange,
-            isDurationBased ? 'Seconds' : 'Reps'
+            isDurationBased ? 'Seconds' : 'Reps',
+            isDurationBased ? undefined : 'reps'
           )}
           <button
             type="button"
@@ -331,24 +374,26 @@ export function SetLoggerRow({
         </div>
       </div>
 
-      {/* Row 2: RIR chips + feedback sheet trigger */}
-      <div className="flex items-center gap-1.5">
-        <span className="text-[11px] text-surface-500 mr-0.5">RIR</span>
+      {/* Row 2: RIR chips (labeled, full-width) + feedback sheet trigger */}
+      <div className="flex items-stretch gap-2">
         {RIR_CHIPS.map((chip) => (
           <button
             key={chip}
             type="button"
             onClick={() => setSelectedRir(chip)}
             disabled={disabled}
-            aria-label={`${chip} reps in reserve`}
+            aria-label={`${chip} reps in reserve (${RIR_LABELS[chip]})`}
             aria-pressed={selectedRir === chip}
-            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            className={`flex-1 min-h-[52px] rounded-xl flex flex-col items-center justify-center gap-0 font-medium transition-colors ${
               selectedRir === chip
                 ? 'bg-primary-500 text-white'
                 : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
             }`}
           >
-            {chip}
+            <span className="text-[16px] font-semibold leading-tight">{chip}</span>
+            <span className={`text-[10px] leading-tight ${selectedRir === chip ? 'text-white/80' : 'text-surface-500'}`}>
+              {RIR_LABELS[chip]}
+            </span>
           </button>
         ))}
         <button
@@ -356,12 +401,12 @@ export function SetLoggerRow({
           onClick={() => setShowFeedbackSheet(true)}
           disabled={disabled}
           aria-label="Add set feedback"
-          className="ml-auto relative p-1.5 rounded-lg text-surface-400 hover:text-surface-200 hover:bg-surface-800 transition-colors"
+          className="relative min-w-[52px] min-h-[52px] rounded-xl flex items-center justify-center text-surface-400 hover:text-surface-200 bg-surface-800/50 hover:bg-surface-800 transition-colors"
         >
-          <IconMessagePlus size={18} />
+          <IconMessagePlus size={20} />
           {hasSheetFeedback && (
             <span
-              className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-primary-400"
+              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-400"
               aria-hidden="true"
             />
           )}
@@ -373,7 +418,7 @@ export function SetLoggerRow({
         type="button"
         onClick={handleLog}
         disabled={!canLog}
-        className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors disabled:opacity-40"
+        className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-xl min-h-[52px] text-base font-semibold transition-colors disabled:opacity-40"
       >
         Log set
       </button>

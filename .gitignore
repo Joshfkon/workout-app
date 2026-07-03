@@ -43,3 +43,8 @@ next-env.d.ts
 
 # Claude Code local working dir
 .claude/
+
+# Live session token used by ux-audit verification runners — never commit
+ux-audit/auth-state.json
+# Raw audit crawl screenshots (36MB) stay local; per-fix evidence is committed
+ux-audit/screenshots/

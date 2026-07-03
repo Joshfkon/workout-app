@@ -1,0 +1,5 @@
+More link "Profile": PASS
+More link "Discover Workouts": PASS
+More link "Leaderboards": PASS
+More link "Plans & Billing": PASS
+Leaderboards link navigates: PASS

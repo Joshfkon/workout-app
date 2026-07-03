@@ -60,6 +60,8 @@ const navItems: NavItem[] = [
       '/dashboard/glossary',
       '/dashboard/science',
       '/dashboard/settings',
+      '/dashboard/leaderboards',
+      '/dashboard/pricing',
     ],
   },
 ];

@@ -80,6 +80,7 @@ jest.mock('@/lib/utils', () => ({
     return to === 'lb' ? w * 2.20462 : w / 2.20462;
   }),
   formatWeight: jest.fn((w, unit) => `${w}${unit}`),
+  formatMuscleName: jest.fn((m: string) => m.split(/[_\s]+/).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' ')),
   formatWeightValue: jest.fn((w, unit) => (unit === 'lb' ? Math.round((w * 2.20462) / 2.5) * 2.5 : w)),
   convertWeightForDisplay: jest.fn((w, unit) =>
     unit === 'lb' ? Math.round(w * 2.20462 * 10) / 10 : Math.round(w * 10) / 10
@@ -350,7 +351,7 @@ describe('ExerciseCard', () => {
         <ExerciseCard {...defaultProps} isActive={true} onSetComplete={onSetComplete} />
       );
 
-      await user.click(screen.getByRole('button', { name: '0 reps in reserve' }));
+      await user.click(screen.getByRole('button', { name: '0 reps in reserve (maxed)' }));
       await user.click(screen.getByRole('button', { name: 'Log set' }));
 
       expect(onSetComplete).toHaveBeenCalledWith(
@@ -375,7 +376,7 @@ describe('ExerciseCard', () => {
         />
       );
 
-      expect(screen.getByRole('button', { name: '0 reps in reserve' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '0 reps in reserve (maxed)' })).toHaveAttribute(
         'aria-pressed',
         'true'
       );
@@ -490,7 +491,7 @@ describe('ExerciseCard', () => {
 
       expect(screen.getByText(/eased for readiness/)).toBeInTheDocument();
       // Target RIR 2 + readiness delta 1 -> chip 3 pre-selected
-      expect(screen.getByRole('button', { name: '3 reps in reserve' })).toHaveAttribute(
+      expect(screen.getByRole('button', { name: '3 reps in reserve (easy)' })).toHaveAttribute(
         'aria-pressed',
         'true'
       );

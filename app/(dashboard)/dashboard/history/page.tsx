@@ -5,10 +5,18 @@ import { Card, Badge, Button, FullPageLoading, LoadingAnimation } from '@/compon
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { formatWeight, convertWeight, estimateE1RM, getLocalDateString } from '@/lib/utils';
+import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import HistoryCalendar from './_components/HistoryCalendar';
+import nextDynamic from 'next/dynamic';
+
+// P1-2 (perf): keep recharts (~100KB) out of history's first-load — the chart
+// only renders inside the exercise-detail modal.
+const E1RMProgressChart = nextDynamic(() => import('./_components/E1RMProgressChart'), {
+  ssr: false,
+  loading: () => <div className="h-full flex items-center justify-center text-sm text-surface-500">Loading chart…</div>,
+});
 
 interface SetDetail {
   id: string;
@@ -36,6 +44,52 @@ interface WorkoutHistory {
   exercises: ExerciseDetail[];
   totalSets: number;
   totalVolume: number;
+}
+
+/** Nested session rows -> WorkoutHistory cards (shared by list + calendar-day fetches). */
+function transformSessions(data: any[]): WorkoutHistory[] {
+  return data.map((workout: any) => {
+    const exercises: ExerciseDetail[] = (workout.exercise_blocks || [])
+      .sort((a: any, b: any) => a.order - b.order)
+      .filter((block: any) => block.exercises)
+      .map((block: any) => {
+        const workingSets = (block.set_logs || [])
+          .filter((set: any) => !set.is_warmup)
+          .sort((a: any, b: any) => a.set_number - b.set_number);
+
+        return {
+          id: block.id,
+          exerciseId: block.exercise_id,
+          name: block.exercises.name,
+          primaryMuscle: block.exercises.primary_muscle,
+          sets: workingSets.map((set: any) => ({
+            id: set.id,
+            weight_kg: set.weight_kg,
+            reps: set.reps,
+            rpe: set.rpe,
+          })),
+        };
+      });
+
+    const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+    const totalVolume = exercises.reduce(
+      (sum, ex) => sum + ex.sets.reduce((setSum, set) => setSum + set.weight_kg * set.reps, 0),
+      0
+    );
+
+    return {
+      id: workout.id,
+      planned_date: workout.planned_date,
+      completed_at: workout.completed_at,
+      state: workout.state,
+      session_rpe: workout.session_rpe,
+      session_notes: workout.session_notes,
+      pump_rating: workout.pump_rating,
+      exercises,
+      totalSets,
+      totalVolume,
+    };
+  });
 }
 
 interface ExerciseHistoryEntry {
@@ -69,6 +123,147 @@ function HistoryPageContent() {
 
   const [workouts, setWorkouts] = useState<WorkoutHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  // Calendar view + filters (P1-6)
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calMonth, setCalMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [monthDots, setMonthDots] = useState<Set<string>>(new Set());
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dayWorkouts, setDayWorkouts] = useState<WorkoutHistory[] | null>(null);
+  const [exerciseFilter, setExerciseFilter] = useState<string | null>(null);
+
+  // Dot markers: one lightweight query per visible month (completed_at only).
+  useEffect(() => {
+    if (viewMode !== 'calendar') return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const start = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1);
+      const end = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select('completed_at')
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .gte('completed_at', start.toISOString())
+        .lt('completed_at', end.toISOString());
+      if (!cancelled) {
+        setMonthDots(
+          new Set(((data ?? []) as { completed_at: string }[]).map(r => getLocalDateString(new Date(r.completed_at))))
+        );
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [viewMode, calMonth]);
+
+  // Selecting a day fetches that day's sessions (they may be outside the
+  // paginated list) using the same nested select + transform as the list.
+  useEffect(() => {
+    if (!selectedDay) { setDayWorkouts(null); return; }
+    let cancelled = false;
+    (async () => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const dayStart = new Date(`${selectedDay}T00:00:00`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select(SESSION_SELECT)
+        .eq('user_id', user.id)
+        .eq('state', 'completed')
+        .gte('completed_at', dayStart.toISOString())
+        .lt('completed_at', dayEnd.toISOString())
+        .order('completed_at', { ascending: false });
+      if (!cancelled) setDayWorkouts(transformSessions(data ?? []));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDay]);
+
+  // What the cards section shows: day selection replaces the paginated list;
+  // the exercise chip filters either source client-side.
+  const baseWorkouts = selectedDay && viewMode === 'calendar' ? (dayWorkouts ?? []) : workouts;
+  const displayedWorkouts = exerciseFilter
+    ? baseWorkouts.filter(w => w.exercises.some(ex => ex.name === exerciseFilter))
+    : baseWorkouts;
+  const exerciseChips = Array.from(
+    new Set(workouts.flatMap(w => w.exercises.map(ex => ex.name)))
+  ).sort().slice(0, 12);
+
+  // Inline past-set editing (P1-3)
+  const [editingSetId, setEditingSetId] = useState<string | null>(null);
+  const [editWeight, setEditWeight] = useState('');
+  const [editReps, setEditReps] = useState('');
+  const [savingSetEdit, setSavingSetEdit] = useState(false);
+
+  const startSetEdit = (set: SetDetail) => {
+    setEditingSetId(set.id);
+    setEditWeight(String(convertWeightForDisplay(set.weight_kg, unit)));
+    setEditReps(String(set.reps));
+  };
+
+  const saveSetEdit = async (workoutId: string, exerciseBlockId: string, setId: string) => {
+    const weightNum = parseFloat(editWeight);
+    const repsNum = parseInt(editReps, 10);
+    if (isNaN(weightNum) || weightNum < 0 || isNaN(repsNum) || repsNum < 1 || repsNum > 999) return;
+
+    setSavingSetEdit(true);
+    try {
+      const weightKg = inputWeightToKg(weightNum, unit);
+      const supabase = createUntypedClient();
+      const { error } = await supabase
+        .from('set_logs')
+        .update({ weight_kg: weightKg, reps: repsNum })
+        .eq('id', setId);
+      if (error) {
+        console.error('Failed to update set:', error);
+        return;
+      }
+
+      // P1-3 detection A: stamp edited_at (best-effort). Separate from the
+      // essential update above so editing never breaks — dormant until the
+      // set_logs.edited_at migration is applied; an unknown-column error just
+      // returns { error } which we ignore.
+      await supabase
+        .from('set_logs')
+        .update({ edited_at: new Date().toISOString() })
+        .eq('id', setId)
+        .then(({ error: stampErr }: { error: unknown }) => {
+          if (stampErr) console.debug('edited_at stamp skipped (migration not applied?)');
+        });
+
+      // Update local card state + recompute the workout's volume total.
+      // (E1RM, PRs, weekly volume, and future suggestions all derive from
+      // set_logs at read time — no stored aggregates to fix up.)
+      setWorkouts(prev =>
+        prev.map(w => {
+          if (w.id !== workoutId) return w;
+          const exercises = w.exercises.map(ex =>
+            ex.id !== exerciseBlockId
+              ? ex
+              : { ...ex, sets: ex.sets.map(s => (s.id === setId ? { ...s, weight_kg: weightKg, reps: repsNum } : s)) }
+          );
+          const totalVolume = exercises.reduce(
+            (sum, ex) => sum + ex.sets.reduce((s2, s) => s2 + s.weight_kg * s.reps, 0),
+            0
+          );
+          return { ...w, exercises, totalVolume };
+        })
+      );
+      setEditingSetId(null);
+    } finally {
+      setSavingSetEdit(false);
+    }
+  };
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [expandedWorkout, setExpandedWorkout] = useState<string | null>(null);
@@ -445,19 +640,12 @@ function HistoryPageContent() {
     }
   };
 
-  useEffect(() => {
-    async function fetchHistory() {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        setIsLoading(false);
-        return;
-      }
+  // P1-2 (perf): history is paginated — PAGE_SIZE sessions per fetch instead
+  // of every session the user has ever logged. Older pages load on demand.
+  const PAGE_SIZE = 20;
 
-      const { data } = await supabase
-        .from('workout_sessions')
-        .select(`
+  // Shared nested select for session cards (list pages + calendar day fetch)
+  const SESSION_SELECT = `
           id,
           planned_date,
           completed_at,
@@ -483,61 +671,49 @@ function HistoryPageContent() {
               is_warmup
             )
           )
-        `)
+        `;
+
+  const fetchHistoryPage = async (pageIndex: number) => {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('workout_sessions')
+        .select(SESSION_SELECT)
         .eq('user_id', user.id)
         .in('state', ['completed', 'in_progress'])
-        .order('completed_at', { ascending: false, nullsFirst: false });
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .range(pageIndex * PAGE_SIZE, pageIndex * PAGE_SIZE + PAGE_SIZE - 1);
 
       if (data) {
-        const transformed: WorkoutHistory[] = data.map((workout: any) => {
-          const exercises: ExerciseDetail[] = (workout.exercise_blocks || [])
-            .sort((a: any, b: any) => a.order - b.order)
-            .filter((block: any) => block.exercises)
-            .map((block: any) => {
-              const workingSets = (block.set_logs || [])
-                .filter((set: any) => !set.is_warmup)
-                .sort((a: any, b: any) => a.set_number - b.set_number);
-              
-              return {
-                id: block.id,
-                exerciseId: block.exercise_id,
-                name: block.exercises.name,
-                primaryMuscle: block.exercises.primary_muscle,
-                sets: workingSets.map((set: any) => ({
-                  id: set.id,
-                  weight_kg: set.weight_kg,
-                  reps: set.reps,
-                  rpe: set.rpe,
-                })),
-              };
-            });
-
-          const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-          const totalVolume = exercises.reduce((sum, ex) => 
-            sum + ex.sets.reduce((setSum, set) => setSum + (set.weight_kg * set.reps), 0), 0
-          );
-
-          return {
-            id: workout.id,
-            planned_date: workout.planned_date,
-            completed_at: workout.completed_at,
-            state: workout.state,
-            session_rpe: workout.session_rpe,
-            session_notes: workout.session_notes,
-            pump_rating: workout.pump_rating,
-            exercises,
-            totalSets,
-            totalVolume,
-          };
-        });
-        setWorkouts(transformed);
+        const transformed = transformSessions(data);
+        setWorkouts(prev => (pageIndex === 0 ? transformed : [...prev, ...transformed]));
+        setHasMore(transformed.length === PAGE_SIZE);
+      } else {
+        setHasMore(false);
       }
 
       setIsLoading(false);
-    }
+      setIsLoadingMore(false);
+  };
 
-    fetchHistory();
+  useEffect(() => {
+    fetchHistoryPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleLoadMore = () => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    const nextPage = page + 1;
+    setPage(nextPage);
+    void fetchHistoryPage(nextPage);
+  };
 
   // Auto-fetch exercise from query parameter (from analytics page)
   useEffect(() => {
@@ -660,54 +836,16 @@ function HistoryPageContent() {
                   </div>
                 </div>
 
-                {/* Progress chart */}
+                {/* Progress chart (recharts loads on demand — P1-2) */}
                 {chartData.length > 1 && (
                   <div className="bg-surface-800 rounded-lg p-4">
                     <h3 className="text-sm font-semibold text-surface-300 mb-4">Estimated 1RM Progress</h3>
                     <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis 
-                            dataKey="date" 
-                            stroke="#9CA3AF" 
-                            tick={{ fontSize: 11 }}
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis 
-                            stroke="#9CA3AF" 
-                            tick={{ fontSize: 11 }}
-                            domain={['auto', 'auto']}
-                            tickFormatter={(value) => `${value}`}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: '#1F2937',
-                              border: '1px solid #374151',
-                              borderRadius: '8px',
-                            }}
-                            labelStyle={{ color: '#9CA3AF' }}
-                            formatter={(value: number, name: string) => [
-                              `${value} ${unit}`,
-                              name === 'e1rm' ? 'Est. 1RM' : 'Best Weight'
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="e1rm"
-                            stroke="#8B5CF6"
-                            strokeWidth={2}
-                            dot={{ fill: '#8B5CF6', strokeWidth: 0, r: 4 }}
-                            activeDot={{ r: 6 }}
-                          />
-                          <ReferenceLine 
-                            y={Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))} 
-                            stroke="#22C55E" 
-                            strokeDasharray="5 5"
-                            label={{ value: 'PR', fill: '#22C55E', fontSize: 11 }}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <E1RMProgressChart
+                        chartData={chartData}
+                        unit={unit}
+                        prLine={Math.round(convertWeight(selectedExercise.allTimeMaxE1RM, 'kg', unit))}
+                      />
                     </div>
                   </div>
                 )}
@@ -816,6 +954,66 @@ function HistoryPageContent() {
         )}
       </div>
 
+      {/* List / Calendar toggle (P1-6) — flat list stays the default */}
+      {workouts.length > 0 && (
+        <div className="flex gap-1 bg-surface-800/50 p-1 rounded-xl w-fit">
+          {(['list', 'calendar'] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => {
+                setViewMode(mode);
+                if (mode === 'list') setSelectedDay(null);
+              }}
+              aria-pressed={viewMode === mode}
+              className={`px-5 min-h-[44px] rounded-lg text-sm font-medium capitalize transition-all ${
+                viewMode === mode
+                  ? 'bg-surface-700 text-surface-100 shadow-sm'
+                  : 'text-surface-400 hover:text-surface-200'
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'calendar' && (
+        <HistoryCalendar
+          month={calMonth}
+          dotDates={monthDots}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          onMonthChange={setCalMonth}
+        />
+      )}
+
+      {/* Exercise filter chips (P1-6) */}
+      {workouts.length > 0 && exerciseChips.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+          {exerciseChips.map((name) => (
+            <button
+              key={name}
+              onClick={() => setExerciseFilter(exerciseFilter === name ? null : name)}
+              aria-pressed={exerciseFilter === name}
+              className={`flex-shrink-0 min-h-[44px] px-4 rounded-full text-sm font-medium transition-colors ${
+                exerciseFilter === name
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {viewMode === 'calendar' && selectedDay && displayedWorkouts.length === 0 && (
+        <p className="text-sm text-surface-500 text-center py-4">
+          No {exerciseFilter ? `${exerciseFilter} ` : ''}workouts on{' '}
+          {new Date(`${selectedDay}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}.
+        </p>
+      )}
+
       {workouts.length === 0 ? (
         <Card className="text-center py-12">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800 flex items-center justify-center">
@@ -833,7 +1031,7 @@ function HistoryPageContent() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {workouts.map((workout) => {
+          {displayedWorkouts.map((workout) => {
             const isExpanded = expandedWorkout === workout.id;
             
             const isSelected = selectedWorkouts.has(workout.id);
@@ -939,7 +1137,7 @@ function HistoryPageContent() {
                             )}
                             <span>{workout.exercises.length} exercises</span>
                             <span>{workout.totalSets} sets</span>
-                            <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                            <span>{formatWeight(workout.totalVolume, unit, 0)} total</span>
                           </div>
                         </div>
                       </div>
@@ -975,7 +1173,7 @@ function HistoryPageContent() {
                           )}
                           <span>{workout.exercises.length} exercises</span>
                           <span>{workout.totalSets} sets</span>
-                          <span>{formatWeight(workout.totalVolume, unit)} total</span>
+                          <span>{formatWeight(workout.totalVolume, unit, 0)} total</span>
                           {workout.session_rpe && (
                             <span className="flex items-center gap-1">
                               RPE: <span className={workout.session_rpe >= 8 ? 'text-danger-400' : workout.session_rpe >= 6 ? 'text-warning-400' : 'text-surface-300'}>{workout.session_rpe}</span>
@@ -1069,10 +1267,52 @@ function HistoryPageContent() {
 
                             {exercise.sets.length > 0 ? (
                               <div className="space-y-1">
-                                {exercise.sets.map((set, idx) => (
+                                {exercise.sets.map((set, idx) =>
+                                  editingSetId === set.id ? (
+                                    /* Inline set editor (P1-3): fix a fat-fingered
+                                       weight after the session is done. E1RM, PRs,
+                                       volume and future suggestions all derive from
+                                       set_logs at read time, so saving self-heals. */
+                                    <div key={set.id} className="flex items-center gap-2 text-sm py-1 px-2 rounded bg-surface-700/40">
+                                      <span className="text-surface-500 w-8">#{idx + 1}</span>
+                                      <input
+                                        type="number"
+                                        inputMode="decimal"
+                                        value={editWeight}
+                                        onChange={(e) => setEditWeight(e.target.value)}
+                                        aria-label="Weight"
+                                        className="w-20 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                      />
+                                      <span className="text-surface-500 text-xs">{unit}</span>
+                                      <span className="text-surface-400">×</span>
+                                      <input
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={editReps}
+                                        onChange={(e) => setEditReps(e.target.value)}
+                                        aria-label="Reps"
+                                        className="w-16 min-h-[44px] px-2 bg-surface-900 border border-primary-500/50 rounded-lg text-center font-mono text-surface-100 focus:outline-none"
+                                      />
+                                      <button
+                                        onClick={() => saveSetEdit(workout.id, exercise.id, set.id)}
+                                        disabled={savingSetEdit}
+                                        aria-label="Save set"
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-primary-400 hover:bg-surface-700 font-semibold"
+                                      >
+                                        {savingSetEdit ? '…' : '✓'}
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingSetId(null)}
+                                        aria-label="Cancel edit"
+                                        className="min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:bg-surface-700"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
                                   <div
                                     key={set.id}
-                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50"
+                                    className="flex items-center gap-4 text-sm py-1 px-2 rounded hover:bg-surface-700/50 group/set"
                                   >
                                     <span className="text-surface-500 w-8">#{idx + 1}</span>
                                     <span className="text-surface-200 font-medium">
@@ -1091,8 +1331,21 @@ function HistoryPageContent() {
                                         RPE {set.rpe}
                                       </span>
                                     )}
+                                    {workout.state === 'completed' && !isSelectMode && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          startSetEdit(set);
+                                        }}
+                                        aria-label={`Edit set ${idx + 1}`}
+                                        className="ml-auto min-w-[44px] min-h-[44px] rounded-lg text-surface-500 hover:text-primary-400 hover:bg-surface-700 transition-colors"
+                                      >
+                                        ✎
+                                      </button>
+                                    )}
                                   </div>
-                                ))}
+                                  )
+                                )}
                               </div>
                             ) : (
                               <p className="text-sm text-surface-500">No sets recorded</p>
@@ -1136,6 +1389,19 @@ function HistoryPageContent() {
               </Card>
             );
           })}
+
+          {/* Older sessions load on demand (P1-2 pagination) — hidden while a
+              calendar day or exercise filter narrows the list */}
+          {hasMore && viewMode === 'list' && !exerciseFilter && (
+            <Button
+              variant="ghost"
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              className="w-full min-h-[48px]"
+            >
+              {isLoadingMore ? 'Loading…' : 'Load older workouts'}
+            </Button>
+          )}
         </div>
       )}
 

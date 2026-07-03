@@ -259,7 +259,7 @@ export default function OnboardingBodyCompPage() {
         </div>
         
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-surface-100 mb-2">Welcome to HyperTracker!</h1>
+          <h1 className="text-3xl font-bold text-surface-100 mb-2">Welcome to HyperTrack!</h1>
           <p className="text-surface-400 mb-6">
             Your AI-powered hypertrophy training and nutrition companion.
           </p>

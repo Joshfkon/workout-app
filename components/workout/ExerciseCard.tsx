@@ -5,7 +5,7 @@ import { Card, Badge, Button, ConfirmModal } from '@/components/ui';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/Accordion';
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
-import { convertWeight, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
+import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
@@ -14,7 +14,7 @@ import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
 import { Input } from '@/components/ui';
-import { IconCheck, IconChevronDown } from '@tabler/icons-react';
+import { IconCheck, IconChevronDown, IconCloudPause } from '@tabler/icons-react';
 import { InlineRestTimerBar } from './InlineRestTimerBar';
 import { DropsetPrompt } from './DropsetPrompt';
 import { BodyweightSetEditRow } from './BodyweightSetEditRow';
@@ -197,7 +197,13 @@ interface ExerciseCardProps {
   isAmrapSuggested?: boolean;  // If true, pre-fill RPE with 9.5 as a target
   // Plate calculator
   onPlateCalculatorOpen?: (initialWeightKg?: number) => void;  // Callback to open plate calculator modal
+  // Per-set write status (P0-2): drives the saved/saving/queued glyph on
+  // completed set lines. Sets absent from the map (loaded from DB) are saved.
+  setSyncStatus?: Record<string, SetSyncStatus>;
 }
+
+/** Write status of a logged set (offline outbox, P0-2). */
+export type SetSyncStatus = 'saving' | 'saved' | 'queued';
 
 // PERFORMANCE: Memoized component to prevent unnecessary re-renders
 export const ExerciseCard = memo(function ExerciseCard({
@@ -239,6 +245,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   userBodyweightKg,
   adjustedRir,
   readinessModulation,
+  setSyncStatus,
   performanceSnapshots,
   onRepRangeChange,
   isAmrapSuggested = false,
@@ -1223,7 +1230,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           className="mt-1 flex items-center justify-between w-full gap-2 text-left"
         >
           <p className="min-w-0 text-[11px] text-surface-500 truncate">
-            <span className="capitalize">{exercise.primaryMuscle}</span>
+            <span>{formatMuscleName(exercise.primaryMuscle)}</span>
             {isBodyweightExercise && ' · bodyweight'}
             {lastSessionMeta && <> · {lastSessionMeta}</>}
           </p>
@@ -1618,7 +1625,23 @@ export const ExerciseCard = memo(function ExerciseCard({
                 onTouchEnd={() => handleTouchEnd(set.id, true)}
                 style={getSwipeTransform(set.id)}
               >
-                <IconCheck size={16} className="text-success-400 flex-shrink-0" aria-hidden="true" />
+                {/* Write-status glyph (P0-2): saved ✓ / saving spinner / queued ⏸ */}
+                {setSyncStatus?.[set.id] === 'saving' ? (
+                  <span
+                    className="w-3.5 h-3.5 flex-shrink-0 rounded-full border-2 border-surface-600 border-t-surface-300 animate-spin"
+                    role="status"
+                    aria-label="Saving set"
+                  />
+                ) : setSyncStatus?.[set.id] === 'queued' ? (
+                  <IconCloudPause
+                    size={16}
+                    className="text-warning-400 flex-shrink-0"
+                    role="status"
+                    aria-label="Queued — will sync when online"
+                  />
+                ) : (
+                  <IconCheck size={16} className="text-success-400 flex-shrink-0" aria-hidden="true" />
+                )}
                 {isDropsetSet && (
                   <span className="text-[11px] text-purple-400 flex-shrink-0">drop</span>
                 )}
@@ -1628,6 +1651,9 @@ export const ExerciseCard = memo(function ExerciseCard({
                   {isDurationBased ? 's' : ''}
                 </span>
                 <span className="ml-auto flex-shrink-0 text-[11px] text-surface-500">
+                  {setSyncStatus?.[set.id] === 'queued' && (
+                    <span className="text-warning-400 mr-1.5">queued</span>
+                  )}
                   {rirValue} RIR · <span className={qualityTextClass(set.quality)}>{set.quality}</span>
                 </span>
               </div>
@@ -1792,6 +1818,16 @@ export const ExerciseCard = memo(function ExerciseCard({
                 weightMode={weightMode}
                 userBodyweightKg={userBodyweightKg}
                 onLog={completeLoggedSet}
+                onPlateCalculatorOpen={
+                  onPlateCalculatorOpen && !isBodyweightExercise
+                    ? () => {
+                        const w = parseFloat(usesBwLoad ? bwLoadInput : input.weight);
+                        onPlateCalculatorOpen(
+                          !isNaN(w) && w > 0 ? inputWeightToKg(w, unit) : undefined
+                        );
+                      }
+                    : undefined
+                }
               />
             </div>
           );
@@ -2188,7 +2224,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                           )}
                         </div>
                         <p className="text-xs text-surface-500 capitalize">
-                          {alt.primaryMuscle} • {alt.mechanic}
+                          {formatMuscleName(alt.primaryMuscle)} • {alt.mechanic}
                         </p>
                         {injuryRisk.isRisky && injuryRisk.reasons.length > 0 && (
                           <p className="text-[10px] text-danger-400/70 mt-0.5">
@@ -2498,6 +2534,14 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
-    prevProps.userBodyweightKg === nextProps.userBodyweightKg
+    prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
+    // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
+    // whole shared map by reference. setSyncStatus is one object shared by every
+    // card, so a reference check would re-render all cards whenever any set's
+    // status flips; this narrow comparison re-renders a card only when one of
+    // its own sets changes saved/saving/queued.
+    prevProps.sets.every(
+      (s) => prevProps.setSyncStatus?.[s.id] === nextProps.setSyncStatus?.[s.id]
+    )
   );
 });

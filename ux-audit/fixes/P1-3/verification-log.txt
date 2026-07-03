@@ -1,0 +1,33 @@
+Created throwaway completed session a8652c8e-dd34-4e08-80a5-bb0cded1bc39
+Set before edit: {"id":"25acfedb-d2e6-47e8-b49f-63f0759578ab","weight_kg":65.77,"reps":8}
+Edit affordance on past set: PASS
+Set after edit: {"id":"25acfedb-d2e6-47e8-b49f-63f0759578ab","weight_kg":62.37,"reps":9}
+DB updated (weight 137.5 lb -> ~62.37 kg, reps 9): PASS
+UI reflects edited value: PASS
+Cleanup: session rows left: 0 (expect 0)
+
+--- POST-MIGRATION happy path ---
+Completed Bench session b4a4b889-c461-4ff9-8e04-45e5ec7c339a; set edited_at before UI edit: null
+A) edited_at stamped by real UI edit: PASS (2026-07-03T11:33:44.455+00:00)
+Planned session 93d9fa84-3adb-4798-ae73-388909813d59 with Bench target 100kg (block created 1h ago, before the edit)
+B) recalc banner appears on stale planned session: PASS
+   confirm dialog lists changes: PASS
+   recalc rewrote target_weight_kg: PASS (100 -> 35.15)
+Cleanup: sessions left 0 (expect 0)
+
+--- POST-MIGRATION happy path ---
+Completed Bench session 6782c253-3640-4363-84ac-8b03c8f9a96a; set edited_at before UI edit: null
+A) edited_at stamped by real UI edit: PASS (2026-07-03T11:36:06.131+00:00)
+Planned session 88b9096b-1674-4494-887e-e20ae3409009 with Bench target 100kg (block created 1h ago, before the edit)
+B) recalc banner appears on stale planned session: PASS
+   confirm dialog lists changes: PASS
+   recalc rewrote target_weight_kg: PASS (100 -> 68.04)
+Cleanup: sessions left 0 (expect 0)
+--- POST-MIGRATION result (migration applied via supabase db push) ---
+Migration 20260703000001_set_logs_edited_at applied to remote (osqhdonkyoucvvfxomia); edited_at column live.
+A) real history edit stamps edited_at: PASS
+B) banner appears on stale planned session: PASS; confirm dialog lists changes: PASS
+   recalc rewrote target_weight_kg using CORRECTED E1RM: 100 -> 68kg (~150lb, history-based).
+   (First pass produced 35kg because the estimate ignored history — fixed to pass the exercise's
+    corrected estimatedE1RM as knownE1RM, matching the live suggestion path.)
+Cleanup: 0 test sessions left.

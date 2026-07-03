@@ -1,0 +1,81 @@
+'use client';
+
+/**
+ * E1RM progress chart for the exercise-history modal. Split out of the
+ * history page (P1-2, perf): recharts is ~100KB and only needed once a user
+ * opens an exercise's detail — the page dynamic-imports this component so
+ * the chart library stays out of history's first-load bundle.
+ */
+
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from 'recharts';
+
+export interface E1RMChartPoint {
+  date: string;
+  e1rm: number;
+}
+
+export default function E1RMProgressChart({
+  chartData,
+  unit,
+  prLine,
+}: {
+  chartData: E1RMChartPoint[];
+  unit: string;
+  /** All-time max E1RM already converted to display units. */
+  prLine: number;
+}) {
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis
+          dataKey="date"
+          stroke="#9CA3AF"
+          tick={{ fontSize: 11 }}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          stroke="#9CA3AF"
+          tick={{ fontSize: 11 }}
+          domain={['auto', 'auto']}
+          tickFormatter={(value) => `${value}`}
+        />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: '#1F2937',
+            border: '1px solid #374151',
+            borderRadius: '8px',
+          }}
+          labelStyle={{ color: '#9CA3AF' }}
+          formatter={(value: number, name: string) => [
+            `${value} ${unit}`,
+            name === 'e1rm' ? 'Est. 1RM' : 'Best Weight',
+          ]}
+        />
+        <Line
+          type="monotone"
+          dataKey="e1rm"
+          stroke="#8B5CF6"
+          strokeWidth={2}
+          dot={{ fill: '#8B5CF6', strokeWidth: 0, r: 4 }}
+          activeDot={{ r: 6 }}
+        />
+        <ReferenceLine
+          y={prLine}
+          stroke="#22C55E"
+          strokeDasharray="5 5"
+          label={{ value: 'PR', fill: '#22C55E', fontSize: 11 }}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}

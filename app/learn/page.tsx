@@ -6,7 +6,7 @@ const features = [
   {
     icon: '🧠',
     title: 'AI-Powered Mesocycle Planning',
-    description: 'Unlike basic workout trackers, HyperTracker uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
+    description: 'Unlike basic workout trackers, HyperTrack uses intelligent algorithms to design periodized training programs tailored to your goals, experience, recovery capacity, and available time.',
     howItWorks: 'We analyze your training frequency, session duration, experience level, sleep quality, and stress to recommend the optimal split, volume distribution, and periodization model.',
   },
   {
@@ -54,7 +54,7 @@ const features = [
   {
     icon: '🔄',
     title: 'Reactive Deload Detection',
-    description: 'HyperTracker monitors performance trends, sleep quality, motivation, and joint health to automatically suggest deloads before you overtrain.',
+    description: 'HyperTrack monitors performance trends, sleep quality, motivation, and joint health to automatically suggest deloads before you overtrain.',
     howItWorks: 'If RPE consistently hits 9.5+, sleep drops below 2/5, or you miss rep targets for 2+ sessions, we trigger an early deload instead of waiting for a fixed schedule.',
   },
   {
@@ -155,7 +155,7 @@ export default function LearnPage() {
           <h1 className="text-4xl md:text-6xl font-black text-surface-100 mb-6">
             The Science Behind{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-400 to-purple-400">
-              HyperTracker
+              HyperTrack
             </span>
           </h1>
           <p className="text-xl text-surface-300 max-w-3xl">
@@ -231,7 +231,7 @@ export default function LearnPage() {
         <section>
           <h2 className="text-3xl font-bold text-surface-100 mb-4 text-center">Built on Real Science</h2>
           <p className="text-center text-surface-400 mb-12 max-w-2xl mx-auto">
-            Every algorithm in HyperTracker is based on peer-reviewed research and proven training methodologies.
+            Every algorithm in HyperTrack is based on peer-reviewed research and proven training methodologies.
           </p>
           
           <div className="grid gap-6">
@@ -249,7 +249,7 @@ export default function LearnPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <p className="text-sm text-primary-300">
-                    <span className="font-semibold">In HyperTracker:</span> {concept.application}
+                    <span className="font-semibold">In HyperTrack:</span> {concept.application}
                   </p>
                 </div>
               </div>
@@ -265,7 +265,7 @@ export default function LearnPage() {
               <thead>
                 <tr className="bg-surface-800/70">
                   <th className="text-left p-4 text-surface-300 font-medium">Feature</th>
-                  <th className="text-center p-4 text-primary-400 font-bold">HyperTracker</th>
+                  <th className="text-center p-4 text-primary-400 font-bold">HyperTrack</th>
                   <th className="text-center p-4 text-surface-400 font-medium">Other Apps</th>
                 </tr>
               </thead>
@@ -297,7 +297,7 @@ export default function LearnPage() {
 
         {/* Who It's For */}
         <section className="text-center">
-          <h2 className="text-3xl font-bold text-surface-100 mb-8">Who Is HyperTracker For?</h2>
+          <h2 className="text-3xl font-bold text-surface-100 mb-8">Who Is HyperTrack For?</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="p-6">
               <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-purple-500/20 flex items-center justify-center">
@@ -356,7 +356,7 @@ export default function LearnPage() {
       {/* Footer */}
       <div className="border-t border-surface-800 py-8 text-center">
         <p className="text-sm text-surface-500">
-          HyperTracker © {new Date().getFullYear()} • Built with ❤️ for the lifting community
+          HyperTrack © {new Date().getFullYear()} • Built with ❤️ for the lifting community
         </p>
       </div>
     </div>

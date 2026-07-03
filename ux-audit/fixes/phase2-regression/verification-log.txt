@@ -1,0 +1,6 @@
+1) One-tap set logging: PASS (Set 1 logged with a single tap)
+2) Rest timer auto-started + visible: PASS
+3) Undo toast present: PASS
+4) Per-set persistence (survives reload): PASS
+5) Bottom nav + nutrition page intact: PASS
+Cleanup: session discarded.

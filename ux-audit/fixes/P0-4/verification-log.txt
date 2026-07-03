@@ -1,0 +1,21 @@
+=== Set-logger controls (390px viewport) ===
+RIR chip 3 (easy)      57x52  PASS
+RIR chip 2 (good)      57x52  PASS
+RIR chip 1 (hard)      57x52  PASS
+RIR chip 0 (maxed)     57x52  PASS
+Weight - stepper       44x52  PASS
+Weight + stepper       44x52  PASS
+Reps - stepper         44x52  PASS
+Reps + stepper         44x52  PASS
+Weight value           51x52  PASS
+Reps value             51x52  PASS
+Log set                310x52  PASS
+Set feedback           52x52  PASS
+Finish (header)        69x44  PASS
+Overflow ⋮ (header)    44x44  PASS
+Logged set with ONE tap (suggestion accepted).
+=== Rest timer controls ===
++15s (timer)           61x44  PASS
+Skip (timer)           59x44  PASS
+Regression: completed "Set 1" visible: true
+Cleanup: session discarded via in-app Cancel workout.

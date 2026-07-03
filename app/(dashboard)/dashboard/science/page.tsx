@@ -384,10 +384,10 @@ export default function SciencePage() {
       {/* Hero */}
       <div className="text-center space-y-4">
         <h1 className="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary-400 via-purple-400 to-pink-400">
-          The Science Behind HyperTracker
+          The Science Behind HyperTrack
         </h1>
         <p className="text-lg text-surface-400 max-w-2xl mx-auto">
-          Every algorithm in HyperTracker is based on peer-reviewed research and proven training methodologies.
+          Every algorithm in HyperTrack is based on peer-reviewed research and proven training methodologies.
           Here&apos;s the science that powers your gains.
         </p>
       </div>
@@ -435,10 +435,10 @@ export default function SciencePage() {
                     </div>
                     <p className="text-surface-300">{concept.explanation}</p>
 
-                    {/* In HyperTracker section - always visible */}
+                    {/* In HyperTrack section - always visible */}
                     <div className={`p-3 ${colors.bg} rounded-lg border ${colors.border}`}>
                       <p className="text-sm">
-                        <span className={`font-semibold ${colors.text}`}>In HyperTracker: </span>
+                        <span className={`font-semibold ${colors.text}`}>In HyperTrack: </span>
                         <span className="text-surface-300">{concept.application}</span>
                       </p>
                     </div>

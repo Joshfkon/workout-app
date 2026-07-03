@@ -3,6 +3,10 @@
 import { createUntypedServerClient } from '@/lib/supabase/server';
 import { getLocalDateString } from '@/lib/utils';
 import { type WorkoutDay } from '@/types/schema';
+import {
+  computeWeeklyMuscleVolume,
+  type MuscleVolumeStats,
+} from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 export interface DashboardMesocycle {
   id: string;
@@ -218,4 +222,26 @@ export async function fetchCompletedWorkoutsCount(userId: string): Promise<numbe
     .eq('user_id', userId)
     .eq('state', 'completed');
   return count || 0;
+}
+
+/**
+ * Weekly per-muscle volume for the atrophy-risk card (item 6: server-render
+ * first paint). Same query + pure pipeline the client fast-path used, moved
+ * server-side so the card — the dashboard's LCP element — ships in the HTML
+ * instead of waiting on a post-hydration fetch.
+ */
+export async function fetchWeeklyMuscleVolume(userId: string): Promise<MuscleVolumeStats[]> {
+  const supabase = await createUntypedServerClient();
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 6);
+
+  const { data } = await supabase
+    .from('exercise_blocks')
+    .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
+      workout_sessions!inner (user_id, completed_at, state)`)
+    .eq('workout_sessions.user_id', userId)
+    .eq('workout_sessions.state', 'completed')
+    .gte('workout_sessions.completed_at', weekStart.toISOString());
+
+  return computeWeeklyMuscleVolume((data as any) || []);
 }

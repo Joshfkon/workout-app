@@ -191,7 +191,7 @@ export interface Database {
           id: string;
           user_id: string;
           mesocycle_id: string | null;
-          state: 'planned' | 'in_progress' | 'completed' | 'skipped';
+          state: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
           planned_date: string;
           started_at: string | null;
           completed_at: string | null;
@@ -200,12 +200,13 @@ export interface Database {
           pump_rating: number | null;
           session_notes: string | null;
           completion_percent: number;
+          auto_discarded_at: string | null;
         };
         Insert: {
           id?: string;
           user_id: string;
           mesocycle_id?: string | null;
-          state?: 'planned' | 'in_progress' | 'completed' | 'skipped';
+          state?: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
           planned_date: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -214,12 +215,13 @@ export interface Database {
           pump_rating?: number | null;
           session_notes?: string | null;
           completion_percent?: number;
+          auto_discarded_at?: string | null;
         };
         Update: {
           id?: string;
           user_id?: string;
           mesocycle_id?: string | null;
-          state?: 'planned' | 'in_progress' | 'completed' | 'skipped';
+          state?: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
           planned_date?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -228,6 +230,7 @@ export interface Database {
           pump_rating?: number | null;
           session_notes?: string | null;
           completion_percent?: number;
+          auto_discarded_at?: string | null;
         };
         Relationships: [];
       };
@@ -653,7 +656,7 @@ export interface Database {
       goal: 'bulk' | 'cut' | 'maintenance';
       experience: 'novice' | 'intermediate' | 'advanced';
       mechanic: 'compound' | 'isolation';
-      session_state: 'planned' | 'in_progress' | 'completed' | 'skipped';
+      session_state: 'planned' | 'in_progress' | 'completed' | 'skipped' | 'auto_discarded';
       set_quality: 'junk' | 'effective' | 'stimulative' | 'excessive';
       progression_type: 'load' | 'reps' | 'sets' | 'technique';
       volume_status: 'below_mev' | 'effective' | 'optimal' | 'approaching_mrv' | 'exceeding_mrv';

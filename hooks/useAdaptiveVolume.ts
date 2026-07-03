@@ -257,7 +257,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         .eq('user_id', userId!)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (data) {
         setLatestAnalysis({
@@ -293,7 +293,7 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         .from('user_volume_profiles')
         .select('*')
         .eq('user_id', userId!)
-        .single();
+        .maybeSingle();
 
       if (profileError && profileError.code !== 'PGRST116') {
         // PGRST116 is "not found" - that's expected for new users
@@ -497,7 +497,7 @@ export async function runMesocycleCompletionAnalysis(
       .from('user_volume_profiles')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     let currentProfile: UserVolumeProfile;
     if (profileData) {

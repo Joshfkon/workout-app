@@ -4,6 +4,8 @@ export type WorkoutPhase = 'loading' | 'checkin' | 'workout' | 'summary' | 'erro
 
 export interface ExerciseBlockWithExercise extends ExerciseBlock {
   exercise: Exercise;
+  /** exercise_blocks.created_at — when the block's targets were computed (P1-3 stale detection). */
+  createdAt?: string;
 }
 
 export interface AvailableExercise {

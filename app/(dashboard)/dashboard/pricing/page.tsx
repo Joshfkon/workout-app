@@ -95,7 +95,7 @@ function PricingContent() {
       <div className="text-center">
         <h1 className="text-3xl font-bold text-surface-100">Choose Your Plan</h1>
         <p className="text-surface-400 mt-2 max-w-xl mx-auto">
-          Unlock your full potential with HyperTracker. Choose the plan that fits your training goals.
+          Unlock your full potential with HyperTrack. Choose the plan that fits your training goals.
         </p>
       </div>
 

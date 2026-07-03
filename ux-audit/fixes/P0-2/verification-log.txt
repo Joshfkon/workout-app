@@ -1,0 +1,13 @@
+session: dab3a841-c147-46f0-888b-32566ef1d0b3
+Network: OFFLINE
+Queued glyphs: 3, queued labels: 4 PASS
+Offline banner visible: PASS
+Banner shows "3 sets queued": PASS
+DB set_logs while offline: 0 (expect 0) PASS
+Network: ONLINE
+Queued glyphs after reconnect: 0 (expect 0) PASS
+DB set_logs after flush: 3 (expect 3) PASS
+DB set_logs after reload/double-flush: 3 (expect 3) PASS
+Undo toast after logging: PASS
+DB set_logs after Undo: 3 (expect 3) PASS
+Cleanup: session rows left: 0 (expect 0)
