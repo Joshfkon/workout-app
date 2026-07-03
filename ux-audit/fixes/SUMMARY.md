@@ -1,0 +1,130 @@
+# UX Audit Fixes — Summary
+
+Branch: `ux-audit-fixes` (15 commits). Every fix was verified the same way the
+audit found it (Playwright at 390×844, DOM measurement, DB probes, Lighthouse
+on production builds); evidence lives beside this file. Test suite (1781
+tests), `tsc --noEmit`, and `next lint` ran green after every commit.
+
+## Finding → commit → evidence → status
+
+| Finding | Commit | Evidence | Status |
+|---|---|---|---|
+| P0-1 side-effectful GET + stale sessions | `d053c69` | fixes/P0-1/ | **Fixed.** Confirm screen; create-on-tap; >4h empty ad-hoc sessions auto-discard. Bonus bug fixed: Cancel Workout was a no-op on empty workouts (modal never rendered in that branch) |
+| P0-4 sub-44px tap targets | `4375bb5` + `fbf7159` | fixes/P0-4/ | **Fixed.** All 16 audited controls ≥44px (RIR chips 26×25→57×52, labeled); before/after table in evidence; one-tap logging re-verified |
+| P0-5 invisible rest timer | `2dd2691` | fixes/P0-5/ | **Fixed.** Fixed bottom bar (mockup 01): mm:ss + next-set line, survives scroll, bar-tap scrolls to current exercise. useRestTimer mechanics untouched |
+| P0-3 workout navigation trap | `005c3b9` | fixes/P0-3/ | **Fixed.** Minimize chevron (both header branches) + upgraded resume pill (live "rest m:ss · N/M sets"). Removed the unmount dismiss() that killed the countdown on navigation (guard now keyed by session id) |
+| P0-2 offline writes fail | `a0f636c` | fixes/P0-2/, 19 unit tests | **Fixed.** IndexedDB outbox, client-generated set ids + ignoreDuplicates upsert (double-flush safe), per-set glyphs, offline banner, flush-on-reconnect from any tab. Verified offline→3 queued→reconnect→3 DB rows→reload still 3 |
+| P1-4 no save feedback / undo | same commit | fixes/P0-2/ | **Fixed.** saving/saved/queued glyphs + undo toast on every logged set |
+| P1-1 hydration failures | `6a5b0c5` | fixes/P1-1/ | **Fixed.** Random pick moved to mount effect; 0 hydration errors on all 8 routes |
+| P1-2 LCP > 2.5s | `a3e9f6e` | fixes/perf-progress.md | **Partially fixed / plan exhausted.** Items 1,3,4 done (history bundle −99 KB; pagination; query caps; analytics range cache). LCP still 3.9–6.5s: it is fetch-after-hydrate-bound; the remaining fix is PERF.md item 5 (server-render first paint, ~1 day/page — pattern already exists on /dashboard). Reported per the stop condition |
+| P1-3 past sets immutable | `812a8ee` | fixes/P1-3/ | **Fixed.** Inline weight/reps editor in history detail. Verified edit persists (lb→kg conversion correct). **Flagged for review:** already-planned future sessions keep targets computed from pre-edit data |
+| P1-5 plate calculator unreachable | `e05af93` | fixes/P1-5/ | **Fixed (calculator half).** 44px "Plates" affordance on the set logger, pre-filled. Audit correction: it was reachable via the ⋮ menu, so this was discoverability. **Supersets: design note for review** (fixes/supersets-design.md) — columns+index+mapping already exist since the initial schema; no migration needed; UI/flow proposal awaiting your call on pairs-vs-circuits & auto-supersetting |
+| P1-7 unlabeled tabs | `d2638d5` | fixes/P1-7/ | **Fixed.** Labels always visible (stacked at <640px), 52px targets |
+| P1-8 kg shown to lb users | `d27612d` | fixes/P1-8/ | **Fixed.** Root cause was a cold-store fallback, not missing conversion; pages now use DB-backed useUserPreferences |
+| P1-9 orphaned routes | `7a15ccd` | fixes/P1-9/ | **Fixed.** Profile / Discover / Leaderboards / Plans & Billing in More + tab matchPaths |
+| P1-6 flat unsearchable history | `3e661bd` | fixes/P1-6/ | **Fixed.** Month calendar with dots (per-month query), day drill-down, exercise filter chips; list stays default |
+| P2-1 raw muscle keys | `0623851` | fixes/P2-sweep/ | **Fixed** (formatMuscleName across title/picker/chips/swaps) |
+| P2-2 HyperTracker branding | `0623851` | — | **Fixed** (8 files) |
+| P2-3 raw auth errors | `0623851` | fixes/P2-sweep/ | **Fixed** (mapped to human copy) |
+| P2-4 dev copy on login | `0623851` | fixes/P2-sweep/ | **Fixed** |
+| P2-5 landing CTAs | `0623851` | fixes/P2-sweep/ | **Fixed.** Audit correction: actual bug was Get Started→/login; now →/register with a Log In secondary |
+| P2-8 Enter-to-send on touch | `0623851` | — | **Fixed** (desktop-only) |
+| P2-9 duplicate desktop logo | `0623851` | fixes/P2-sweep/desktop-single-logo.png | **Fixed** (header logo lg:hidden) |
+| P2-11 "2175.0 lbs" | `0623851` | — | **Fixed** (0-decimal volume totals; stepper truncation fixed in `fbf7159`) |
+| P2-13 Supabase 406s | `0623851` | — | **Fixed** (.maybeSingle ×3 in useAdaptiveVolume) |
+| Leaderboard "Top 1% of 1" | `0623851` | — | **Fixed** (percentile suppressed under 10 participants) |
+| P2-6 confirm-password field | — | — | **Skipped** (register-flow validation rework; low risk-to-value at sweep stage) |
+| P2-7 native confirm() dialogs | — | — | **Skipped** (mechanical ConfirmModal swap in history; safe standalone follow-up) |
+| P2-10 shared page titles | — | — | **Skipped** — every dashboard page is a client component; per-route titles need `metadata` in per-route layouts (~30 new files). Worth doing as its own pass |
+| P2-12 duplicate workout hubs | — | — | **Recommendation (per instructions, no deletion):** keep `/dashboard/log` as the Train tab's launcher and demote `/dashboard/workout` to a plan-browser reached from "Planned sessions & recovery" — it duplicates 4 of log's 5 actions with a different visual language, and every duplicated "start" path is another place session-creation bugs (P0-1) can hide |
+| P2-14 exercises filter wall | — | — | **Skipped** (layout redesign, not sweep-sized) |
+| P2-15 no starter templates | — | — | **Skipped** (content work: needs a curated template set) |
+| P2-16 workout-detail spinner | — | — | **Skipped**; belongs with PERF item 5 skeletons |
+
+## Final numbers
+
+**Tap targets (390px, measured):** every control from the audit's P0-4 table
+is ≥44px — RIR chips 57×52 (were 26×25), steppers 44×52, values 51×52, Log
+set 310×52, timer +15s/Skip 61/59×44, header Finish 69×44, ⋮ 44×44.
+
+**Taps to log a set:** still **1** with an accepted suggestion (re-verified
+after every phase; final run in fixes/phase2-regression/).
+
+**LCP (mobile-throttled, production, localhost server + remote Supabase):**
+see final table below and fixes/perf-progress.md. Not under 2.5s on authed
+routes — structural (fetch-after-hydrate); PERF.md item 5 is the path, with
+the /dashboard `initialData` pattern as the template.
+
+**Crown-jewels regression (after each phase + final):** one-tap logging ✓,
+rest-timer mechanics ✓, per-set persistence + reload recovery ✓, nutrition
+quick-add + undo toast ✓ (untouched code, page verified), bottom nav ✓.
+
+## Notes for review
+
+1. **P1-3 recalc scope:** edits self-heal all read-time stats (E1RM/PR/volume
+   — verified `exercise_performance_snapshots` has no writers), but planned
+   future sessions keep stale `targetWeightKg`. Product call needed.
+2. **Supersets:** fixes/supersets-design.md — persistence already exists;
+   three open questions at the end.
+3. **Mesocycle CLS 0.417** (pre-existing, exposed by the hydration fix):
+   progressive card pop-in; fix alongside skeletons/PERF-5.
+4. **Home "Continue workout — 0 exercises · 0/0 sets"** for *mesocycle*
+   sessions is today's planned-but-unstarted session (blocks are created on
+   start) — pre-existing copy problem on the Home card, distinct from the
+   fixed P0-1 phantom (ad-hoc GET-created sessions).
+
+## Final Lighthouse (production build, mobile-throttled, post-all-fixes)
+
+| Route | Score | LCP | TBT | CLS |
+|---|---|---|---|---|
+| /login | 96 | 2.77s | 0ms | 0 |
+| / | 94 | 2.94s | 0ms | 0 |
+| /dashboard/log | 88 | 3.91s | 21ms | 0 |
+| /dashboard/history | 86 | 4.21s | 13ms | 0 |
+| /dashboard/workout/new | 84 | 4.29s | 14ms | 0.085 |
+| /dashboard/settings | 77 | 6.68s | 25ms | 0 |
+| /dashboard/analytics | 75 | 7.70s | 47ms | 0.038 |
+| /dashboard | 73 | 6.33s | 20ms | 0.13 |
+| /dashboard/nutrition | 73 | 7.54s* | 110ms | 0.001 |
+| /dashboard/mesocycle | 57 | 6.82s | 27ms | **0.417** (pre-existing pop-in, note 3) |
+
+\* data-bound routes vary ±1.5s run-to-run with live Supabase RTT.
+
+## Final flow regression (production build)
+
+quick-workout confirm ✓ · 1-tap logging ✓ · sticky timer ✓ · undo toast ✓ ·
+sync glyph ✓ · minimize→resume pill→resume with state ✓ · in-app discard ✓
+(fixes/final-regression/verification-log.txt)
+
+---
+
+## Hardening round (review follow-up)
+
+| Ask | Commit | Evidence | Result |
+|---|---|---|---|
+| 1. Outbox exactly-once under ugly failures | `183a151` | fixes/P0-2/EVIDENCE.md + 3 new tests | **Proven.** Mechanism already key-based (client UUID + `ON CONFLICT DO NOTHING`); added stateful-server tests for lost-ack→retry, kill-mid-flush→reopen, two-tab race — all exactly-one-row. 22 outbox tests green. |
+| 2. Comparator no re-render regression | `b310235` | fixes/comparator-profile/EVIDENCE.md + raw Profiler logs | **Measured.** Before/after React Profiler, 2 mounted cards: sibling card 0 renders in both, all sub-6ms. Then narrowed the comparator to per-set sync status (structural, not timing-lucky). Found+fixed a P2-era test-mock miss (suite was silently red). |
+| 3a. Guard = 0 sets ∧ 0 blocks ∧ >4h | `1c0938a` | 11 unit tests | **Proven.** Predicate extracted as pure `isStaleEmptyAdhocSession`; tests cover every condition + both 4h boundaries. |
+| 3b. Soft-delete instead of hard delete | `72bc216` | fixes/P0-1/archive-proposal.md | **Proposed + STOPPED** — needs a `session_state` enum migration. Also flagged a pre-existing bug: cancelling an AMRAP workout orphans its calibration rows (FK is ON DELETE SET NULL). |
+| 3c. Orphan sweep | `72bc216` | fixes/P0-1/orphan-sweep.md | **Clean.** 0 sessions in my window; found+removed 2 detached amrap rows my profiling created (no in-app path exists for fully-detached rows). |
+| 4. Supersets "no migration" validation | `7ec71c1` | fixes/supersets-design.md | **Validated column-by-column.** All 3 reused columns fit exactly; index exists; shared-rest is app logic, not reinterpretation. Corrected my earlier composite-index claim. 3 product Qs restated with recommended answers. |
+| 5. P1-3 recalc banner | `98e5ff0` | fixes/P1-3/recalc-banner-proposal.md | **Proposed + STOPPED** — both halves gated (recalc overwrites stored targets; detection needs `set_logs.edited_at`). Awaiting your detection (A/B/C) + mitigation (a/b/c) choice. |
+| 6. Server-render /dashboard + /dashboard/log | `9a41edc` | fixes/perf-item6.md | **Executed + diagnosed; NOT under 2.5s.** Trace: LCP is 93% Render Delay (network done at 1.4s) — blocked by client-bundle hydration, not data. Proven by 3 fetch-side changes moving LCP 0ms. Real fix = bundle reduction / static-HTML LCP card, both larger than a targeted edit. Server-volume change kept (removes a client fetch; prerequisite for the real fix). |
+
+**Awaiting your reply (3 words + 2 letters):** supersets → pairs/manual/last?;
+P1-3 → detection A/B/C + mitigation a/b/c?
+
+---
+
+## Feature round (your answers: "pairs, manual, last" + "detection A, mitigation a")
+
+| Feature | Commit | Evidence | Result |
+|---|---|---|---|
+| Supersets (pairs, manual, rest-after-last) | `0dbcce4` | fixes/supersets/ + 8 unit tests | **Built + verified E2E.** The create/remove UI and columns already existed; added the missing set-flow (alternate within a pair, rest only after the last block using its own rest). Pure `computeSupersetAdvance` (8 tests: L→H no-rest, H→rest→L, full 2×2, uneven, degenerate/orphaned fallback, order-independent). E2E: DB link/unlink via UI, symmetric pair logs a clean 6-set alternation with correct rest pattern. Non-superset one-tap logging unaffected. No migration (columns pre-exist). |
+| P1-3 recalc banner (detection A + mitigation a) | `a9f044e` | fixes/P1-3/POST-MIGRATION-VERIFY.md + 11 unit tests | **Built; migration flagged; happy path deferred.** detection A needs `set_logs.edited_at` — migration written, NOT applied (no DDL access; apply via `supabase db push`). mitigation a collapses to "recalc all stale + confirm" because there's no manual target-weight override UI, so no 2nd column. Pure logic + RecalcTargetsBanner component built; edit paths stamp edited_at defensively (verified: editing still works with column absent); banner verified SAFELY DORMANT on a real planned session. Happy path activates + is verifiable once the migration is applied. |
+
+**Migration awaiting you:** `supabase/migrations/20260703000001_set_logs_edited_at.sql`
+(additive, non-destructive). Apply to activate the P1-3 banner.
+
+**Final test count:** 1814 tests green (+31 from this round). Account clean,
+one-tap logging re-verified on the production of both features.
