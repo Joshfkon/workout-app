@@ -617,25 +617,35 @@ export default function WorkoutPage() {
       }
     })();
     return () => { cancelled = true; };
+    // exerciseHistories included so changes recompute with the corrected E1RM
+    // once the per-exercise history finishes loading.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, blocks, userProfile]);
+  }, [phase, blocks, userProfile, exerciseHistories]);
 
-  // Re-run quickWeightEstimate for a stale block against the corrected history.
+  // Re-run the weight estimate for a stale block against the CORRECTED history.
+  // The point of the recalc is to use the edited data, so the exercise's E1RM
+  // (recomputed from the corrected sets at load time) is passed as knownE1RM —
+  // without it the estimate would be a weak profile-only guess that ignores the
+  // very edit that triggered the banner. Uses the calibration path when lifts
+  // are calibrated, matching the live suggestion logic.
   const estimateBlockTargetKg = (blk: PlannedTargetBlock): number => {
     const block = blocks.find((b) => b.id === blk.id);
     if (!block || !userProfile?.weightKg || !userProfile?.heightCm) return 0;
-    const rec = quickWeightEstimate(
-      block.exercise.name,
-      { min: block.targetRepRange[0], max: block.targetRepRange[1] },
-      block.targetRir,
-      userProfile.weightKg,
-      userProfile.heightCm,
-      userProfile.bodyFatPercent,
-      userProfile.experience,
-      userProfile.regionalData,
-      preferences.units,
-      undefined
-    );
+    const knownE1RM = exerciseHistories[block.exerciseId]?.estimatedE1RM;
+    const repRange = { min: block.targetRepRange[0], max: block.targetRepRange[1] };
+    const rec =
+      userProfile.calibratedLifts && userProfile.calibratedLifts.length > 0
+        ? quickWeightEstimateWithCalibration(
+            block.exercise.name, repRange, block.targetRir,
+            userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
+            userProfile.experience, userProfile.calibratedLifts, userProfile.regionalData,
+            preferences.units, knownE1RM
+          )
+        : quickWeightEstimate(
+            block.exercise.name, repRange, block.targetRir,
+            userProfile.weightKg, userProfile.heightCm, userProfile.bodyFatPercent,
+            userProfile.experience, userProfile.regionalData, preferences.units, knownE1RM
+          );
     if (!rec || rec.confidence === 'find_working_weight' || !rec.recommendedWeight) return 0;
     return inputWeightToKg(rec.recommendedWeight, preferences.units);
   };
