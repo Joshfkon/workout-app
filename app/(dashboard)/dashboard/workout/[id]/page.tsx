@@ -601,7 +601,10 @@ export default function WorkoutPage() {
           id: b.id,
           exerciseId: b.exerciseId,
           exerciseName: b.exercise.name,
-          createdAt: (b as any).createdAt ?? new Date(0).toISOString(),
+          // Fail-safe: an unknown creation time counts as "now" so the block
+          // can never be flagged stale (an epoch-0 fallback made EVERY block
+          // look older than any edit, permanently re-triggering the banner).
+          createdAt: b.createdAt ?? new Date().toISOString(),
           targetWeightKg: b.targetWeightKg,
         }));
         const stale = findStaleTargetBlocks(plannedInfos, latestByExercise);
@@ -1780,7 +1783,11 @@ export default function WorkoutPage() {
             .limit(1)
             .single();
           if (maxSetResult?.set_number != null) {
-            nextSetNumber = maxSetResult.set_number + 1;
+            // Floor at the local number: a set still queued in the offline
+            // outbox isn't in the DB max yet, and reusing its number would
+            // create duplicate set_numbers in the block. DB max still wins
+            // when it's ahead (another tab/device logged sets).
+            nextSetNumber = Math.max(currentSetNumber, maxSetResult.set_number + 1);
           }
         } catch {
           // Numbering probe failed (flaky network) — local numbering is fine.

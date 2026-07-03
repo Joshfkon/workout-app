@@ -550,8 +550,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   }, []);
 
-  // Load cached dashboard data on mount for instant content display
+  // Load cached dashboard data on mount for instant content display.
+  // Skipped entirely when server initialData exists: it is strictly fresher
+  // than any localStorage snapshot, and the cache is saved with
+  // muscleVolume: [] — applying it would wipe the server-fetched volume
+  // (and re-render the SSR'd atrophy card, the LCP element) post-hydration.
   useEffect(() => {
+    if (hasInitialData) return;
     try {
       const cached = localStorage.getItem(DASHBOARD_CACHE_KEY);
       if (cached) {
@@ -588,7 +593,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     } catch (e) {
       // Ignore cache errors - fresh data will be fetched
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasInitialData]);
 
   // Helper function to update the dashboard cache after data mutations
   // This prevents stale data from being shown on page reload
