@@ -1322,6 +1322,70 @@ export function generateWarmupProtocol(input: GenerateWarmupInput): WarmupSet[] 
 }
 
 // ============================================
+// MUSCLE WARMUP STATUS
+// ============================================
+
+export interface WarmedMusclesInput {
+  /** Sets completed so far this session */
+  completedSets: Array<{
+    exerciseBlockId: string;
+    isWarmup?: boolean;
+    setType?: string | null;
+  }>;
+  /** Exercise blocks in the session, used to map sets to muscles */
+  blocks: Array<{
+    id: string;
+    exercise: { primaryMuscle: string; secondaryMuscles?: string[] };
+  }>;
+}
+
+/**
+ * Determine which muscles are already warmed up this session.
+ *
+ * A muscle counts as warm once any set has been completed on an exercise
+ * that targets it as the primary muscle, or once a working (non-warmup)
+ * set has been completed on an exercise that hits it as a secondary
+ * muscle — e.g. bench press working sets warm the triceps and front
+ * delts, so a triceps exercise later in the session needs no warmup.
+ *
+ * Muscle names are compared case-insensitively.
+ */
+export function getWarmedUpMuscles(input: WarmedMusclesInput): Set<string> {
+  const { completedSets, blocks } = input;
+  const warmed = new Set<string>();
+  const blocksById = new Map(blocks.map((b) => [b.id, b]));
+
+  for (const set of completedSets) {
+    const block = blocksById.get(set.exerciseBlockId);
+    if (!block) continue;
+
+    if (block.exercise.primaryMuscle) {
+      warmed.add(block.exercise.primaryMuscle.toLowerCase());
+    }
+
+    // Light warmup sets prep their own primary muscle, but only working
+    // sets carry enough load to count for secondary muscles
+    const isWarmupSet = set.isWarmup || set.setType === 'warmup';
+    if (!isWarmupSet) {
+      for (const secondary of block.exercise.secondaryMuscles ?? []) {
+        if (secondary) warmed.add(secondary.toLowerCase());
+      }
+    }
+  }
+
+  return warmed;
+}
+
+/**
+ * Whether a muscle has already been warmed up this session.
+ * See getWarmedUpMuscles for what counts as "warm".
+ */
+export function isMuscleWarmedUp(muscle: string, input: WarmedMusclesInput): boolean {
+  if (!muscle) return false;
+  return getWarmedUpMuscles(input).has(muscle.toLowerCase());
+}
+
+// ============================================
 // HELPER FUNCTIONS
 // ============================================
 
