@@ -60,6 +60,7 @@ export function CustomExerciseBasicForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
+  const [locationsLoaded, setLocationsLoaded] = useState(false);
   const [unavailableLocationIds, setUnavailableLocationIds] = useState<Set<string>>(
     () =>
       new Set(
@@ -81,18 +82,24 @@ export function CustomExerciseBasicForm({
   // Load gym locations so the user can say where this exercise is available
   useEffect(() => {
     async function loadGymLocations() {
-      const supabase = createUntypedClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const supabase = createUntypedClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data } = await supabase
-        .from('gym_locations')
-        .select('id, name, is_default')
-        .eq('user_id', user.id)
-        .order('name');
+        const { data } = await supabase
+          .from('gym_locations')
+          .select('id, name, is_default')
+          .eq('user_id', user.id)
+          .order('name');
 
-      if (data) {
-        setGymLocations(data);
+        if (data) {
+          setGymLocations(data);
+        }
+      } finally {
+        // Unblocks submit even if the query fails — the exercise then simply
+        // defaults to available everywhere, same as before this feature.
+        setLocationsLoaded(true);
       }
     }
     loadGymLocations();
@@ -132,6 +139,10 @@ export function CustomExerciseBasicForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Don't submit before gym locations resolve — otherwise a multi-location
+    // user would silently skip the availability picker.
+    if (!locationsLoaded) return;
 
     if (!validate()) return;
 
@@ -311,7 +322,7 @@ export function CustomExerciseBasicForm({
         <Button
           type="submit"
           variant="primary"
-          isLoading={isLoading}
+          isLoading={isLoading || !locationsLoaded}
           className="flex-1"
         >
           Continue
