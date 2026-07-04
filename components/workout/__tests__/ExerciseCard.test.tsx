@@ -687,6 +687,57 @@ describe('ExerciseCard', () => {
       expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
     });
 
+    it('reseeds the untouched logger prefill when the one-tap rep range is applied', async () => {
+      const user = userEvent.setup();
+      const onRepRangeChange = jest.fn();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={onRepRangeChange}
+          previousSets={[{ weightKg: 100, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Seeded from the previous session: 100 kg × 10 (inside the 8-12 target)
+      expect(screen.getByRole('button', { name: /Weight: 100 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10/ })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
+      // With no completed sets the reseed effects never fire, so the button
+      // itself must reprice the prefill: 100×10 @ 2 RIR → E1RM 140 kg, and
+      // 140 / (1 + (6+2)/30) ≈ 110.5 → 110 at the 2.5 kg increment.
+      expect(screen.getByRole('button', { name: /Weight: 110 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
+    it('hides the one-tap rep-range button when the block already uses that range', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={createMockBlock({ targetRepRange: [5, 6] as [number, number] })}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          onExerciseSwap={jest.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+
+      expect(screen.getByText('Plateau detected')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Try 5–6 reps/ })).not.toBeInTheDocument();
+      // Swap remains available as the actionable follow-up
+      expect(screen.getByRole('button', { name: 'Swap exercise' })).toBeInTheDocument();
+    });
+
     it('does not show the plateau pill without enough history', () => {
       render(
         <ExerciseCard

@@ -477,6 +477,25 @@ export const ExerciseCard = memo(function ExerciseCard({
     [displayWeight]
   );
 
+  // Weight+reps seed for a not-yet-started exercise, anchored to the previous
+  // session's set. When the target rep range has moved away from what that set
+  // was performed at (e.g. the one-tap plateau rep-range switch), reusing the
+  // set's weight would prescribe an impossible load — re-derive it from the
+  // set's estimated 1RM at the new range's midpoint instead.
+  const seedFromPreviousSet = useCallback(
+    (prevSet: { weightKg: number; reps: number }, range: [number, number]) => {
+      if (prevSet.reps >= range[0] && prevSet.reps <= range[1]) {
+        return { weightKg: prevSet.weightKg, reps: prevSet.reps };
+      }
+      const reps = Math.round((range[0] + range[1]) / 2);
+      const e1rm = prevSet.weightKg * (1 + (prevSet.reps + effectiveTargetRir) / 30);
+      const rawKg = e1rm / (1 + (reps + effectiveTargetRir) / 30);
+      const inc = exercise.minWeightIncrementKg || 2.5;
+      return { weightKg: Math.max(inc, Math.round(rawKg / inc) * inc), reps };
+    },
+    [effectiveTargetRir, exercise.minWeightIncrementKg]
+  );
+
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
 
@@ -620,8 +639,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
         } else if (prevSet) {
-          defaultWeight = prevSet.weightKg;
-          defaultReps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
+          const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
+          defaultWeight = seeded.weightKg;
+          defaultReps = seeded.reps;
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -1027,8 +1047,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       const prevSet = previousSets[completedSets.length];
       let weightKg = 0;
       if (prevSet) {
-        weightKg = prevSet.weightKg;
-        reps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
+        const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
+        weightKg = seeded.weightKg;
+        reps = seeded.reps;
       } else if (suggestedWeight > 0) {
         weightKg = suggestedWeight;
       }
@@ -2403,10 +2424,35 @@ export const ExerciseCard = memo(function ExerciseCard({
               ))}
             </ul>
             <div className="space-y-2 pt-1">
-              {plateauRepRange && onRepRangeChange && (
+              {plateauRepRange && onRepRangeChange &&
+                (plateauRepRange[0] !== block.targetRepRange[0] ||
+                  plateauRepRange[1] !== block.targetRepRange[1]) && (
                 <button
                   onClick={() => {
                     onRepRangeChange(plateauRepRange);
+                    // Reseed the logger prefills right away: with no completed
+                    // sets the reseed effects never fire (they anchor to a
+                    // completed set), so the old low-rep prefill would stick
+                    // and the tap would look like a no-op.
+                    if (completedSets.length === 0) {
+                      setPendingInputs(prev =>
+                        prev.map((p, i) => {
+                          const prevSet = previousSets[i];
+                          if (!prevSet) {
+                            return {
+                              ...p,
+                              reps: String(Math.round((plateauRepRange[0] + plateauRepRange[1]) / 2)),
+                            };
+                          }
+                          const seeded = seedFromPreviousSet(prevSet, plateauRepRange);
+                          return {
+                            ...p,
+                            weight: seedWeightString(seeded.weightKg, prevSet.weightKg),
+                            reps: String(seeded.reps),
+                          };
+                        })
+                      );
+                    }
                     setShowPlateauSheet(false);
                   }}
                   className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"
