@@ -1,6 +1,7 @@
 import {
   computeCurrentWeekFromSessions,
   computeCurrentWeek,
+  sessionIndexFromCompleted,
 } from '../mesocycleProgress';
 
 describe('computeCurrentWeekFromSessions (session-based advancement)', () => {
@@ -35,6 +36,32 @@ describe('computeCurrentWeekFromSessions (session-based advancement)', () => {
   it('guards against non-positive inputs', () => {
     expect(computeCurrentWeekFromSessions(-3, 0, 0)).toEqual({ week: 1, isComplete: false });
     expect(computeCurrentWeekFromSessions(5, 0, 1).week).toBe(1); // daysPerWeek treated as 1, clamped to 1 week
+  });
+});
+
+describe('sessionIndexFromCompleted (within-week session slot)', () => {
+  const DAYS = 4;
+
+  it('walks through the week in order', () => {
+    expect(sessionIndexFromCompleted(0, DAYS)).toBe(0);
+    expect(sessionIndexFromCompleted(1, DAYS)).toBe(1);
+    expect(sessionIndexFromCompleted(3, DAYS)).toBe(3);
+  });
+
+  it('wraps to the first session of the next week', () => {
+    expect(sessionIndexFromCompleted(4, DAYS)).toBe(0);
+    expect(sessionIndexFromCompleted(7, DAYS)).toBe(3);
+  });
+
+  it('resumes at the missed slot after an under-completed calendar week', () => {
+    // User finished only 2 of 4 sessions "last week": next session is
+    // still index 2 — nothing gets dropped by the calendar rolling over.
+    expect(sessionIndexFromCompleted(2, DAYS)).toBe(2);
+  });
+
+  it('guards against non-positive inputs', () => {
+    expect(sessionIndexFromCompleted(-1, DAYS)).toBe(0);
+    expect(sessionIndexFromCompleted(5, 0)).toBe(0); // daysPerWeek treated as 1
   });
 });
 
