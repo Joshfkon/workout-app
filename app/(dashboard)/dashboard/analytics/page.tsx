@@ -1037,7 +1037,9 @@ export default function AnalyticsPage() {
         });
 
         // Run plateau detection over per-exercise session snapshots.
-        const plateauResults = analyzeAllExercises(snapshotMap);
+        // Pass today's date so exercises not trained recently are skipped
+        // (long time ranges like '1y'/'all' include long-abandoned lifts).
+        const plateauResults = analyzeAllExercises(snapshotMap, new Date());
         const detectedPlateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> = [];
         plateauResults.forEach((result, exerciseId) => {
           if (result.isPlateaued) {

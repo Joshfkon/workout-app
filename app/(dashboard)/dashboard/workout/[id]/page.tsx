@@ -2525,6 +2525,7 @@ export default function WorkoutPage() {
         setError(`Failed to update rep range: ${updateError.message}`);
       } else {
         setError(null);
+        showSuccess(`Rep range updated to ${range[0]}–${range[1]}`);
       }
     } catch (err) {
       console.error('Failed to update rep range:', err);

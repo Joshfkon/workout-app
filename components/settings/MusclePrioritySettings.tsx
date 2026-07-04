@@ -226,13 +226,24 @@ export function MusclePrioritySettings({
                 return (
                   <div
                     key={muscle}
-                    className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg"
+                    className="flex flex-col gap-2 p-3 bg-surface-800/50 rounded-lg sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-8 rounded ${PRIORITY_COLORS[priority]}`} />
-                      <span className="text-sm font-medium text-surface-200">
-                        {formatMuscleName(muscle)}
-                      </span>
+                    <div className="flex items-center justify-between gap-3 sm:justify-start">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-2 h-8 rounded ${PRIORITY_COLORS[priority]}`} />
+                        <span className="text-sm font-medium text-surface-200">
+                          {formatMuscleName(muscle)}
+                        </span>
+                      </div>
+
+                      {/* Current Priority Label (next to name on mobile) */}
+                      <Badge
+                        variant={PRIORITY_BADGE_VARIANTS[priority]}
+                        size="sm"
+                        className="justify-center sm:hidden"
+                      >
+                        {PRIORITY_LABELS[priority]}
+                      </Badge>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -254,11 +265,11 @@ export function MusclePrioritySettings({
                         ))}
                       </div>
 
-                      {/* Current Priority Label */}
+                      {/* Current Priority Label (inline on desktop) */}
                       <Badge
                         variant={PRIORITY_BADGE_VARIANTS[priority]}
                         size="sm"
-                        className="w-24 justify-center"
+                        className="hidden w-24 justify-center sm:inline-flex"
                       >
                         {PRIORITY_LABELS[priority]}
                       </Badge>

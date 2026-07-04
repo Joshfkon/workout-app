@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Badge, Button, Slider, Input } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
@@ -48,6 +48,41 @@ export default function MesocyclePage() {
   const [isEditingDuration, setIsEditingDuration] = useState(false);
   const [editDuration, setEditDuration] = useState(60);
   const [isRegenerating, setIsRegenerating] = useState(false);
+
+  // Rename mesocycle state
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  const startRename = (meso: Mesocycle) => {
+    setRenamingId(meso.id);
+    setRenameValue(meso.name);
+  };
+
+  const handleRenameMesocycle = async () => {
+    const trimmed = renameValue.trim();
+    if (!renamingId || !trimmed) return;
+
+    setIsSavingName(true);
+    try {
+      const supabase = createUntypedClient();
+      const { error } = await supabase
+        .from('mesocycles')
+        .update({ name: trimmed })
+        .eq('id', renamingId);
+
+      if (error) throw error;
+
+      setMesocycles(prev => prev.map(m =>
+        m.id === renamingId ? { ...m, name: trimmed } : m
+      ));
+      setRenamingId(null);
+    } catch (error) {
+      console.error('Failed to rename mesocycle:', error);
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   // Regenerate mesocycle program with new session duration
   const handleUpdateSessionDuration = async (mesocycleId: string, newDuration: number) => {
@@ -450,11 +485,54 @@ export default function MesocyclePage() {
           {/* Mesocycle Overview Card */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>{activeMesocycle.name}</CardTitle>
-                  <p className="text-surface-400 text-sm mt-1">{activeMesocycle.split_type}</p>
-                </div>
+              <div className="flex items-center justify-between gap-3">
+                {renamingId === activeMesocycle.id ? (
+                  <div className="flex-1 flex items-center gap-2">
+                    <Input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRenameMesocycle();
+                        if (e.key === 'Escape') setRenamingId(null);
+                      }}
+                      placeholder="Mesocycle name"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleRenameMesocycle}
+                      isLoading={isSavingName}
+                      disabled={!renameValue.trim()}
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRenamingId(null)}
+                      disabled={isSavingName}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CardTitle>{activeMesocycle.name}</CardTitle>
+                      <button
+                        onClick={() => startRename(activeMesocycle)}
+                        className="p-1 text-surface-500 hover:text-primary-400 hover:bg-primary-500/10 rounded transition-colors"
+                        title="Rename mesocycle"
+                        aria-label="Rename mesocycle"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    </div>
+                    <p className="text-surface-400 text-sm mt-1">{activeMesocycle.split_type}</p>
+                  </div>
+                )}
                 <Badge variant="success">Active</Badge>
               </div>
             </CardHeader>
@@ -751,17 +829,60 @@ export default function MesocyclePage() {
           <CardContent>
             <div className="space-y-3">
               {pastMesocycles.map((meso) => (
-                <div key={meso.id} className="flex items-center justify-between p-3 bg-surface-800/50 rounded-lg">
+                <div key={meso.id} className="flex items-center justify-between gap-3 p-3 bg-surface-800/50 rounded-lg">
+                  {renamingId === meso.id ? (
+                    <div className="flex-1 flex items-center gap-2">
+                      <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameMesocycle();
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        placeholder="Mesocycle name"
+                        autoFocus
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleRenameMesocycle}
+                        isLoading={isSavingName}
+                        disabled={!renameValue.trim()}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRenamingId(null)}
+                        disabled={isSavingName}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
                   <div>
                     <p className="font-medium text-surface-200">{meso.name}</p>
                     <p className="text-sm text-surface-500">
                       {meso.split_type} • {meso.total_weeks} weeks • {new Date(meso.created_at).toLocaleDateString()}
                     </p>
                   </div>
+                  )}
                   <div className="flex items-center gap-2">
                     <Badge variant={meso.state === 'completed' ? 'default' : 'warning'}>
                       {meso.state}
                     </Badge>
+                    {renamingId !== meso.id && (
+                      <button
+                        onClick={() => startRename(meso)}
+                        className="p-1.5 text-surface-500 hover:text-primary-400 hover:bg-primary-500/10 rounded transition-colors"
+                        title="Rename mesocycle"
+                        aria-label="Rename mesocycle"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                    )}
                     {confirmDeleteId === meso.id ? (
                       <div className="flex items-center gap-1">
                         <Button

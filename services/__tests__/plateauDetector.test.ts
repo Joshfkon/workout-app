@@ -242,6 +242,104 @@ describe('detectPlateau', () => {
     expect(result.isPlateaued).toBe(false);
     expect(result.weeksSinceProgress).toBe(0);
   });
+
+  it('ignores peaks older than the analysis window', () => {
+    // Year-old sessions at a heavier bodyweight set a peak the user may
+    // never touch again — they must not count against recent progress.
+    const input: DetectPlateauInput = {
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2023-01-01', 140), // old peak, out of window
+        createSnapshot('2023-01-08', 138),
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 105),
+        createSnapshot('2024-01-15', 110),
+        createSnapshot('2024-01-22', 115),
+      ],
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(false);
+    expect(result.peakE1RM).toBe(115); // peak within the window, not 140
+    expect(result.weeksSinceProgress).toBe(0);
+  });
+
+  it('measures a real plateau only against the recent window', () => {
+    // Stagnant recent training is still flagged, but weeksSinceProgress is
+    // measured within the window, not from a year-old peak.
+    const input: DetectPlateauInput = {
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2023-01-01', 140), // old peak, out of window
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 100),
+        createSnapshot('2024-01-22', 100),
+      ],
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(true);
+    expect(result.peakE1RM).toBe(100);
+    expect(result.weeksSinceProgress).toBe(3); // not ~52
+  });
+
+  it('does not flag an exercise that has not been trained recently', () => {
+    // Flat history that ended long before the reference date: the user
+    // stopped doing the exercise, so there is nothing to alert on.
+    const input: DetectPlateauInput = {
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 100),
+        createSnapshot('2024-01-22', 100),
+      ],
+      referenceDate: '2025-01-22', // a year later
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(false);
+    expect(result.suggestions).toHaveLength(0);
+  });
+
+  it('still flags recently-trained exercises when a referenceDate is given', () => {
+    const input: DetectPlateauInput = {
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 100),
+        createSnapshot('2024-01-22', 100),
+      ],
+      referenceDate: '2024-01-25', // a few days after the last session
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(true);
+  });
+
+  it('requires enough sessions inside the window, not just overall', () => {
+    // Two year-old sessions + two recent ones: four snapshots total, but
+    // only two are recent — not enough signal to call a plateau.
+    const input: DetectPlateauInput = {
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2023-01-01', 120),
+        createSnapshot('2023-01-08', 120),
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+      ],
+    };
+
+    const result = detectPlateau(input);
+
+    expect(result.isPlateaued).toBe(false);
+  });
 });
 
 // ============================================
