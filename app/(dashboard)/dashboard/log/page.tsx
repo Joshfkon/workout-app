@@ -3,33 +3,32 @@
 /**
  * /dashboard/log — the app's landing surface.
  *
- * Opening the app drops the user into a four-choice launcher:
- *   1. Continue card (only when a session is in_progress today).
- *   2. Log food -> /dashboard/nutrition.
- *   3. Mesocycle workout -> start today's scheduled session (or route to the
- *      mesocycle pages on rest days / when there is no active mesocycle).
- *   4. Blank workout -> creates/reuses today's session (no exercise blocks)
+ * Opening the app drops the user into a four-choice launcher, rendered as a
+ * 2x2 grid of large tiles that fills most of the viewport:
+ *   1. Log food -> /dashboard/nutrition.
+ *   2. Blank workout -> creates/reuses today's session (no exercise blocks)
  *      and opens the workout page, where the user adds exercises via the
  *      search-first picker. Repeat taps reuse the same session.
- *   5. AI suggested workout -> builds a plan from muscle recovery + weekly
+ *   3. AI suggested workout -> builds a plan from muscle recovery + weekly
  *      volume (services/suggestedWorkout, pure), previews it in a bottom
  *      sheet, and only writes the session/blocks when the user taps Start.
+ *   4. Mesocycle workout -> start today's scheduled session (or route to the
+ *      mesocycle pages on rest days / when there is no active mesocycle).
+ *
+ * A Continue banner sits above the grid when a session is in_progress today.
+ * Training tools (history, templates, exercises, plans) live on the Train
+ * tab's dashboard at /dashboard/train.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   IconBarbell,
-  IconCalendarStats,
   IconChevronRight,
-  IconHistory,
-  IconListDetails,
   IconLoader2,
   IconPlus,
   IconSalad,
   IconSparkles,
-  IconTemplate,
   IconX,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -498,8 +497,9 @@ export default function LogPage() {
     day: 'numeric',
   });
 
-  const launcherCardClass =
-    'w-full flex items-center gap-3 p-4 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors';
+  // Large square launcher tile: icon badge on top, label + subtitle below.
+  const tileClass =
+    'w-full h-full flex flex-col items-center justify-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-center hover:bg-surface-800/70 transition-colors disabled:opacity-60';
 
   const mesoStartable = Boolean(activeMeso && todayWorkout);
   const mesoSubtitle = !activeMeso
@@ -521,7 +521,9 @@ export default function LogPage() {
   };
 
   return (
-    <div className="max-w-lg mx-auto space-y-4">
+    // Fill the viewport below the app chrome (header 4rem + main padding +
+    // bottom nav) so the 2x2 launcher grid takes up most of the screen.
+    <div className="max-w-lg mx-auto flex flex-col gap-4 min-h-[calc(100dvh-11rem)] lg:min-h-[calc(100dvh-8rem)]">
       {/* Slim header */}
       <div className="flex items-baseline justify-between">
         <h1 className="text-[17px] font-medium text-surface-100">Log</h1>
@@ -553,128 +555,101 @@ export default function LogPage() {
         </button>
       )}
 
-      {/* Four launcher cards */}
-      <div className="space-y-2">
+      {/* Four launcher tiles in a 2x2 grid that stretches to fill the screen */}
+      <div className="flex-1 grid grid-cols-2 auto-rows-fr gap-3">
         {/* 1. Log food */}
-        <button onClick={() => router.push('/dashboard/nutrition')} className={launcherCardClass}>
-          <IconSalad size={20} className="text-success-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-medium text-surface-100">Log food</span>
-            <span className="block text-[12px] text-surface-500">
+        <button onClick={() => router.push('/dashboard/nutrition')} className={tileClass}>
+          <span className="w-14 h-14 rounded-2xl bg-success-500/15 flex items-center justify-center">
+            <IconSalad size={30} className="text-success-400" aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block text-[16px] font-semibold text-surface-100">Log food</span>
+            <span className="block text-[11px] text-surface-500 mt-1">
               Meals, barcode, describe with AI
             </span>
           </span>
-          <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
         </button>
 
-        {/* 2. Mesocycle workout */}
-        <button
-          onClick={handleMesoCardTap}
-          disabled={isStartingMeso}
-          className={
-            mesoStartable
-              ? 'w-full flex items-center gap-3 p-4 rounded-xl bg-primary-500/10 border border-primary-500/30 text-left hover:bg-primary-500/15 transition-colors disabled:opacity-60'
-              : launcherCardClass
-          }
-        >
-          <IconBarbell
-            size={20}
-            className={`${mesoStartable ? 'text-primary-400' : 'text-surface-400'} flex-shrink-0`}
-            aria-hidden="true"
-          />
-          <span className="flex-1 min-w-0">
-            <span
-              className={`block text-[15px] font-medium ${mesoStartable ? 'text-primary-300' : 'text-surface-100'}`}
-            >
-              Mesocycle workout
-            </span>
-            <span className="block text-[12px] text-surface-500 truncate">{mesoSubtitle}</span>
+        {/* 2. Blank workout: straight into the workout page */}
+        <button onClick={handleStartBlank} disabled={isStartingBlank} className={tileClass}>
+          <span className="w-14 h-14 rounded-2xl bg-surface-800 flex items-center justify-center">
+            {isStartingBlank ? (
+              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
+            ) : (
+              <IconPlus size={30} className="text-surface-300" aria-hidden="true" />
+            )}
           </span>
-          {isStartingMeso ? (
-            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
-          ) : (
-            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-          )}
-        </button>
-
-        {/* 3. Blank workout: straight into the workout page */}
-        <button
-          onClick={handleStartBlank}
-          disabled={isStartingBlank}
-          className={`${launcherCardClass} disabled:opacity-60`}
-        >
-          <IconPlus size={20} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-medium text-surface-100">Blank workout</span>
-            <span className="block text-[12px] text-surface-500">
+          <span>
+            <span className="block text-[16px] font-semibold text-surface-100">Blank workout</span>
+            <span className="block text-[11px] text-surface-500 mt-1">
               {isStartingBlank ? 'Starting...' : 'Add exercises as you go'}
             </span>
           </span>
-          {isStartingBlank ? (
-            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
-          ) : (
-            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-          )}
         </button>
 
-        {/* 4. AI suggested workout: opens the sheet on the time question */}
+        {/* 3. AI suggested workout: opens the sheet on the time question */}
         <button
           onClick={() => {
             setAiPlan(null);
             setShowAiSheet(true);
           }}
           disabled={aiRequested}
-          className={`${launcherCardClass} disabled:opacity-60`}
+          className={tileClass}
         >
-          <IconSparkles size={20} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-medium text-surface-100">
+          <span className="w-14 h-14 rounded-2xl bg-primary-500/15 flex items-center justify-center">
+            {aiRequested ? (
+              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
+            ) : (
+              <IconSparkles size={30} className="text-primary-400" aria-hidden="true" />
+            )}
+          </span>
+          <span>
+            <span className="block text-[16px] font-semibold text-surface-100">
               AI suggested workout
             </span>
-            <span className="block text-[12px] text-surface-500">
-              {aiRequested ? 'Building suggestion...' : 'Built from your recovery and weekly volume'}
+            <span className="block text-[11px] text-surface-500 mt-1">
+              {aiRequested ? 'Building suggestion...' : 'Built from recovery and volume'}
             </span>
           </span>
-          {aiRequested ? (
-            <IconLoader2 size={16} className="text-primary-400 animate-spin flex-shrink-0" aria-hidden="true" />
-          ) : (
-            <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-          )}
+        </button>
+
+        {/* 4. Mesocycle workout */}
+        <button
+          onClick={handleMesoCardTap}
+          disabled={isStartingMeso}
+          className={
+            mesoStartable
+              ? 'w-full h-full flex flex-col items-center justify-center gap-3 p-4 rounded-2xl bg-primary-500/10 border border-primary-500/30 text-center hover:bg-primary-500/15 transition-colors disabled:opacity-60'
+              : tileClass
+          }
+        >
+          <span
+            className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
+              mesoStartable ? 'bg-primary-500/20' : 'bg-surface-800'
+            }`}
+          >
+            {isStartingMeso ? (
+              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
+            ) : (
+              <IconBarbell
+                size={30}
+                className={mesoStartable ? 'text-primary-400' : 'text-surface-300'}
+                aria-hidden="true"
+              />
+            )}
+          </span>
+          <span>
+            <span
+              className={`block text-[16px] font-semibold ${
+                mesoStartable ? 'text-primary-300' : 'text-surface-100'
+              }`}
+            >
+              Mesocycle workout
+            </span>
+            <span className="block text-[11px] text-surface-500 mt-1">{mesoSubtitle}</span>
+          </span>
         </button>
       </div>
-
-      {/* Training tools: the rest of the Train tab lives behind these */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { name: 'Mesocycle plan', href: '/dashboard/mesocycle', icon: IconCalendarStats },
-          { name: 'History', href: '/dashboard/history', icon: IconHistory },
-          { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
-          { name: 'Exercises', href: '/dashboard/exercises', icon: IconListDetails },
-        ].map((tool) => {
-          const ToolIcon = tool.icon;
-          return (
-            <Link
-              key={tool.href}
-              href={tool.href}
-              className="flex items-center gap-2 p-3 rounded-xl bg-surface-900 border border-surface-800 hover:bg-surface-800/70 transition-colors"
-            >
-              <ToolIcon size={16} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
-              <span className="text-[13px] font-medium text-surface-200 truncate">{tool.name}</span>
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* Planned sessions, today's programmed workout & recovery now live on
-          the mesocycle page (the old /dashboard/workout hub was retired). */}
-      <Link
-        href="/dashboard/mesocycle"
-        className="flex items-center gap-2 px-1 py-2 text-xs text-surface-500 hover:text-surface-300 transition-colors"
-      >
-        <IconBarbell size={14} aria-hidden="true" />
-        <span>Planned sessions &amp; recovery</span>
-        <IconChevronRight size={14} className="ml-auto" aria-hidden="true" />
-      </Link>
 
       {/* AI suggested workout: time question first, then the plan preview;
           nothing is created until Start */}

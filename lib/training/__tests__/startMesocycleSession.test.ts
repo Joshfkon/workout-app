@@ -37,7 +37,6 @@ function createSupabaseMock(responder: Responder) {
       return Promise.resolve(responder(query));
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const builder: any = {
       select: () => builder,
       insert: (payload: unknown) => {
