@@ -32,9 +32,9 @@ const primaryNavigation: SidebarNavItem[] = [
   { name: 'Home', href: '/dashboard', icon: IconHome },
   {
     name: 'Train',
-    href: '/dashboard/log',
+    href: '/dashboard/exercises',
     icon: IconBarbell,
-    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history', '/dashboard/exercises'],
+    matchPaths: ['/dashboard/exercises', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
   },
   { name: 'Eat', href: '/dashboard/nutrition', icon: IconSalad },
   { name: 'Progress', href: '/dashboard/analytics', icon: IconChartLine },
@@ -50,9 +50,11 @@ const moreNavigation: SidebarNavItem[] = [
 
 interface SidebarProps {
   onSignOut: () => void;
+  /** True when every muscle group has reached MEV this week — lights up Train. */
+  volumeGoalsMet?: boolean;
 }
 
-export function Sidebar({ onSignOut }: SidebarProps) {
+export function Sidebar({ onSignOut, volumeGoalsMet = false }: SidebarProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -79,6 +81,13 @@ export function Sidebar({ onSignOut }: SidebarProps) {
       >
         <Icon size={20} stroke={2} aria-hidden="true" />
         {item.name}
+        {item.name === 'Train' && volumeGoalsMet && (
+          <span
+            className="ml-auto w-2 h-2 rounded-full bg-green-400"
+            role="img"
+            aria-label="All muscle groups at target weekly sets"
+          />
+        )}
       </Link>
     );
   };

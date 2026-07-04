@@ -165,13 +165,24 @@ const createSnapshot = (
   ...overrides,
 });
 
-/** Five weeks of flat E1RM — unambiguous plateau for detectPlateau. */
+/**
+ * Dates must be relative to "now": ExerciseCard passes the current date to
+ * detectPlateau, which skips exercises not trained within its staleness
+ * window, so fixed dates would rot as real time advances.
+ */
+const weeksAgo = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - n * 7);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Five weeks of flat E1RM ending today — unambiguous plateau for detectPlateau. */
 const plateauedSnapshots: ExercisePerformanceSnapshot[] = [
-  createSnapshot({ id: 's1', sessionDate: '2026-05-01' }),
-  createSnapshot({ id: 's2', sessionDate: '2026-05-08' }),
-  createSnapshot({ id: 's3', sessionDate: '2026-05-15' }),
-  createSnapshot({ id: 's4', sessionDate: '2026-05-22' }),
-  createSnapshot({ id: 's5', sessionDate: '2026-05-29' }),
+  createSnapshot({ id: 's1', sessionDate: weeksAgo(4) }),
+  createSnapshot({ id: 's2', sessionDate: weeksAgo(3) }),
+  createSnapshot({ id: 's3', sessionDate: weeksAgo(2) }),
+  createSnapshot({ id: 's4', sessionDate: weeksAgo(1) }),
+  createSnapshot({ id: 's5', sessionDate: weeksAgo(0) }),
 ];
 
 describe('ExerciseCard', () => {
@@ -665,6 +676,57 @@ describe('ExerciseCard', () => {
       // One-tap rep-range action parsed from the suggestions
       await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
       expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
+    });
+
+    it('reseeds the untouched logger prefill when the one-tap rep range is applied', async () => {
+      const user = userEvent.setup();
+      const onRepRangeChange = jest.fn();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={onRepRangeChange}
+          previousSets={[{ weightKg: 100, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      // Seeded from the previous session: 100 kg × 10 (inside the 8-12 target)
+      expect(screen.getByRole('button', { name: /Weight: 100 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10/ })).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      expect(onRepRangeChange).toHaveBeenCalledWith([5, 6]);
+      // With no completed sets the reseed effects never fire, so the button
+      // itself must reprice the prefill: 100×10 @ 2 RIR → E1RM 140 kg, and
+      // 140 / (1 + (6+2)/30) ≈ 110.5 → 110 at the 2.5 kg increment.
+      expect(screen.getByRole('button', { name: /Weight: 110 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
+    it('hides the one-tap rep-range button when the block already uses that range', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          block={createMockBlock({ targetRepRange: [5, 6] as [number, number] })}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          onExerciseSwap={jest.fn()}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+
+      expect(screen.getByText('Plateau detected')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Try 5–6 reps/ })).not.toBeInTheDocument();
+      // Swap remains available as the actionable follow-up
+      expect(screen.getByRole('button', { name: 'Swap exercise' })).toBeInTheDocument();
     });
 
     it('does not show the plateau pill without enough history', () => {
