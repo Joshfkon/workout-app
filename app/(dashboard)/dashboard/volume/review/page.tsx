@@ -225,7 +225,7 @@ export default function MesocycleReviewPage() {
           <p className="text-surface-400 mb-4">
             Complete at least 3 weeks of training to generate your first mesocycle analysis.
           </p>
-          <Link href="/dashboard/workout">
+          <Link href="/dashboard/log">
             <button className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors">
               Start Training
             </button>
