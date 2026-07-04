@@ -85,3 +85,19 @@ export function computeCurrentWeekFromSessions(
 
   return { week, isComplete };
 }
+
+/**
+ * 0-based index of the next session within the program week, from the TOTAL
+ * completed-session count for the mesocycle. Pairs with
+ * computeCurrentWeekFromSessions: together they make the plan self-extending —
+ * skipped days (even across calendar-week boundaries) never drop a session,
+ * the user always resumes at the next un-done slot.
+ */
+export function sessionIndexFromCompleted(
+  completedSessions: number,
+  daysPerWeek: number
+): number {
+  const safeDaysPerWeek = Math.max(1, Math.floor(daysPerWeek || 1));
+  const safeCompleted = Math.max(0, Math.floor(completedSessions || 0));
+  return safeCompleted % safeDaysPerWeek;
+}

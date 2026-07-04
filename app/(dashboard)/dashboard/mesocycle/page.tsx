@@ -13,11 +13,12 @@ import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
   getTrainingDays,
-  getWeekStart,
+  countCompletedSessions,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import { WorkoutDaySelector } from '@/components/mesocycle';
 import { getLocalDateString } from '@/lib/utils';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 
 const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -60,7 +61,7 @@ export default function MesocyclePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
-  const [completedSessionsThisWeek, setCompletedSessionsThisWeek] = useState<number>(0);
+  const [completedSessions, setCompletedSessions] = useState<number>(0);
   const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -393,23 +394,16 @@ export default function MesocyclePage() {
           );
           setTodayWorkout(workout);
 
-          // Fetch completed sessions this week for session tracking
-          const weekStart = getWeekStart();
-          const { data: completedSessions } = await supabase
-            .from('workout_sessions')
-            .select('id')
-            .eq('mesocycle_id', active.id)
-            .eq('state', 'completed')
-            .gte('planned_date', weekStart);
-
-          const completedCount = completedSessions?.length || 0;
-          setCompletedSessionsThisWeek(completedCount);
+          // TOTAL completed sessions drive progression: session index is
+          // count % days_per_week (skipped days never drop a session).
+          const completedCount = await countCompletedSessions(supabase, active.id);
+          setCompletedSessions(completedCount);
 
           // Get estimated time from program_data for time budget validation
           const programData = active.program_data as FullProgramRecommendation | null;
           const sessionFromProgram = getSessionFromProgramData(
             programData,
-            completedCount, // Use completed count as session index
+            sessionIndexFromCompleted(completedCount, active.days_per_week),
             active.current_week,
             active.total_weeks
           );
@@ -438,7 +432,7 @@ export default function MesocyclePage() {
         supabase,
         mesocycle: activeMesocycle,
         todayWorkout,
-        completedSessionsThisWeek,
+        completedSessions,
       });
 
       router.push(`/dashboard/workout/${sessionId}`);
@@ -557,7 +551,7 @@ export default function MesocyclePage() {
                     </div>
                     <div className="flex items-center gap-3 mt-3 text-sm">
                       <span className="text-surface-400">
-                        Week {activeMesocycle.current_week} • Session {completedSessionsThisWeek + 1} of {activeMesocycle.days_per_week}
+                        Week {activeMesocycle.current_week} • Session {sessionIndexFromCompleted(completedSessions, activeMesocycle.days_per_week) + 1} of {activeMesocycle.days_per_week}
                       </span>
                       {estimatedSessionTime && (
                         <span className={`flex items-center gap-1 ${
