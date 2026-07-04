@@ -48,25 +48,38 @@ export async function runPostSessionMesoUpdates(
       .eq('id', mesocycleId)
       .maybeSingle();
 
-    // Session-count-based week (this session is already 'completed', so it's
-    // in the count). The week advances only when the user has actually done
+    // Session-count-based weeks (this session is already 'completed', so it's
+    // in the count). A week advances only when the user has actually done
     // days_per_week sessions — skipped days extend the plan instead of the
-    // calendar silently dropping sessions. Clamped to never go below the
-    // stored week so mesocycles that advanced under the old date-based scheme
-    // don't jump backwards. Distinct week numbers are what lets
-    // checkDeloadTriggers compare consecutive weeks.
+    // calendar silently dropping sessions. Both weeks are clamped to never go
+    // below the stored week so mesocycles that advanced under the old
+    // date-based scheme don't jump backwards.
     const completedCount = await countCompletedSessions(supabase, mesocycleId);
-    const sessionWeek = computeCurrentWeekFromSessions(
-      completedCount,
-      meso?.days_per_week ?? 1,
-      meso?.total_weeks ?? 1
-    ).week;
-    const weekNumber = Math.max(sessionWeek, meso?.current_week ?? 1);
+    const daysPerWeek = meso?.days_per_week ?? 1;
+    const totalWeeks = meso?.total_weeks ?? 1;
+    const storedWeek = meso?.current_week ?? 1;
+
+    // The week the just-finished session BELONGS to comes from the count
+    // before it (completedCount - 1): on a boundary session (count is an
+    // exact multiple of days_per_week) the full count already rolls over,
+    // which would file the last workout of week N under N+1 — and
+    // checkDeloadTriggers would then compare two same-week fatigue logs as
+    // if they were consecutive weeks.
+    const logWeek = Math.max(
+      computeCurrentWeekFromSessions(completedCount - 1, daysPerWeek, totalWeeks).week,
+      storedWeek
+    );
+    // The week UPCOMING sessions belong to uses the full count, matching how
+    // startMesocycleSession picks the next session's week.
+    const weekNumber = Math.max(
+      computeCurrentWeekFromSessions(completedCount, daysPerWeek, totalWeeks).week,
+      storedWeek
+    );
 
     const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
       userId,
       mesocycleId,
-      weekNumber,
+      weekNumber: logWeek,
       readinessScore: checkIn?.readinessScore ?? 0,
       sleepQuality: checkIn?.sleepQuality ?? null,
       stressLevel: checkIn?.stressLevel ?? null,
