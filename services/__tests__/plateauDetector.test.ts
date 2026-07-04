@@ -342,6 +342,119 @@ describe('detectPlateau', () => {
   });
 });
 
+describe('detectPlateau goal awareness', () => {
+  const flatSnapshots = [
+    createSnapshot('2024-01-01', 100),
+    createSnapshot('2024-01-08', 100),
+    createSnapshot('2024-01-15', 100),
+    createSnapshot('2024-01-22', 100),
+  ];
+
+  it('does not flag flat strength as a plateau on a cut', () => {
+    // Holding E1RM in a deficit is success, not stagnation.
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: flatSnapshots,
+      goal: 'cut',
+    });
+
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('tolerates a small strength dip on a cut', () => {
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 99),
+        createSnapshot('2024-01-22', 98), // -2%, within cut tolerance
+      ],
+      goal: 'cut',
+    });
+
+    expect(result.isPlateaued).toBe(false);
+  });
+
+  it('flags a real strength decline on a cut, with deficit-aware advice', () => {
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 98),
+        createSnapshot('2024-01-15', 97),
+        createSnapshot('2024-01-22', 96), // -4%, beyond cut tolerance
+      ],
+      goal: 'cut',
+    });
+
+    expect(result.isPlateaued).toBe(true);
+    expect(result.suggestions[0].toLowerCase()).toContain('deficit');
+  });
+
+  it('does not flag flat strength at maintenance (both spellings)', () => {
+    for (const goal of ['maintenance', 'maintain'] as const) {
+      const result = detectPlateau({
+        exerciseId: 'bench-press',
+        snapshots: flatSnapshots,
+        goal,
+      });
+      expect(result.isPlateaued).toBe(false);
+    }
+  });
+
+  it('gives recomp extra time before calling a plateau', () => {
+    // 4 flat weeks: plateau on a bulk, still within tolerance on recomp.
+    const bulk = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: flatSnapshots,
+      goal: 'bulk',
+    });
+    const recomp = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: flatSnapshots,
+      goal: 'recomp',
+    });
+
+    expect(bulk.isPlateaued).toBe(true);
+    expect(recomp.isPlateaued).toBe(false);
+  });
+
+  it('still flags a long stall on recomp', () => {
+    // Six weeks without a new peak exceeds even the recomp allowance.
+    const result = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: [
+        createSnapshot('2024-01-01', 100),
+        createSnapshot('2024-01-08', 100),
+        createSnapshot('2024-01-15', 100),
+        createSnapshot('2024-01-22', 100),
+        createSnapshot('2024-01-29', 100),
+        createSnapshot('2024-02-05', 100),
+        createSnapshot('2024-02-12', 100),
+      ],
+      goal: 'recomp',
+    });
+
+    expect(result.isPlateaued).toBe(true);
+  });
+
+  it('treats an omitted goal like the original bulk-style behavior', () => {
+    const withDefault = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: flatSnapshots,
+    });
+    const withBulk = detectPlateau({
+      exerciseId: 'bench-press',
+      snapshots: flatSnapshots,
+      goal: 'bulk',
+    });
+
+    expect(withDefault.isPlateaued).toBe(true);
+    expect(withBulk.isPlateaued).toBe(true);
+  });
+});
+
 // ============================================
 // PLATEAU SUGGESTIONS TESTS
 // ============================================

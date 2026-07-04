@@ -10,8 +10,15 @@ import type {
   Exercise,
   ExerciseTrend,
   PlateauAlert,
+  Goal,
 } from '@/types/schema';
 import { estimate1RM } from './shared/strengthCalculations';
+
+/**
+ * Some parts of the app (coaching PhaseType, workout page check-in) use
+ * 'maintain' where the schema Goal uses 'maintenance'; accept both.
+ */
+export type PlateauGoal = Goal | 'maintain';
 
 // ============================================
 // CONSTANTS
@@ -20,11 +27,39 @@ import { estimate1RM } from './shared/strengthCalculations';
 /** Minimum weeks of data needed for plateau detection */
 const MIN_WEEKS_FOR_ANALYSIS = 4;
 
-/** E1RM improvement threshold for plateau (percentage) */
-const PLATEAU_THRESHOLD = 0.02; // 2%
+interface GoalPlateauProfile {
+  /**
+   * E1RM percent change over the recent window below which it's a plateau.
+   * Positive = gains expected; negative = only flag an actual decline.
+   */
+  threshold: number;
+  /**
+   * Flag after this many weeks without a new peak E1RM.
+   * null disables the trigger (no new peaks are expected on a deficit).
+   */
+  weeksWithoutPeak: number | null;
+}
 
-/** Weeks without progress to trigger plateau alert */
-const WEEKS_TO_PLATEAU = 3;
+/**
+ * What counts as "stalled" depends on the diet phase: on a bulk, flat E1RM
+ * is a plateau; on a cut, holding strength IS the goal and only a real
+ * decline is worth an alert; recomp sits in between.
+ */
+const GOAL_PROFILES: Record<Goal, GoalPlateauProfile> = {
+  bulk: { threshold: 0.02, weeksWithoutPeak: 3 },
+  recomp: { threshold: 0, weeksWithoutPeak: 5 },
+  maintenance: { threshold: -0.02, weeksWithoutPeak: null },
+  cut: { threshold: -0.03, weeksWithoutPeak: null },
+};
+
+/** Pre-goal-awareness behavior, used when no goal is provided. */
+const DEFAULT_PROFILE: GoalPlateauProfile = GOAL_PROFILES.bulk;
+
+function resolveProfile(goal?: PlateauGoal): GoalPlateauProfile {
+  if (!goal) return DEFAULT_PROFILE;
+  const normalized: Goal = goal === 'maintain' ? 'maintenance' : goal;
+  return GOAL_PROFILES[normalized] ?? DEFAULT_PROFILE;
+}
 
 /**
  * Only sessions within this many weeks of the most recent one are analyzed.
@@ -64,10 +99,13 @@ export function calculateE1RM(
 // ============================================
 
 /**
- * Analyze exercise performance trend over time
+ * Analyze exercise performance trend over time.
+ * Pass the user's diet goal so "stalled" is judged against what the phase
+ * can realistically deliver (gains on a bulk, maintenance on a cut).
  */
 export function analyzeExerciseTrend(
-  snapshots: ExercisePerformanceSnapshot[]
+  snapshots: ExercisePerformanceSnapshot[],
+  goal?: PlateauGoal
 ): ExerciseTrend {
   if (snapshots.length === 0) {
     return {
@@ -92,7 +130,7 @@ export function analyzeExerciseTrend(
   const weeklyChange = calculateWeeklyChange(dataPoints);
 
   // Determine if plateaued
-  const isPlateaued = checkForPlateau(dataPoints);
+  const isPlateaued = checkForPlateau(dataPoints, resolveProfile(goal).threshold);
 
   return {
     exerciseId: snapshots[0].exerciseId,
@@ -138,7 +176,8 @@ function calculateWeeklyChange(
  * Check if the recent data points indicate a plateau
  */
 function checkForPlateau(
-  dataPoints: Array<{ date: string; e1rm: number }>
+  dataPoints: Array<{ date: string; e1rm: number }>,
+  threshold: number
 ): boolean {
   if (dataPoints.length < MIN_WEEKS_FOR_ANALYSIS) return false;
 
@@ -156,8 +195,8 @@ function checkForPlateau(
   // Calculate percent change
   const percentChange = (lastE1RM - firstE1RM) / firstE1RM;
 
-  // If less than threshold improvement, it's a plateau
-  return percentChange < PLATEAU_THRESHOLD;
+  // If less than the goal-adjusted threshold, it's a plateau
+  return percentChange < threshold;
 }
 
 // ============================================
@@ -173,6 +212,11 @@ export interface DetectPlateauInput {
    * deterministic when omitted (tests, historical analysis).
    */
   referenceDate?: string | Date;
+  /**
+   * Diet phase. Sets expectations: gains on a bulk, holding strength on a
+   * cut. Omitted = bulk-like behavior (the pre-goal-awareness default).
+   */
+  goal?: PlateauGoal;
 }
 
 export interface PlateauDetectionResult {
@@ -262,13 +306,17 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
     (currentDate.getTime() - peakDateTime.getTime()) / WEEK_MS
   );
 
-  // Analyze trend
-  const trend = analyzeExerciseTrend(recent);
-  const isPlateaued = trend.isPlateaued || weeksSinceProgress >= WEEKS_TO_PLATEAU;
+  // Analyze trend against goal-adjusted expectations
+  const profile = resolveProfile(input.goal);
+  const trend = analyzeExerciseTrend(recent, input.goal);
+  const isPlateaued =
+    trend.isPlateaued ||
+    (profile.weeksWithoutPeak !== null &&
+      weeksSinceProgress >= profile.weeksWithoutPeak);
 
   // Generate suggestions if plateaued
   const suggestions = isPlateaued
-    ? generatePlateauSuggestions(recent, trend)
+    ? generatePlateauSuggestions(recent, trend, input.goal)
     : [];
 
   return {
@@ -290,11 +338,24 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
  */
 export function generatePlateauSuggestions(
   snapshots: ExercisePerformanceSnapshot[],
-  trend: ExerciseTrend
+  trend: ExerciseTrend,
+  goal?: PlateauGoal
 ): string[] {
   const suggestions: string[] = [];
-  
+
   if (snapshots.length === 0) return suggestions;
+
+  // On a deficit, being flagged means strength is actually dropping — lead
+  // with the diet-side levers before the usual training tweaks.
+  if (goal === 'cut') {
+    suggestions.push(
+      'Strength is dropping faster than a cut should cost - check the deficit is not too aggressive and keep protein high'
+    );
+  } else if (goal === 'maintenance' || goal === 'maintain') {
+    suggestions.push(
+      'Strength is slipping at maintenance - verify calories are actually at maintenance and recovery is on point'
+    );
+  }
 
   // Analyze recent training patterns
   const recent = snapshots.slice(-6);
@@ -387,12 +448,13 @@ export function createPlateauAlert(
  */
 export function analyzeAllExercises(
   exerciseSnapshots: Map<string, ExercisePerformanceSnapshot[]>,
-  referenceDate?: string | Date
+  referenceDate?: string | Date,
+  goal?: PlateauGoal
 ): Map<string, PlateauDetectionResult> {
   const results = new Map<string, PlateauDetectionResult>();
 
   exerciseSnapshots.forEach((snapshots, exerciseId) => {
-    const result = detectPlateau({ exerciseId, snapshots, referenceDate });
+    const result = detectPlateau({ exerciseId, snapshots, referenceDate, goal });
     results.set(exerciseId, result);
   });
 

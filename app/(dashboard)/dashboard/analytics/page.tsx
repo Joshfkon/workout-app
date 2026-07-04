@@ -46,7 +46,7 @@ import {
 import type { Mesocycle, BodyCompositionTarget, ExercisePerformanceSnapshot } from '@/types/schema';
 import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnalytics';
 import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
-import { analyzeAllExercises, type PlateauDetectionResult } from '@/services/plateauDetector';
+import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
@@ -910,7 +910,17 @@ export default function AnalyticsPage() {
           query = query.gte('completed_at', startDate.toISOString());
         }
 
-        const { data: workoutSessions, error } = await query;
+        // Diet goal for plateau detection (fetched here, not from userProfile
+        // state, so the per-range cache can't be seeded before the profile
+        // query resolves and keep stale goal-less results).
+        const goalPromise = supabase
+          .from('users')
+          .select('goal')
+          .eq('id', user.id)
+          .single();
+
+        const [{ data: workoutSessions, error }, { data: goalRow }] =
+          await Promise.all([query, goalPromise]);
 
         if (error || !workoutSessions || workoutSessions.length === 0) {
           setAnalytics(null);
@@ -1037,9 +1047,14 @@ export default function AnalyticsPage() {
         });
 
         // Run plateau detection over per-exercise session snapshots.
-        // Pass today's date so exercises not trained recently are skipped
-        // (long time ranges like '1y'/'all' include long-abandoned lifts).
-        const plateauResults = analyzeAllExercises(snapshotMap, new Date());
+        // Today's date skips exercises not trained recently (long ranges like
+        // '1y'/'all' include long-abandoned lifts); the goal sets expectations
+        // (gains on a bulk vs. holding strength on a cut).
+        const plateauResults = analyzeAllExercises(
+          snapshotMap,
+          new Date(),
+          (goalRow?.goal as PlateauGoal | null) ?? undefined
+        );
         const detectedPlateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> = [];
         plateauResults.forEach((result, exerciseId) => {
           if (result.isPlateaued) {
