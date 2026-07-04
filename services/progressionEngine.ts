@@ -18,7 +18,12 @@ import type {
   MovementPattern,
   Equipment,
 } from '@/types/schema';
-import { rirToRpe, calculateAvgFormScore } from '@/types/schema';
+import {
+  rirToRpe,
+  calculateAvgFormScore,
+  muscleMatchesGroup,
+  normalizeMuscleToken,
+} from '@/types/schema';
 import { roundToIncrement, clamp } from '@/lib/utils';
 import {
   estimate1RM,
@@ -1348,7 +1353,9 @@ export interface WarmedMusclesInput {
  * muscle — e.g. bench press working sets warm the triceps and front
  * delts, so a triceps exercise later in the session needs no warmup.
  *
- * Muscle names are compared case-insensitively.
+ * Returns the normalized raw tokens as logged on the exercises; callers
+ * should match against them with isMuscleWarmedUp, which resolves legacy,
+ * standard, and detailed tokens through the muscle taxonomy.
  */
 export function getWarmedUpMuscles(input: WarmedMusclesInput): Set<string> {
   const { completedSets, blocks } = input;
@@ -1360,7 +1367,7 @@ export function getWarmedUpMuscles(input: WarmedMusclesInput): Set<string> {
     if (!block) continue;
 
     if (block.exercise.primaryMuscle) {
-      warmed.add(block.exercise.primaryMuscle.toLowerCase());
+      warmed.add(normalizeMuscleToken(block.exercise.primaryMuscle));
     }
 
     // Light warmup sets prep their own primary muscle, but only working
@@ -1368,7 +1375,7 @@ export function getWarmedUpMuscles(input: WarmedMusclesInput): Set<string> {
     const isWarmupSet = set.isWarmup || set.setType === 'warmup';
     if (!isWarmupSet) {
       for (const secondary of block.exercise.secondaryMuscles ?? []) {
-        if (secondary) warmed.add(secondary.toLowerCase());
+        if (secondary) warmed.add(normalizeMuscleToken(secondary));
       }
     }
   }
@@ -1379,10 +1386,23 @@ export function getWarmedUpMuscles(input: WarmedMusclesInput): Set<string> {
 /**
  * Whether a muscle has already been warmed up this session.
  * See getWarmedUpMuscles for what counts as "warm".
+ *
+ * Matching goes through the muscle taxonomy in both directions, so a
+ * coarse legacy token and a precise standard/detailed token warm each
+ * other — e.g. flat bench ('chest') warms 'chest_upper' for a following
+ * incline press, and 'front_delts' work warms 'shoulders'.
  */
 export function isMuscleWarmedUp(muscle: string, input: WarmedMusclesInput): boolean {
   if (!muscle) return false;
-  return getWarmedUpMuscles(input).has(muscle.toLowerCase());
+  const warmed = getWarmedUpMuscles(input);
+  const token = normalizeMuscleToken(muscle);
+  if (warmed.has(token)) return true;
+  for (const warmedMuscle of Array.from(warmed)) {
+    if (muscleMatchesGroup(warmedMuscle, token) || muscleMatchesGroup(token, warmedMuscle)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ============================================
