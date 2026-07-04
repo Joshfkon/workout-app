@@ -10,6 +10,8 @@ import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestio
 import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
+import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
+import { useUserStore } from '@/stores';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
@@ -440,6 +442,21 @@ export const ExerciseCard = memo(function ExerciseCard({
     });
     return result.isPlateaued ? result : null;
   }, [performanceSnapshots, exercise.id, userGoal]);
+
+  // Progression pace vs what's expected for the user's experience level
+  // (services/progressionInsights). Complements the plateau badge: the pace
+  // pill covers the non-plateaued states (ahead / on track / behind).
+  const experience = useUserStore((s) => s.user?.experience ?? 'intermediate');
+  const progressionInsight: ExerciseProgressionInsight | null = useMemo(() => {
+    if (!performanceSnapshots || performanceSnapshots.length === 0) return null;
+    return getExerciseProgression({
+      exerciseId: exercise.id,
+      snapshots: performanceSnapshots,
+      experience,
+      referenceDate: new Date(),
+      goal: userGoal,
+    });
+  }, [performanceSnapshots, exercise.id, experience, userGoal]);
 
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
@@ -1132,6 +1149,28 @@ export const ExerciseCard = memo(function ExerciseCard({
     }`;
   })();
 
+  // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
+  // what the top set did versus the previous session (weight/rep deltas).
+  const progressionTitle = (() => {
+    if (!progressionInsight) return undefined;
+    const sign = progressionInsight.weeklyChangePct >= 0 ? '+' : '';
+    let title = `E1RM trend ${sign}${progressionInsight.weeklyChangePct}%/week · expected ~${progressionInsight.expectedWeeklyPct}%/week for your level`;
+    const delta = progressionInsight.lastSessionDelta;
+    if (delta && (delta.weightKg !== 0 || delta.reps !== 0)) {
+      const parts: string[] = [];
+      if (delta.weightKg !== 0) {
+        parts.push(
+          `${delta.weightKg > 0 ? '+' : ''}${convertWeightForDisplay(delta.weightKg, unit)} ${weightLabel}`
+        );
+      }
+      if (delta.reps !== 0) {
+        parts.push(`${delta.reps > 0 ? '+' : ''}${delta.reps} rep${Math.abs(delta.reps) === 1 ? '' : 's'}`);
+      }
+      title += ` · top set ${parts.join(', ')} vs prior session`;
+    }
+    return title;
+  })();
+
   // Only badge exercises that need caution — "Safe" is the default and just adds header noise
   const safetyTier = getFailureSafetyTier(exercise.name);
 
@@ -1167,6 +1206,31 @@ export const ExerciseCard = memo(function ExerciseCard({
               Plateau
             </button>
           )}
+          {/* Progression pace pill (services/progressionInsights) — trend vs
+              the expected rate for the user's experience level. The plateau
+              badge takes precedence when both would show. */}
+          {!plateau &&
+            progressionInsight &&
+            (progressionInsight.pace === 'ahead' ||
+              progressionInsight.pace === 'on_track' ||
+              progressionInsight.pace === 'behind') && (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${
+                  progressionInsight.pace === 'ahead'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : progressionInsight.pace === 'on_track'
+                      ? 'bg-surface-700/60 text-surface-300'
+                      : 'bg-orange-500/10 text-orange-400'
+                }`}
+                title={progressionTitle}
+              >
+                {progressionInsight.pace === 'ahead'
+                  ? '▲ Ahead'
+                  : progressionInsight.pace === 'on_track'
+                    ? 'On track'
+                    : '▼ Behind'}
+              </span>
+            )}
           {block.supersetGroupId && (
             <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
               SS{block.supersetOrder}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -48,6 +48,8 @@ import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnal
 import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
 import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
+import { getMuscleGroupProgression } from '@/services/progressionInsights';
+import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
@@ -141,6 +143,14 @@ interface UserProfile {
   goal: Goal;
   experience: Experience;
   targetBodyFatPercent: number | null;
+}
+
+/** Raw inputs for the muscle-group progression card (services/progressionInsights) */
+interface ProgressionRawData {
+  snapshotsByExercise: Map<string, ExercisePerformanceSnapshot[]>;
+  muscleByExercise: Map<string, string>;
+  exerciseNames: Map<string, string>;
+  goal?: PlateauGoal;
 }
 
 interface WorkoutSummary {
@@ -361,9 +371,13 @@ export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   // Per-time-range result cache (P1-2) — lives for the page's lifetime.
   const analyticsRangeCacheRef = useRef(
-    new Map<string, { analytics: AnalyticsData; plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }> }>()
+    new Map<string, { analytics: AnalyticsData; plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>; progressionRaw: ProgressionRawData | null }>()
   );
   const [plateauAlerts, setPlateauAlerts] = useState<Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>>([]);
+  // Raw inputs for the muscle-group progression card. Classification happens
+  // in a render-side memo so it re-runs when the user profile (experience)
+  // finishes loading, without refetching workout data.
+  const [progressionRaw, setProgressionRaw] = useState<ProgressionRawData | null>(null);
   const [strengthViewMode, setStrengthViewMode] = useState<'absolute' | 'relative'>('absolute');
   const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
 
@@ -857,6 +871,7 @@ export default function AnalyticsPage() {
         if (cached) {
           setAnalytics(cached.analytics);
           setPlateauAlerts(cached.plateauAlerts);
+          setProgressionRaw(cached.progressionRaw);
           return;
         }
 
@@ -925,6 +940,7 @@ export default function AnalyticsPage() {
         if (error || !workoutSessions || workoutSessions.length === 0) {
           setAnalytics(null);
           setPlateauAlerts([]);
+          setProgressionRaw(null);
           return;
         }
 
@@ -1068,6 +1084,20 @@ export default function AnalyticsPage() {
         detectedPlateauAlerts.sort((a, b) => b.result.weeksSinceProgress - a.result.weeksSinceProgress);
         setPlateauAlerts(detectedPlateauAlerts);
 
+        // Raw inputs for the muscle-group progression card: per-exercise
+        // session snapshots plus each exercise's primary muscle.
+        const muscleByExercise = new Map<string, string>();
+        exercisePerformanceMap.forEach((data, exId) => {
+          if (data.primaryMuscle) muscleByExercise.set(exId, data.primaryMuscle);
+        });
+        const progressionRawResult: ProgressionRawData = {
+          snapshotsByExercise: snapshotMap,
+          muscleByExercise,
+          exerciseNames: exerciseNameMap,
+          goal: (goalRow?.goal as PlateauGoal | null) ?? undefined,
+        };
+        setProgressionRaw(progressionRawResult);
+
         const totalWorkouts = workoutSessions.length;
         const avgWorkoutDuration = durations.length > 0
           ? Math.floor(durations.reduce((a, b) => a + b, 0) / durations.length)
@@ -1170,6 +1200,7 @@ export default function AnalyticsPage() {
         analyticsRangeCacheRef.current.set(timeRange, {
           analytics: analyticsResult,
           plateauAlerts: detectedPlateauAlerts,
+          progressionRaw: progressionRawResult,
         });
       } catch (error) {
         console.error('Failed to fetch analytics:', error);
@@ -1178,6 +1209,20 @@ export default function AnalyticsPage() {
 
     fetchAnalytics();
   }, [timeRange]);
+
+  // Muscle-group progression classification (services/progressionInsights).
+  // Recomputes when the profile loads so pace is judged against the right
+  // experience level; workout data itself comes from the cached fetch above.
+  const muscleProgression = useMemo(() => {
+    if (!progressionRaw) return [];
+    return getMuscleGroupProgression({
+      snapshotsByExercise: progressionRaw.snapshotsByExercise,
+      muscleByExercise: progressionRaw.muscleByExercise,
+      experience: userProfile?.experience ?? 'intermediate',
+      referenceDate: new Date(),
+      goal: progressionRaw.goal,
+    });
+  }, [progressionRaw, userProfile?.experience]);
 
   // Calculated values
   const latestScan = scans[0];
@@ -1487,6 +1532,14 @@ export default function AnalyticsPage() {
           {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
           {plateauAlerts.length > 0 && (
             <PlateauAlertList alerts={plateauAlerts} />
+          )}
+          {/* Progression pace per muscle group vs the expected rate for the
+              user's experience level (services/progressionInsights) */}
+          {muscleProgression.length > 0 && (
+            <MuscleProgressionCard
+              groups={muscleProgression}
+              exerciseNames={progressionRaw?.exerciseNames}
+            />
           )}
           {strengthProfile ? (
             <>
