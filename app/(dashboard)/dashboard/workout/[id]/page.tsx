@@ -46,7 +46,7 @@ import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progression
 import { MUSCLE_GROUPS } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
-import { addExerciseOverride, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import { formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
@@ -89,7 +89,6 @@ import {
   upsertSessionMuscleFeedback,
   type RecentMuscleSession,
 } from './_lib/muscleFeedbackWrites';
-import { upsertWeeklyFatigueLog } from './_lib/sessionWrites';
 import { isStaleEmptyAdhocSession, discardStaleSession } from '../_lib/adhocSession';
 import { computeSupersetAdvance } from './_lib/supersetFlow';
 import {
@@ -100,7 +99,10 @@ import {
 } from '../_lib/staleTargets';
 import { RecalcTargetsBanner } from '@/components/workout';
 import { cancelWorkoutSession } from './_lib/cancelWorkout';
-import { computeCurrentWeek } from '@/lib/training/mesocycleProgress';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
+import { matchAdhocToPlannedSession } from '@/lib/training/adhocClaim';
+import { runPostSessionMesoUpdates } from './_lib/postSessionMeso';
 import type {
   AvailableExercise,
   CalibratedLift,
@@ -356,6 +358,15 @@ export default function WorkoutPage() {
   // Mirrors exercise_blocks.skipped_at; excluded from progress, summary
   // aggregates, and progression/feedback derivations.
   const [skippedBlockIds, setSkippedBlockIds] = useState<Set<string>>(new Set());
+  // Ad-hoc workout that matches the mesocycle's next pending session: armed
+  // by the summary-phase check, prompts after Finish to count the workout
+  // toward the plan (sets mesocycle_id — never claimed silently).
+  const [claimCandidate, setClaimCandidate] = useState<{ mesocycleId: string; dayName: string } | null>(null);
+  const [showClaimPrompt, setShowClaimPrompt] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+  // Session RPE from the submitted summary, kept for the claim path's
+  // post-session meso updates (the summary data is gone once the prompt shows).
+  const [submittedSessionRpe, setSubmittedSessionRpe] = useState<number | null>(null);
   // Session-local readiness banner state: dismissed hides the strip only;
   // "Train as planned" additionally zeroes the modulation passed down.
   const [readinessBannerDismissed, setReadinessBannerDismissed] = useState(false);
@@ -3412,6 +3423,62 @@ export default function WorkoutPage() {
     }
   };
 
+  // B1: when an ad-hoc workout reaches the summary, check whether it matches
+  // the active mesocycle's next pending session. A match arms the
+  // count-toward-mesocycle prompt shown after the summary is submitted.
+  // Ref-guarded to run the queries once per visit; if the check is still in
+  // flight when the user taps Finish, they just navigate as before (no prompt).
+  const claimCheckStarted = useRef(false);
+  useEffect(() => {
+    if (phase !== 'summary' || claimCheckStarted.current) return;
+    if (!session || session.mesocycleId) return;
+    if (session.state === 'completed' && session.completedAt) return; // viewing history
+    claimCheckStarted.current = true;
+
+    (async () => {
+      try {
+        const supabase = createUntypedClient();
+        const { data: mesoRows } = await supabase
+          .from('mesocycles')
+          .select('id, days_per_week, current_week, total_weeks, program_data, exercise_overrides')
+          .eq('user_id', session.userId)
+          .or('is_active.eq.true,state.eq.active')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const meso = mesoRows?.[0];
+        if (!meso) return;
+
+        const completed = await countCompletedSessions(supabase, meso.id);
+        const programSession = getSessionFromProgramData(
+          meso.program_data,
+          sessionIndexFromCompleted(completed, meso.days_per_week),
+          meso.current_week,
+          meso.total_weeks
+        );
+        if (!programSession || programSession.exercises.length === 0) return;
+
+        const planned = applyExerciseOverrides(
+          programSession.exercises,
+          (meso.exercise_overrides ?? []) as ExerciseOverride[]
+        );
+        const loggedBlockIds = new Set(
+          completedSets.filter((s) => !s.isWarmup).map((s) => s.exerciseBlockId)
+        );
+        const logged = blocks
+          .filter((b) => !skippedBlockIds.has(b.id) && loggedBlockIds.has(b.id))
+          .map((b) => ({ name: b.exercise.name, primaryMuscle: b.exercise.primaryMuscle }));
+
+        const match = matchAdhocToPlannedSession(logged, planned);
+        if (match.isMatch) {
+          setClaimCandidate({ mesocycleId: meso.id, dayName: programSession.dayName });
+        }
+      } catch (err) {
+        // Non-fatal: without a candidate the finish flow behaves as before.
+        console.error('Ad-hoc claim check failed:', err);
+      }
+    })();
+  }, [phase, session, blocks, completedSets, skippedBlockIds]);
+
   const handleWorkoutComplete = () => {
     setPhase('summary');
   };
@@ -3484,68 +3551,16 @@ export default function WorkoutPage() {
         }
       }
 
-      // Deload trigger check (Phase 1.4). Log this week's fatigue signals to
-      // weekly_fatigue_logs (the data checkDeloadTriggers reads), then run the
-      // trigger check and stamp deload_recommended_at/deload_reasons on the
-      // mesocycle if it fires. Fire-and-forget: must never block or fail the
-      // finish flow.
+      // Deload trigger check (Phase 1.4) + week advance from the completed-
+      // session count (see _lib/postSessionMeso). Fire-and-forget: must never
+      // block or fail the finish flow.
       if (session?.mesocycleId) {
-        const mesocycleId = session.mesocycleId;
-        const sessionUserId = session.userId;
-        const checkIn = session.preWorkoutCheckIn;
-        const sessionRpe = data.sessionRpe;
-        void (async () => {
-          try {
-            const { data: meso } = await supabase
-              .from('mesocycles')
-              .select('start_date, total_weeks')
-              .eq('id', mesocycleId)
-              .maybeSingle();
-
-            // Date-based week in mesocycle (matches how the page computes
-            // weekInMesocycle for coaching context). Distinct week numbers are
-            // what lets checkDeloadTriggers compare consecutive weeks.
-            const weekNumber = meso?.start_date
-              ? computeCurrentWeek(meso.start_date, meso.total_weeks ?? 1).week
-              : 1;
-
-            const fatigueResult = await upsertWeeklyFatigueLog(supabase, {
-              userId: sessionUserId,
-              mesocycleId,
-              weekNumber,
-              readinessScore: checkIn?.readinessScore ?? 0,
-              sleepQuality: checkIn?.sleepQuality ?? null,
-              stressLevel: checkIn?.stressLevel ?? null,
-              sessionAvgRpe: sessionRpe,
-            });
-            if (!fatigueResult.ok) {
-              console.error('Failed to save weekly fatigue log:', fatigueResult.error);
-            }
-
-            // current_week was historically written only at creation (always 1),
-            // which silently disabled everything that reads it: the weekly
-            // rollover's deload-week hold, program-week modifiers at workout
-            // start, and deload-accept's current_week+1 targeting. Keep it in
-            // step with the date-derived week here, where we already computed it.
-            if (meso?.start_date) {
-              const { error: weekError } = await supabase
-                .from('mesocycles')
-                .update({ current_week: weekNumber })
-                .eq('id', mesocycleId)
-                .neq('current_week', weekNumber);
-              if (weekError) {
-                console.error('Failed to advance mesocycle current_week:', weekError);
-              }
-            }
-
-            const { recordDeloadRecommendationIfTriggered } = await import(
-              '@/lib/training/deloadRecommendation'
-            );
-            await recordDeloadRecommendationIfTriggered(supabase, sessionUserId, mesocycleId);
-          } catch (err) {
-            console.error('Post-session deload check failed:', err);
-          }
-        })();
+        void runPostSessionMesoUpdates(supabase, {
+          mesocycleId: session.mesocycleId,
+          userId: session.userId,
+          sessionRpe: data.sessionRpe,
+          checkIn: session.preWorkoutCheckIn ?? null,
+        });
       }
 
       // Calculate and save workout calories (set-based HyperTrack method) in
@@ -3561,6 +3576,14 @@ export default function WorkoutPage() {
           .catch((err) => console.error('Workout calorie calculation failed:', err));
       }
 
+      // B1: ad-hoc workout that matches the mesocycle's next pending session
+      // — hold navigation and ask whether to count it toward the plan.
+      if (!session?.mesocycleId && claimCandidate) {
+        setSubmittedSessionRpe(data.sessionRpe);
+        setShowClaimPrompt(true);
+        return;
+      }
+
       // Clear store state and navigate to dashboard to see weekly volume
       endWorkoutSession();
       router.push('/dashboard');
@@ -3569,6 +3592,51 @@ export default function WorkoutPage() {
       endWorkoutSession();
       router.push('/dashboard');
     }
+  };
+
+  const finishToDashboard = () => {
+    endWorkoutSession();
+    router.push('/dashboard');
+  };
+
+  const handleDeclineClaim = () => {
+    setShowClaimPrompt(false);
+    finishToDashboard();
+  };
+
+  // Count the completed ad-hoc session toward the mesocycle: link it via
+  // mesocycle_id (session counting, week advancement, and weekly-rollover
+  // feedback all key off that), then run the same post-session updates a
+  // programmed session gets — they were skipped at finish because the
+  // session had no mesocycle_id yet.
+  const handleConfirmClaim = async () => {
+    if (!claimCandidate || !session) {
+      setShowClaimPrompt(false);
+      finishToDashboard();
+      return;
+    }
+    setIsClaiming(true);
+    try {
+      const supabase = createUntypedClient();
+      const { error: claimError } = await supabase
+        .from('workout_sessions')
+        .update({ mesocycle_id: claimCandidate.mesocycleId })
+        .eq('id', sessionId);
+      if (claimError) throw claimError;
+
+      void runPostSessionMesoUpdates(supabase, {
+        mesocycleId: claimCandidate.mesocycleId,
+        userId: session.userId,
+        sessionRpe: submittedSessionRpe,
+        checkIn: session.preWorkoutCheckIn ?? null,
+      });
+    } catch (err) {
+      // Non-fatal: the workout is already saved; it just stays ad-hoc.
+      console.error('Failed to count workout toward mesocycle:', err);
+    }
+    setIsClaiming(false);
+    setShowClaimPrompt(false);
+    finishToDashboard();
   };
 
   if (phase === 'loading') {
@@ -3674,6 +3742,18 @@ export default function WorkoutPage() {
             setShowShareModal(false);
             // Optionally show success message or refresh
           }}
+        />
+
+        {/* B1: offer to count a matching ad-hoc workout toward the mesocycle */}
+        <ConfirmModal
+          isOpen={showClaimPrompt}
+          onClose={handleDeclineClaim}
+          onConfirm={handleConfirmClaim}
+          title="Count toward your mesocycle?"
+          message={`This workout looks like ${claimCandidate?.dayName ?? 'your next planned session'}. Counting it advances your program to the next session — otherwise it stays an extra workout.`}
+          confirmText="Count it"
+          cancelText="Keep as extra"
+          isLoading={isClaiming}
         />
       </div>
     );

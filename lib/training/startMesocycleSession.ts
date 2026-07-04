@@ -9,8 +9,9 @@
 //   1. Resume today's existing planned/in-progress session if there is one.
 //   2. Create a workout_sessions row for today.
 //   3. Build exercise blocks from mesocycle.program_data via
-//      getSessionFromProgramData (day selected by completed-sessions-this-
-//      week so skipped days don't desync), applying:
+//      getSessionFromProgramData (day = TOTAL completed sessions modulo
+//      days/week, so skipped days — even across calendar weeks — never drop
+//      a session; the plan self-extends), applying:
 //        - exercise_overrides (user's swapped exercises),
 //        - weekly progression modifiers (intensity/deload),
 //        - weekly per-muscle set adjustments from last week's feedback
@@ -43,6 +44,7 @@ import {
   exerciseKey,
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { toLegacyMuscleGroup } from '@/types/schema';
 import type {
@@ -71,6 +73,7 @@ export interface StartableMesocycle {
   current_week: number;
   total_weeks: number;
   deload_week: number;
+  days_per_week: number;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
 }
@@ -81,11 +84,12 @@ export interface StartMesocycleSessionInput {
   /** Today's scheduled workout (used by the no-program_data fallback). */
   todayWorkout: TodayWorkout | null;
   /**
-   * Completed sessions this calendar week, used as the 0-based session index
-   * into the week's program (handles skipped days). When omitted it is
-   * queried from the database.
+   * TOTAL completed sessions for this mesocycle. The session index is
+   * `completedSessions % days_per_week`, so skipped days (even across
+   * calendar-week boundaries) never drop a session — the user always resumes
+   * at the next un-done slot. When omitted it is queried from the database.
    */
-  completedSessionsThisWeek?: number;
+  completedSessions?: number;
 }
 
 export interface StartMesocycleSessionResult {
@@ -216,28 +220,23 @@ export function getRestPeriod(isCompound: boolean, goal: Goal, primaryMuscle?: M
 }
 
 /**
- * Get the Monday of the current week (for tracking completed sessions this week)
+ * TOTAL completed sessions for a mesocycle. Progression is session-count
+ * based (see lib/training/mesocycleProgress.ts): the week is
+ * floor(count / daysPerWeek) + 1 and the session index is
+ * count % daysPerWeek, so the plan self-extends when days are skipped
+ * instead of dropping the rest of a calendar week.
  */
-export function getWeekStart(): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = now.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-  const monday = new Date(now.setDate(diff));
-  return monday.toISOString().split('T')[0];
-}
-
-async function countCompletedSessionsThisWeek(
+export async function countCompletedSessions(
   supabase: SupabaseClient,
   mesocycleId: string
 ): Promise<number> {
-  const { data: completedSessions } = await supabase
+  const { count } = await supabase
     .from('workout_sessions')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('mesocycle_id', mesocycleId)
-    .eq('state', 'completed')
-    .gte('planned_date', getWeekStart());
+    .eq('state', 'completed');
 
-  return completedSessions?.length || 0;
+  return count || 0;
 }
 
 // ============================================================
@@ -290,8 +289,8 @@ export async function startMesocycleWorkoutSession(
     return { sessionId: existingWorkout.id, resumedExisting: true };
   }
 
-  const completedSessionsThisWeek =
-    input.completedSessionsThisWeek ?? (await countCompletedSessionsThisWeek(supabase, mesocycle.id));
+  const completedSessions =
+    input.completedSessions ?? (await countCompletedSessions(supabase, mesocycle.id));
 
   // Create new workout session
   const { data: session, error: sessionError } = await supabase
@@ -310,10 +309,11 @@ export async function startMesocycleWorkoutSession(
   if (sessionError || !session) throw sessionError || new Error('Failed to create session');
 
   // Try to get session from program_data first (preferred - uses pre-calculated exercises & sets)
-  // Use completedSessionsThisWeek as the session index to handle skipped days correctly
-  // e.g., if user skipped Monday, Tuesday's workout should still be the first session of the week
+  // Session index = TOTAL completed % days/week, so skipped days (even across
+  // calendar-week boundaries) never drop a session — e.g. a user who finished
+  // 2 of 4 sessions last week resumes at session 2, not week N+1 session 0.
   const programData = mesocycle.program_data as FullProgramRecommendation | null;
-  const sessionIndex = completedSessionsThisWeek; // 0-based: 0 completed = get session 0
+  const sessionIndex = sessionIndexFromCompleted(completedSessions, mesocycle.days_per_week);
   const programSession = getSessionFromProgramData(
     programData,
     sessionIndex,
