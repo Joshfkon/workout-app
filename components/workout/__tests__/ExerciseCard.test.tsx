@@ -741,6 +741,48 @@ describe('ExerciseCard', () => {
     });
   });
 
+  describe('Progression pace pill', () => {
+    /** Five weekly sessions gaining ~1% E1RM/week — well ahead of the
+     *  intermediate expectation (0.3%/wk) used when no user is in the store. */
+    const progressingSnapshots: ExercisePerformanceSnapshot[] = [0, 1, 2, 3, 4].map((i) =>
+      createSnapshot({
+        id: `p${i}`,
+        sessionDate: weeksAgo(4 - i),
+        estimatedE1RM: Math.round(120 * Math.pow(1.01, i) * 10) / 10,
+        topSetWeightKg: 100 + i * 2.5,
+      })
+    );
+
+    it('shows the Ahead pill for a lift progressing faster than expected', () => {
+      render(
+        <ExerciseCard {...defaultProps} performanceSnapshots={progressingSnapshots} />
+      );
+      expect(screen.getByText(/Ahead/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
+    });
+
+    it('suppresses the pace pill when the plateau badge is showing', () => {
+      render(
+        <ExerciseCard {...defaultProps} performanceSnapshots={plateauedSnapshots} />
+      );
+      expect(screen.getByRole('button', { name: 'Plateau' })).toBeInTheDocument();
+      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText('On track')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Behind/)).not.toBeInTheDocument();
+    });
+
+    it('shows no pace pill without enough history', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          performanceSnapshots={progressingSnapshots.slice(0, 2)}
+        />
+      );
+      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText('On track')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Rest Timer Integration', () => {
     it('renders the inline timer while active and resting', () => {
       render(
