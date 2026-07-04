@@ -433,6 +433,11 @@ export default function WorkoutPage() {
   
   // Custom exercise creation state
   const [showCustomExercise, setShowCustomExercise] = useState(false);
+  // When set, the custom-exercise modal was opened from a swap flow: on save,
+  // the new exercise replaces this block instead of being added to the workout.
+  const [customSwapBlockId, setCustomSwapBlockId] = useState<string | null>(null);
+  // Pre-filled name when creating a custom exercise from a swap search
+  const [customSwapInitialName, setCustomSwapInitialName] = useState('');
   
   // Coach message state
   const [showCoachMessage, setShowCoachMessage] = useState(true);
@@ -3399,6 +3404,36 @@ export default function WorkoutPage() {
         default_rir: newExercise.default_rir,
       }]);
 
+      if (customSwapBlockId) {
+        // Created from a swap flow: replace the target block instead of adding.
+        // handleExerciseSwap refetches the full exercise row, so a minimal
+        // Exercise shape is enough here.
+        const swappedOut = blocks.find(b => b.id === customSwapBlockId)?.exercise.name;
+        await handleExerciseSwap(customSwapBlockId, {
+          id: newExercise.id,
+          name: newExercise.name,
+          primaryMuscle: newExercise.primary_muscle,
+          secondaryMuscles: newExercise.secondary_muscles || [],
+          mechanic: newExercise.mechanic,
+          defaultRepRange: newExercise.default_rep_range || [8, 12],
+          defaultRir: newExercise.default_rir ?? 2,
+          minWeightIncrementKg: 2.5,
+          formCues: [],
+          commonMistakes: [],
+          setupNote: '',
+          movementPattern: '',
+          equipmentRequired: [],
+        });
+        setShowSwapForInjury(null);
+        setCustomSwapBlockId(null);
+        setShowCustomExercise(false);
+        if (swappedOut) {
+          setAutoAdjustMessage(`✓ Swapped ${swappedOut} → ${newExercise.name}`);
+          setTimeout(() => setAutoAdjustMessage(null), 5000);
+        }
+        return;
+      }
+
       // Now add it to the workout
       await handleAddExercise({
         id: newExercise.id,
@@ -4373,6 +4408,11 @@ export default function WorkoutPage() {
                       handleExerciseSwap(block.id, newEx);
                       setShowSwapForInjury(null); // Clear after swap
                     }}
+                    onCreateCustomSwap={(initialName) => {
+                      setCustomSwapBlockId(block.id);
+                      setCustomSwapInitialName(initialName ?? '');
+                      setShowCustomExercise(true);
+                    }}
                     onExerciseDelete={() => handleExerciseDelete(block.id)}
                     onBlockNoteUpdate={(note) => handleBlockNoteUpdate(block.id, note)}
                     availableExercises={blocks.map(b => b.exercise).concat(
@@ -4850,7 +4890,7 @@ export default function WorkoutPage() {
           isAddingExercise={isAddingExercise}
           onClose={handleCloseAddExerciseModal}
           onAddSelected={handleAddSelectedExercises}
-          onCreateCustom={() => setShowCustomExercise(true)}
+          onCreateCustom={() => { setCustomSwapBlockId(null); setShowCustomExercise(true); }}
           error={error}
         />
       )}
@@ -4861,7 +4901,7 @@ export default function WorkoutPage() {
           {/* Backdrop */}
           <div 
             className="absolute inset-0 bg-black/60"
-            onClick={() => setShowCustomExercise(false)}
+            onClick={() => { setShowCustomExercise(false); setCustomSwapBlockId(null); }}
           />
           
           {/* Modal */}
@@ -4870,7 +4910,7 @@ export default function WorkoutPage() {
             <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowCustomExercise(false)}
+                  onClick={() => { setShowCustomExercise(false); setCustomSwapBlockId(null); }}
                   className="p-1 text-surface-400 hover:text-surface-200"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4886,8 +4926,8 @@ export default function WorkoutPage() {
               <CreateCustomExercise
                 userId={session.userId}
                 onSuccess={handleCustomExerciseSuccess}
-                onCancel={() => setShowCustomExercise(false)}
-                initialName={exerciseSearch}
+                onCancel={() => { setShowCustomExercise(false); setCustomSwapBlockId(null); }}
+                initialName={customSwapBlockId ? customSwapInitialName : exerciseSearch}
               />
             </div>
           </div>
@@ -5268,7 +5308,21 @@ export default function WorkoutPage() {
               </div>
               
               {/* Skip option */}
-              <div className="p-3 border-t border-surface-800 bg-surface-800/50">
+              <div className="p-3 border-t border-surface-800 bg-surface-800/50 space-y-2">
+                <button
+                  onClick={() => {
+                    setCustomSwapBlockId(swapTargetBlockId);
+                    setCustomSwapInitialName(swapSearchQuery.trim());
+                    setShowPageLevelSwapModal(false);
+                    setShowCustomExercise(true);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-primary-400 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create custom exercise
+                </button>
                 <button
                   onClick={async () => {
                     await handleExerciseDelete(swapTargetBlockId);
