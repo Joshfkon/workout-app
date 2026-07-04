@@ -717,6 +717,51 @@ describe('ExerciseCard', () => {
       expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
     });
 
+    it('reprices from the logged RPE when the previous set has one', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          previousSets={[{ weightKg: 100, reps: 10, rpe: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      // 100×10 at RPE 10 (0 RIR) → E1RM 133.3 kg, not the 140 the target-RIR
+      // fallback would assume: 133.3 / (1 + (6+2)/30) ≈ 105.3 → 105.
+      expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
+    it('keeps a zero-load seed at zero when repriced into the new range', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          previousSets={[{ weightKg: 0, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      // Zero-load history must not be floored up to the 2.5 kg increment.
+      expect(screen.getByRole('button', { name: /Weight: 0 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
     it('hides the one-tap rep-range button when the block already uses that range', async () => {
       const user = userEvent.setup();
 

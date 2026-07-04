@@ -157,7 +157,7 @@ interface ExerciseCardProps {
   isActive?: boolean;
   unit?: WeightUnit;
   recommendedWeight?: number;  // AI-suggested weight in kg
-  previousSets?: { weightKg: number; reps: number }[];  // Previous workout's sets for this exercise
+  previousSets?: { weightKg: number; reps: number; rpe?: number }[];  // Previous workout's sets for this exercise
   exerciseHistory?: ExerciseHistory;  // Historical data for this exercise
   warmupSets?: WarmupSetData[];  // Warmup protocol for this exercise
   workingWeight?: number;  // Working weight in kg for warmup calculations
@@ -483,12 +483,19 @@ export const ExerciseCard = memo(function ExerciseCard({
   // set's weight would prescribe an impossible load — re-derive it from the
   // set's estimated 1RM at the new range's midpoint instead.
   const seedFromPreviousSet = useCallback(
-    (prevSet: { weightKg: number; reps: number }, range: [number, number]) => {
+    (prevSet: { weightKg: number; reps: number; rpe?: number }, range: [number, number]) => {
       if (prevSet.reps >= range[0] && prevSet.reps <= range[1]) {
         return { weightKg: prevSet.weightKg, reps: prevSet.reps };
       }
       const reps = Math.round((range[0] + range[1]) / 2);
-      const e1rm = prevSet.weightKg * (1 + (prevSet.reps + effectiveTargetRir) / 30);
+      // Zero-load history (bodyweight/no-load without a bodyweight check-in)
+      // must stay zero-load — the increment floor below would turn it into a
+      // phantom 2.5 kg set.
+      if (prevSet.weightKg <= 0) {
+        return { weightKg: 0, reps };
+      }
+      const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : effectiveTargetRir;
+      const e1rm = prevSet.weightKg * (1 + (prevSet.reps + prevRir) / 30);
       const rawKg = e1rm / (1 + (reps + effectiveTargetRir) / 30);
       const inc = exercise.minWeightIncrementKg || 2.5;
       return { weightKg: Math.max(inc, Math.round(rawKg / inc) * inc), reps };
@@ -841,8 +848,7 @@ export const ExerciseCard = memo(function ExerciseCard({
             } else if (prevSet) {
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
-              // previousSets doesn't include RPE, use target RPE from block
-              refRpe = 10 - effectiveTargetRir;
+              refRpe = prevSet.rpe ?? 10 - effectiveTargetRir;
             } else if (suggestedWeight > 0) {
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
