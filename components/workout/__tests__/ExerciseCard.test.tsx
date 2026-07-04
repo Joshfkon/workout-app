@@ -745,10 +745,11 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByRole('button', { name: 'Plateau' }));
       await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
 
-      // 100×10 at RPE 10 (0 RIR) → E1RM 133.3 kg, not the 140 the target-RIR
-      // fallback would assume: 133.3 / (1 + (6+2)/30) ≈ 105.3 → 105.
-      expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      // 100×10 at RPE 10 (0 RIR) ran HARDER than the 2-RIR target, so the
+      // session-start recommender backs the load off one increment instead of
+      // repricing up into the new range (services/setRecommender reduce_load).
+      expect(screen.getByRole('button', { name: /Weight: 97.5 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 9/ })).toBeInTheDocument();
     });
 
     it('keeps a zero-load seed at zero when repriced into the new range', async () => {
@@ -768,9 +769,11 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByRole('button', { name: 'Plateau' }));
       await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
 
-      // Zero-load history must not be floored up to the 2.5 kg increment.
+      // Zero-load history must not be floored up to the 2.5 kg increment, and
+      // honest reps repeat the logged 10 (within range max + overshoot ceiling)
+      // rather than snapping to the new range midpoint.
       expect(screen.getByRole('button', { name: /Weight: 0 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10/ })).toBeInTheDocument();
     });
 
     it('hides the one-tap rep-range button when the block already uses that range', async () => {
