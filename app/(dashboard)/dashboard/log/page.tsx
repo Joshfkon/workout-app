@@ -180,6 +180,25 @@ function warmupForFirstExercise(
   });
 }
 
+/** Duration choices for the AI suggested workout ("How much time do you have?"). */
+const AI_DURATION_CHOICES = [20, 30, 45, 60, 75, 90];
+
+/** Exercise budget for the session length (compound ≈ 12 min, isolation ≈ 8 min incl. rest). */
+function maxExercisesForDuration(minutes: number): number {
+  if (minutes <= 20) return 2;
+  if (minutes <= 30) return 3;
+  if (minutes <= 45) return 4;
+  if (minutes <= 60) return 5;
+  if (minutes <= 75) return 6;
+  return 7;
+}
+
+/** Per-exercise set target scaled to session length (full sets at 60+ min, never below 2). */
+function plannedSetsFor(mechanic: 'compound' | 'isolation' | null, minutes: number): number {
+  const base = mechanic === 'compound' ? 4 : 3;
+  return Math.max(2, Math.round(base * Math.min(1, minutes / 60)));
+}
+
 export default function LogPage() {
   const router = useRouter();
   const supabase = createUntypedClient();
@@ -201,6 +220,7 @@ export default function LogPage() {
   const { volumeData, isLoading: volumeLoading } = useWeeklyVolume();
   const [aiRequested, setAiRequested] = useState(false);
   const [aiPlan, setAiPlan] = useState<SuggestedWorkoutPlan | null>(null);
+  const [aiDuration, setAiDuration] = useState(45);
   const [showAiSheet, setShowAiSheet] = useState(false);
   const [isStartingAi, setIsStartingAi] = useState(false);
 
@@ -353,8 +373,10 @@ export default function LogPage() {
     }
   };
 
-  // AI suggestion: compute on tap (once recovery/volume/exercise data is in),
-  // then preview in a bottom sheet. NOTHING is written until Start.
+  // AI suggestion: the sheet asks "How much time do you have?" first; picking
+  // a duration sets aiRequested and the plan is computed here (once
+  // recovery/volume/exercise data is in), sized to fit the time. NOTHING is
+  // written until Start.
   useEffect(() => {
     if (!aiRequested || recoveryLoading || volumeLoading || isLoading) return;
 
@@ -380,16 +402,17 @@ export default function LogPage() {
             (usageCounts.get(b[0]) ?? 0) - (usageCounts.get(a[0]) ?? 0)
         )
         .map(([id]) => id),
+      maxExercises: maxExercisesForDuration(aiDuration),
     });
 
     setAiRequested(false);
     if (plan.exercises.length === 0) {
       setError('Could not build a suggestion — try a blank workout instead.');
+      setShowAiSheet(false);
       return;
     }
     setAiPlan(plan);
-    setShowAiSheet(true);
-  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone, usageCounts]);
+  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone, usageCounts, aiDuration]);
 
   const handleRemoveAiPick = (exerciseId: string) => {
     setAiPlan((plan) =>
@@ -446,7 +469,7 @@ export default function LogPage() {
           workout_session_id: sessionId,
           exercise_id: exercise.id,
           order: order++,
-          target_sets: isCompound ? 4 : 3,
+          target_sets: plannedSetsFor(exercise.mechanic, aiDuration),
           target_rep_range: repRange,
           target_rir: targetRir,
           target_weight_kg: suggestedWeight,
@@ -594,9 +617,12 @@ export default function LogPage() {
           )}
         </button>
 
-        {/* 4. AI suggested workout */}
+        {/* 4. AI suggested workout: opens the sheet on the time question */}
         <button
-          onClick={() => setAiRequested(true)}
+          onClick={() => {
+            setAiPlan(null);
+            setShowAiSheet(true);
+          }}
           disabled={aiRequested}
           className={`${launcherCardClass} disabled:opacity-60`}
         >
@@ -649,21 +675,56 @@ export default function LogPage() {
         <IconChevronRight size={14} className="ml-auto" aria-hidden="true" />
       </Link>
 
-      {/* AI suggested workout preview: nothing is created until Start */}
+      {/* AI suggested workout: time question first, then the plan preview;
+          nothing is created until Start */}
       <BottomSheet
-        isOpen={showAiSheet && aiPlan !== null}
+        isOpen={showAiSheet}
         onClose={() => setShowAiSheet(false)}
-        title="Suggested workout"
+        title={aiPlan ? 'Suggested workout' : 'How much time do you have?'}
       >
+        {!aiPlan && (
+          <div className="space-y-3">
+            <p className="text-[13px] text-surface-400">
+              We&apos;ll size the workout to fit your time.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {AI_DURATION_CHOICES.map((mins) => (
+                <button
+                  key={mins}
+                  onClick={() => {
+                    setAiDuration(mins);
+                    setAiRequested(true);
+                  }}
+                  disabled={aiRequested}
+                  className={`p-3 rounded-xl text-center border-2 transition-colors disabled:opacity-60 ${
+                    aiRequested && aiDuration === mins
+                      ? 'bg-primary-500/20 border-primary-500 text-primary-400'
+                      : 'bg-surface-800 border-transparent text-surface-200 hover:bg-surface-700'
+                  }`}
+                >
+                  <span className="block text-[15px] font-semibold">{mins}</span>
+                  <span className="block text-[11px] text-surface-500">min</span>
+                </button>
+              ))}
+            </div>
+            {aiRequested && (
+              <p className="flex items-center gap-2 text-[13px] text-surface-400">
+                <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
+                Building suggestion...
+              </p>
+            )}
+          </div>
+        )}
         {aiPlan && (
           <div className="space-y-3">
             <p className="text-[13px] text-surface-300">{aiPlan.focus}</p>
+            <p className="text-[11px] text-surface-500">Sized for ~{aiDuration} minutes.</p>
 
             <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
               {aiPlan.exercises.map((pick) => {
                 const exercise = exercises.find((ex) => ex.id === pick.exerciseId);
                 if (!exercise) return null;
-                const setsPlanned = exercise.mechanic === 'compound' ? 4 : 3;
+                const setsPlanned = plannedSetsFor(exercise.mechanic, aiDuration);
                 return (
                   <div
                     key={pick.exerciseId}
