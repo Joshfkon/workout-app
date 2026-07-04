@@ -14,6 +14,7 @@ import { CustomExerciseReviewForm } from './CustomExerciseReviewForm';
 import type { BasicExerciseInput, CompletedExerciseData } from '@/lib/exercises/types';
 import { completeExerciseWithAI } from '@/lib/actions/exercise-completion';
 import { createCustomExercise, clearExerciseCache } from '@/services/exerciseService';
+import { createUntypedClient } from '@/lib/supabase/client';
 
 interface CreateCustomExerciseProps {
   onSuccess?: (exerciseId: string) => void;
@@ -111,6 +112,27 @@ export function CreateCustomExercise({
 
       if (!exercise) {
         throw new Error('Failed to save exercise');
+      }
+
+      // Record which gym locations have this exercise (chosen on the basic
+      // form). A failure here shouldn't undo the save — the exercise just
+      // defaults to available everywhere, editable later in exercise details.
+      if (basicInput?.locationAvailability?.length) {
+        const supabase = createUntypedClient();
+        const { error: availabilityError } = await supabase
+          .from('exercise_location_availability')
+          .upsert(
+            basicInput.locationAvailability.map(({ locationId, isAvailable }) => ({
+              user_id: userId,
+              exercise_id: exercise.id,
+              location_id: locationId,
+              is_available: isAvailable,
+            })),
+            { onConflict: 'user_id,exercise_id,location_id' }
+          );
+        if (availabilityError) {
+          console.error('Failed to save location availability:', availabilityError);
+        }
       }
 
       clearExerciseCache();

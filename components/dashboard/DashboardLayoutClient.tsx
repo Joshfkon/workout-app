@@ -10,6 +10,7 @@ import { SubscriptionBadge } from './SubscriptionBadge';
 import { SignOutButton } from './SignOutButton';
 import { ResumeWorkoutBanner } from '@/components/workout';
 import { flushSetOutbox } from '@/lib/offline/setOutbox';
+import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 
 interface DashboardLayoutClientProps {
   children: React.ReactNode;
@@ -17,6 +18,13 @@ interface DashboardLayoutClientProps {
 
 export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) {
   const router = useRouter();
+
+  // Weekly volume coverage for the Train tab indicator: lit when every
+  // muscle group has hit at least MEV this week. Fetched once here so the
+  // sidebar and bottom nav share a single query.
+  const { summary, isLoading: volumeLoading } = useWeeklyVolume();
+  const volumeGoalsMet =
+    !volumeLoading && summary.totalSets > 0 && summary.musclesBelowMev.length === 0;
 
   // Offline outbox (P0-2): flush queued set writes whenever connectivity
   // returns, from ANY dashboard tab — not just the workout page.
@@ -36,7 +44,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
 
   return (
     <div className="min-h-screen bg-surface-950 overflow-x-hidden">
-      <Sidebar onSignOut={handleSignOut} />
+      <Sidebar onSignOut={handleSignOut} volumeGoalsMet={volumeGoalsMet} />
 
       {/* Main content */}
       <div className="lg:pl-64">
@@ -80,7 +88,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
       </div>
 
       {/* Bottom navigation for mobile */}
-      <BottomNavigation />
+      <BottomNavigation volumeGoalsMet={volumeGoalsMet} />
 
       {/* Resume workout banner - shows when there's an active workout */}
       <ResumeWorkoutBanner />

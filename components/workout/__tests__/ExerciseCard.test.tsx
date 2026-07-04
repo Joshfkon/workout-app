@@ -165,13 +165,24 @@ const createSnapshot = (
   ...overrides,
 });
 
-/** Five weeks of flat E1RM — unambiguous plateau for detectPlateau. */
+/**
+ * Dates must be relative to "now": ExerciseCard passes the current date to
+ * detectPlateau, which skips exercises not trained within its staleness
+ * window, so fixed dates would rot as real time advances.
+ */
+const weeksAgo = (n: number): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - n * 7);
+  return d.toISOString().slice(0, 10);
+};
+
+/** Five weeks of flat E1RM ending today — unambiguous plateau for detectPlateau. */
 const plateauedSnapshots: ExercisePerformanceSnapshot[] = [
-  createSnapshot({ id: 's1', sessionDate: '2026-05-01' }),
-  createSnapshot({ id: 's2', sessionDate: '2026-05-08' }),
-  createSnapshot({ id: 's3', sessionDate: '2026-05-15' }),
-  createSnapshot({ id: 's4', sessionDate: '2026-05-22' }),
-  createSnapshot({ id: 's5', sessionDate: '2026-05-29' }),
+  createSnapshot({ id: 's1', sessionDate: weeksAgo(4) }),
+  createSnapshot({ id: 's2', sessionDate: weeksAgo(3) }),
+  createSnapshot({ id: 's3', sessionDate: weeksAgo(2) }),
+  createSnapshot({ id: 's4', sessionDate: weeksAgo(1) }),
+  createSnapshot({ id: 's5', sessionDate: weeksAgo(0) }),
 ];
 
 describe('ExerciseCard', () => {

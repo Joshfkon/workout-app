@@ -12,7 +12,7 @@ exports[`ExerciseCard Snapshot Tests renders active state with logger row and su
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -530,21 +530,10 @@ exports[`ExerciseCard Snapshot Tests renders bodyweight exercise 1`] = `
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Pull-ups
         </button>
-        <div
-          class="relative inline-flex"
-        >
-          <span
-            class="inline-flex items-center font-medium rounded-full bg-success-500/20 text-success-400 border border-success-500/30 px-2 py-0.5 text-xs"
-          >
-            🟢
-             
-            Safe
-          </span>
-        </div>
         <div
           class="ml-auto flex items-center gap-1.5 flex-shrink-0"
         >
@@ -758,7 +747,7 @@ exports[`ExerciseCard Snapshot Tests renders empty state (no sets logged) 1`] = 
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -965,7 +954,7 @@ exports[`ExerciseCard Snapshot Tests renders in lb unit mode 1`] = `
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -1172,7 +1161,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -1413,7 +1402,7 @@ exports[`ExerciseCard Snapshot Tests renders with exercise history 1`] = `
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -1638,7 +1627,7 @@ exports[`ExerciseCard Snapshot Tests renders with hypertrophy score tier pill 1`
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
@@ -1850,7 +1839,7 @@ exports[`ExerciseCard Snapshot Tests renders with plateau pill 1`] = `
         class="flex items-center gap-2"
       >
         <button
-          class="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+          class="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
         >
           Bench Press
         </button>
