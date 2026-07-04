@@ -30,9 +30,9 @@ const navItems: NavItem[] = [
   },
   {
     name: 'Train',
-    href: '/dashboard/log',
+    href: '/dashboard/exercises',
     icon: IconBarbell,
-    matchPaths: ['/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history', '/dashboard/exercises'],
+    matchPaths: ['/dashboard/exercises', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
   },
   {
     name: 'Eat',
@@ -66,7 +66,12 @@ const navItems: NavItem[] = [
   },
 ];
 
-export function BottomNavigation() {
+interface BottomNavigationProps {
+  /** True when every muscle group has reached MEV this week — lights up Train. */
+  volumeGoalsMet?: boolean;
+}
+
+export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationProps) {
   const pathname = usePathname();
 
   // Hide bottom nav only while on the active workout page itself.
@@ -98,7 +103,16 @@ export function BottomNavigation() {
                 isActive ? 'text-primary-400' : 'text-surface-500 hover:text-surface-300'
               )}
             >
-              <Icon size={20} stroke={2} aria-hidden="true" />
+              <span className="relative">
+                <Icon size={20} stroke={2} aria-hidden="true" />
+                {item.name === 'Train' && volumeGoalsMet && (
+                  <span
+                    className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-green-400 ring-2 ring-surface-900"
+                    role="img"
+                    aria-label="All muscle groups at target weekly sets"
+                  />
+                )}
+              </span>
               <span className="text-[10px] font-medium leading-none">{item.name}</span>
             </Link>
           );

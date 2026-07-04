@@ -149,6 +149,7 @@ interface ExerciseCardProps {
   onSetFeedbackUpdate?: (setId: string, feedback: SetFeedback) => void;  // Update feedback on existing set
   onTargetSetsChange?: (newTargetSets: number) => void;  // Callback to add/remove planned sets
   onExerciseSwap?: (newExercise: Exercise) => void;  // Callback to swap exercise
+  onCreateCustomSwap?: (initialName?: string) => void;  // Open custom-exercise creation as part of a swap
   onExerciseDelete?: () => void;  // Callback to delete entire exercise from workout
   onBlockNoteUpdate?: (note: string | null) => void;  // Callback to update exercise block note
   onWarmupComplete?: (restSeconds: number) => void;  // Callback when a warmup set is completed
@@ -217,6 +218,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onSetFeedbackUpdate,
   onTargetSetsChange,
   onExerciseSwap,
+  onCreateCustomSwap,
   onExerciseDelete,
   onBlockNoteUpdate,
   onWarmupComplete,
@@ -422,9 +424,15 @@ export const ExerciseCard = memo(function ExerciseCard({
 
   // Plateau detection for this exercise (services/plateauDetector, Phase 1.7).
   // History snapshots are threaded from the page's already-loaded exercise history.
+  // referenceDate keeps stale history (an exercise resumed after months off)
+  // from triggering the badge off old, no-longer-representative sessions.
   const plateau: PlateauDetectionResult | null = useMemo(() => {
     if (!performanceSnapshots || performanceSnapshots.length === 0) return null;
-    const result = detectPlateau({ exerciseId: exercise.id, snapshots: performanceSnapshots });
+    const result = detectPlateau({
+      exerciseId: exercise.id,
+      snapshots: performanceSnapshots,
+      referenceDate: new Date(),
+    });
     return result.isPlateaued ? result : null;
   }, [performanceSnapshots, exercise.id]);
 
@@ -475,6 +483,25 @@ export const ExerciseCard = memo(function ExerciseCard({
       return String(displayWeight(kg, exactSourceKg !== undefined && kg === exactSourceKg));
     },
     [displayWeight]
+  );
+
+  // Weight+reps seed for a not-yet-started exercise, anchored to the previous
+  // session's set. When the target rep range has moved away from what that set
+  // was performed at (e.g. the one-tap plateau rep-range switch), reusing the
+  // set's weight would prescribe an impossible load — re-derive it from the
+  // set's estimated 1RM at the new range's midpoint instead.
+  const seedFromPreviousSet = useCallback(
+    (prevSet: { weightKg: number; reps: number }, range: [number, number]) => {
+      if (prevSet.reps >= range[0] && prevSet.reps <= range[1]) {
+        return { weightKg: prevSet.weightKg, reps: prevSet.reps };
+      }
+      const reps = Math.round((range[0] + range[1]) / 2);
+      const e1rm = prevSet.weightKg * (1 + (prevSet.reps + effectiveTargetRir) / 30);
+      const rawKg = e1rm / (1 + (reps + effectiveTargetRir) / 30);
+      const inc = exercise.minWeightIncrementKg || 2.5;
+      return { weightKg: Math.max(inc, Math.round(rawKg / inc) * inc), reps };
+    },
+    [effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
   // Track the last known completed sets count to detect changes
@@ -620,8 +647,9 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
         } else if (prevSet) {
-          defaultWeight = prevSet.weightKg;
-          defaultReps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
+          const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
+          defaultWeight = seeded.weightKg;
+          defaultReps = seeded.reps;
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -1027,8 +1055,9 @@ export const ExerciseCard = memo(function ExerciseCard({
       const prevSet = previousSets[completedSets.length];
       let weightKg = 0;
       if (prevSet) {
-        weightKg = prevSet.weightKg;
-        reps = Math.max(block.targetRepRange[0], Math.min(block.targetRepRange[1], prevSet.reps));
+        const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
+        weightKg = seeded.weightKg;
+        reps = seeded.reps;
       } else if (suggestedWeight > 0) {
         weightKg = suggestedWeight;
       }
@@ -1092,6 +1121,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     }`;
   })();
 
+  // Only badge exercises that need caution — "Safe" is the default and just adds header noise
+  const safetyTier = getFailureSafetyTier(exercise.name);
+
   return (
     <Card
       variant={isActive ? 'elevated' : 'default'}
@@ -1105,7 +1137,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         <div className="flex items-center gap-2">
           <button
             onClick={onExerciseNameClick}
-            className="min-w-0 text-[15px] font-medium text-surface-100 truncate hover:text-primary-400 transition-colors text-left"
+            className="min-w-0 text-[15px] font-medium text-surface-100 break-words hover:text-primary-400 transition-colors text-left"
           >
             {exercise.name}
           </button>
@@ -1129,11 +1161,9 @@ export const ExerciseCard = memo(function ExerciseCard({
               SS{block.supersetOrder}
             </span>
           )}
-          <SafetyTierBadge
-            tier={getFailureSafetyTier(exercise.name)}
-            variant="short"
-            showTooltip={true}
-          />
+          {safetyTier !== 'push_freely' && (
+            <SafetyTierBadge tier={safetyTier} variant="short" showTooltip={true} />
+          )}
           <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
             {/* Set add/remove moved to the footer (next to "+ Add Set") to declutter the header */}
             {/* Overflow menu: secondary exercise actions (watch form, swap, plates, remove) */}
@@ -1167,7 +1197,7 @@ export const ExerciseCard = memo(function ExerciseCard({
                         </svg>
                         Watch form
                       </a>
-                      {onExerciseSwap && similarExercises.length > 0 && (
+                      {onExerciseSwap && (
                         <button
                           onClick={() => { setShowSwapModal(true); setShowExerciseMenu(false); }}
                           className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-surface-200 hover:bg-surface-700 transition-colors text-left"
@@ -2353,6 +2383,24 @@ export const ExerciseCard = memo(function ExerciseCard({
               )}
             </div>
             
+            {/* Footer: swap to a brand-new custom exercise (opens creation flow) */}
+            {onCreateCustomSwap && (
+              <div className="p-3 border-t border-surface-700 bg-surface-800/50">
+                <button
+                  onClick={() => {
+                    setShowSwapModal(false);
+                    onCreateCustomSwap(swapSearch.trim() || undefined);
+                  }}
+                  className="w-full py-2.5 px-4 rounded-lg bg-surface-700 hover:bg-surface-600 text-primary-400 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create custom exercise
+                </button>
+              </div>
+            )}
+
             {/* Footer with Skip option */}
             {hasInjuries && onExerciseDelete && (
               <div className="p-3 border-t border-surface-700 bg-surface-800/50">
@@ -2403,10 +2451,35 @@ export const ExerciseCard = memo(function ExerciseCard({
               ))}
             </ul>
             <div className="space-y-2 pt-1">
-              {plateauRepRange && onRepRangeChange && (
+              {plateauRepRange && onRepRangeChange &&
+                (plateauRepRange[0] !== block.targetRepRange[0] ||
+                  plateauRepRange[1] !== block.targetRepRange[1]) && (
                 <button
                   onClick={() => {
                     onRepRangeChange(plateauRepRange);
+                    // Reseed the logger prefills right away: with no completed
+                    // sets the reseed effects never fire (they anchor to a
+                    // completed set), so the old low-rep prefill would stick
+                    // and the tap would look like a no-op.
+                    if (completedSets.length === 0) {
+                      setPendingInputs(prev =>
+                        prev.map((p, i) => {
+                          const prevSet = previousSets[i];
+                          if (!prevSet) {
+                            return {
+                              ...p,
+                              reps: String(Math.round((plateauRepRange[0] + plateauRepRange[1]) / 2)),
+                            };
+                          }
+                          const seeded = seedFromPreviousSet(prevSet, plateauRepRange);
+                          return {
+                            ...p,
+                            weight: seedWeightString(seeded.weightKg, prevSet.weightKg),
+                            reps: String(seeded.reps),
+                          };
+                        })
+                      );
+                    }
                     setShowPlateauSheet(false);
                   }}
                   className="w-full bg-primary-500 hover:bg-primary-600 text-white rounded-lg py-2.5 text-sm font-medium transition-colors"

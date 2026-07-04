@@ -94,6 +94,9 @@ interface CustomExerciseForm {
 
 type Goal = 'bulk' | 'cut' | 'maintain';
 
+// How many exercises to show per muscle group before collapsing behind "Show more"
+const TOP_EXERCISES_SHOWN = 10;
+
 /**
  * Get rest period based on exercise type and user's goal
  */
@@ -216,6 +219,9 @@ function NewWorkoutContent() {
   
   // Search filter for exercises
   const [exerciseSearch, setExerciseSearch] = useState('');
+
+  // Muscle groups expanded past the top TOP_EXERCISES_SHOWN exercises
+  const [expandedMuscles, setExpandedMuscles] = useState<Set<string>>(new Set());
   
   // Workout duration
   const [workoutDuration, setWorkoutDuration] = useState(45); // Default 45 minutes
@@ -1334,6 +1340,18 @@ function NewWorkoutContent() {
     );
   };
 
+  const toggleMuscleExpanded = (muscle: string) => {
+    setExpandedMuscles((prev) => {
+      const next = new Set(prev);
+      if (next.has(muscle)) {
+        next.delete(muscle);
+      } else {
+        next.add(muscle);
+      }
+      return next;
+    });
+  };
+
   const openCustomExerciseModal = (muscle: string) => {
     setCustomExerciseForm({
       name: exerciseSearch,
@@ -2093,15 +2111,26 @@ function NewWorkoutContent() {
               </CardContent>
             </Card>
           ) : (
-            selectedMuscles.map((muscle) => (
+            selectedMuscles.map((muscle) => {
+              const muscleExercises = exercisesByMuscle[muscle] ?? [];
+              // Searching shows all matches; otherwise cap at the top 10,
+              // but keep selected exercises visible even past the cap
+              const isExpanded = expandedMuscles.has(muscle) || Boolean(exerciseSearch.trim());
+              const visibleExercises = isExpanded
+                ? muscleExercises
+                : muscleExercises.filter((e, i) => i < TOP_EXERCISES_SHOWN || selectedExercises.includes(e.id));
+              const hiddenCount = muscleExercises.length - visibleExercises.length;
+              const canCollapse = !exerciseSearch.trim() && expandedMuscles.has(muscle) && muscleExercises.length > TOP_EXERCISES_SHOWN;
+
+              return (
               <Card key={muscle}>
                 <CardHeader>
                   <CardTitle className="capitalize">{muscle}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {exercisesByMuscle[muscle]?.length > 0 ? (
+                  {muscleExercises.length > 0 ? (
                     <div className="space-y-2">
-                      {exercisesByMuscle[muscle].map((exercise) => {
+                      {visibleExercises.map((exercise) => {
                         const usageCount = frequentExerciseIds.get(exercise.id) || 0;
                         const isFrequent = usageCount >= 2; // Show badge if used 2+ times
                         
@@ -2155,6 +2184,29 @@ function NewWorkoutContent() {
                           </button>
                         );
                       })}
+
+                      {hiddenCount > 0 && (
+                        <button
+                          onClick={() => toggleMuscleExpanded(muscle)}
+                          className="w-full p-2.5 rounded-lg text-sm text-primary-400 hover:bg-surface-800 transition-all flex items-center justify-center gap-1.5"
+                        >
+                          Show {hiddenCount} more exercise{hiddenCount !== 1 ? 's' : ''}
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      )}
+                      {canCollapse && (
+                        <button
+                          onClick={() => toggleMuscleExpanded(muscle)}
+                          className="w-full p-2.5 rounded-lg text-sm text-surface-400 hover:bg-surface-800 transition-all flex items-center justify-center gap-1.5"
+                        >
+                          Show less
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <p className="text-surface-500 text-center py-4">
@@ -2174,7 +2226,8 @@ function NewWorkoutContent() {
                   </button>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
 
         </div>

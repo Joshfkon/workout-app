@@ -26,6 +26,21 @@ const PLATEAU_THRESHOLD = 0.02; // 2%
 /** Weeks without progress to trigger plateau alert */
 const WEEKS_TO_PLATEAU = 3;
 
+/**
+ * Only sessions within this many weeks of the most recent one are analyzed.
+ * Older history (e.g. last year at a different bodyweight) must not set the
+ * peak E1RM that current performance is judged against.
+ */
+const ANALYSIS_WINDOW_WEEKS = 12;
+
+/**
+ * No alert when the exercise hasn't been trained within this many weeks of
+ * the reference date — an exercise you stopped doing isn't plateaued.
+ */
+const STALE_AFTER_WEEKS = 6;
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 // ============================================
 // E1RM CALCULATION
 // ============================================
@@ -152,6 +167,12 @@ function checkForPlateau(
 export interface DetectPlateauInput {
   exerciseId: string;
   snapshots: ExercisePerformanceSnapshot[];
+  /**
+   * "Today" for the staleness check. Callers should pass the current date;
+   * defaults to the most recent snapshot date so the function stays
+   * deterministic when omitted (tests, historical analysis).
+   */
+  referenceDate?: string | Date;
 }
 
 export interface PlateauDetectionResult {
@@ -185,32 +206,69 @@ export function detectPlateau(input: DetectPlateauInput): PlateauDetectionResult
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime()
   );
 
-  // Find peak E1RM and when it occurred
+  const latestDate = new Date(sorted[sorted.length - 1].sessionDate);
+  const referenceDate = input.referenceDate
+    ? new Date(input.referenceDate)
+    : latestDate;
+
+  // Exercise not trained recently: stale history isn't a plateau, it's an
+  // exercise the user stopped doing. No alert.
+  if (referenceDate.getTime() - latestDate.getTime() > STALE_AFTER_WEEKS * WEEK_MS) {
+    return {
+      isPlateaued: false,
+      weeksSinceProgress: 0,
+      lastProgressDate: null,
+      currentE1RM: sorted[sorted.length - 1].estimatedE1RM,
+      peakE1RM: 0,
+      suggestions: [],
+    };
+  }
+
+  // Only judge against recent training. Sessions older than the analysis
+  // window (e.g. last year's heavier-bodyweight peaks) are excluded from
+  // both the peak comparison and the trend.
+  const windowStart = latestDate.getTime() - ANALYSIS_WINDOW_WEEKS * WEEK_MS;
+  const recent = sorted.filter(
+    (s) => new Date(s.sessionDate).getTime() >= windowStart
+  );
+
+  if (recent.length < MIN_WEEKS_FOR_ANALYSIS) {
+    return {
+      isPlateaued: false,
+      weeksSinceProgress: 0,
+      lastProgressDate: null,
+      currentE1RM: sorted[sorted.length - 1].estimatedE1RM,
+      peakE1RM: 0,
+      suggestions: [],
+    };
+  }
+
+  // Find peak E1RM within the window and when it occurred
   let peakE1RM = 0;
   let peakDate = '';
-  for (const s of sorted) {
+  for (const s of recent) {
     if (s.estimatedE1RM > peakE1RM) {
       peakE1RM = s.estimatedE1RM;
       peakDate = s.sessionDate;
     }
   }
 
-  const currentE1RM = sorted[sorted.length - 1].estimatedE1RM;
-  const currentDate = new Date(sorted[sorted.length - 1].sessionDate);
+  const currentE1RM = recent[recent.length - 1].estimatedE1RM;
+  const currentDate = new Date(recent[recent.length - 1].sessionDate);
   const peakDateTime = new Date(peakDate);
 
   // Calculate weeks since progress
   const weeksSinceProgress = Math.floor(
-    (currentDate.getTime() - peakDateTime.getTime()) / (7 * 24 * 60 * 60 * 1000)
+    (currentDate.getTime() - peakDateTime.getTime()) / WEEK_MS
   );
 
   // Analyze trend
-  const trend = analyzeExerciseTrend(snapshots);
+  const trend = analyzeExerciseTrend(recent);
   const isPlateaued = trend.isPlateaued || weeksSinceProgress >= WEEKS_TO_PLATEAU;
 
   // Generate suggestions if plateaued
   const suggestions = isPlateaued
-    ? generatePlateauSuggestions(sorted, trend)
+    ? generatePlateauSuggestions(recent, trend)
     : [];
 
   return {
@@ -328,12 +386,13 @@ export function createPlateauAlert(
  * Analyze all exercises for a user and detect plateaus
  */
 export function analyzeAllExercises(
-  exerciseSnapshots: Map<string, ExercisePerformanceSnapshot[]>
+  exerciseSnapshots: Map<string, ExercisePerformanceSnapshot[]>,
+  referenceDate?: string | Date
 ): Map<string, PlateauDetectionResult> {
   const results = new Map<string, PlateauDetectionResult>();
 
   exerciseSnapshots.forEach((snapshots, exerciseId) => {
-    const result = detectPlateau({ exerciseId, snapshots });
+    const result = detectPlateau({ exerciseId, snapshots, referenceDate });
     results.set(exerciseId, result);
   });
 
