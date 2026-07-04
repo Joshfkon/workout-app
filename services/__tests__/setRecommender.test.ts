@@ -5,9 +5,11 @@
 
 import {
   recommendSet,
+  recommendSessionStart,
   estimateRepsForWeight,
   predictAmrapReps,
   type SetRecommenderInput,
+  type SessionStartInput,
 } from '../setRecommender';
 
 const base = (over: Partial<SetRecommenderInput> = {}): SetRecommenderInput => ({
@@ -95,8 +97,26 @@ describe('recommendSet', () => {
       const r = recommendSet(base({ lastWeightKg: 100, lastReps: 6, lastRir: 0 }));
       expect(r.rationale).toBe('reduce_load');
       expect(r.weightKg).toBeLessThan(100);
-      expect(r.weightKg).toBeGreaterThanOrEqual(100 * 0.9 - 2.5);
+      expect(r.weightKg).toBeGreaterThanOrEqual(100 * 0.7 - 2.5); // asymmetric reduce cap
       expect(r.reps).toBeGreaterThanOrEqual(8); // targets back into range
+    });
+
+    it('drops far enough to reach the range after a drastic overshoot (not capped at -10%)', () => {
+      // Live bug: 105 lb x 2 @ RIR 0 against a 10-15 target. The +/-10% cap left the
+      // suggestion at ~92.5 lb x 4 — a set the model itself predicted below the range.
+      const r = recommendSet(
+        base({
+          lastWeightKg: 47.6, // ~105 lb
+          lastReps: 2,
+          lastRir: 0,
+          targetRepRange: [10, 15],
+          minIncrementKg: 1.13, // ~2.5 lb
+        })
+      );
+      expect(r.rationale).toBe('reduce_load');
+      expect(r.weightKg).toBeLessThanOrEqual(47.6 * 0.75); // needs ~-29%, allowed now
+      expect(r.reps).toBeGreaterThanOrEqual(10); // prediction lands back in range
+      expect(r.reps).toBeLessThanOrEqual(15);
     });
 
     it('reduces when a set went much closer to failure than target (deadband)', () => {
@@ -142,19 +162,131 @@ describe('recommendSet', () => {
 });
 
 describe('estimateRepsForWeight', () => {
-  it('estimates more reps at a lighter weight, clamped to the range', () => {
-    const reps = estimateRepsForWeight(80, { weightKg: 100, reps: 8, rir: 2 }, [8, 12], 2);
-    expect(reps).toBeGreaterThanOrEqual(8);
-    expect(reps).toBeLessThanOrEqual(12);
+  it('agrees exactly with recommendSet at the recommended weight (single prediction core)', () => {
+    // The live-bug scenario: 105 lb x 2 @ RIR 0 against a 10-15 target. Editing the
+    // weight field back to the recommended weight must reproduce the recommended reps —
+    // the banner and the weight-edit recalc may never disagree.
+    const input = base({
+      lastWeightKg: 47.6,
+      lastReps: 2,
+      lastRir: 0,
+      targetRepRange: [10, 15] as [number, number],
+      minIncrementKg: 1.13,
+    });
+    const rec = recommendSet(input);
+    expect(rec.rationale).toBe('reduce_load');
+    expect(estimateRepsForWeight(rec.weightKg, input)).toBe(rec.reps);
   });
 
-  it('does not suggest absurd reps for a very light weight (clamp prevents 30)', () => {
-    const reps = estimateRepsForWeight(40, { weightKg: 100, reps: 8, rir: 2 }, [8, 12], 2);
-    expect(reps).toBeLessThanOrEqual(12);
+  it('shows honest below-range reps at a too-heavy weight (no floor to repMin)', () => {
+    // Live bug: after 105 lb x 2 @ RIR 0 (10-15 target), editing the weight to
+    // ~92.5 lb used to jump the rep prefill to 10 (floored to the range min).
+    // Honest answer at that weight is ~4 reps.
+    const input = base({
+      lastWeightKg: 47.6, // ~105 lb
+      lastReps: 2,
+      lastRir: 0,
+      targetRepRange: [10, 15] as [number, number],
+    });
+    const reps = estimateRepsForWeight(41.96 /* ~92.5 lb */, input);
+    expect(reps).toBe(4);
+    expect(reps).toBeLessThan(10); // must NOT be floored up to the range
+  });
+
+  it('estimates fewer reps at heavier weights and more at lighter weights', () => {
+    const heavier = estimateRepsForWeight(110, base());
+    const lighter = estimateRepsForWeight(90, base());
+    expect(heavier).toBeLessThan(lighter);
+  });
+
+  it('caps very light weights at repMax + overshoot ceiling (the 30-rep bug stays fixed)', () => {
+    // e1rm 140 at 40kg predicts ~69 fresh reps — must cap at 12 + 5.
+    expect(estimateRepsForWeight(40, base())).toBe(17);
+  });
+
+  it('never predicts below 1 or above repMax + 5 across the weight spectrum', () => {
+    for (const w of [20, 40, 60, 80, 100, 120, 150, 200]) {
+      const reps = estimateRepsForWeight(w, base());
+      expect(reps).toBeGreaterThanOrEqual(1);
+      expect(reps).toBeLessThanOrEqual(12 + 5);
+    }
+  });
+
+  it('uses the session-best E1RM anchor like recommendSet does', () => {
+    const fatigued = base({ lastWeightKg: 100, lastReps: 6, lastRir: 0 });
+    const anchored = base({ lastWeightKg: 100, lastReps: 6, lastRir: 0, sessionBestE1RMKg: 160 });
+    expect(estimateRepsForWeight(100, anchored)).toBeGreaterThan(
+      estimateRepsForWeight(100, fatigued)
+    );
   });
 
   it('returns mid-range for degenerate inputs', () => {
-    expect(estimateRepsForWeight(0, { weightKg: 100, reps: 8 }, [8, 12], 2)).toBe(10);
+    expect(estimateRepsForWeight(0, base())).toBe(10);
+    expect(estimateRepsForWeight(50, base({ lastWeightKg: 0, lastReps: 0 }))).toBe(10);
+  });
+});
+
+describe('recommendSessionStart', () => {
+  const start = (over: Partial<SessionStartInput> = {}): SessionStartInput => ({
+    prevWeightKg: 100,
+    prevReps: 10,
+    prevRir: 2,
+    targetRepRange: [8, 12],
+    targetRir: 2,
+    minIncrementKg: 2.5,
+    ...over,
+  });
+
+  it('repeats last session verbatim when it landed in range at ~target effort (fresh, no fatigue shave)', () => {
+    const r = recommendSessionStart(start({ prevReps: 11, prevRir: 3 }));
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBe(11); // NOT 10 — a new session starts fresh
+  });
+
+  it('steps the load up when last session was clearly too light (live bug: 20 reps @ 4 RIR vs 10-15 @ 2)', () => {
+    // The screenshot case: cable fly 9.07 kg (20 lb) x 20 @ RIR 4 against a 10-15 @ 2 RIR target.
+    // The old seed replayed the same weight and clamped reps to 15, labelled "matching your last session".
+    const r = recommendSessionStart(
+      start({
+        prevWeightKg: 9.07,
+        prevReps: 20,
+        prevRir: 4,
+        targetRepRange: [10, 15],
+        minIncrementKg: 1.13, // ~2.5 lb
+      })
+    );
+    expect(r.rationale).toBe('increase_load');
+    expect(r.weightKg).toBeGreaterThan(9.07);
+    expect(r.weightKg).toBeLessThanOrEqual(9.07 * 1.1 + 1.13); // capped step
+  });
+
+  it('steps the load down when last session went too close to failure', () => {
+    const r = recommendSessionStart(start({ prevReps: 10, prevRir: 0 }));
+    expect(r.rationale).toBe('reduce_load');
+    expect(r.weightKg).toBeLessThan(100);
+  });
+
+  it('assumes on-target effort when the previous set has no recorded RIR', () => {
+    // In-range reps, unknown effort -> hold and repeat.
+    const r = recommendSessionStart(start({ prevReps: 10, prevRir: undefined }));
+    expect(r.rationale).toBe('maintain');
+    expect(r.weightKg).toBe(100);
+    expect(r.reps).toBe(10);
+  });
+
+  it('still increases on an objective rep-overshoot even with no recorded RIR', () => {
+    // 20 reps against a 10-15 range proves under-load regardless of effort rating.
+    const r = recommendSessionStart(start({ prevReps: 20, prevRir: undefined, targetRepRange: [10, 15] }));
+    expect(r.rationale).toBe('increase_load');
+    expect(r.weightKg).toBeGreaterThan(100);
+  });
+
+  it('handles degenerate inputs without throwing', () => {
+    const r = recommendSessionStart(start({ prevWeightKg: 0, prevReps: 0 }));
+    expect(r.rationale).toBe('maintain');
+    expect(r.reps).toBeGreaterThanOrEqual(1);
+    expect(Number.isFinite(r.weightKg)).toBe(true);
   });
 });
 
