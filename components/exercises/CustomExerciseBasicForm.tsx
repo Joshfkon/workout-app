@@ -24,6 +24,13 @@ import type { BasicExerciseInput } from '@/lib/exercises/types';
 import { MUSCLE_GROUP_OPTIONS, EQUIPMENT_OPTIONS } from '@/lib/exercises/types';
 import type { MuscleGroup, Equipment } from '@/types/schema';
 import { getExercises, type Exercise } from '@/services/exerciseService';
+import { createUntypedClient } from '@/lib/supabase/client';
+
+interface GymLocation {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
 
 interface CustomExerciseBasicFormProps {
   onSubmit: (input: BasicExerciseInput) => void;
@@ -52,6 +59,16 @@ export function CustomExerciseBasicForm({
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
+  const [unavailableLocationIds, setUnavailableLocationIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        (initialData?.locationAvailability ?? [])
+          .filter((l) => !l.isAvailable)
+          .map((l) => l.locationId)
+      )
+  );
+
   // Load exercises for variation selection (include custom exercises)
   useEffect(() => {
     async function loadExercises() {
@@ -60,6 +77,30 @@ export function CustomExerciseBasicForm({
     }
     loadExercises();
   }, []);
+
+  // Load gym locations so the user can say where this exercise is available
+  useEffect(() => {
+    async function loadGymLocations() {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('gym_locations')
+        .select('id, name, is_default')
+        .eq('user_id', user.id)
+        .order('name');
+
+      if (data) {
+        setGymLocations(data);
+      }
+    }
+    loadGymLocations();
+  }, []);
+
+  // With a single location the choice is meaningless, so only ask when there
+  // are multiple gyms to pick between.
+  const showLocationPicker = gymLocations.length > 1;
 
   // Filter exercises for variation dropdown based on selected muscle
   const variationOptions = exercises
@@ -81,6 +122,9 @@ export function CustomExerciseBasicForm({
     if (isVariation && !variationOf) {
       newErrors.variationOf = 'Please select the base exercise';
     }
+    if (showLocationPicker && unavailableLocationIds.size >= gymLocations.length) {
+      newErrors.locations = 'Select at least one location';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -100,6 +144,12 @@ export function CustomExerciseBasicForm({
       description: description.trim() || undefined,
       variationOf: isVariation ? variationOf : undefined,
       variationOfName: selectedExercise?.name,
+      locationAvailability: showLocationPicker
+        ? gymLocations.map((location) => ({
+            locationId: location.id,
+            isAvailable: !unavailableLocationIds.has(location.id),
+          }))
+        : undefined,
     };
 
     onSubmit(input);
@@ -164,6 +214,53 @@ export function CustomExerciseBasicForm({
             A quick note helps the AI get the details right.
           </p>
         </div>
+
+        {showLocationPicker && (
+          <div>
+            <label className="block text-sm font-medium text-surface-200 mb-1.5">
+              Available At
+            </label>
+            <div className="space-y-2">
+              {gymLocations.map((location) => {
+                const isAvailable = !unavailableLocationIds.has(location.id);
+                return (
+                  <label key={location.id} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isAvailable}
+                      onChange={(e) => {
+                        setUnavailableLocationIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) {
+                            next.delete(location.id);
+                          } else {
+                            next.add(location.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className="w-5 h-5 rounded bg-surface-800 border-surface-600
+                        text-primary-500 focus:ring-primary-500 focus:ring-offset-0"
+                    />
+                    <span className="text-surface-200">
+                      {location.name}
+                      {location.is_default && (
+                        <span className="text-xs text-surface-500 ml-1">(Default)</span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {errors.locations ? (
+              <p className="mt-1.5 text-sm text-danger-400">{errors.locations}</p>
+            ) : (
+              <p className="mt-1.5 text-sm text-surface-500">
+                Uncheck gyms that don&apos;t have the equipment for this exercise.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="border-t border-surface-800 pt-4">
           <label className="flex items-center gap-3 cursor-pointer">
