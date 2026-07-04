@@ -9,7 +9,7 @@ import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDis
 import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
 import { recommendSet } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
-import { detectPlateau, type PlateauDetectionResult } from '@/services/plateauDetector';
+import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
@@ -192,6 +192,9 @@ interface ExerciseCardProps {
   readinessModulation?: ReadinessModulation | null;
   // Per-session performance history for plateau detection (services/plateauDetector)
   performanceSnapshots?: ExercisePerformanceSnapshot[];
+  // Diet phase for plateau detection: gains expected on a bulk, holding
+  // strength counts as progress on a cut
+  userGoal?: PlateauGoal;
   // One-tap plateau action: update the block's target rep range
   onRepRangeChange?: (range: [number, number]) => void;
   // AMRAP suggestion - indicates this is the last set and user should push to failure
@@ -249,6 +252,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   performanceSnapshots,
+  userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
@@ -432,9 +436,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       exerciseId: exercise.id,
       snapshots: performanceSnapshots,
       referenceDate: new Date(),
+      goal: userGoal,
     });
     return result.isPlateaued ? result : null;
-  }, [performanceSnapshots, exercise.id]);
+  }, [performanceSnapshots, exercise.id, userGoal]);
 
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
@@ -2612,6 +2617,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.readinessModulation?.rirDelta === nextProps.readinessModulation?.rirDelta &&
     prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
+    prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     // Write-status (P0-2): compare only THIS card's own sets' statuses, not the

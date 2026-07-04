@@ -4427,6 +4427,7 @@ export default function WorkoutPage() {
                     }
                     readinessModulation={readinessModulation}
                     performanceSnapshots={performanceSnapshots[block.exerciseId]}
+                    userGoal={userGoal}
                     onRepRangeChange={(range) => handleRepRangeChange(block.id, range)}
                     isAmrapSuggested={
                       // Show AMRAP when either the suggestion is active OR user already accepted it
