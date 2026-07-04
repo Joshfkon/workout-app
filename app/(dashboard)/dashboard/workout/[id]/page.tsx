@@ -506,6 +506,7 @@ export default function WorkoutPage() {
   
   // Cancel workout modal state
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
 
   // Dropset chain state - tracks pending drops after a main set
@@ -3479,7 +3480,14 @@ export default function WorkoutPage() {
     })();
   }, [phase, session, blocks, completedSets, skippedBlockIds]);
 
+  // Finishing is easy to hit by accident (header + bottom bar) and the
+  // summary screen has no way back, so always confirm first.
   const handleWorkoutComplete = () => {
+    setShowFinishConfirm(true);
+  };
+
+  const confirmFinishWorkout = () => {
+    setShowFinishConfirm(false);
     setPhase('summary');
   };
 
@@ -3858,6 +3866,18 @@ export default function WorkoutPage() {
             onConfirm={handleCancelWorkout}
           />
         )}
+
+        {/* Finish confirmation — same early-return branch caveat as above */}
+        <ConfirmModal
+          isOpen={showFinishConfirm}
+          onClose={() => setShowFinishConfirm(false)}
+          onConfirm={confirmFinishWorkout}
+          title="Finish Workout?"
+          message="No sets have been logged yet. Finish anyway?"
+          confirmText="Finish"
+          cancelText="Keep Training"
+          variant="warning"
+        />
       </div>
     );
   }
@@ -5278,6 +5298,22 @@ export default function WorkoutPage() {
           onConfirm={handleCancelWorkout}
         />
       )}
+
+      {/* Finish Workout Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showFinishConfirm}
+        onClose={() => setShowFinishConfirm(false)}
+        onConfirm={confirmFinishWorkout}
+        title="Finish Workout?"
+        message={
+          totalCompletedSets < totalPlannedSets
+            ? `You've logged ${totalCompletedSets} of ${totalPlannedSets} sets. Remaining sets won't be logged.`
+            : `All ${totalPlannedSets} sets logged. Wrap up and rate your session.`
+        }
+        confirmText="Finish"
+        cancelText="Keep Training"
+        variant={totalCompletedSets < totalPlannedSets ? 'warning' : 'default'}
+      />
       
       {/* Exercise Details Modal */}
       <ExerciseDetailsModal
