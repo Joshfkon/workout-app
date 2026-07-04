@@ -66,6 +66,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/progressionInsights.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
     'services/deloadEngine.ts': {
       lines: 70,
       functions: 60,

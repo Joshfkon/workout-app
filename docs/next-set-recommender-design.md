@@ -76,7 +76,8 @@ The two **new** inputs vs `recommendNextSet` today:
 | Const | Default | Meaning |
 |---|---|---|
 | `DEADBAND_RIR` | `2` | How far the last set's RIR must miss target before we change the weight at all. Inside ±2, hold. |
-| `MAX_STEP_PCT` | `0.10` | Cap on per-set load change (±10%). Prevents wild jumps. |
+| `MAX_STEP_PCT` | `0.10` | Cap on per-set load **increase** (+10%). Prevents wild jumps. |
+| `MAX_REDUCE_PCT` | `0.30` | Cap on per-set load **reduction** (−30%). Asymmetric: a drastic overshoot (e.g. 2 reps against a 10–15 range) needs a ~30% correction to reach mid-range; capping the drop at 10% left the next suggestion still too heavy with predicted reps below the range (live bug, 2026-07-04). |
 | `HOLD_DROP_RATE` | `0.07` | Expected rep decline per set at a fixed load (~7%). Used in the HOLD case. |
 | `FATIGUE_PER_SET` | `0.05` | Rep de-rating per already-completed set, used only when the weight changed (§6). |
 | `FATIGUE_FLOOR` | `0.60` | Lower bound on the fatigue factor (never predict below 60% of fresh). |
@@ -104,7 +105,7 @@ recommend(input):
   if lastReps < repMin  OR  dev <= -DEADBAND_RIR:
       // too heavy / went too close to failure → back off
       ideal     = weightFor(e1rm, midRange, targetRir)
-      newWeight = roundToInc(max(ideal, lastWeightKg * (1 - MAX_STEP_PCT)))
+      newWeight = roundToInc(max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)))
       rationale = 'reduce_load'
 
   else if lastReps >= repMax  AND  dev >= DEADBAND_RIR:
@@ -183,15 +184,22 @@ Flagged, not assumed.
 
 ---
 
-## 8. Auxiliary predictions (keep main's, they're good)
+## 8. Auxiliary predictions (folded into the same module)
 
-These answer different UI questions and stay as-is (lightly folded into the new module):
+These answer different UI questions but share the engine's math:
 
-- **`estimateRepsForWeight(newWeightKg, reference, ctx)`** — you manually type a different
-  weight → predict reps at it. Same inverse-Epley math, clamp to range. (main's "key fix"
-  for the 30-rep bug.) *Optional:* de-rate by set number for consistency with §5.
-- **`predictAmrapReps(lastSet, ctx)`** — AMRAP set: `lastReps + RIR`, floored at `repMin`,
-  capped at `repMax + 5`.
+- **`estimateRepsForWeight(newWeightKg, input)`** — you manually type a different weight →
+  predict reps at it. Runs the **same prediction core** as §5's weight-changed branch
+  (same capacity anchor, target-RIR subtraction, and per-set fatigue de-rate), so editing
+  the weight field back to the recommended weight reproduces the recommended reps exactly.
+  Clamped to `[1, repMax + OVERSHOOT_CEILING]` — **not** floored up to `repMin`. The
+  original spec kept main's clamp-to-range here, which contradicted §7's honest-reps
+  principle: the overshoot *ceiling* is what fixes the 30-rep bug; flooring reps up to the
+  range minimum hid over-load and made the prefill disagree with the banner (live bug,
+  2026-07-04: 105 lb × 2 @ RIR 0, banner said 92.5 × 4, editing to 90 jumped the prefill
+  to 10).
+- **`predictAmrapReps(lastSet, targetRepRange)`** — AMRAP set: `lastReps + RIR`, floored
+  at `repMin`, capped at `repMax + 5`.
 
 ---
 
@@ -229,7 +237,7 @@ This is what consumes the "honest reps" signal from §7. It belongs in
 | 100×11 @ RIR3 (slightly easy, in range) | 1 | **100 × 10** (hold, fatigue) | 104 × 12 (bumps both) | 100 × 10 (hold) |
 | 110×20 @ RIR4 (way too easy, over range) | 1 | **121 × 16** (+10% cap, honest reps) | 118 × 10 (jumps, hides under-load) | 121 × 17 |
 | 100×9 @ RIR1, set 4 done (normal fatigue) | 4 | **100 × 8** (hold, decrement) | ~97 × 8 (drops weight on fatigue ✗) | 100 × 8 |
-| 100×6 @ RIR0 (missed range, too heavy) | 1 | **~92 × 10** (reduce toward mid) | ~97 × ~7 | ~92 × 10 |
+| 100×6 @ RIR0 (missed range, too heavy) | 1 | **~85 × 10** (reduce to mid-range ideal) | ~97 × ~7 | ~92 × 10 |
 
 The row that matters most: **set 4 at normal fatigue.** main *drops the weight* because
 the set felt hard (RPE up) — but that's just fatigue, not over-load; you should hold. This
@@ -247,7 +255,10 @@ engine and `recommendNextSet` hold; main doesn't. That's the clearest correctnes
 - **Q1 — fatigue rate:** default ~7% reps/set (`HOLD_DROP_RATE`). Tunable; proximity-to-
   failure scaling (§6) left out of v1, revisit from feel.
 - **Q2 — deadband:** default ±2 RIR. Tunable.
-- **Q3 — step cap:** default ±10%/set. Tunable.
+- **Q3 — step cap:** asymmetric since 2026-07-04: +10%/set on increases (`MAX_STEP_PCT`),
+  −30%/set on reductions (`MAX_REDUCE_PCT`). Originally ±10%, but a symmetric cap meant a
+  drastically-too-heavy set (2 reps vs a 10–15 target) got a suggestion that was still too
+  heavy to reach the range. Reductions follow the mid-range ideal; the cap is a backstop.
 
 Q1–Q3 shipped at defaults (they're named constants — trivially adjustable after live feel).
 

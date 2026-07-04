@@ -745,10 +745,11 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByRole('button', { name: 'Plateau' }));
       await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
 
-      // 100×10 at RPE 10 (0 RIR) → E1RM 133.3 kg, not the 140 the target-RIR
-      // fallback would assume: 133.3 / (1 + (6+2)/30) ≈ 105.3 → 105.
-      expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      // 100×10 at RPE 10 (0 RIR) ran HARDER than the 2-RIR target, so the
+      // session-start recommender backs the load off one increment instead of
+      // repricing up into the new range (services/setRecommender reduce_load).
+      expect(screen.getByRole('button', { name: /Weight: 97.5 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 9/ })).toBeInTheDocument();
     });
 
     it('keeps a zero-load seed at zero when repriced into the new range', async () => {
@@ -768,9 +769,11 @@ describe('ExerciseCard', () => {
       await user.click(screen.getByRole('button', { name: 'Plateau' }));
       await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
 
-      // Zero-load history must not be floored up to the 2.5 kg increment.
+      // Zero-load history must not be floored up to the 2.5 kg increment, and
+      // honest reps repeat the logged 10 (within range max + overshoot ceiling)
+      // rather than snapping to the new range midpoint.
       expect(screen.getByRole('button', { name: /Weight: 0 kg/ })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 10/ })).toBeInTheDocument();
     });
 
     it('hides the one-tap rep-range button when the block already uses that range', async () => {
@@ -803,6 +806,48 @@ describe('ExerciseCard', () => {
       );
 
       expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Progression pace pill', () => {
+    /** Five weekly sessions gaining ~1% E1RM/week — well ahead of the
+     *  intermediate expectation (0.3%/wk) used when no user is in the store. */
+    const progressingSnapshots: ExercisePerformanceSnapshot[] = [0, 1, 2, 3, 4].map((i) =>
+      createSnapshot({
+        id: `p${i}`,
+        sessionDate: weeksAgo(4 - i),
+        estimatedE1RM: Math.round(120 * Math.pow(1.01, i) * 10) / 10,
+        topSetWeightKg: 100 + i * 2.5,
+      })
+    );
+
+    it('shows the Ahead pill for a lift progressing faster than expected', () => {
+      render(
+        <ExerciseCard {...defaultProps} performanceSnapshots={progressingSnapshots} />
+      );
+      expect(screen.getByText(/Ahead/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Plateau' })).not.toBeInTheDocument();
+    });
+
+    it('suppresses the pace pill when the plateau badge is showing', () => {
+      render(
+        <ExerciseCard {...defaultProps} performanceSnapshots={plateauedSnapshots} />
+      );
+      expect(screen.getByRole('button', { name: 'Plateau' })).toBeInTheDocument();
+      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText('On track')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Behind/)).not.toBeInTheDocument();
+    });
+
+    it('shows no pace pill without enough history', () => {
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          performanceSnapshots={progressingSnapshots.slice(0, 2)}
+        />
+      );
+      expect(screen.queryByText(/Ahead/)).not.toBeInTheDocument();
+      expect(screen.queryByText('On track')).not.toBeInTheDocument();
     });
   });
 

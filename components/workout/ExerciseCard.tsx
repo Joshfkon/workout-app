@@ -6,10 +6,11 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
-import { estimateRepsForWeight, predictAmrapReps } from '@/services/setSuggestionEngine';
-import { recommendSet } from '@/services/setRecommender';
+import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
-import { detectPlateau, type PlateauDetectionResult } from '@/services/plateauDetector';
+import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
+import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
+import { useUserStore } from '@/stores';
 import type { AdjustedRIRResult } from '@/services/rpeCalibration';
 import type { ReadinessModulation } from '@/services/fatigueEngine';
 import { lightHaptic } from '@/lib/integrations/notifications';
@@ -192,6 +193,9 @@ interface ExerciseCardProps {
   readinessModulation?: ReadinessModulation | null;
   // Per-session performance history for plateau detection (services/plateauDetector)
   performanceSnapshots?: ExercisePerformanceSnapshot[];
+  // Diet phase for plateau detection: gains expected on a bulk, holding
+  // strength counts as progress on a cut
+  userGoal?: PlateauGoal;
   // One-tap plateau action: update the block's target rep range
   onRepRangeChange?: (range: [number, number]) => void;
   // AMRAP suggestion - indicates this is the last set and user should push to failure
@@ -249,6 +253,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   readinessModulation,
   setSyncStatus,
   performanceSnapshots,
+  userGoal,
   onRepRangeChange,
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
@@ -398,6 +403,13 @@ export const ExerciseCard = memo(function ExerciseCard({
       minIncrementKg: exercise.minWeightIncrementKg,
     });
 
+  // RPE→RIR adapter for the recommender's AMRAP prediction.
+  const amrapReps = (last: { reps: number; rpe?: number }) =>
+    predictAmrapReps(
+      { reps: last.reps, rir: last.rpe != null ? Math.max(0, 10 - last.rpe) : undefined },
+      block.targetRepRange
+    );
+
   // Check if this is a bodyweight exercise
   // Use type assertion to access bodyweight properties that may exist on the exercise
   const exerciseWithBodyweight = exercise as any;
@@ -432,9 +444,25 @@ export const ExerciseCard = memo(function ExerciseCard({
       exerciseId: exercise.id,
       snapshots: performanceSnapshots,
       referenceDate: new Date(),
+      goal: userGoal,
     });
     return result.isPlateaued ? result : null;
-  }, [performanceSnapshots, exercise.id]);
+  }, [performanceSnapshots, exercise.id, userGoal]);
+
+  // Progression pace vs what's expected for the user's experience level
+  // (services/progressionInsights). Complements the plateau badge: the pace
+  // pill covers the non-plateaued states (ahead / on track / behind).
+  const experience = useUserStore((s) => s.user?.experience ?? 'intermediate');
+  const progressionInsight: ExerciseProgressionInsight | null = useMemo(() => {
+    if (!performanceSnapshots || performanceSnapshots.length === 0) return null;
+    return getExerciseProgression({
+      exerciseId: exercise.id,
+      snapshots: performanceSnapshots,
+      experience,
+      referenceDate: new Date(),
+      goal: userGoal,
+    });
+  }, [performanceSnapshots, exercise.id, experience, userGoal]);
 
   // One-tap "Try X-Y reps" action: first rep range embedded in the suggestions.
   const plateauRepRange: [number, number] | null = useMemo(() => {
@@ -486,28 +514,21 @@ export const ExerciseCard = memo(function ExerciseCard({
   );
 
   // Weight+reps seed for a not-yet-started exercise, anchored to the previous
-  // session's set. When the target rep range has moved away from what that set
-  // was performed at (e.g. the one-tap plateau rep-range switch), reusing the
-  // set's weight would prescribe an impossible load — re-derive it from the
-  // set's estimated 1RM at the new range's midpoint instead.
+  // session's set INCLUDING its effort (services/setRecommender). Holds the
+  // weight when that set landed in range at roughly the target effort; steps
+  // it on a clear miss — e.g. 20 reps left at 4 RIR against a 10-15 @ 2 RIR
+  // target, or a rep range moved by the one-tap plateau switch — so a
+  // mis-loaded session doesn't get replayed verbatim.
   const seedFromPreviousSet = useCallback(
-    (prevSet: { weightKg: number; reps: number; rpe?: number }, range: [number, number]) => {
-      if (prevSet.reps >= range[0] && prevSet.reps <= range[1]) {
-        return { weightKg: prevSet.weightKg, reps: prevSet.reps };
-      }
-      const reps = Math.round((range[0] + range[1]) / 2);
-      // Zero-load history (bodyweight/no-load without a bodyweight check-in)
-      // must stay zero-load — the increment floor below would turn it into a
-      // phantom 2.5 kg set.
-      if (prevSet.weightKg <= 0) {
-        return { weightKg: 0, reps };
-      }
-      const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : effectiveTargetRir;
-      const e1rm = prevSet.weightKg * (1 + (prevSet.reps + prevRir) / 30);
-      const rawKg = e1rm / (1 + (reps + effectiveTargetRir) / 30);
-      const inc = exercise.minWeightIncrementKg || 2.5;
-      return { weightKg: Math.max(inc, Math.round(rawKg / inc) * inc), reps };
-    },
+    (prevSet: { weightKg: number; reps: number; rpe?: number }, range: [number, number]) =>
+      recommendSessionStart({
+        prevWeightKg: prevSet.weightKg,
+        prevReps: prevSet.reps,
+        prevRir: prevSet.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
+        targetRepRange: range,
+        targetRir: effectiveTargetRir,
+        minIncrementKg: exercise.minWeightIncrementKg,
+      }),
     [effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
@@ -554,7 +575,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // For AMRAP sets, use bounded prediction instead of uncapped formula
       let setReps = smartReps;
       if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
-        setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
+        setReps = Math.max(amrapReps(lastSetData), smartReps);
       }
 
       updatedInputs.push({
@@ -605,7 +626,7 @@ export const ExerciseCard = memo(function ExerciseCard({
         let setReps = smartReps;
         if (isLastSet && isAmrapSuggested && lastCompleted?.rpe) {
           const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-          setReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), smartReps);
+          setReps = Math.max(amrapReps(lastSetData), smartReps);
         }
 
         updatedInputs.push({
@@ -668,7 +689,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           // For AMRAP sets, use bounded prediction
           if (lastCompleted?.rpe) {
             const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-            defaultReps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), defaultReps);
+            defaultReps = Math.max(amrapReps(lastSetData), defaultReps);
           }
         } else {
           defaultRpe = targetRpe;
@@ -713,7 +734,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       let predictedReps: number | null = null;
       if (lastCompleted?.rpe) {
         const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
-        predictedReps = predictAmrapReps(lastSetData, suggestionCtx);
+        predictedReps = amrapReps(lastSetData);
       }
 
       // Only prefill reps if we have a prediction (don't check current value - this is initial prefill)
@@ -816,9 +837,6 @@ export const ExerciseCard = memo(function ExerciseCard({
     };
   };
 
-  // Shared suggestion context for the setSuggestionEngine
-  const suggestionCtx = { targetRepRange: block.targetRepRange, targetRir: effectiveTargetRir };
-
   const updatePendingInput = (index: number, field: 'weight' | 'reps' | 'rpe', value: string) => {
     // If user manually edits reps, cancel any pending debounced reps calculation
     // This prevents overwriting the user's manual input
@@ -847,20 +865,20 @@ export const ExerciseCard = memo(function ExerciseCard({
 
             let refWeight = 0;
             let refReps = 0;
-            let refRpe = 8; // Default RPE if not available
+            // Assume on-target effort when the reference has no RPE
+            let refRir = effectiveTargetRir;
 
             if (lastCompleted) {
               refWeight = lastCompleted.weightKg;
               refReps = lastCompleted.reps;
-              refRpe = lastCompleted.rpe;
+              if (lastCompleted.rpe != null) refRir = Math.max(0, 10 - lastCompleted.rpe);
             } else if (prevSet) {
               refWeight = prevSet.weightKg;
               refReps = prevSet.reps;
-              refRpe = prevSet.rpe ?? 10 - effectiveTargetRir;
+              if (prevSet.rpe != null) refRir = rpeToRir(prevSet.rpe);
             } else if (suggestedWeight > 0) {
               refWeight = suggestedWeight;
               refReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
-              refRpe = 10 - effectiveTargetRir;
             }
 
             if (refWeight > 0 && Math.abs(newWeightKg - refWeight) > 0.5) {
@@ -881,7 +899,17 @@ export const ExerciseCard = memo(function ExerciseCard({
                   const newInputs = [...prevInputs];
                   // Only update reps if user hasn't manually changed it since we scheduled
                   if (newInputs[index] && newInputs[index].reps === currentReps) {
-                    const newReps = estimateRepsForWeight(newWeightKg, { weightKg: refWeight, reps: refReps, rpe: refRpe }, suggestionCtx);
+                    // Same inputs as the banner's recommendSet call, so the
+                    // estimate agrees with the suggestion at the same weight.
+                    const newReps = estimateRepsForWeight(newWeightKg, {
+                      lastWeightKg: refWeight,
+                      lastReps: refReps,
+                      lastRir: refRir,
+                      setsCompletedThisExercise: completedSets.length,
+                      sessionBestE1RMKg: sessionBestE1RM,
+                      targetRepRange: block.targetRepRange,
+                      targetRir: effectiveTargetRir,
+                    });
                     newInputs[index] = { ...newInputs[index], reps: String(newReps) };
                   }
                   return newInputs;
@@ -1042,7 +1070,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
       reps = rec.reps;
       if (isAmrap && lastCompleted.rpe) {
-        reps = Math.max(predictAmrapReps(lastSetData, suggestionCtx), reps);
+        reps = Math.max(amrapReps(lastSetData), reps);
       }
       const deltaKg = rec.weightKg - lastCompleted.weightKg;
       if (rec.rationale === 'increase_load') {
@@ -1059,27 +1087,30 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Mirror the pending-input seed: previous-session set for this slot
       // first, then the block/profile-level suggested weight.
       const prevSet = previousSets[completedSets.length];
-      let weightKg = 0;
-      if (prevSet) {
-        const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
-        weightKg = seeded.weightKg;
-        reps = seeded.reps;
-      } else if (suggestedWeight > 0) {
-        weightKg = suggestedWeight;
-      }
-      weight = seedWeightString(weightKg, prevSet?.weightKg);
-
-      const lastSessionTop = exerciseHistory?.lastWorkoutSets?.[0];
-      if (lastSessionTop && weightKg > 0) {
-        const deltaKg = weightKg - lastSessionTop.weightKg;
-        reason =
-          Math.abs(deltaKg) < 0.25
-            ? 'matching your last session'
-            : `${deltaKg > 0 ? 'up' : 'down'} ${deltaLabel(deltaKg)} vs last session`;
+      if (prevSet && prevSet.weightKg > 0) {
+        const rec = seedFromPreviousSet(prevSet, block.targetRepRange);
+        reps = rec.reps;
+        weight = seedWeightString(rec.weightKg, prevSet.weightKg);
+        const deltaKg = rec.weightKg - prevSet.weightKg;
+        const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
         explanation.push(
-          `Anchored to your last session: ${displayWeight(lastSessionTop.weightKg, true)} ${weightLabel} × ${lastSessionTop.reps}.`
+          `Anchored to your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
-      } else if (weightKg > 0) {
+        if (rec.rationale === 'increase_load') {
+          reason = `up ${deltaLabel(deltaKg)} vs last session — it was clearly too light`;
+          explanation.push(
+            `That set cleared the ${block.targetRepRange[0]}-${block.targetRepRange[1]} rep target with effort to spare, so the load steps up to bring the target effort back in range.`
+          );
+        } else if (rec.rationale === 'reduce_load') {
+          reason = `down ${deltaLabel(deltaKg)} vs last session — it was harder than the target effort`;
+          explanation.push(
+            'That set fell short of the rep target or went too close to failure, so the load steps down toward the middle of the range.'
+          );
+        } else {
+          reason = 'same weight as last session';
+        }
+      } else if (suggestedWeight > 0) {
+        weight = seedWeightString(suggestedWeight);
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else {
@@ -1127,6 +1158,28 @@ export const ExerciseCard = memo(function ExerciseCard({
     }`;
   })();
 
+  // Tooltip for the progression pace pill: E1RM trend vs expectation, plus
+  // what the top set did versus the previous session (weight/rep deltas).
+  const progressionTitle = (() => {
+    if (!progressionInsight) return undefined;
+    const sign = progressionInsight.weeklyChangePct >= 0 ? '+' : '';
+    let title = `E1RM trend ${sign}${progressionInsight.weeklyChangePct}%/week · expected ~${progressionInsight.expectedWeeklyPct}%/week for your level`;
+    const delta = progressionInsight.lastSessionDelta;
+    if (delta && (delta.weightKg !== 0 || delta.reps !== 0)) {
+      const parts: string[] = [];
+      if (delta.weightKg !== 0) {
+        parts.push(
+          `${delta.weightKg > 0 ? '+' : ''}${convertWeightForDisplay(delta.weightKg, unit)} ${weightLabel}`
+        );
+      }
+      if (delta.reps !== 0) {
+        parts.push(`${delta.reps > 0 ? '+' : ''}${delta.reps} rep${Math.abs(delta.reps) === 1 ? '' : 's'}`);
+      }
+      title += ` · top set ${parts.join(', ')} vs prior session`;
+    }
+    return title;
+  })();
+
   // Only badge exercises that need caution — "Safe" is the default and just adds header noise
   const safetyTier = getFailureSafetyTier(exercise.name);
 
@@ -1162,6 +1215,31 @@ export const ExerciseCard = memo(function ExerciseCard({
               Plateau
             </button>
           )}
+          {/* Progression pace pill (services/progressionInsights) — trend vs
+              the expected rate for the user's experience level. The plateau
+              badge takes precedence when both would show. */}
+          {!plateau &&
+            progressionInsight &&
+            (progressionInsight.pace === 'ahead' ||
+              progressionInsight.pace === 'on_track' ||
+              progressionInsight.pace === 'behind') && (
+              <span
+                className={`rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 ${
+                  progressionInsight.pace === 'ahead'
+                    ? 'bg-emerald-500/10 text-emerald-400'
+                    : progressionInsight.pace === 'on_track'
+                      ? 'bg-surface-700/60 text-surface-300'
+                      : 'bg-orange-500/10 text-orange-400'
+                }`}
+                title={progressionTitle}
+              >
+                {progressionInsight.pace === 'ahead'
+                  ? '▲ Ahead'
+                  : progressionInsight.pace === 'on_track'
+                    ? 'On track'
+                    : '▼ Behind'}
+              </span>
+            )}
           {block.supersetGroupId && (
             <span className="rounded-full px-2.5 py-1 text-[11px] font-medium leading-none flex-shrink-0 bg-cyan-500/20 text-cyan-400">
               SS{block.supersetOrder}
@@ -2612,6 +2690,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.readinessModulation?.rirDelta === nextProps.readinessModulation?.rirDelta &&
     prevProps.readinessModulation?.banner === nextProps.readinessModulation?.banner &&
     prevProps.performanceSnapshots === nextProps.performanceSnapshots &&
+    prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
     // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
