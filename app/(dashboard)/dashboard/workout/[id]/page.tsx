@@ -42,7 +42,7 @@ import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaR
 import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSummary';
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
-import { generateWarmupProtocol } from '@/services/progressionEngine';
+import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
 import { MUSCLE_GROUPS, rirToRpe } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
@@ -3209,10 +3209,12 @@ export default function WorkoutPage() {
         }
       }
 
-      // Check if this is the first exercise for this muscle group in the workout
+      // Check if this is the first exercise for this muscle group in the
+      // workout, or if the muscle is already warm from completed sets
+      // (including working sets that hit it as a secondary muscle)
       const muscleAlreadyWarmedUp = blocks.some(
         block => block.exercise.primaryMuscle === exercise.primary_muscle
-      );
+      ) || isMuscleWarmedUp(exercise.primary_muscle, { completedSets, blocks });
       
       // Generate warmup for first exercise of each muscle group (compound or isolation)
       // If starting with an isolation, you still need warmups for that muscle group
@@ -4353,26 +4355,22 @@ export default function WorkoutPage() {
                     }
                     warmupSets={(() => {
                       if (!isCurrent) return undefined;
-                      
+
+                      // If the muscle is already warm (sets completed this
+                      // session on an exercise hitting it as primary, or
+                      // working sets hitting it as secondary), remove the
+                      // warmup option — even if this block has a stored
+                      // protocol (e.g. exercises done out of order)
+                      const muscleGroup = block.exercise.primaryMuscle;
+                      if (isMuscleWarmedUp(muscleGroup, { completedSets, blocks })) {
+                        return undefined;
+                      }
+
                       // Check if this block has warmup protocol defined
                       if (block.warmupProtocol && block.warmupProtocol.length > 0) {
                         return block.warmupProtocol;
                       }
-                      
-                      // Check if this muscle group has already been warmed up
-                      // (any completed sets for exercises in this muscle group)
-                      const muscleGroup = block.exercise.primaryMuscle;
-                      const muscleGroupExerciseIds = blocks
-                        .filter(b => b.exercise.primaryMuscle === muscleGroup)
-                        .map(b => b.id);
-                      
-                      const hasCompletedSetsForMuscle = completedSets.some(
-                        s => muscleGroupExerciseIds.includes(s.exerciseBlockId)
-                      );
-                      
-                      // If muscle already warmed up or has completed sets, no warmups needed
-                      if (hasCompletedSetsForMuscle) return undefined;
-                      
+
                       // Check if another exercise in this muscle group has warmups defined
                       const blockWithWarmups = blocks.find(
                         b => b.exercise.primaryMuscle === muscleGroup && 
