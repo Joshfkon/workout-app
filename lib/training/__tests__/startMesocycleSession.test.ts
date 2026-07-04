@@ -93,6 +93,8 @@ const mesocycle: StartableMesocycle = {
 function makeResponder(overrides: {
   existingSession?: { id: string; state: string; mesocycle_id: string | null } | null;
   blockCount?: number;
+  /** Rows returned by the conditional claim update; [] simulates a lost race. */
+  claimedRows?: Array<{ id: string }>;
 }): Responder {
   return (query) => {
     if (query.table === 'user_profiles') return { data: { goal: 'bulk', experience: 'intermediate' } };
@@ -100,7 +102,9 @@ function makeResponder(overrides: {
     if (query.table === 'exercise_blocks') return { count: overrides.blockCount ?? 0 };
     if (query.table === 'workout_sessions') {
       if (query.method === 'insert') return { data: { id: 'new-session' } };
-      if (query.method === 'update') return { error: null };
+      if (query.method === 'update') {
+        return { data: overrides.claimedRows ?? [{ id: query.filters['id'] as string }], error: null };
+      }
       if (query.filters['state'] === 'completed') return { count: 4 };
       return { data: overrides.existingSession ?? null };
     }
@@ -152,11 +156,32 @@ describe('startMesocycleWorkoutSession — today\'s existing session handling', 
     const update = queries.find((q) => q.table === 'workout_sessions' && q.method === 'update');
     expect(update).toBeDefined();
     expect(update!.filters['id']).toBe('shell-1');
+    // The claim is conditional so a concurrent start can't also win it.
+    expect(update!.filters['state']).toBe('planned');
+    expect(update!.filters['mesocycle_id']).toBe('meso-1');
     expect((update!.payload as { state: string }).state).toBe('in_progress');
     expect((update!.payload as { started_at?: string }).started_at).toBeTruthy();
 
     // No duplicate session row is created for today.
     expect(queries.find((q) => q.table === 'workout_sessions' && q.method === 'insert')).toBeUndefined();
+  });
+
+  it('resumes instead of building blocks when a concurrent start already claimed the shell', async () => {
+    const { supabase, queries } = createSupabaseMock(
+      makeResponder({
+        existingSession: { id: 'shell-1', state: 'planned', mesocycle_id: 'meso-1' },
+        blockCount: 0,
+        claimedRows: [], // conditional update matched no rows — the other tab won
+      })
+    );
+
+    const result = await startMesocycleWorkoutSession({ supabase, mesocycle, todayWorkout: null });
+
+    expect(result).toEqual({ sessionId: 'shell-1', resumedExisting: true });
+    // The loser writes nothing beyond the failed claim: no session insert,
+    // and no exercise blocks duplicated into the winner's session.
+    expect(queries.find((q) => q.table === 'workout_sessions' && q.method === 'insert')).toBeUndefined();
+    expect(queries.find((q) => q.table === 'exercise_blocks' && q.method === 'insert')).toBeUndefined();
   });
 
   it('does not claim a blockless planned session belonging to another mesocycle', async () => {

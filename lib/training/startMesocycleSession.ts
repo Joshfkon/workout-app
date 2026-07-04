@@ -316,12 +316,24 @@ export async function startMesocycleWorkoutSession(
   // Create new workout session (or claim today's blockless planned shell)
   let sessionId: string;
   if (claimedShellId) {
-    const { error: claimError } = await supabase
+    // Claim atomically: only flip the row if it's still a planned shell for
+    // this mesocycle. Two concurrent starts (double tap, second tab) can both
+    // pass the zero-block check above; without this filter both updates
+    // succeed and both callers insert blocks, duplicating every exercise.
+    const { data: claimedRows, error: claimError } = await supabase
       .from('workout_sessions')
       .update({ state: 'in_progress', started_at: new Date().toISOString() })
-      .eq('id', claimedShellId);
+      .eq('id', claimedShellId)
+      .eq('state', 'planned')
+      .eq('mesocycle_id', mesocycle.id)
+      .select('id');
 
     if (claimError) throw claimError;
+    if (!claimedRows || claimedRows.length === 0) {
+      // Lost the race — the other start owns the shell and is building its
+      // blocks. Resume into it rather than inserting a second set.
+      return { sessionId: claimedShellId, resumedExisting: true };
+    }
     sessionId = claimedShellId;
   } else {
     const { data: session, error: sessionError } = await supabase
