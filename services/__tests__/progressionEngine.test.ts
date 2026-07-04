@@ -10,6 +10,8 @@ import {
   detectJunkVolume,
   detectRegression,
   generateWarmupProtocol,
+  getWarmedUpMuscles,
+  isMuscleWarmedUp,
   getPeriodizationPhase,
   adjustForFatigue,
   checkForPR,
@@ -711,6 +713,88 @@ describe('generateWarmupProtocol', () => {
     const heavySet = protocol[protocol.length - 1];
     const lightSet = protocol[0];
     expect(heavySet.targetReps).toBeLessThanOrEqual(lightSet.targetReps);
+  });
+});
+
+// ============================================
+// MUSCLE WARMUP STATUS TESTS
+// ============================================
+
+describe('getWarmedUpMuscles / isMuscleWarmedUp', () => {
+  const benchBlock = {
+    id: 'block-bench',
+    exercise: { primaryMuscle: 'chest', secondaryMuscles: ['triceps', 'front_delts'] },
+  };
+  const inclineBlock = {
+    id: 'block-incline',
+    exercise: { primaryMuscle: 'chest', secondaryMuscles: ['front_delts'] },
+  };
+  const pushdownBlock = {
+    id: 'block-pushdown',
+    exercise: { primaryMuscle: 'triceps', secondaryMuscles: [] as string[] },
+  };
+  const blocks = [benchBlock, inclineBlock, pushdownBlock];
+
+  const workingSet = (blockId: string) => ({
+    exerciseBlockId: blockId,
+    isWarmup: false,
+    setType: 'normal',
+  });
+
+  it('returns no warmed muscles when no sets are completed', () => {
+    expect(getWarmedUpMuscles({ completedSets: [], blocks }).size).toBe(0);
+    expect(isMuscleWarmedUp('chest', { completedSets: [], blocks })).toBe(false);
+  });
+
+  it('marks the primary muscle warm after a working set', () => {
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('chest', { completedSets, blocks })).toBe(true);
+  });
+
+  it('marks secondary muscles warm after a working set', () => {
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('triceps', { completedSets, blocks })).toBe(true);
+    expect(isMuscleWarmedUp('front_delts', { completedSets, blocks })).toBe(true);
+  });
+
+  it('does not warm unrelated muscles', () => {
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('quads', { completedSets, blocks })).toBe(false);
+  });
+
+  it('counts warmup sets for the primary muscle but not secondaries', () => {
+    const warmupSet = { exerciseBlockId: 'block-bench', isWarmup: true, setType: 'warmup' };
+    expect(isMuscleWarmedUp('chest', { completedSets: [warmupSet], blocks })).toBe(true);
+    expect(isMuscleWarmedUp('triceps', { completedSets: [warmupSet], blocks })).toBe(false);
+  });
+
+  it('treats setType "warmup" like isWarmup for secondaries', () => {
+    const typedWarmup = { exerciseBlockId: 'block-bench', isWarmup: false, setType: 'warmup' };
+    expect(isMuscleWarmedUp('triceps', { completedSets: [typedWarmup], blocks })).toBe(false);
+  });
+
+  it('compares muscle names case-insensitively', () => {
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('Chest', { completedSets, blocks })).toBe(true);
+    const mixedCaseBlocks = [
+      { id: 'b1', exercise: { primaryMuscle: 'Chest', secondaryMuscles: ['Triceps'] } },
+    ];
+    expect(
+      isMuscleWarmedUp('chest', {
+        completedSets: [workingSet('b1')],
+        blocks: mixedCaseBlocks,
+      })
+    ).toBe(true);
+  });
+
+  it('ignores sets whose block is not in the session', () => {
+    const orphanSet = workingSet('block-deleted');
+    expect(getWarmedUpMuscles({ completedSets: [orphanSet], blocks }).size).toBe(0);
+  });
+
+  it('returns false for an empty muscle name', () => {
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('', { completedSets, blocks })).toBe(false);
   });
 });
 
