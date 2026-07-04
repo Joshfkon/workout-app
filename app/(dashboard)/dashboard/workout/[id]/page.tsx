@@ -43,7 +43,7 @@ import type { SessionMuscleFeedbackEntry } from '@/components/workout/SessionSum
 import type { MuscleSorenessRatings } from '@/components/workout/ReadinessCheckIn';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progressionEngine';
-import { MUSCLE_GROUPS, rirToRpe } from '@/types/schema';
+import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
@@ -3224,7 +3224,7 @@ export default function WorkoutPage() {
       // workout, or if the muscle is already warm from completed sets
       // (including working sets that hit it as a secondary muscle)
       const muscleAlreadyWarmedUp = blocks.some(
-        block => block.exercise.primaryMuscle === exercise.primary_muscle
+        block => muscleMatchesGroup(block.exercise.primaryMuscle, exercise.primary_muscle)
       ) || isMuscleWarmedUp(exercise.primary_muscle, { completedSets, blocks });
       
       // Generate warmup for first exercise of each muscle group (compound or isolation)
@@ -4453,8 +4453,8 @@ export default function WorkoutPage() {
 
                       // Check if another exercise in this muscle group has warmups defined
                       const blockWithWarmups = blocks.find(
-                        b => b.exercise.primaryMuscle === muscleGroup && 
-                             b.warmupProtocol && 
+                        b => muscleMatchesGroup(b.exercise.primaryMuscle, muscleGroup) &&
+                             b.warmupProtocol &&
                              b.warmupProtocol.length > 0
                       );
                       
@@ -4466,7 +4466,7 @@ export default function WorkoutPage() {
                       // Generate warmups dynamically for first exercise of each muscle group
                       // (includes isolation exercises if they're the first for that muscle)
                       const isFirstForMuscle = !blocks.some(
-                        (b, i) => i < index && b.exercise.primaryMuscle === muscleGroup
+                        (b, i) => i < index && muscleMatchesGroup(b.exercise.primaryMuscle, muscleGroup)
                       );
 
                       if (isFirstForMuscle) {

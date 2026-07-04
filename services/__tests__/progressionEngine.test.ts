@@ -796,6 +796,40 @@ describe('getWarmedUpMuscles / isMuscleWarmedUp', () => {
     const completedSets = [workingSet('block-bench')];
     expect(isMuscleWarmedUp('', { completedSets, blocks })).toBe(false);
   });
+
+  it('matches legacy and precise muscle tokens through the taxonomy', () => {
+    // Flat bench tagged with the legacy coarse token warms the upper chest
+    // for a following incline press tagged with the precise token
+    const completedSets = [workingSet('block-bench')];
+    expect(isMuscleWarmedUp('chest_upper', { completedSets, blocks })).toBe(true);
+
+    // And the reverse: a precise-token exercise warms the coarse group
+    const inclinePrecise = [
+      { id: 'b-incline', exercise: { primaryMuscle: 'chest_upper', secondaryMuscles: [] as string[] } },
+    ];
+    expect(
+      isMuscleWarmedUp('chest', { completedSets: [workingSet('b-incline')], blocks: inclinePrecise })
+    ).toBe(true);
+  });
+
+  it('matches front_delts against the legacy shoulders token', () => {
+    const ohpBlocks = [
+      { id: 'b-ohp', exercise: { primaryMuscle: 'shoulders', secondaryMuscles: ['triceps'] } },
+    ];
+    const completedSets = [workingSet('b-ohp')];
+    expect(isMuscleWarmedUp('front_delts', { completedSets, blocks: ohpBlocks })).toBe(true);
+    expect(isMuscleWarmedUp('lateral_delts', { completedSets, blocks: ohpBlocks })).toBe(true);
+    expect(isMuscleWarmedUp('lats', { completedSets, blocks: ohpBlocks })).toBe(false);
+  });
+
+  it('does not cross unrelated precise tokens', () => {
+    const lateralBlocks = [
+      { id: 'b-lat-raise', exercise: { primaryMuscle: 'lateral_delts', secondaryMuscles: [] as string[] } },
+    ];
+    const completedSets = [workingSet('b-lat-raise')];
+    expect(isMuscleWarmedUp('front_delts', { completedSets, blocks: lateralBlocks })).toBe(false);
+    expect(isMuscleWarmedUp('chest_upper', { completedSets, blocks: lateralBlocks })).toBe(false);
+  });
 });
 
 // ============================================
