@@ -411,6 +411,8 @@ export default function WorkoutPage() {
   const [exerciseSearch, setExerciseSearch] = useState('');
   const [selectedMuscle, setSelectedMuscle] = useState<string>('');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
+  // Empty-state "Copy last workout instead" action
+  const [isCopyingLastWorkout, setIsCopyingLastWorkout] = useState(false);
   const [selectedMuscleFilter, setSelectedMuscleFilter] = useState<string | null>(null);
   const [showMuscleDropdown, setShowMuscleDropdown] = useState(false);
   const [selectedExercisesToAdd, setSelectedExercisesToAdd] = useState<AvailableExercise[]>([]);
@@ -3136,6 +3138,26 @@ export default function WorkoutPage() {
     setShowAllExercises(false);
   }, [selectedMuscleFilter]);
 
+  // Preload the exercise library while the workout is empty so the
+  // quick-add chips on the empty state can resolve names immediately.
+  useEffect(() => {
+    if (phase === 'workout' && blocks.length === 0 && availableExercises.length === 0) {
+      fetchExercises();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, blocks.length, availableExercises.length]);
+
+  // Most-used exercises (last 90 days) for the empty-state quick-add chips
+  const quickAddExercises = useMemo(() => {
+    if (availableExercises.length === 0 || frequentExerciseIds.size === 0) return [];
+    const byId = new Map(availableExercises.map((ex) => [ex.id, ex]));
+    return Array.from(frequentExerciseIds.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => byId.get(id))
+      .filter((ex): ex is AvailableExercise => Boolean(ex))
+      .slice(0, 8);
+  }, [availableExercises, frequentExerciseIds]);
+
   const handleOpenAddExercise = () => {
     setShowAddExercise(true);
     setShowAllExercises(false);
@@ -3387,6 +3409,71 @@ export default function WorkoutPage() {
     setSelectedMuscleFilter(null);
     setExerciseSearch('');
     setIsAddingExercise(false);
+  };
+
+  // Empty-state shortcut: copy the exercises from the user's most recent
+  // completed workout into this session (skipped blocks excluded).
+  const handleCopyLastWorkout = async () => {
+    if (isCopyingLastWorkout || isAddingExercise) return;
+    setIsCopyingLastWorkout(true);
+    setError(null);
+
+    try {
+      const supabase = createUntypedClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not signed in');
+
+      // Most recently completed session other than this one
+      const { data: lastSession, error: lastSessionError } = await supabase
+        .from('workout_sessions')
+        .select('id')
+        .eq('user_id', user.id)
+        .not('completed_at', 'is', null)
+        .neq('id', sessionId)
+        .order('completed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastSessionError) throw lastSessionError;
+      if (!lastSession) {
+        showError('No previous workout found to copy.');
+        return;
+      }
+
+      const { data: lastBlocks, error: lastBlocksError } = await supabase
+        .from('exercise_blocks')
+        .select('exercise_id, order, exercises(id, name, primary_muscle, mechanic, equipment_required, default_rep_range, default_rir, is_bodyweight)')
+        .eq('workout_session_id', lastSession.id)
+        .is('skipped_at', null)
+        .order('order', { ascending: true });
+
+      if (lastBlocksError) throw lastBlocksError;
+
+      const seenExerciseIds = new Set<string>();
+      const exercisesToAdd: AvailableExercise[] = [];
+      for (const block of lastBlocks ?? []) {
+        // Supabase returns the joined row as an object for many-to-one FKs,
+        // but the untyped client can surface it as a single-element array.
+        const joined = Array.isArray(block.exercises) ? block.exercises[0] : block.exercises;
+        if (!joined || seenExerciseIds.has(joined.id)) continue;
+        seenExerciseIds.add(joined.id);
+        exercisesToAdd.push(joined as AvailableExercise);
+      }
+
+      if (exercisesToAdd.length === 0) {
+        showError('Your last workout had no exercises to copy.');
+        return;
+      }
+
+      for (const exercise of exercisesToAdd) {
+        await handleAddExercise(exercise);
+      }
+    } catch (err) {
+      console.error('Failed to copy last workout:', err);
+      showError('Could not copy your last workout. Please try again.');
+    } finally {
+      setIsCopyingLastWorkout(false);
+    }
   };
 
   // Close modal and clear selections
@@ -3825,11 +3912,11 @@ export default function WorkoutPage() {
   // Empty workout - show standard header with add button (no extra page)
   if (!currentBlock || !currentExercise) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6 pb-8">
-        {/* Same header as normal workout */}
+      <div className="max-w-2xl mx-auto flex flex-col min-h-[calc(100dvh-9rem)] pb-8">
+        {/* Header: back chevron + title/timer on the left, Finish on the right */}
         <div className="sticky top-0 z-10 bg-surface-950/95 backdrop-blur py-4 -mx-4 px-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1 min-w-0">
               <button
                 onClick={() => router.push('/dashboard/log')}
                 aria-label="Minimize workout"
@@ -3840,41 +3927,80 @@ export default function WorkoutPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.25} d="M15 19l-7-7 7-7" />
                 </svg>
               </button>
-              <div>
-                <h1 className="text-2xl font-bold text-surface-100">Workout</h1>
-                <p className="text-surface-400">0 of 0 sets completed</p>
+              <div className="min-w-0">
+                <h1 className="text-3xl font-bold text-surface-100">Workout</h1>
+                <div className="flex items-center gap-1.5 text-surface-400 mt-0.5">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
+                  </svg>
+                  <span className="tabular-nums">{workoutTimer.formattedTime}</span>
+                  <span className="text-surface-600">·</span>
+                  <span className="truncate">No exercises yet</span>
+                </div>
               </div>
             </div>
-            <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
-              <Button
-                variant="ghost"
-                onClick={() => setShowCancelModal(true)}
-                className="text-surface-400 hover:text-danger-400 flex-1 sm:flex-none"
-              >
-                Cancel Workout
-              </Button>
-              <Button variant="ghost" onClick={handleOpenAddExercise} className="flex-1 sm:flex-none">
-                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add
-              </Button>
-              <Button variant="outline" onClick={handleWorkoutComplete} className="flex-1 sm:flex-none">
-                Finish
-              </Button>
-            </div>
+            <button
+              onClick={handleWorkoutComplete}
+              className="flex-shrink-0 px-6 py-3 rounded-2xl bg-surface-800 text-surface-400 text-lg font-semibold hover:bg-surface-700 hover:text-surface-300 transition-colors"
+            >
+              Finish
+            </button>
           </div>
         </div>
 
-        {/* Progress bar (empty) */}
-        <div className="bg-surface-800 rounded-full h-2 overflow-hidden">
-          <div className="bg-primary-500 h-full transition-all duration-300" style={{ width: '0%' }} />
-        </div>
+        {/* Primary action: add exercises */}
+        <button
+          onClick={handleOpenAddExercise}
+          disabled={isAddingExercise || isCopyingLastWorkout}
+          className="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-lg font-semibold shadow-lg shadow-purple-500/25 hover:from-purple-400 hover:to-indigo-500 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center gap-2.5"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add exercises
+        </button>
 
-        {/* Empty state hint */}
-        <div className="text-center py-12 text-surface-500">
-          <p>Tap <button onClick={handleOpenAddExercise} className="text-primary-400 font-medium hover:text-primary-300 underline cursor-pointer">+ Add</button> to add exercises</p>
-        </div>
+        {/* Quick add: the user's most frequent exercises as one-tap chips */}
+        {quickAddExercises.length > 0 && (
+          <div className="mt-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-surface-500 mb-3">
+              Quick add · Your frequent exercises
+            </p>
+            <div className="flex flex-wrap gap-2.5">
+              {quickAddExercises.map((exercise) => (
+                <button
+                  key={exercise.id}
+                  onClick={() => handleAddExercise(exercise)}
+                  disabled={isAddingExercise || isCopyingLastWorkout}
+                  className="px-4 py-2.5 rounded-full border border-surface-700 bg-surface-900 text-surface-200 font-medium hover:border-surface-500 hover:text-surface-100 disabled:opacity-50 transition-colors"
+                >
+                  + {exercise.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Alternative: copy the previous workout wholesale */}
+        <button
+          onClick={handleCopyLastWorkout}
+          disabled={isAddingExercise || isCopyingLastWorkout}
+          className="mt-10 mx-auto flex items-center gap-2 text-surface-400 hover:text-surface-200 font-medium disabled:opacity-50 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {isCopyingLastWorkout ? 'Copying last workout…' : 'Copy last workout instead'}
+        </button>
+
+        {/* Destructive escape hatch pinned to the bottom */}
+        <button
+          onClick={() => setShowCancelModal(true)}
+          className="mt-auto pt-16 mx-auto text-danger-500 hover:text-danger-400 font-medium transition-colors"
+        >
+          Discard workout
+        </button>
 
         {/* Add Exercise Modal */}
         {showAddExercise && (
