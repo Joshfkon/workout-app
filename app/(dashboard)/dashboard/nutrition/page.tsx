@@ -54,7 +54,18 @@ import {
   IconBookmarkPlus,
   IconDots,
   IconX,
+  IconToolsKitchen2,
+  IconScale,
+  IconChartLine,
 } from '@tabler/icons-react';
+
+type NutritionTab = 'log' | 'weight' | 'insights';
+
+const NUTRITION_TABS: { key: NutritionTab; label: string; icon: typeof IconScale }[] = [
+  { key: 'log', label: 'Food Log', icon: IconToolsKitchen2 },
+  { key: 'weight', label: 'Weight', icon: IconScale },
+  { key: 'insights', label: 'Insights', icon: IconChartLine },
+];
 
 const DEFAULT_MEAL_CONFIG: { type: MealType; label: string }[] = [
   { type: 'breakfast', label: 'Breakfast' },
@@ -178,6 +189,7 @@ export default function NutritionPage() {
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [openMealMenu, setOpenMealMenu] = useState<MealType | null>(null);
+  const [activeTab, setActiveTab] = useState<NutritionTab>('log');
 
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
@@ -1329,6 +1341,13 @@ export default function NutritionPage() {
   const timeMealType = getMealTypeForNow();
   const timeMealLabel = mealConfig.find((meal) => meal.type === timeMealType)?.label || 'Snacks';
 
+  // Has the user weighed in today? Drives the Weight-tab reminder dot and CTAs.
+  const todayWeightEntry = weightEntries.find((entry) => entry.logged_at === todayDateString);
+  const hasLoggedWeightToday = !!todayWeightEntry;
+  const todayWeightDisplay = todayWeightEntry
+    ? getDisplayWeight(todayWeightEntry.weight, (todayWeightEntry as any).unit as 'lb' | 'kg' | null, weightUnit).toFixed(1)
+    : null;
+
   if (isLoading) {
     return (
       <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -1423,6 +1442,50 @@ export default function NutritionPage() {
           </div>
         </div>
       </div>
+
+      {/* Section tabs: Food Log / Weight / Insights */}
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-surface-800 bg-surface-900 p-1">
+        {NUTRITION_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`relative flex items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-medium transition-colors ${
+              activeTab === tab.key
+                ? 'bg-surface-800 text-surface-100'
+                : 'text-surface-400 hover:text-surface-200'
+            }`}
+            aria-pressed={activeTab === tab.key}
+          >
+            <tab.icon size={15} aria-hidden="true" />
+            {tab.label}
+            {tab.key === 'weight' && !hasLoggedWeightToday && (
+              <span
+                className="absolute top-1.5 right-2 h-1.5 w-1.5 rounded-full bg-amber-400"
+                aria-hidden="true"
+                title="No weigh-in logged today"
+              />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ---- Food Log tab ---- */}
+      {/* Tabs hide via CSS (not unmount) so graphs/steps keep their state across switches */}
+      <div className={activeTab === 'log' ? 'space-y-4' : 'hidden'}>
+
+      {/* One-tap weigh-in reminder (today only, until logged) */}
+      {isToday && !hasLoggedWeightToday && (
+        <button
+          onClick={() => setShowWeightLog(true)}
+          className="w-full flex items-center justify-between rounded-xl border border-surface-800 bg-surface-900 px-4 py-3 hover:bg-surface-800 transition-colors"
+        >
+          <span className="flex items-center gap-2.5">
+            <IconScale size={18} className="text-primary-400" aria-hidden="true" />
+            <span className="text-[13px] text-surface-200">Log today&apos;s weight</span>
+          </span>
+          <span className="text-[12px] font-semibold text-primary-400">Log</span>
+        </button>
+      )}
 
       {/* Macro summary (replaces the 4-box grid + remaining-calories section) */}
       <MacroSummaryCard
@@ -1578,10 +1641,43 @@ export default function NutritionPage() {
         })}
       </div>
 
-      {/* Nutrition Trends Graph */}
-      <NutritionTrendGraph targets={nutritionTargets} />
+      </div>
+      {/* ---- end Food Log tab ---- */}
+
+      {/* ---- Weight tab ---- */}
+      <div className={activeTab === 'weight' ? 'space-y-4' : 'hidden'}>
+
+      {/* Log / update today's weight CTA */}
+      <button
+        onClick={() => setShowWeightLog(true)}
+        className="w-full flex items-center justify-between gap-3 rounded-2xl border border-primary-500/40 bg-primary-500/10 p-4 hover:bg-primary-500/20 transition-colors"
+      >
+        <span className="flex items-center gap-3 min-w-0">
+          <IconScale size={22} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
+          <span className="text-left min-w-0">
+            <span className="block text-[15px] font-semibold text-surface-100">
+              {hasLoggedWeightToday ? "Update today's weight" : "Log today's weight"}
+            </span>
+            <span className="block text-[12px] text-surface-400 truncate">
+              {hasLoggedWeightToday
+                ? `Logged today: ${todayWeightDisplay} ${weightUnit}`
+                : 'Daily weigh-ins keep your adaptive TDEE accurate'}
+            </span>
+          </span>
+        </span>
+        <span className="flex-shrink-0 rounded-full bg-primary-600 px-4 py-1.5 text-[13px] font-semibold text-white">
+          {hasLoggedWeightToday ? 'Update' : 'Log'}
+        </span>
+      </button>
 
       {/* Weight Trend */}
+      {weightEntries.length === 0 && (
+        <div className="rounded-2xl border border-surface-800 bg-surface-900 p-6 text-center">
+          <p className="text-[13px] text-surface-400">
+            No weight entries yet. Log your first weigh-in to start tracking your trend.
+          </p>
+        </div>
+      )}
       {weightEntries.length > 0 && (
         <Card>
           <CardHeader>
@@ -1665,6 +1761,15 @@ export default function NutritionPage() {
         </Card>
       )}
 
+      </div>
+      {/* ---- end Weight tab ---- */}
+
+      {/* ---- Insights tab ---- */}
+      <div className={activeTab === 'insights' ? 'space-y-4' : 'hidden'}>
+
+      {/* Nutrition Trends Graph */}
+      <NutritionTrendGraph targets={nutritionTargets} />
+
       {/* Step Tracking */}
       {(() => {
         // Calculate userWeightKg from current weight or weight entries
@@ -1710,6 +1815,9 @@ export default function NutritionPage() {
           onReset={resetAndRecalculateTDEE}
         />
       )}
+
+      </div>
+      {/* ---- end Insights tab ---- */}
 
       {/* Modals */}
       <AddFoodModal
