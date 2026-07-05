@@ -34,10 +34,20 @@ export const Modal = memo(function Modal({
 
     // Prevent body scroll and touch scrolling
     const preventScroll = (e: TouchEvent) => {
-      // Only prevent if scrolling on the overlay, not the modal content
-      if (e.target === overlayRef.current || overlayRef.current?.contains(e.target as Node)) {
-        e.preventDefault();
+      // Allow the touch if it happens inside a scrollable element within the
+      // modal content; block everything else (overlay, body) so the page
+      // behind the modal doesn't scroll on iOS.
+      const content = contentRef.current;
+      let el = e.target as HTMLElement | null;
+      while (el && content?.contains(el)) {
+        const { overflowY } = window.getComputedStyle(el);
+        const scrollable =
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          el.scrollHeight > el.clientHeight;
+        if (scrollable) return;
+        el = el.parentElement;
       }
+      e.preventDefault();
     };
 
     if (isOpen) {
@@ -146,7 +156,7 @@ export const Modal = memo(function Modal({
 
         {/* Content - scrollable area */}
         <div 
-          className="p-4 overflow-y-auto flex-1 min-h-0"
+          className="p-4 overflow-y-auto overscroll-contain flex-1 min-h-0"
           onTouchStart={handleTouchStart}
           onClick={handleContentClick}
         >
