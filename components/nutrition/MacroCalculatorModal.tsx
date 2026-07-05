@@ -22,6 +22,9 @@ import {
 } from '@/lib/nutrition/macroCalculator';
 import { saveMacroSettings, getMacroSettings } from '@/lib/actions/nutrition';
 
+/** Round kg->lbs conversion artifacts (e.g. 171.078511999999) for display. */
+const formatLbs = (lbs: number) => (Math.round(lbs * 10) / 10).toString();
+
 /** Default 7-level goal when all we know is the user's current phase. */
 const PHASE_TO_GOAL: Record<'bulk' | 'cut' | 'maintenance', Goal> = {
   cut: 'moderate_cut',
@@ -68,7 +71,9 @@ export function MacroCalculatorModal({
   currentPhase,
 }: MacroCalculatorModalProps) {
   // User stats
-  const [weight, setWeight] = useState(userStats?.weightLbs?.toString() || '');
+  const [weight, setWeight] = useState(
+    userStats?.weightLbs != null ? formatLbs(userStats.weightLbs) : ''
+  );
   const [heightFeet, setHeightFeet] = useState('');
   const [heightInches, setHeightInches] = useState('');
   const [age, setAge] = useState(userStats?.age?.toString() || '');
@@ -101,7 +106,7 @@ export function MacroCalculatorModal({
   // Update form when userStats props change (after data loads)
   useEffect(() => {
     if (userStats?.weightLbs) {
-      setWeight(userStats.weightLbs.toString());
+      setWeight(formatLbs(userStats.weightLbs));
     }
     if (userStats?.heightInches) {
       const feet = Math.floor(userStats.heightInches / 12);
@@ -263,7 +268,7 @@ export function MacroCalculatorModal({
       title="Smart Macro Calculator"
       size="lg"
     >
-      <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+      <div className="space-y-6">
         {error && (
           <div className="p-3 text-sm text-danger-400 bg-danger-500/10 border border-danger-500/20 rounded-lg">
             {error}
