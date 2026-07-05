@@ -19,24 +19,29 @@ interface QuickLogRowProps {
  * detail cards were removed from the home page).
  */
 export function QuickLogRow({ onLogWeight, onLogWater, onLogFood, onLogCardio }: QuickLogRowProps) {
-  const actions: { label: string; icon: Icon; onClick: (() => void) | undefined }[] = [
-    { label: 'Weight', icon: IconScale, onClick: onLogWeight },
-    { label: 'Water', icon: IconDroplet, onClick: onLogWater },
-    { label: 'Food', icon: IconSalad, onClick: onLogFood },
-    { label: 'Cardio', icon: IconRun, onClick: onLogCardio },
+  const actions: { label: string; icon: Icon; iconClass: string; onClick: (() => void) | undefined }[] = [
+    { label: 'Water', icon: IconDroplet, iconClass: 'text-primary-400', onClick: onLogWater },
+    { label: 'Food', icon: IconSalad, iconClass: 'text-success-400', onClick: onLogFood },
+    { label: 'Weight', icon: IconScale, iconClass: 'text-accent-400', onClick: onLogWeight },
+    { label: 'Cardio', icon: IconRun, iconClass: 'text-danger-400', onClick: onLogCardio },
   ];
+  const visible = actions.filter(
+    (a): a is (typeof actions)[number] & { onClick: () => void } => !!a.onClick
+  );
 
   return (
     <div>
-      <div className="text-xs text-surface-500 mb-2">Quick log</div>
-      <div className="grid grid-cols-4 gap-2">
-        {actions.filter((a): a is { label: string; icon: Icon; onClick: () => void } => !!a.onClick).map((a) => (
+      <div className="text-[11px] font-semibold tracking-widest uppercase text-surface-500 mb-2">
+        Quick log
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {visible.map((a) => (
           <button
             key={a.label}
             onClick={a.onClick}
-            className="bg-surface-900 border border-surface-800 rounded-lg py-2.5 flex flex-col items-center gap-1 text-xs text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
+            className="bg-surface-900 border border-surface-800 rounded-xl py-3.5 flex items-center justify-center gap-2 text-sm font-medium text-surface-200 hover:bg-surface-800 transition-colors"
           >
-            <a.icon size={18} aria-hidden="true" />
+            <a.icon size={18} aria-hidden="true" className={a.iconClass} />
             {a.label}
           </button>
         ))}
