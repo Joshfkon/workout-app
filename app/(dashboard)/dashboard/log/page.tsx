@@ -47,6 +47,7 @@ import {
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
+  programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
@@ -436,7 +437,7 @@ export default function LogPage() {
         const completed = (completedRows ?? []) as { started_at: string | null }[];
 
         const sessionIndex = sessionIndexFromCompleted(completed.length, meso.days_per_week);
-        const programSession = getSessionFromProgramData(
+        const slotSession = getSessionFromProgramData(
           meso.program_data as FullProgramRecommendation | null,
           sessionIndex,
           meso.current_week,
@@ -444,11 +445,17 @@ export default function LogPage() {
         );
         // The hero must advertise the workout Start actually launches: this
         // program slot, which diverges from the calendar weekday after
-        // skipped days. Null (→ calendar fallback) when program_data yields
-        // nothing, matching the start path's own fallback.
-        setProgramDayName(
-          programSession && programSession.exercises.length > 0 ? programSession.dayName : null
+        // skipped days. Treat the slot as absent (→ calendar fallback) when
+        // program_data yields nothing OR none of its exercises resolve in
+        // the library — exactly when the start path's block-building loop
+        // skips every entry and builds from todayWorkout's muscles instead.
+        const slotUsable = await programSessionHasUsableExercises(
+          supabase,
+          slotSession,
+          meso.exercise_overrides
         );
+        const programSession = slotUsable ? slotSession : null;
+        setProgramDayName(programSession?.dayName ?? null);
 
         // Fallback mirrors the start path's legacy behavior: 2 exercises per
         // scheduled muscle when program_data has no usable session.

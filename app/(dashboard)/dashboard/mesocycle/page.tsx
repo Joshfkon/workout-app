@@ -14,6 +14,7 @@ import {
   getWorkoutForDay,
   getTrainingDays,
   countCompletedSessions,
+  programSessionHasUsableExercises,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import { WorkoutDaySelector } from '@/components/mesocycle';
@@ -451,7 +452,10 @@ export default function MesocyclePage() {
           setCompletedSessions(completedCount);
 
           // The program-slot session Start will actually launch (also gives
-          // the estimated time for the time-budget warning).
+          // the estimated time for the time-budget warning). Keep it only if
+          // its exercises still resolve in the library — otherwise Start's
+          // block-building loop skips every entry and falls back to the
+          // calendar workout, so the card must advertise that instead.
           const programData = active.program_data as FullProgramRecommendation | null;
           const sessionFromProgram = getSessionFromProgramData(
             programData,
@@ -459,8 +463,13 @@ export default function MesocyclePage() {
             active.current_week,
             active.total_weeks
           );
-          setProgramSession(sessionFromProgram);
-          if (sessionFromProgram) {
+          const slotUsable = await programSessionHasUsableExercises(
+            supabase,
+            sessionFromProgram,
+            active.exercise_overrides
+          );
+          setProgramSession(slotUsable ? sessionFromProgram : null);
+          if (slotUsable && sessionFromProgram) {
             setEstimatedSessionTime(sessionFromProgram.estimatedMinutes);
           }
         }
@@ -475,13 +484,13 @@ export default function MesocyclePage() {
 
   // The card must advertise the workout Start actually launches: the program
   // slot at completedSessions % days_per_week, which diverges from the
-  // calendar weekday after skipped days. Fall back to todayWorkout only when
-  // program_data yields nothing — exactly when the start path itself falls
-  // back to building from todayWorkout's muscles.
-  const slotSession = programSession && programSession.exercises.length > 0 ? programSession : null;
-  const cardDayName = slotSession?.dayName ?? todayWorkout?.dayName;
-  const cardMuscles: MuscleGroup[] = slotSession
-    ? Array.from(new Set(slotSession.exercises.map(ex => ex.primaryMuscle)))
+  // calendar weekday after skipped days. programSession is null (→ calendar
+  // fallback) exactly when the start path itself falls back to building from
+  // todayWorkout's muscles: program_data yields nothing, or none of its
+  // exercises resolve in the library (programSessionHasUsableExercises).
+  const cardDayName = programSession?.dayName ?? todayWorkout?.dayName;
+  const cardMuscles: MuscleGroup[] = programSession
+    ? Array.from(new Set(programSession.exercises.map(ex => ex.primaryMuscle)))
     : todayWorkout?.muscles ?? [];
 
   // Start today's workout from the mesocycle (shared start path)

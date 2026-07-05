@@ -40,6 +40,7 @@ import {
   getWeeklyProgressionModifiers,
   applyExerciseOverrides,
   type ExerciseOverride,
+  type ExtractedSession,
 } from '@/services/mesocycleHelpers';
 import {
   planWeeklySetAdjustments,
@@ -243,6 +244,46 @@ export async function countCompletedSessions(
   return count || 0;
 }
 
+/**
+ * Older mesocycles stored placeholder ids (e.g. "db-row") in program_data;
+ * only a real UUID can satisfy the exercise_blocks.exercise_id FK.
+ */
+const isUuid = (v: unknown): v is string =>
+  typeof v === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/**
+ * Whether a program_data session would actually produce exercise blocks in
+ * startMesocycleWorkoutSession. Mirrors the block-building skip logic there:
+ * an entry is buildable when its stored exerciseId is a real UUID, or its
+ * name (after the user's exercise overrides) resolves in the exercises table.
+ * When nothing is buildable the start path falls back to the calendar
+ * workout, so surfaces advertising "what Start launches" must fall back under
+ * this same check — a bare exercises.length test would advertise stale
+ * programs (deleted/renamed exercises) whose slot Start won't launch.
+ */
+export async function programSessionHasUsableExercises(
+  supabase: SupabaseClient,
+  session: ExtractedSession | null,
+  overrides?: ExerciseOverride[] | null
+): Promise<boolean> {
+  if (!session || session.exercises.length === 0) return false;
+
+  const exercises = applyExerciseOverrides(session.exercises, overrides ?? []);
+  const unresolvedNames: string[] = [];
+  for (const exercise of exercises) {
+    if (isUuid(exercise.exerciseId)) return true;
+    unresolvedNames.push(exercise.exerciseName);
+  }
+
+  const { data } = await supabase
+    .from('exercises')
+    .select('id')
+    .in('name', unresolvedNames)
+    .limit(1);
+  return (data?.length ?? 0) > 0;
+}
+
 // ============================================================
 // Start path
 // ============================================================
@@ -427,14 +468,12 @@ export async function startMesocycleWorkoutSession(
         .eq('name', exercise.exerciseName)
         .single();
 
-      // Use program_data's exerciseId ONLY if it's a real UUID. Older
-      // mesocycles stored placeholder ids (e.g. "db-row") in program_data,
-      // which fail the exercise_blocks.exercise_id UUID/FK constraint and
-      // reject the WHOLE insert (every block) -> an empty workout. Fall back
-      // to the id we just looked up by name.
-      const isUuid = (v: unknown): v is string =>
-        typeof v === 'string' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+      // Use program_data's exerciseId ONLY if it's a real UUID — a placeholder
+      // id fails the exercise_blocks.exercise_id UUID/FK constraint and
+      // rejects the WHOLE insert (every block) -> an empty workout. Fall back
+      // to the id we just looked up by name. Keep this in sync with
+      // programSessionHasUsableExercises above, which display surfaces use to
+      // predict whether this loop yields any blocks.
       const exerciseId = isUuid(exercise.exerciseId) ? exercise.exerciseId : dbExercise?.id;
       if (!exerciseId) continue; // Skip if exercise not found
 
