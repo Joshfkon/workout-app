@@ -214,3 +214,26 @@ merge via the open PR.
   `auth-state.json` — Supabase refresh tokens are single-use, a stale static
   cookie is what triggered the first wedge), `flow-cleanup.mjs`.
   `auth-state.json` holds a live session token — never commit it.
+
+### Round 3 (2026-07-03, post-merge audit-cleanup pass — branch `audit-p2-cleanup`)
+
+Cleared the remaining open audit items with judgment applied per item —
+shipped the tractable ones, made a firm reasoned call to defer the two that
+are genuinely out of "sweep" scope.
+
+| Item | Decision | Commit | Evidence |
+|---|---|---|---|
+| **P2-10 shared page titles** | **Fixed.** | `42600ab` | Thin server `layout.tsx` per dashboard route exporting `metadata.title`; root `%s \| HyperTrack` template does the rest. Pages stay client components. Server-rendered `<title>` verified distinct per route (History/Nutrition/Settings/Exercises/Templates/Workout), Home keeps branded default. |
+| **P2-14 exercises filter wall** | **Fixed.** | `97b07ac` | Muscle (~15 chips) + equipment blocks were `flex-wrap` → ~6 stacked rows on 390px, burying the list. Converted both to single-row horizontal scrollers on mobile (`shrink-0 whitespace-nowrap`), wrap on `sm+`. Verified @390px: each row 44px (one chip), horizontally scrollable, first exercise card visible ~400px with 3 above the fold. |
+| **P2-15 no starter templates** | **Fixed.** | `b521c92` | New `lib/content/starterTemplates.ts` (6 evidence-based split presets) + "Quick start" horizontal scroller always on the templates page. Pure content — cards deep-link to `/dashboard/workout/new?template=…&muscles=…` (pre-selects muscles, jumps to exercise step). No schema/seed/writes. Verified: 6 cards, correct hrefs, Full Body → new-workout exercise step with muscles pre-picked. |
+| **P2-12 duplicate workout hubs** | **DEFERRED — needs your product call. Not done autonomously.** | — | `/dashboard/workout/page.tsx` is a 3000-line hub that directly inserts `workout_sessions` (lines ~931, ~1009) and starts mesocycle sessions via multiple paths. Rewiring primary navigation / demoting it risks reintroducing exactly the P0-1-class session-creation bugs the audit flagged. This is an information-architecture decision, not a mechanical fix. **Recommendation unchanged:** keep `/dashboard/log` as the Train-tab launcher, demote `/dashboard/workout` to a plan-browser reachable from "Planned sessions & recovery." Say the word and I'll do it as its own reviewed change. |
+| **LCP pattern rollout to remaining routes** | **DEFERRED — scoped follow-up, not a sweep.** | — | history / nutrition / analytics / mesocycle are all `'use client'` fetch-on-mount pages; each needs its own server→`initialData` re-architecture like the dashboard did (not a shared switch). Two reasons to not blanket it now: (1) it's real per-route work with real regression surface; (2) **LCP improvement can't be reliably verified on this localhost** — Lantern-simulated LCP misreports by construction and `next start` wedges under sustained Lighthouse load — so shipping it "blind" would violate the verify-before-done rule this engagement runs on. The two highest-traffic routes (`/dashboard`, `/dashboard/log`) are already done and under 2.5s real-throttle. Best done route-by-route with real-device throttling. |
+
+**Still genuinely open after Round 3:** P2-12 (product call ↑), LCP rollout
+(scoped ↑), plus the two non-code flags from before — the AMRAP-cancel
+orphan bug (spun off as its own task) and the `.env.local`
+`SUPABASE_SERVICE_ROLE_KEY==` doubled-`=` config issue.
+
+Round-3 verification: `tsc --noEmit` clean; eslint on changed files 0
+errors (pre-existing complexity/max-lines warnings only); each visible
+change DOM/screenshot-verified @390px against the running dev server.

@@ -39,6 +39,12 @@ export interface BasicExerciseInput {
   variationOf?: string;
   /** Name of the base exercise if this is a variation */
   variationOfName?: string;
+  /**
+   * Per-gym-location availability chosen at creation time.
+   * Only set when the user has multiple gym locations; omitted means
+   * available everywhere (no exercise_location_availability rows written).
+   */
+  locationAvailability?: Array<{ locationId: string; isAvailable: boolean }>;
 
   // === Optional Detailed Fields ===
 

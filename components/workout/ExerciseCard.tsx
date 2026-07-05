@@ -518,7 +518,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   // weight when that set landed in range at roughly the target effort; steps
   // it on a clear miss — e.g. 20 reps left at 4 RIR against a 10-15 @ 2 RIR
   // target, or a rep range moved by the one-tap plateau switch — so a
-  // mis-loaded session doesn't get replayed verbatim.
+  // mis-loaded session doesn't get replayed verbatim. Zero-load history stays
+  // zero-load (recommendSet's guard), never floored up to a phantom increment.
   const seedFromPreviousSet = useCallback(
     (prevSet: { weightKg: number; reps: number; rpe?: number }, range: [number, number]) =>
       recommendSessionStart({
@@ -1725,7 +1726,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           const completedWeight = set.bodyweightData
             ? displayWeight(set.bodyweightData.effectiveLoadKg, true)
             : displayWeight(set.weightKg, true);
-          const rirValue = rpeToRir(set.rpe);
+          const rirValue = set.feedback?.repsInTank ?? rpeToRir(set.rpe);
 
           return (
             <React.Fragment key={set.id}>

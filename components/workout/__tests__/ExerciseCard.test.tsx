@@ -644,6 +644,26 @@ describe('ExerciseCard', () => {
       expect(screen.getByText('stimulative')).toBeInTheDocument();
     });
 
+    it('shows the logged RIR from feedback, not the lossy RPE-derived bucket', () => {
+      // RIR 3 is stored as RPE 7; bucketed rpeToRir(7) = 2, so the display
+      // must prefer feedback.repsInTank or a logged 3 renders as 2.
+      const sets = [
+        createMockSetLog({
+          id: 'set-1',
+          setNumber: 1,
+          weightKg: 100,
+          reps: 10,
+          rpe: 7,
+          quality: 'effective',
+          feedback: { repsInTank: 3, form: 'clean' },
+        }),
+      ];
+
+      render(<ExerciseCard {...defaultProps} sets={sets} isActive={true} />);
+
+      expect(screen.getByText(/3 RIR ·/)).toBeInTheDocument();
+    });
+
     it('renders remaining sets as muted target lines', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
 
@@ -705,6 +725,51 @@ describe('ExerciseCard', () => {
       // itself must reprice the prefill: 100×10 @ 2 RIR → E1RM 140 kg, and
       // 140 / (1 + (6+2)/30) ≈ 110.5 → 110 at the 2.5 kg increment.
       expect(screen.getByRole('button', { name: /Weight: 110 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
+    it('reprices from the logged RPE when the previous set has one', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          previousSets={[{ weightKg: 100, reps: 10, rpe: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      // 100×10 at RPE 10 (0 RIR) → E1RM 133.3 kg, not the 140 the target-RIR
+      // fallback would assume: 133.3 / (1 + (6+2)/30) ≈ 105.3 → 105.
+      expect(screen.getByRole('button', { name: /Weight: 105 kg/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
+    });
+
+    it('keeps a zero-load seed at zero when repriced into the new range', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          isActive={true}
+          performanceSnapshots={plateauedSnapshots}
+          onRepRangeChange={jest.fn()}
+          previousSets={[{ weightKg: 0, reps: 10 }]}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Plateau' }));
+      await user.click(screen.getByRole('button', { name: /Try 5–6 reps/ }));
+
+      // Zero-load history must not be floored up to the 2.5 kg increment.
+      expect(screen.getByRole('button', { name: /Weight: 0 kg/ })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Reps: 6/ })).toBeInTheDocument();
     });
 

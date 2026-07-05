@@ -5,6 +5,7 @@ import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 import Link from 'next/link';
+import { STARTER_TEMPLATES, starterTemplateHref } from '@/lib/content/starterTemplates';
 
 interface FolderWithTemplates extends WorkoutFolder {
   templates: (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[];
@@ -293,6 +294,30 @@ export default function TemplatesPage() {
           >
             📁
           </Button>
+        </div>
+      </div>
+
+      {/* Quick start (P2-15): curated starter templates that deep-link into
+          the new-workout flow — no saved template needed. Always available so
+          new users aren't staring at an empty page and regulars get 1-tap
+          presets. Horizontal scroller keeps it to one compact row. */}
+      <div>
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide">Quick start</h2>
+          <span className="text-xs text-surface-500">No template needed</span>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
+          {STARTER_TEMPLATES.map((t) => (
+            <Link
+              key={t.id}
+              href={starterTemplateHref(t)}
+              className="shrink-0 w-44 p-4 rounded-xl bg-surface-800 border border-surface-700 hover:border-primary-500 hover:bg-surface-700 transition-colors"
+            >
+              <span className="text-2xl block mb-2">{t.emoji}</span>
+              <span className="block font-semibold text-surface-100">{t.name}</span>
+              <span className="block text-xs text-surface-400 mt-1 leading-snug">{t.description}</span>
+            </Link>
+          ))}
         </div>
       </div>
 

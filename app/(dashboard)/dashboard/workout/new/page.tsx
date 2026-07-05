@@ -225,6 +225,8 @@ function NewWorkoutContent() {
   
   // Workout duration
   const [workoutDuration, setWorkoutDuration] = useState(45); // Default 45 minutes
+  // In AI mode, wait for the user to answer "How much time do you have?" before generating
+  const [awaitingAiTime, setAwaitingAiTime] = useState(aiMode);
   
   // Gym location selection
   const [gymLocations, setGymLocations] = useState<Array<{ id: string; name: string; is_default: boolean }>>([]);
@@ -339,7 +341,8 @@ function NewWorkoutContent() {
 
   // Suggest exercises based on recent history, goals, AND time available
   // COMPREHENSIVE VERSION: Addresses all 8 identified issues
-  const suggestExercises = async () => {
+  const suggestExercises = async (durationOverride?: number) => {
+    const duration = durationOverride ?? workoutDuration;
     setIsSuggesting(true);
     setError(null); // Clear any previous errors
     try {
@@ -626,7 +629,7 @@ function NewWorkoutContent() {
         return 0;
       });
       
-      const muscleCount = workoutDuration <= 30 ? 2 : workoutDuration <= 45 ? 2 : 3;
+      const muscleCount = duration <= 30 ? 2 : duration <= 45 ? 2 : 3;
       const suggestedMuscles = sortedMuscles.slice(0, muscleCount);
       
       // ============================================
@@ -852,7 +855,7 @@ function NewWorkoutContent() {
       // STEP 5: SELECT WITH MOVEMENT PATTERN VARIETY
       // ============================================
       
-      const exerciseBudget = getMaxExercisesForTime(workoutDuration, userGoal);
+      const exerciseBudget = getMaxExercisesForTime(duration, userGoal);
       const selectedPatterns = new Set<string>();
       const picked: any[] = [];
       
@@ -979,8 +982,8 @@ function NewWorkoutContent() {
       });
       
       const reason = Object.keys(trainedMuscles).length === 0 
-        ? `${picked.length} exercises for your ${workoutDuration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
-        : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${workoutDuration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
+        ? `${picked.length} exercises for your ${duration}-minute workout (~${Math.round(estimatedMinutes)} min estimated).`
+        : `${picked.length} exercises targeting ${suggestedMuscles.join(', ')} for your ${duration}-minute session (~${Math.round(estimatedMinutes)} min estimated).`;
       
       setSuggestions({
         muscles: suggestedMuscles,
@@ -1016,13 +1019,8 @@ function NewWorkoutContent() {
     }
   }, [suggestions, exercises, selectedExercises.length]);
 
-  // Auto-trigger AI suggestions when ai=true in URL
-  useEffect(() => {
-    if (aiMode && !suggestions && !isSuggesting) {
-      suggestExercises();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiMode]);
+  // When ai=true in URL, generation waits for the user to pick a duration
+  // (awaitingAiTime) instead of auto-triggering with the default time.
 
   // Load equipment types on mount
   useEffect(() => {
@@ -1325,6 +1323,8 @@ function NewWorkoutContent() {
   }, [step, selectedMuscles, frequentExerciseIds, selectedLocationId]);
 
   const toggleMuscle = (muscle: string) => {
+    // Manual muscle selection means the user opted out of the AI flow
+    setAwaitingAiTime(false);
     setSelectedMuscles((prev) =>
       prev.includes(muscle)
         ? prev.filter((m) => m !== muscle)
@@ -1606,14 +1606,27 @@ function NewWorkoutContent() {
                 <label className="block text-sm font-medium text-surface-200 mb-3">
                   How much time do you have?
                 </label>
+                {awaitingAiTime && (
+                  <p className="text-sm text-accent-300 bg-accent-500/10 border border-accent-500/20 rounded-lg px-3 py-2 mb-3">
+                    ⚡ Pick a time and we&apos;ll generate your workout
+                  </p>
+                )}
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[20, 30, 45, 60, 75, 90].map((mins) => (
                   <button
                     key={mins}
-                    onClick={() => setWorkoutDuration(mins)}
+                    onClick={() => {
+                      setWorkoutDuration(mins);
+                      if (awaitingAiTime && !isSuggesting) {
+                        setAwaitingAiTime(false);
+                        suggestExercises(mins);
+                      }
+                    }}
                     className={`p-3 rounded-lg text-center transition-all ${
                       workoutDuration === mins
                         ? 'bg-primary-500/20 border-2 border-primary-500 text-primary-400'
+                        : awaitingAiTime
+                        ? 'bg-surface-800 border-2 border-accent-500/40 text-surface-300 hover:bg-surface-700 hover:border-accent-500'
                         : 'bg-surface-800 border-2 border-transparent text-surface-300 hover:bg-surface-700'
                     }`}
                   >
@@ -1729,6 +1742,7 @@ function NewWorkoutContent() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    setAwaitingAiTime(false);
                     suggestExercises();
                   }}
                   isLoading={isSuggesting}
