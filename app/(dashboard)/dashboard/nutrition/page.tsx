@@ -50,10 +50,9 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconSettings,
-  IconPlus,
-  IconMinus,
   IconCopy,
   IconBookmarkPlus,
+  IconDots,
   IconX,
 } from '@tabler/icons-react';
 
@@ -178,14 +177,13 @@ export default function NutritionPage() {
   const [showEditFood, setShowEditFood] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
+  const [openMealMenu, setOpenMealMenu] = useState<MealType | null>(null);
 
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
 
   const { toasts, dismissToast, showSuccess, addToast } = useToasts();
 
-  // Pending debounced DB writes for the inline serving stepper, keyed by entry id
-  const servingFlushTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   // Lazy one-time load of the system food library (only needed once a food modal opens)
   const systemFoodsLoadedRef = useRef(false);
 
@@ -892,44 +890,6 @@ export default function NutritionPage() {
     }
   }
 
-  /**
-   * Inline ±0.5 serving stepper on entry rows. State updates instantly;
-   * the DB write is debounced per entry so rapid taps produce one update.
-   */
-  function adjustServings(entry: FoodLogEntry, delta: number) {
-    const currentServings = entry.servings || 1;
-    const newServings = Math.max(0.5, Math.round((currentServings + delta) * 2) / 2);
-    if (newServings === currentServings) return;
-
-    const factor = newServings / currentServings;
-    const updates = {
-      servings: newServings,
-      calories: Math.round((entry.calories || 0) * factor),
-      protein: Math.round((entry.protein || 0) * factor * 10) / 10,
-      carbs: Math.round((entry.carbs || 0) * factor * 10) / 10,
-      fat: Math.round((entry.fat || 0) * factor * 10) / 10,
-    };
-
-    setFoodEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, ...updates } : e)));
-
-    const timers = servingFlushTimers.current;
-    const pending = timers.get(entry.id);
-    if (pending) clearTimeout(pending);
-    timers.set(
-      entry.id,
-      setTimeout(() => {
-        timers.delete(entry.id);
-        supabase
-          .from('food_log')
-          .update(updates)
-          .eq('id', entry.id)
-          .then(({ error }: { error: unknown }) => {
-            if (error) console.error('Error updating servings:', error);
-          });
-      }, 600)
-    );
-  }
-
   async function handleUpdateFood(id: string, updates: {
     servings: number;
     calories: number;
@@ -1274,6 +1234,13 @@ export default function NutritionPage() {
   const mealsLogged = mealGroups.filter((m) => m.entries.length > 0).length;
   const mealsRemaining = Math.max(0, mealsPerDay - mealsLogged);
 
+  // "~X calories available" hint on empty meal cards
+  const remainingCalories = nutritionTargets?.calories
+    ? Math.round(nutritionTargets.calories - dailyTotals.calories)
+    : 0;
+  const perMealAvailable =
+    remainingCalories > 0 && mealsRemaining > 0 ? Math.round(remainingCalories / mealsRemaining) : 0;
+
   // Top frequent foods across meals for the one-tap chips row
   const chipMap = new Map<string, { food: FrequentFood; count: number }>();
   for (const food of frequentFoods) {
@@ -1494,73 +1461,83 @@ export default function NutritionPage() {
         {mealGroups.map((meal) => {
           const mealCalories = Math.round(meal.entries.reduce((sum, e) => sum + (e.calories || 0), 0));
           const mealProtein = Math.round(meal.entries.reduce((sum, e) => sum + (e.protein || 0), 0));
+          const mealCarbs = Math.round(meal.entries.reduce((sum, e) => sum + (e.carbs || 0), 0));
+          const mealFat = Math.round(meal.entries.reduce((sum, e) => sum + (e.fat || 0), 0));
           const yesterdayHasEntries = yesterdayEntries.some((e) => e.meal_type === meal.type);
-
-          if (meal.entries.length === 0) {
-            // Empty meal: dashed card with Copy yesterday + Add
-            return (
-              <div key={meal.type} className="rounded-xl border border-dashed border-surface-700 px-4 py-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] text-surface-500">{meal.label}</span>
-                  <div className="flex items-center gap-1">
-                    {yesterdayHasEntries && (
-                      <button
-                        onClick={() => handleCopyYesterday(meal.type)}
-                        className="flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] text-surface-400 hover:bg-surface-800 hover:text-surface-200 transition-colors"
-                      >
-                        <IconCopy size={13} aria-hidden="true" />
-                        Copy yesterday
-                      </button>
-                    )}
-                    <button
-                      onClick={() => openAddFood(meal.type)}
-                      className="rounded-full px-2.5 py-1 text-[11px] text-primary-400 hover:bg-surface-800 transition-colors"
-                    >
-                      + Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          }
+          const hasEntries = meal.entries.length > 0;
+          const hasMenuActions = hasEntries || yesterdayHasEntries;
 
           return (
-            <div key={meal.type} className="rounded-xl border border-surface-800 bg-surface-900 p-4">
-              {/* Header: "{Meal} · {kcal} kcal · {protein}p" + save-as-meal + add */}
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <div className="flex items-baseline gap-1.5 min-w-0">
-                  <span className="text-[13px] font-medium text-surface-100">{meal.label}</span>
-                  <span className="text-[11px] text-surface-500 truncate">
-                    · {mealCalories} kcal · {mealProtein}p
-                  </span>
+            <div key={meal.type} className="rounded-2xl border border-surface-800 bg-surface-900 p-4">
+              {/* Header: "{Meal}: {kcal} cals" + macro breakdown + overflow menu */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-[15px] font-semibold text-surface-100 truncate">
+                    {meal.label}
+                    {hasEntries && (
+                      <span>: {mealCalories.toLocaleString()} cals</span>
+                    )}
+                  </h3>
+                  <p className="text-[12px] text-surface-500 mt-0.5">
+                    {hasEntries
+                      ? `${mealFat}g fat · ${mealCarbs}g carbs · ${mealProtein}g protein`
+                      : perMealAvailable > 0
+                        ? `~${perMealAvailable.toLocaleString()} calories available`
+                        : 'Nothing logged yet'}
+                  </p>
                 </div>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
-                  <button
-                    onClick={() => handleSaveMealAsSaved(meal)}
-                    className="p-1.5 text-surface-500 hover:text-surface-200 transition-colors"
-                    aria-label={`Save ${meal.label} as meal`}
-                    title="Save as meal"
-                  >
-                    <IconBookmarkPlus size={16} aria-hidden="true" />
-                  </button>
-                  <button
-                    onClick={() => openAddFood(meal.type)}
-                    className="p-1.5 text-surface-400 hover:text-surface-100 transition-colors"
-                    aria-label={`Add food to ${meal.label}`}
-                  >
-                    <IconPlus size={16} aria-hidden="true" />
-                  </button>
-                </div>
+                {hasMenuActions && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setOpenMealMenu(openMealMenu === meal.type ? null : meal.type)}
+                      className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition-colors"
+                      aria-label={`${meal.label} options`}
+                    >
+                      <IconDots size={18} aria-hidden="true" />
+                    </button>
+                    {openMealMenu === meal.type && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setOpenMealMenu(null)} />
+                        <div className="absolute right-0 top-full mt-1 z-40 w-52 rounded-xl border border-surface-800 bg-surface-900 py-1 shadow-xl">
+                          {hasEntries && (
+                            <button
+                              onClick={() => {
+                                setOpenMealMenu(null);
+                                void handleSaveMealAsSaved(meal);
+                              }}
+                              className="w-full px-3 py-2 flex items-center gap-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
+                            >
+                              <IconBookmarkPlus size={15} aria-hidden="true" />
+                              Save as meal
+                            </button>
+                          )}
+                          {yesterdayHasEntries && (
+                            <button
+                              onClick={() => {
+                                setOpenMealMenu(null);
+                                void handleCopyYesterday(meal.type);
+                              }}
+                              className="w-full px-3 py-2 flex items-center gap-2 text-left text-[13px] text-surface-200 hover:bg-surface-800 transition-colors"
+                            >
+                              <IconCopy size={15} aria-hidden="true" />
+                              Copy from yesterday
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Entry rows: "name · qty | kcal", swipe-to-delete + tap-to-edit */}
-              <div>
-                {meal.entries.map((entry) => (
-                  <SwipeableRow
-                    key={entry.id}
-                    onDelete={() => handleDeleteFood(entry.id)}
-                  >
-                    <div className="flex items-center gap-1">
+              {/* Entry rows: name over serving, calories right; swipe-to-delete + tap-to-edit */}
+              {hasEntries && (
+                <div className="mt-2">
+                  {meal.entries.map((entry) => (
+                    <SwipeableRow
+                      key={entry.id}
+                      onDelete={() => handleDeleteFood(entry.id)}
+                    >
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1568,43 +1545,33 @@ export default function NutritionPage() {
                           e.stopPropagation();
                           openEditFood(entry);
                         }}
-                        className="flex-1 min-w-0 flex items-center justify-between gap-3 py-1.5 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
+                        className="w-full flex items-center justify-between gap-4 py-2 px-1 rounded-lg hover:bg-surface-800/50 active:bg-surface-800 transition-colors text-left"
                       >
-                        <div className="flex items-baseline gap-1.5 min-w-0">
-                          <span className="text-[13px] text-surface-200 truncate">
+                        <div className="min-w-0">
+                          <div className="text-[14px] text-surface-100 truncate">
                             {toTitleCase(entry.food_name)}
-                          </span>
-                          <span className="text-[12px] text-surface-500 flex-shrink-0">
-                            · {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
-                          </span>
+                          </div>
+                          <div className="text-[12px] text-surface-500 truncate">
+                            {entry.servings !== 1 ? `${entry.servings} × ` : ''}{entry.serving_size}
+                          </div>
                         </div>
-                        <span className="text-[13px] text-surface-300 flex-shrink-0">
-                          {Math.round(entry.calories)}
+                        <span className="text-[15px] text-surface-300 flex-shrink-0 tabular-nums">
+                          {Math.round(entry.calories).toLocaleString()}
                         </span>
                       </button>
-                      {/* Inline serving stepper: ±0.5 servings without opening the edit modal */}
-                      <div className="flex items-center gap-0.5 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => adjustServings(entry, -0.5)}
-                          disabled={(entry.servings || 1) <= 0.5}
-                          className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          aria-label={`Decrease ${entry.food_name} servings`}
-                        >
-                          <IconMinus size={13} aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => adjustServings(entry, 0.5)}
-                          className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-800 transition-colors"
-                          aria-label={`Increase ${entry.food_name} servings`}
-                        >
-                          <IconPlus size={13} aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
-                  </SwipeableRow>
-                ))}
+                    </SwipeableRow>
+                  ))}
+                </div>
+              )}
+
+              {/* Add Food pill */}
+              <div className={`flex justify-end ${hasEntries ? 'mt-2' : 'mt-3'}`}>
+                <button
+                  onClick={() => openAddFood(meal.type)}
+                  className="rounded-full bg-primary-600 px-5 py-2 text-[13px] font-semibold text-white hover:bg-primary-500 active:bg-primary-700 transition-colors"
+                >
+                  Add Food
+                </button>
               </div>
             </div>
           );
