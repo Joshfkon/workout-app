@@ -97,8 +97,10 @@ function HeroShell({
 /**
  * "Next up" hero — the primary daily action at the top of the home page.
  * A pending workout wins; otherwise the next meal is suggested (workout done
- * or rest day); then completed-workout / no-plan states. Renders nothing on a
- * rest day with nothing left to log.
+ * or rest day); then completed-workout / no-plan states. Without a plan the
+ * meal hero is skipped so the plan CTA stays reachable (a completed quick
+ * workout still shows its done state first). Renders nothing on a rest day
+ * with nothing left to log.
  */
 export function TodayHeroCard({
   workout,
@@ -172,8 +174,10 @@ export function TodayHeroCard({
     );
   }
 
-  // No pending workout (done for the day or rest day) — recommend the next meal.
-  if (meal) {
+  // No pending workout (done for the day or rest day) — recommend the next
+  // meal. Only within an active plan: without one the "plan a mesocycle" CTA
+  // below must stay reachable as the primary hero for new users.
+  if (meal && hasPlan) {
     return (
       <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20">
         <HeroShell
