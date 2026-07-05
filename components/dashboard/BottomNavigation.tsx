@@ -32,7 +32,9 @@ const navItems: NavItem[] = [
     name: 'Train',
     href: '/dashboard/train',
     icon: IconBarbell,
-    matchPaths: ['/dashboard/train', '/dashboard/exercises', '/dashboard/log', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
+    // NB: /dashboard/log (the startup launcher) deliberately does NOT
+    // highlight Train — it is a standalone surface, not the Train page.
+    matchPaths: ['/dashboard/train', '/dashboard/exercises', '/dashboard/workout', '/dashboard/mesocycle', '/dashboard/history'],
   },
   {
     name: 'Eat',
