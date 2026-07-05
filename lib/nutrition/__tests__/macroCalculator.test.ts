@@ -132,7 +132,7 @@ describe('calculateBMR', () => {
 describe('calculateTDEE', () => {
   it('applies activity multiplier to BMR', () => {
     const stats = createMockStats();
-    const activity = createMockActivity({ activityLevel: 'sedentary' });
+    const activity = createMockActivity({ activityLevel: 'sedentary', workoutsPerWeek: 0 });
 
     const tdee = calculateTDEE(stats, activity);
     const bmr = calculateBMR(stats);
@@ -163,6 +163,59 @@ describe('calculateTDEE', () => {
     }));
 
     expect(intense).toBeGreaterThan(moderate);
+  });
+
+  // Regression: workouts previously contributed nothing unless 4+/week AND
+  // intense — 5×60min moderate sessions returned exactly BMR × 1.2
+  describe('workout energy contribution (regression)', () => {
+    // 173 lb, 6'2", age 38, male, 19% BF, sedentary base activity
+    const regressionStats: UserStats = {
+      weightKg: lbsToKg(173),
+      heightCm: inchesToCm(74),
+      age: 38,
+      sex: 'male',
+      bodyFatPercent: 19,
+    };
+    const regressionActivity: ActivityConfig = {
+      activityLevel: 'sedentary',
+      workoutsPerWeek: 5,
+      avgWorkoutMinutes: 60,
+      workoutIntensity: 'moderate',
+    };
+
+    it('adds workout energy on top of the base activity multiplier', () => {
+      const bmr = calculateBMR(regressionStats);
+      const tdee = calculateTDEE(regressionStats, regressionActivity);
+
+      // Katch-McArdle: 370 + 21.6 × (78.47 × 0.81) ≈ 1742.9
+      expect(bmr).toBeCloseTo(1742.9, 0);
+
+      // The reported bug: TDEE was exactly BMR × 1.2 = 2092
+      expect(tdee).toBeGreaterThan(bmr * 1.2);
+
+      // 5 × 60 min at ~5.5 kcal/min ≈ +235 kcal/day → TDEE ≈ 2325
+      expect(tdee).toBeGreaterThanOrEqual(2300);
+      expect(tdee).toBeLessThanOrEqual(2360);
+    });
+
+    it('returns exactly BMR × multiplier when workouts are zero', () => {
+      const bmr = calculateBMR(regressionStats);
+      const tdee = calculateTDEE(regressionStats, {
+        ...regressionActivity,
+        workoutsPerWeek: 0,
+      });
+
+      expect(tdee).toBe(Math.round(bmr * 1.2));
+    });
+
+    it('scales workout energy with intensity', () => {
+      const light = calculateTDEE(regressionStats, { ...regressionActivity, workoutIntensity: 'light' });
+      const moderate = calculateTDEE(regressionStats, regressionActivity);
+      const intense = calculateTDEE(regressionStats, { ...regressionActivity, workoutIntensity: 'intense' });
+
+      expect(moderate).toBeGreaterThan(light);
+      expect(intense).toBeGreaterThan(moderate);
+    });
   });
 });
 
@@ -303,6 +356,70 @@ describe('calculateMacros', () => {
 
       expect(withPeptide.protein).toBeGreaterThanOrEqual(withoutPeptide.protein);
       expect(withPeptide.peptideNotes).toBeDefined();
+    });
+  });
+
+  // Regression: peptide tips ignored goal direction — slow_bulk showed
+  // cut-phase copy ("keep deficit sane")
+  describe('goal-aware peptide notes', () => {
+    const notesFor = (goal: GoalConfig['goal'], peptide: NonNullable<GoalConfig['peptide']>) =>
+      calculateMacros(
+        createMockStats(),
+        createMockActivity(),
+        createMockGoalConfig({ goal, peptide })
+      ).peptideNotes;
+
+    it('does not show deficit copy for bulk goals', () => {
+      const bulkGoals: GoalConfig['goal'][] = ['slow_bulk', 'moderate_bulk', 'aggressive_bulk'];
+
+      for (const goal of bulkGoals) {
+        const notes = notesFor(goal, 'retatrutide');
+        expect(notes).toBeDefined();
+        expect(notes!.toLowerCase()).not.toContain('deficit');
+        expect(notes!.toLowerCase()).toContain('surplus');
+      }
+    });
+
+    it('keeps existing cut copy for cut goals', () => {
+      expect(notesFor('moderate_cut', 'retatrutide')).toBe(
+        'Most potent suppression; keep deficit sane and carbs non-trivial.'
+      );
+      expect(notesFor('slow_cut', 'semaglutide')).toBe(
+        "Hit protein reliably; don't chase suppression with deeper deficits."
+      );
+    });
+
+    it('returns undefined when no peptide is used', () => {
+      const result = calculateMacros(
+        createMockStats(),
+        createMockActivity(),
+        createMockGoalConfig({ goal: 'slow_bulk' })
+      );
+      expect(result.peptideNotes).toBeUndefined();
+    });
+
+    it('matches snapshot per goal category for each peptide', () => {
+      const peptides: NonNullable<GoalConfig['peptide']>[] = [
+        'semaglutide',
+        'tirzepatide',
+        'retatrutide',
+        'liraglutide',
+        'tesofensine',
+        'gh_peptides',
+      ];
+
+      const tipsByGoalCategory = Object.fromEntries(
+        peptides.map((peptide) => [
+          peptide,
+          {
+            cut: notesFor('moderate_cut', peptide),
+            maintain: notesFor('maintain', peptide),
+            bulk: notesFor('slow_bulk', peptide),
+          },
+        ])
+      );
+
+      expect(tipsByGoalCategory).toMatchSnapshot();
     });
   });
 

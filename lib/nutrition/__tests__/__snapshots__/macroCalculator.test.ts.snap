@@ -1,0 +1,36 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`calculateMacros goal-aware peptide notes matches snapshot per goal category for each peptide 1`] = `
+{
+  "gh_peptides": {
+    "bulk": "No appetite suppression to fight — keep protein adequate and track the surplus normally.",
+    "cut": "No special deficit tolerance; keep protein adequate.",
+    "maintain": "Keep protein adequate; no meaningful effect on appetite or energy needs.",
+  },
+  "liraglutide": {
+    "bulk": "Suppression makes a surplus harder — favor calorie-dense foods and liquid calories, and keep meals on a schedule.",
+    "cut": "Keep protein consistent; avoid very low carbs for long stretches.",
+    "maintain": "Keep protein consistent and monitor weight — suppression can pull intake below maintenance unnoticed.",
+  },
+  "retatrutide": {
+    "bulk": "Most potent suppression — hitting a surplus will be genuinely hard. Prioritize calorie-dense foods and liquid calories, and never skip scheduled meals.",
+    "cut": "Most potent suppression; keep deficit sane and carbs non-trivial.",
+    "maintain": "Most potent suppression — weigh in regularly and track intake to avoid sliding below maintenance.",
+  },
+  "semaglutide": {
+    "bulk": "Suppression works against your surplus. Lean on calorie-dense foods and liquid calories (shakes), and eat on a schedule rather than by hunger.",
+    "cut": "Hit protein reliably; don't chase suppression with deeper deficits.",
+    "maintain": "Suppression can drift you into an unplanned deficit — watch the scale trend and keep protein consistent.",
+  },
+  "tesofensine": {
+    "bulk": "Blunted appetite fights your surplus — use calorie-dense foods, liquid calories, and scheduled meals instead of relying on hunger.",
+    "cut": "Nutrient density matters; don't let calories drift too low.",
+    "maintain": "Appetite is blunted — track calories so maintenance intake doesn't drift downward.",
+  },
+  "tirzepatide": {
+    "bulk": "Strong suppression makes a surplus hard to hit. Use calorie-dense foods, liquid calories, and don't skip meals — eat by the clock.",
+    "cut": "Keep deficits moderate; appetite suppression ≠ CNS tolerance.",
+    "maintain": "Appetite cues are muted — track intake so maintenance doesn't quietly become a cut.",
+  },
+}
+`;
