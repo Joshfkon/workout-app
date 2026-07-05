@@ -8,7 +8,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { generateFullMesocycleWithFatigue } from '@/services/sessionBuilderWithFatigue';
 import { calculateRecoveryFactors } from '@/services/mesocycleBuilder';
 import { analyzeRegionalComposition } from '@/services/regionalAnalysis';
-import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { getSessionFromProgramData, type ExerciseOverride, type ExtractedSession } from '@/services/mesocycleHelpers';
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
@@ -112,6 +112,7 @@ export default function MesocyclePage() {
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [completedSessions, setCompletedSessions] = useState<number>(0);
+  const [programSession, setProgramSession] = useState<ExtractedSession | null>(null);
   const [estimatedSessionTime, setEstimatedSessionTime] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -449,7 +450,8 @@ export default function MesocyclePage() {
           const completedCount = await countCompletedSessions(supabase, active.id);
           setCompletedSessions(completedCount);
 
-          // Get estimated time from program_data for time budget validation
+          // The program-slot session Start will actually launch (also gives
+          // the estimated time for the time-budget warning).
           const programData = active.program_data as FullProgramRecommendation | null;
           const sessionFromProgram = getSessionFromProgramData(
             programData,
@@ -457,6 +459,7 @@ export default function MesocyclePage() {
             active.current_week,
             active.total_weeks
           );
+          setProgramSession(sessionFromProgram);
           if (sessionFromProgram) {
             setEstimatedSessionTime(sessionFromProgram.estimatedMinutes);
           }
@@ -469,6 +472,17 @@ export default function MesocyclePage() {
 
   const activeMesocycle = mesocycles.find(m => m.state === 'active');
   const pastMesocycles = mesocycles.filter(m => m.state !== 'active');
+
+  // The card must advertise the workout Start actually launches: the program
+  // slot at completedSessions % days_per_week, which diverges from the
+  // calendar weekday after skipped days. Fall back to todayWorkout only when
+  // program_data yields nothing — exactly when the start path itself falls
+  // back to building from todayWorkout's muscles.
+  const slotSession = programSession && programSession.exercises.length > 0 ? programSession : null;
+  const cardDayName = slotSession?.dayName ?? todayWorkout?.dayName;
+  const cardMuscles: MuscleGroup[] = slotSession
+    ? Array.from(new Set(slotSession.exercises.map(ex => ex.primaryMuscle)))
+    : todayWorkout?.muscles ?? [];
 
   // Start today's workout from the mesocycle (shared start path)
   const handleStartWorkout = async () => {
@@ -589,11 +603,11 @@ export default function MesocyclePage() {
                       <span className="text-3xl">🏋️</span>
                       <div>
                         <p className="text-sm text-primary-400 font-medium">Today&apos;s Workout</p>
-                        <h2 className="text-xl font-bold text-surface-100">{todayWorkout.dayName}</h2>
+                        <h2 className="text-xl font-bold text-surface-100">{cardDayName}</h2>
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 mt-3">
-                      {todayWorkout.muscles.map(muscle => (
+                      {cardMuscles.map(muscle => (
                         <Badge key={muscle} variant="default" className="capitalize">
                           {muscle}
                         </Badge>

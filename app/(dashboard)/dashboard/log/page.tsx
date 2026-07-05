@@ -49,6 +49,7 @@ import {
   getWorkoutForDay,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
@@ -57,7 +58,6 @@ import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { Modal } from '@/components/ui/Modal';
 import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
-import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import {
   LogHeroCard,
   QuickLogRow,
@@ -252,6 +252,7 @@ export default function LogPage() {
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
   const [heroInfo, setHeroInfo] = useState<HeroPlanInfo | null>(null);
   const [todaySoFar, setTodaySoFar] = useState<TodaySoFar | null>(null);
+  const [programDayName, setProgramDayName] = useState<string | null>(null);
   const [exercises, setExercises] = useState<LogExercise[]>([]);
   const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
   const [lastDone, setLastDone] = useState<Map<string, Date>>(new Map());
@@ -441,6 +442,14 @@ export default function LogPage() {
           meso.current_week,
           meso.total_weeks
         );
+        // The hero must advertise the workout Start actually launches: this
+        // program slot, which diverges from the calendar weekday after
+        // skipped days. Null (→ calendar fallback) when program_data yields
+        // nothing, matching the start path's own fallback.
+        setProgramDayName(
+          programSession && programSession.exercises.length > 0 ? programSession.dayName : null
+        );
+
         // Fallback mirrors the start path's legacy behavior: 2 exercises per
         // scheduled muscle when program_data has no usable session.
         const exerciseCount =
@@ -760,7 +769,7 @@ export default function LogPage() {
         <LogHeroCard
           variant="primary"
           eyebrow={heroEyebrow}
-          title={todayWorkout.dayName}
+          title={programDayName ?? todayWorkout.dayName}
           meta={heroMeta ?? ''}
           ctaLabel={isStartingMeso ? 'Starting...' : inProgress ? 'Continue workout' : 'Start workout'}
           ctaDisabled={isStartingMeso}
