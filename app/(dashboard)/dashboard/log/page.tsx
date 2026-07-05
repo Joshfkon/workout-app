@@ -3,34 +3,37 @@
 /**
  * /dashboard/log — the app's landing surface.
  *
- * Opening the app drops the user into a four-choice launcher, rendered as a
- * 2x2 grid of large tiles that fills most of the viewport:
- *   1. Log food -> /dashboard/nutrition.
- *   2. Blank workout -> creates/reuses today's session (no exercise blocks)
- *      and opens the workout page, where the user adds exercises via the
- *      search-first picker. Repeat taps reuse the same session.
- *   3. AI suggested workout -> builds a plan from muscle recovery + weekly
- *      volume (services/suggestedWorkout, pure), previews it in a bottom
- *      sheet, and only writes the session/blocks when the user taps Start.
- *   4. Mesocycle workout -> start today's scheduled session (or route to the
- *      mesocycle pages on rest days / when there is no active mesocycle).
+ * Layout (top to bottom):
+ *   1. Unfinished-workout banner when a session is in_progress today:
+ *      started time + sets logged, Resume opens it, X discards it via the
+ *      same cleanup path as the workout page's cancel flow.
+ *   2. Daily check-in link (only until today's check-in is done).
+ *   3. Hero card for today's mesocycle workout: day name, exercise count /
+ *      estimated duration / when this day was last done, a Start workout
+ *      CTA and a sparkle button that opens the AI suggested workout sheet.
+ *      On rest days the hero shows the next scheduled day; with no active
+ *      mesocycle it prompts to plan one.
+ *   4. "Quick log" rows: Log food -> /dashboard/nutrition, and Blank
+ *      workout -> creates/reuses today's session (no exercise blocks) and
+ *      opens the workout page. Repeat taps reuse the same session.
+ *   5. "Today so far" strip: calories + protein from today's food log vs
+ *      nutrition targets, and steps from wearable daily activity data
+ *      (tile hidden when there's no activity row for today).
  *
- * A Continue banner sits above the grid when a session is in_progress today.
- * Training tools (history, templates, exercises, plans) live on the Train
- * tab's dashboard at /dashboard/train.
+ * The AI suggested workout sheet builds a plan from muscle recovery +
+ * weekly volume (services/suggestedWorkout, pure), previews it, and only
+ * writes the session/blocks when the user taps Start.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import {
-  IconBarbell,
   IconChevronRight,
   IconClipboardHeart,
   IconLoader2,
   IconPlus,
   IconSalad,
-  IconSparkles,
   IconX,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -47,13 +50,30 @@ import {
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
+import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
 import { Modal } from '@/components/ui/Modal';
-import type { ExerciseOverride } from '@/services/mesocycleHelpers';
+import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import {
+  LogHeroCard,
+  QuickLogRow,
+  SectionLabel,
+  TodaySoFarStrip,
+  UnfinishedWorkoutBanner,
+  formatRelativeDay,
+  type TodaySoFar,
+} from './_components/LogPageSections';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
-import type { Experience, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
+import type {
+  Experience,
+  FullProgramRecommendation,
+  MuscleGroup,
+  WarmupSet,
+  WorkoutDay,
+} from '@/types/schema';
 
 // Lazy-load the check-in flow so it only ships when the user opens it
 // (same pattern as the home dashboard's quick-log modals).
@@ -76,9 +96,12 @@ interface LogExercise {
 
 interface InProgressSummary {
   id: string;
-  name: string;
+  /** null for ad-hoc (blank/quick/AI) sessions. */
+  mesocycleId: string | null;
+  startedAt: string | null;
   setsDone: number;
-  setsTarget: number;
+  /** exercise_block ids, needed by the discard path. */
+  blockIds: string[];
 }
 
 /** Active mesocycle row: the fields the shared start path + day derivation need. */
@@ -96,8 +119,16 @@ interface ActiveMesocycleRow {
 }
 
 interface InProgressBlockRow {
-  target_sets: number | null;
+  id: string;
   set_logs: { id: string; is_warmup: boolean | null }[] | null;
+}
+
+/** Hero-card meta for today's scheduled workout, derived from program_data. */
+interface HeroPlanInfo {
+  exerciseCount: number;
+  estMinutes: number;
+  /** When this split day was last completed (previous cycle), if ever. */
+  lastDone: Date | null;
 }
 
 type UntypedSupabase = ReturnType<typeof createUntypedClient>;
@@ -218,11 +249,15 @@ export default function LogPage() {
   const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
   const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
+  const [heroInfo, setHeroInfo] = useState<HeroPlanInfo | null>(null);
+  const [todaySoFar, setTodaySoFar] = useState<TodaySoFar | null>(null);
   const [exercises, setExercises] = useState<LogExercise[]>([]);
   const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
   const [lastDone, setLastDone] = useState<Map<string, Date>>(new Map());
   const [isStartingMeso, setIsStartingMeso] = useState(false);
   const [isStartingBlank, setIsStartingBlank] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Daily check-in: a slim link is shown only while today's check-in is
@@ -255,10 +290,20 @@ export default function LogPage() {
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      const [inProgressRes, mesoRes, exercisesRes, usageRes, checkInRes, goalRes] = await Promise.all([
+      const [
+        inProgressRes,
+        mesoRes,
+        exercisesRes,
+        usageRes,
+        checkInRes,
+        goalRes,
+        foodRes,
+        targetsRes,
+        activityRes,
+      ] = await Promise.all([
         supabase
           .from('workout_sessions')
-          .select('id, mesocycles(name), exercise_blocks(target_sets, set_logs(id, is_warmup))')
+          .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
           .eq('user_id', user.id)
           .eq('planned_date', today)
           .eq('state', 'in_progress')
@@ -290,6 +335,22 @@ export default function LogPage() {
           .select('goal')
           .eq('id', user.id)
           .maybeSingle(),
+        supabase
+          .from('food_log')
+          .select('calories, protein')
+          .eq('user_id', user.id)
+          .eq('logged_at', today),
+        supabase
+          .from('nutrition_targets')
+          .select('calories, protein')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('daily_activity_data')
+          .select('steps_total')
+          .eq('user_id', user.id)
+          .eq('date', today)
+          .maybeSingle(),
       ]);
 
       setCheckInUserId(user.id);
@@ -300,23 +361,26 @@ export default function LogPage() {
       const ipRow = inProgressRes.data?.[0];
       if (ipRow) {
         const blocks = (ipRow.exercise_blocks ?? []) as InProgressBlockRow[];
-        const setsTarget = blocks.reduce((sum, b) => sum + (b.target_sets || 0), 0);
         const setsDone = blocks.reduce(
           (sum, b) => sum + (b.set_logs ?? []).filter((l) => !l.is_warmup).length,
           0
         );
-        const mesoRel = ipRow.mesocycles as { name: string } | { name: string }[] | null;
-        const mesoName = Array.isArray(mesoRel) ? mesoRel[0]?.name : mesoRel?.name;
-        setInProgress({ id: ipRow.id, name: mesoName || 'workout', setsDone, setsTarget });
+        setInProgress({
+          id: ipRow.id,
+          mesocycleId: ipRow.mesocycle_id ?? null,
+          startedAt: ipRow.started_at ?? null,
+          setsDone,
+          blockIds: blocks.map((b) => b.id),
+        });
       }
 
       const meso = (mesoRes.data?.[0] ?? null) as ActiveMesocycleRow | null;
+      let tw: TodayWorkout | null = null;
       if (meso) {
         setActiveMeso(meso);
         const dayOfWeek = new Date().getDay() || 7;
-        setTodayWorkout(
-          getWorkoutForDay(meso.split_type, dayOfWeek, meso.days_per_week, meso.preferred_workout_days)
-        );
+        tw = getWorkoutForDay(meso.split_type, dayOfWeek, meso.days_per_week, meso.preferred_workout_days);
+        setTodayWorkout(tw);
       }
 
       if (exercisesRes.data) {
@@ -340,6 +404,59 @@ export default function LogPage() {
         setUsageCounts(counts);
         setLastDone(recent);
       }
+
+      // "Today so far" strip. food_log rows can be missing entirely (nothing
+      // logged) and the activity row only exists when a wearable synced.
+      const foodRows = (foodRes.data ?? []) as { calories: number | null; protein: number | null }[];
+      const targets = targetsRes.data as { calories: number | null; protein: number | null } | null;
+      const activity = activityRes.data as { steps_total: number | null } | null;
+      setTodaySoFar({
+        calories: Math.round(foodRows.reduce((sum, r) => sum + (r.calories || 0), 0)),
+        protein: Math.round(foodRows.reduce((sum, r) => sum + (r.protein || 0), 0)),
+        caloriesTarget: targets?.calories ?? null,
+        proteinTarget: targets?.protein ?? null,
+        steps: activity?.steps_total ?? null,
+      });
+
+      // Hero meta (exercise count / est. duration / last done) from the
+      // mesocycle's program_data at today's session index. The session index
+      // is TOTAL completed sessions % days/week (the self-extending scheme
+      // the start path uses), so the same ordinal arithmetic also finds when
+      // this slot was last trained: one full cycle (days_per_week sessions)
+      // ago in completion order.
+      if (meso) {
+        const { data: completedRows } = await supabase
+          .from('workout_sessions')
+          .select('started_at')
+          .eq('mesocycle_id', meso.id)
+          .eq('state', 'completed')
+          .order('started_at', { ascending: true });
+        const completed = (completedRows ?? []) as { started_at: string | null }[];
+
+        const sessionIndex = sessionIndexFromCompleted(completed.length, meso.days_per_week);
+        const programSession = getSessionFromProgramData(
+          meso.program_data as FullProgramRecommendation | null,
+          sessionIndex,
+          meso.current_week,
+          meso.total_weeks
+        );
+        // Fallback mirrors the start path's legacy behavior: 2 exercises per
+        // scheduled muscle when program_data has no usable session.
+        const exerciseCount =
+          programSession?.exercises.length || (tw ? tw.muscles.length * 2 : 0);
+        const estMinutes =
+          (programSession?.estimatedMinutes ?? 0) > 0
+            ? Math.round(programSession!.estimatedMinutes)
+            : exerciseCount * 9;
+
+        const lastCycleIdx = completed.length - meso.days_per_week;
+        const lastStartedAt = lastCycleIdx >= 0 ? completed[lastCycleIdx]?.started_at : null;
+        setHeroInfo({
+          exerciseCount,
+          estMinutes,
+          lastDone: lastStartedAt ? new Date(lastStartedAt) : null,
+        });
+      }
     } catch (err) {
       console.error('Failed to load log page data:', err);
     } finally {
@@ -347,10 +464,8 @@ export default function LogPage() {
     }
   }
 
-  // Suggested list: recent/frequent exercises first, topped up with staples
-  // spread round-robin across the major muscle groups.
-  // Next scheduled training day (for the rest-day mesocycle card subtitle).
-  const nextWorkout = useMemo(() => {
+  // Next scheduled training day (for the rest-day hero subtitle).
+  const nextWorkoutInfo = useMemo(() => {
     if (!activeMeso || todayWorkout) return null;
     const todayDow = new Date().getDay() || 7;
     for (let offset = 1; offset <= 7; offset++) {
@@ -361,7 +476,15 @@ export default function LogPage() {
         activeMeso.days_per_week,
         activeMeso.preferred_workout_days
       );
-      if (workout) return workout;
+      if (workout) {
+        const date = new Date();
+        date.setDate(date.getDate() + offset);
+        return {
+          workout,
+          dayLabel:
+            offset === 1 ? 'tomorrow' : date.toLocaleDateString('en-US', { weekday: 'short' }),
+        };
+      }
     }
     return null;
   }, [activeMeso, todayWorkout]);
@@ -404,6 +527,28 @@ export default function LogPage() {
       setError('Failed to start workout. Please try again.');
       setIsStartingBlank(false);
     }
+  };
+
+  // Discard the unfinished workout from the banner's X. Same cleanup as the
+  // workout page's cancel flow: ad-hoc sessions are deleted outright,
+  // mesocycle sessions reset to a restartable planned state.
+  const handleDiscardWorkout = async () => {
+    if (!inProgress || isDiscarding) return;
+    setIsDiscarding(true);
+    setError(null);
+    const { ok, errors } = await cancelWorkoutSession(supabase, {
+      sessionId: inProgress.id,
+      mesocycleId: inProgress.mesocycleId,
+      blockIds: inProgress.blockIds,
+    });
+    if (ok) {
+      setInProgress(null);
+    } else {
+      console.error('Failed to discard workout:', errors);
+      setError('Failed to discard workout. Please try again.');
+    }
+    setIsDiscarding(false);
+    setShowDiscardConfirm(false);
   };
 
   // AI suggestion: the sheet asks "How much time do you have?" first; picking
@@ -531,33 +676,38 @@ export default function LogPage() {
     day: 'numeric',
   });
 
-  // Large square launcher tile: icon badge on top, label + subtitle below.
-  const tileClass =
-    'w-full h-full flex flex-col items-center justify-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-center hover:bg-surface-800/70 transition-colors disabled:opacity-60';
-
-  const mesoStartable = Boolean(activeMeso && todayWorkout);
-  const mesoSubtitle = !activeMeso
-    ? 'Plan a mesocycle'
-    : todayWorkout
-      ? isStartingMeso
-        ? 'Starting...'
-        : `Today: ${todayWorkout.dayName}`
-      : `Rest day · next: ${nextWorkout?.dayName ?? 'view plan'}`;
-
-  const handleMesoCardTap = () => {
-    if (!activeMeso) {
-      router.push('/dashboard/mesocycle/new');
-    } else if (todayWorkout) {
-      handleStartMesoWorkout();
-    } else {
-      router.push('/dashboard/mesocycle');
-    }
+  const openAiSheet = () => {
+    setAiPlan(null);
+    setShowAiSheet(true);
   };
 
+  const startedAtLabel = inProgress?.startedAt
+    ? new Date(inProgress.startedAt).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
+  // Hero eyebrow: "TODAY · MESOCYCLE WK 3" (+ deload flag when applicable).
+  const heroEyebrow = activeMeso
+    ? `Today · Mesocycle wk ${activeMeso.current_week}${
+        activeMeso.current_week === activeMeso.deload_week ? ' · deload' : ''
+      }`
+    : 'Today';
+
+  // Meta line under the hero title: "7 exercises · est. 65 min · last done Thu".
+  const heroMeta = todayWorkout
+    ? [
+        heroInfo && heroInfo.exerciseCount > 0 ? `${heroInfo.exerciseCount} exercises` : null,
+        heroInfo && heroInfo.estMinutes > 0 ? `est. ${heroInfo.estMinutes} min` : null,
+        heroInfo?.lastDone ? `last done ${formatRelativeDay(heroInfo.lastDone)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || 'Exercises are planned when you start'
+    : null;
+
   return (
-    // Fill the viewport below the app chrome (header 4rem + main padding +
-    // bottom nav) so the 2x2 launcher grid takes up most of the screen.
-    <div className="max-w-lg mx-auto flex flex-col gap-4 min-h-[calc(100dvh-11rem)] lg:min-h-[calc(100dvh-8rem)]">
+    <div className="max-w-lg mx-auto flex flex-col gap-4 pb-4">
       {/* Slim header */}
       <div className="flex items-baseline justify-between">
         <h1 className="text-[17px] font-medium text-surface-100">Log</h1>
@@ -570,23 +720,14 @@ export default function LogPage() {
         </div>
       )}
 
-      {/* Continue card (only when a session is in progress today) */}
+      {/* Unfinished workout banner (only when a session is in progress today) */}
       {inProgress && (
-        <button
-          onClick={() => router.push(`/dashboard/workout/${inProgress.id}`)}
-          className="w-full flex items-center gap-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-left hover:bg-warning-500/15 transition-colors"
-        >
-          <IconBarbell size={18} className="text-warning-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[13px] font-medium text-warning-300 truncate">
-              Continue {inProgress.name}
-            </span>
-            <span className="block text-[11px] text-surface-400">
-              {inProgress.setsDone}/{inProgress.setsTarget} sets
-            </span>
-          </span>
-          <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-        </button>
+        <UnfinishedWorkoutBanner
+          startedAtLabel={startedAtLabel}
+          setsDone={inProgress.setsDone}
+          onResume={() => router.push(`/dashboard/workout/${inProgress.id}`)}
+          onDiscard={() => setShowDiscardConfirm(true)}
+        />
       )}
 
       {/* Slim daily check-in link (only until today's check-in is done) */}
@@ -604,101 +745,91 @@ export default function LogPage() {
         </button>
       )}
 
-      {/* Four launcher tiles in a 2x2 grid that stretches to fill the screen */}
-      <div className="flex-1 grid grid-cols-2 auto-rows-fr gap-3">
-        {/* 1. Log food */}
-        <button onClick={() => router.push('/dashboard/nutrition')} className={tileClass}>
-          <span className="w-14 h-14 rounded-2xl bg-success-500/15 flex items-center justify-center">
-            <IconSalad size={30} className="text-success-400" aria-hidden="true" />
-          </span>
-          <span>
-            <span className="block text-[16px] font-semibold text-surface-100">Log food</span>
-            <span className="block text-[11px] text-surface-500 mt-1">
-              Meals, barcode, describe with AI
-            </span>
-          </span>
-        </button>
-
-        {/* 2. Blank workout: straight into the workout page */}
-        <button onClick={handleStartBlank} disabled={isStartingBlank} className={tileClass}>
-          <span className="w-14 h-14 rounded-2xl bg-surface-800 flex items-center justify-center">
-            {isStartingBlank ? (
-              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
-            ) : (
-              <IconPlus size={30} className="text-surface-300" aria-hidden="true" />
-            )}
-          </span>
-          <span>
-            <span className="block text-[16px] font-semibold text-surface-100">Blank workout</span>
-            <span className="block text-[11px] text-surface-500 mt-1">
-              {isStartingBlank ? 'Starting...' : 'Add exercises as you go'}
-            </span>
-          </span>
-        </button>
-
-        {/* 3. AI suggested workout: opens the sheet on the time question */}
-        <button
-          onClick={() => {
-            setAiPlan(null);
-            setShowAiSheet(true);
-          }}
-          disabled={aiRequested}
-          className={tileClass}
-        >
-          <span className="w-14 h-14 rounded-2xl bg-primary-500/15 flex items-center justify-center">
-            {aiRequested ? (
-              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
-            ) : (
-              <IconSparkles size={30} className="text-primary-400" aria-hidden="true" />
-            )}
-          </span>
-          <span>
-            <span className="block text-[16px] font-semibold text-surface-100">
-              AI suggested workout
-            </span>
-            <span className="block text-[11px] text-surface-500 mt-1">
-              {aiRequested ? 'Building suggestion...' : 'Built from recovery and volume'}
-            </span>
-          </span>
-        </button>
-
-        {/* 4. Mesocycle workout */}
-        <button
-          onClick={handleMesoCardTap}
-          disabled={isStartingMeso}
-          className={
-            mesoStartable
-              ? 'w-full h-full flex flex-col items-center justify-center gap-3 p-4 rounded-2xl bg-primary-500/10 border border-primary-500/30 text-center hover:bg-primary-500/15 transition-colors disabled:opacity-60'
-              : tileClass
+      {/* Hero: today's mesocycle workout (training day / rest day / no plan) */}
+      {activeMeso && todayWorkout ? (
+        <LogHeroCard
+          variant="primary"
+          eyebrow={heroEyebrow}
+          title={todayWorkout.dayName}
+          meta={heroMeta ?? ''}
+          ctaLabel={isStartingMeso ? 'Starting...' : inProgress ? 'Continue workout' : 'Start workout'}
+          ctaDisabled={isStartingMeso}
+          onCtaTap={handleStartMesoWorkout}
+          onSparkleTap={openAiSheet}
+          footnote="adjusts today's volume from recovery data"
+        />
+      ) : activeMeso ? (
+        <LogHeroCard
+          variant="muted"
+          eyebrow={heroEyebrow}
+          title="Rest day"
+          meta={
+            nextWorkoutInfo
+              ? `next: ${nextWorkoutInfo.workout.dayName} · ${nextWorkoutInfo.dayLabel}`
+              : 'No upcoming workouts scheduled'
           }
-        >
-          <span
-            className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
-              mesoStartable ? 'bg-primary-500/20' : 'bg-surface-800'
-            }`}
-          >
-            {isStartingMeso ? (
-              <IconLoader2 size={30} className="text-primary-400 animate-spin" aria-hidden="true" />
-            ) : (
-              <IconBarbell
-                size={30}
-                className={mesoStartable ? 'text-primary-400' : 'text-surface-300'}
-                aria-hidden="true"
-              />
-            )}
-          </span>
-          <span>
-            <span
-              className={`block text-[16px] font-semibold ${
-                mesoStartable ? 'text-primary-300' : 'text-surface-100'
-              }`}
-            >
-              Mesocycle workout
+          ctaLabel="View plan"
+          onCtaTap={() => router.push('/dashboard/mesocycle')}
+          onSparkleTap={openAiSheet}
+          footnote="training anyway? builds a workout from recovered muscles"
+        />
+      ) : (
+        !isLoading && (
+          <LogHeroCard
+            variant="primary"
+            eyebrow={heroEyebrow}
+            title="No training plan"
+            meta="Plan a mesocycle for smart progression and volume tracking"
+            ctaLabel="Plan a mesocycle"
+            onCtaTap={() => router.push('/dashboard/mesocycle/new')}
+            onSparkleTap={openAiSheet}
+            footnote="or let AI build today's workout from recovery data"
+          />
+        )
+      )}
+
+      {/* Quick log */}
+      <div className="flex flex-col gap-2">
+        <SectionLabel>Quick log</SectionLabel>
+
+        <QuickLogRow
+          icon={
+            <span className="w-10 h-10 rounded-xl bg-success-500/15 flex items-center justify-center flex-shrink-0">
+              <IconSalad size={22} className="text-success-400" aria-hidden="true" />
             </span>
-            <span className="block text-[11px] text-surface-500 mt-1">{mesoSubtitle}</span>
-          </span>
-        </button>
+          }
+          title="Log food"
+          subtitle="Meals, barcode, describe with AI"
+          onTap={() => router.push('/dashboard/nutrition')}
+        />
+
+        <QuickLogRow
+          icon={
+            <span className="w-10 h-10 rounded-xl bg-primary-500/15 flex items-center justify-center flex-shrink-0">
+              {isStartingBlank ? (
+                <IconLoader2 size={22} className="text-primary-400 animate-spin" aria-hidden="true" />
+              ) : (
+                <IconPlus size={22} className="text-primary-400" aria-hidden="true" />
+              )}
+            </span>
+          }
+          title="Blank workout"
+          subtitle={isStartingBlank ? 'Starting...' : 'Add exercises as you go'}
+          onTap={handleStartBlank}
+          disabled={isStartingBlank}
+        />
       </div>
+
+      {/* Today so far */}
+      {todaySoFar && (
+        <div className="flex flex-col gap-2">
+          <SectionLabel>Today so far</SectionLabel>
+          <TodaySoFarStrip
+            data={todaySoFar}
+            onNutritionTap={() => router.push('/dashboard/nutrition')}
+          />
+        </div>
+      )}
 
       {/* AI suggested workout: time question first, then the plan preview;
           nothing is created until Start */}
@@ -803,6 +934,40 @@ export default function LogPage() {
           </div>
         )}
       </BottomSheet>
+
+      {/* Discard confirmation for the unfinished-workout banner's X */}
+      {showDiscardConfirm && inProgress && (
+        <Modal isOpen onClose={() => setShowDiscardConfirm(false)} title="Discard workout?">
+          <div className="space-y-4">
+            <p className="text-[13px] text-surface-400">
+              {inProgress.setsDone > 0
+                ? `This will delete the ${inProgress.setsDone} ${
+                    inProgress.setsDone === 1 ? 'set' : 'sets'
+                  } you logged. `
+                : ''}
+              {inProgress.mesocycleId
+                ? 'The planned workout stays on your schedule so you can restart it fresh.'
+                : 'This removes the workout session entirely.'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDiscardConfirm(false)}
+                disabled={isDiscarding}
+                className="flex-1 py-2.5 rounded-lg bg-surface-800 text-surface-200 text-[13px] font-medium hover:bg-surface-700 transition-colors disabled:opacity-60"
+              >
+                Keep workout
+              </button>
+              <button
+                onClick={handleDiscardWorkout}
+                disabled={isDiscarding}
+                className="flex-1 py-2.5 rounded-lg bg-danger-500 text-white text-[13px] font-medium hover:bg-danger-600 transition-colors disabled:opacity-60"
+              >
+                {isDiscarding ? 'Discarding...' : 'Discard'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {/* Daily check-in modal (same flow as the home dashboard) */}
       {showCheckIn && checkInUserId && (
