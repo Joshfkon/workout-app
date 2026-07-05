@@ -3173,7 +3173,13 @@ export default function WorkoutPage() {
     }
   };
 
-  const handleAddExercise = async (exercise: AvailableExercise) => {
+  // `addedEarlierInBatch` carries exercises already added by a multi-add loop
+  // (select-multiple modal, copy-last-workout) — `blocks` in this closure is
+  // stale for the whole batch, so warmup logic must also consider them.
+  const handleAddExercise = async (
+    exercise: AvailableExercise,
+    addedEarlierInBatch: AvailableExercise[] = []
+  ) => {
     setIsAddingExercise(true);
     setError(null);
 
@@ -3252,6 +3258,8 @@ export default function WorkoutPage() {
       // (including working sets that hit it as a secondary muscle)
       const muscleAlreadyWarmedUp = blocks.some(
         block => muscleMatchesGroup(block.exercise.primaryMuscle, exercise.primary_muscle)
+      ) || addedEarlierInBatch.some(
+        prev => muscleMatchesGroup(prev.primary_muscle, exercise.primary_muscle)
       ) || isMuscleWarmedUp(exercise.primary_muscle, { completedSets, blocks });
       
       // Generate warmup for first exercise of each muscle group (compound or isolation)
@@ -3275,7 +3283,7 @@ export default function WorkoutPage() {
           movementPattern: '',
           equipmentRequired: exercise.equipment_required || [],
         },
-        isFirstExercise: blocks.length === 0, // First exercise overall gets general warmup
+        isFirstExercise: blocks.length === 0 && addedEarlierInBatch.length === 0, // First exercise overall gets general warmup
       }) : [];
 
       // Get max order from database to avoid duplicate key error
@@ -3397,9 +3405,12 @@ export default function WorkoutPage() {
     
     setIsAddingExercise(true);
     
-    // Add exercises one by one
+    // Add exercises one by one, tracking what's been added so warmup logic
+    // doesn't treat every exercise in the batch as the first of its muscle
+    const addedSoFar: AvailableExercise[] = [];
     for (const exercise of selectedExercisesToAdd) {
-      await handleAddExercise(exercise);
+      await handleAddExercise(exercise, addedSoFar);
+      addedSoFar.push(exercise);
     }
     
     // Clear selections and close modal
@@ -3465,8 +3476,10 @@ export default function WorkoutPage() {
         return;
       }
 
+      const addedSoFar: AvailableExercise[] = [];
       for (const exercise of exercisesToAdd) {
-        await handleAddExercise(exercise);
+        await handleAddExercise(exercise, addedSoFar);
+        addedSoFar.push(exercise);
       }
     } catch (err) {
       console.error('Failed to copy last workout:', err);
