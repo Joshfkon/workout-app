@@ -9,28 +9,38 @@ interface MetricTileProps {
   label: string;
   /** When set, the tile becomes a tap-through link to the detail page. */
   href?: string;
+  /** Header-right action (e.g. the Weight tile's "+ log" button). Not combinable with href. */
+  action?: ReactNode;
+  /** 'warning' draws attention with an amber border (e.g. volume below MEV). */
+  accent?: 'warning';
   children: ReactNode;
 }
 
 /** Shared shell for the dashboard glance tiles: bordered card + icon label row. */
-export function MetricTile({ icon: TileIcon, label, href, children }: MetricTileProps) {
+export function MetricTile({ icon: TileIcon, label, href, action, accent, children }: MetricTileProps) {
+  const borderClass = accent === 'warning' ? 'border-warning-500/40' : 'border-surface-800';
   const inner = (
     <>
-      <div className="flex items-center gap-1.5 text-xs text-surface-500 mb-1"><TileIcon size={14} aria-hidden="true" /> {label}</div>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-1.5 text-xs text-surface-500">
+          <TileIcon size={14} aria-hidden="true" /> {label}
+        </div>
+        {action}
+      </div>
       {children}
     </>
   );
 
   if (href) {
     return (
-      <Link href={href} className="block bg-surface-900 border border-surface-800 rounded-xl p-3 hover:bg-surface-800/50 transition-colors">
+      <Link href={href} className={`block bg-surface-900 border ${borderClass} rounded-xl p-3 hover:bg-surface-800/50 transition-colors`}>
         {inner}
       </Link>
     );
   }
 
   return (
-    <div className="bg-surface-900 border border-surface-800 rounded-xl p-3">
+    <div className={`bg-surface-900 border ${borderClass} rounded-xl p-3`}>
       {inner}
     </div>
   );

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { IconBarbell, IconSparkles } from '@tabler/icons-react';
+import type { ReactNode } from 'react';
+import { IconSparkles } from '@tabler/icons-react';
 import { FirstTimeHint } from '@/components/ui';
 
 /** Summary of today's workout session shown on the dashboard. */
@@ -20,15 +21,33 @@ export interface ScheduledWorkoutSummary {
   muscles: string[];
 }
 
+/** "Log dinner" hero content when the next best action is a meal, not a workout. */
+export interface MealHeroSuggestion {
+  /** e.g. "Log dinner" */
+  title: string;
+  /** Current time for the eyebrow, e.g. "6:58 PM" */
+  timeLabel: string;
+  /** e.g. "1,888 kcal and 135g protein still to go — you're behind pace" */
+  meta: string;
+}
+
 interface TodayHeroCardProps {
   /** Today's session, if one exists (ready / in-progress / completed states). */
   workout: TodaysWorkout | null;
-  /** Scheduled split day for today when there's a plan but no session yet. */
+  /** Today's split day (title + target muscles); also drives the plan-but-no-session state. */
   scheduled?: ScheduledWorkoutSummary | null;
   /** Whether the user has an active mesocycle at all (false = "no plan" state). */
   hasPlan: boolean;
-  /** Name of the active mesocycle, appended to the "Today" label when present. */
+  /** Name of the active mesocycle, the title fallback when no split day is known. */
   mesocycleName: string | null;
+  /** Eyebrow context after "Next up ·", e.g. "Arnold wk 1". */
+  eyebrowContext?: string | null;
+  /** Meta line for a ready workout, e.g. "7 exercises · est. 65 min · all target muscles recovered". */
+  workoutMeta?: string | null;
+  /** Meal suggestion — shown when there's no pending workout (done or rest day). */
+  meal?: MealHeroSuggestion | null;
+  /** Opens the quick food logger (meal hero CTA). */
+  onLogFood?: () => void;
   /**
    * One-line coach note derived from session data (block suggestion reasons or
    * the muscle focus list). Pure derivation upstream — never an AI API call.
@@ -46,60 +65,156 @@ function CoachLine({ text }: { text: string }) {
   );
 }
 
+/** Shared hero layout: eyebrow · big title · meta line · full-width CTA. */
+function HeroShell({
+  eyebrow,
+  eyebrowClass,
+  title,
+  meta,
+  cta,
+  children,
+}: {
+  eyebrow: string;
+  eyebrowClass: string;
+  title: string;
+  meta: string | null;
+  cta: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <>
+      <div className={`text-[11px] font-semibold tracking-widest uppercase mb-1.5 ${eyebrowClass}`}>
+        {eyebrow}
+      </div>
+      <div className="text-2xl font-bold text-surface-100">{title}</div>
+      {meta && <p className="text-[13px] text-surface-400 mt-1">{meta}</p>}
+      <div className="mt-4">{cta}</div>
+      {children}
+    </>
+  );
+}
+
 /**
- * Today's workout hero — the primary daily action at the top of the home page.
- * States: ready / in-progress / completed (session), scheduled (plan but no
- * session yet), no plan (first-time CTA). Renders nothing on a rest day.
+ * "Next up" hero — the primary daily action at the top of the home page.
+ * A pending workout wins; otherwise the next meal is suggested (workout done
+ * or rest day); then completed-workout / no-plan states. Renders nothing on a
+ * rest day with nothing left to log.
  */
-export function TodayHeroCard({ workout, scheduled, hasPlan, mesocycleName, coachLine }: TodayHeroCardProps) {
-  if (workout) {
+export function TodayHeroCard({
+  workout,
+  scheduled,
+  hasPlan,
+  mesocycleName,
+  eyebrowContext,
+  workoutMeta,
+  meal,
+  onLogFood,
+  coachLine,
+}: TodayHeroCardProps) {
+  // Pending workout — the primary recommendation when the user hasn't trained yet.
+  if (workout && workout.state !== 'completed') {
+    const inProgress = workout.state === 'in_progress';
+    const title = scheduled?.dayName ?? mesocycleName ?? "Today's workout";
+    const meta =
+      workoutMeta ??
+      (workout.exercises > 0
+        ? `${workout.exercises} exercises · ${workout.completedSets}/${workout.totalSets} sets`
+        : // Planned session whose blocks are generated on start — "0
+          // exercises · 0/0 sets" would read as an empty workout.
+          'Exercises are planned when you start');
     return (
       <Link href={`/dashboard/workout/${workout.id}`} className="block">
-        <div className={`rounded-2xl p-4 border transition-colors ${
-          workout.state === 'completed'
-            ? 'bg-success-500/10 border-success-500/20'
-            : workout.state === 'in_progress'
-            ? 'bg-warning-500/10 border-warning-500/20'
-            : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
-        }`}>
-          <div className="flex items-center gap-2 text-sm mb-1 text-primary-400">
-            <IconBarbell size={16} aria-hidden="true" />
-            <span>Today{mesocycleName ? ` · ${mesocycleName}` : ''}</span>
-          </div>
-          <div className="text-base font-medium text-surface-100 mb-3">
-            {workout.exercises > 0
-              ? `${workout.exercises} exercises · ${workout.completedSets}/${workout.totalSets} sets`
-              : // Planned session whose blocks are generated on start — "0
-                // exercises · 0/0 sets" would read as an empty workout, so
-                // show the scheduled day instead.
-                scheduled?.dayName ?? 'Exercises are planned when you start'}
-          </div>
-          <div className={`w-full py-2.5 rounded-lg text-center text-sm font-semibold text-white ${
-            workout.state === 'completed' ? 'bg-success-500' : 'bg-primary-500'
-          }`}>
-            {workout.state === 'completed' ? 'View workout' : workout.state === 'in_progress' ? 'Continue workout' : 'Start workout'}
-          </div>
-          {coachLine && <CoachLine text={coachLine} />}
+        <div
+          className={`rounded-2xl p-5 border transition-colors ${
+            inProgress
+              ? 'bg-warning-500/10 border-warning-500/20 hover:bg-warning-500/15'
+              : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
+          }`}
+        >
+          <HeroShell
+            eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
+            eyebrowClass={inProgress ? 'text-warning-400' : 'text-primary-400'}
+            title={title}
+            meta={meta}
+            cta={
+              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
+                {inProgress ? 'Continue workout' : 'Start workout'}
+              </div>
+            }
+          >
+            {coachLine && <CoachLine text={coachLine} />}
+          </HeroShell>
         </div>
       </Link>
     );
   }
 
-  if (scheduled) {
+  // Plan exists but today's session hasn't been generated yet.
+  if (!workout && scheduled) {
     return (
       <Link href="/dashboard/mesocycle" className="block">
-        <div className="rounded-2xl p-4 border bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15 transition-colors">
-          <div className="flex items-center gap-2 text-sm mb-1 text-primary-400">
-            <IconBarbell size={16} aria-hidden="true" />
-            <span>Today{mesocycleName ? ` · ${mesocycleName}` : ''}</span>
-          </div>
-          <div className="text-base font-medium text-surface-100 mb-3">
-            {scheduled.dayName}
-          </div>
-          <div className="w-full py-2.5 rounded-lg text-center text-sm font-semibold text-white bg-primary-500">
-            Start workout
-          </div>
-          {coachLine && <CoachLine text={coachLine} />}
+        <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15 transition-colors">
+          <HeroShell
+            eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
+            eyebrowClass="text-primary-400"
+            title={scheduled.dayName}
+            meta={workoutMeta ?? null}
+            cta={
+              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
+                Start workout
+              </div>
+            }
+          >
+            {coachLine && <CoachLine text={coachLine} />}
+          </HeroShell>
+        </div>
+      </Link>
+    );
+  }
+
+  // No pending workout (done for the day or rest day) — recommend the next meal.
+  if (meal) {
+    return (
+      <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20">
+        <HeroShell
+          eyebrow={`Next up · ${meal.timeLabel}`}
+          eyebrowClass="text-success-400"
+          title={meal.title}
+          meta={meal.meta}
+          cta={
+            <button
+              type="button"
+              onClick={onLogFood}
+              className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-success-500 to-success-600 hover:from-success-400 hover:to-success-500 transition-colors"
+            >
+              Log food
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  // Workout done and nothing left to log — a quiet "done" state.
+  if (workout && workout.state === 'completed') {
+    return (
+      <Link href={`/dashboard/workout/${workout.id}`} className="block">
+        <div className="rounded-2xl p-5 border bg-success-500/10 border-success-500/20 hover:bg-success-500/15 transition-colors">
+          <HeroShell
+            eyebrow="Done today"
+            eyebrowClass="text-success-400"
+            title={scheduled?.dayName ?? mesocycleName ?? 'Workout complete'}
+            meta={
+              workout.exercises > 0
+                ? `${workout.exercises} exercises · ${workout.completedSets} sets logged`
+                : null
+            }
+            cta={
+              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-success-500">
+                View workout
+              </div>
+            }
+          />
         </div>
       </Link>
     );
@@ -107,29 +222,28 @@ export function TodayHeroCard({ workout, scheduled, hasPlan, mesocycleName, coac
 
   if (!hasPlan) {
     return (
-      <div className="relative rounded-2xl p-4 border bg-primary-500/10 border-primary-500/20">
+      <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
         <FirstTimeHint
           id="dashboard-mesocycle-intro"
           title="What's a Mesocycle?"
           description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
           position="top"
         />
-        <div className="flex items-center gap-2 text-sm mb-1 text-primary-400">
-          <IconBarbell size={16} aria-hidden="true" />
-          <span>Today</span>
+        <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
+          Next up
         </div>
-        <div className="text-base font-medium text-surface-100">No training plan yet</div>
-        <p className="text-xs text-surface-400 mt-1 mb-3">
+        <div className="text-2xl font-bold text-surface-100">No training plan yet</div>
+        <p className="text-[13px] text-surface-400 mt-1 mb-4">
           Plan a mesocycle for smart progression and volume tracking, or jump straight into a workout.
         </p>
         <div className="flex gap-2">
           <Link href="/dashboard/mesocycle/new" className="flex-1">
-            <span className="block w-full py-2.5 rounded-lg text-center text-sm font-semibold text-white bg-primary-500 hover:bg-primary-400 transition-colors">
+            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
               Plan a mesocycle
             </span>
           </Link>
           <Link href="/dashboard/workout/quick" className="flex-1">
-            <span className="block w-full py-2.5 rounded-lg text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
+            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
               Quick workout
             </span>
           </Link>
@@ -138,6 +252,6 @@ export function TodayHeroCard({ workout, scheduled, hasPlan, mesocycleName, coac
     );
   }
 
-  // Rest day within an active plan — no hero (Train tab covers ad-hoc sessions).
+  // Rest day within an active plan and nothing left to log — no hero.
   return null;
 }

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { TodayHeroCard, TodaysWorkout } from '../TodayHeroCard';
+import userEvent from '@testing-library/user-event';
+import { TodayHeroCard, TodaysWorkout, MealHeroSuggestion } from '../TodayHeroCard';
 
 const baseWorkout: TodaysWorkout = {
   id: 'sess-1',
@@ -8,6 +9,12 @@ const baseWorkout: TodaysWorkout = {
   exercises: 5,
   completedSets: 0,
   totalSets: 15,
+};
+
+const meal: MealHeroSuggestion = {
+  title: 'Log dinner',
+  timeLabel: '6:58 PM',
+  meta: "1,888 kcal and 135g protein still to go — you're behind pace",
 };
 
 describe('TodayHeroCard — planned-session copy (audit note 4)', () => {
@@ -66,5 +73,72 @@ describe('TodayHeroCard — planned-session copy (audit note 4)', () => {
 
     expect(screen.getByText('5 exercises · 6/15 sets')).toBeInTheDocument();
     expect(screen.getByText('Continue workout')).toBeInTheDocument();
+  });
+});
+
+describe('TodayHeroCard — next-up recommendation', () => {
+  it('recommends the workout over the meal while a session is pending', () => {
+    render(
+      <TodayHeroCard
+        workout={baseWorkout}
+        scheduled={{ dayName: 'Chest & Back', muscles: ['chest', 'back'] }}
+        hasPlan
+        mesocycleName="Arnold"
+        eyebrowContext="Arnold wk 1"
+        workoutMeta="7 exercises · est. 65 min · all target muscles recovered"
+        meal={meal}
+      />
+    );
+
+    expect(screen.getByText('Chest & Back')).toBeInTheDocument();
+    expect(screen.getByText('7 exercises · est. 65 min · all target muscles recovered')).toBeInTheDocument();
+    expect(screen.getByText('Start workout')).toBeInTheDocument();
+    expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
+  });
+
+  it('recommends the next meal once the workout is completed', async () => {
+    const onLogFood = jest.fn();
+    const user = userEvent.setup();
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, state: 'completed', completedSets: 15 }}
+        scheduled={{ dayName: 'Chest & Back', muscles: ['chest', 'back'] }}
+        hasPlan
+        mesocycleName="Arnold"
+        meal={meal}
+        onLogFood={onLogFood}
+      />
+    );
+
+    expect(screen.getByText('Log dinner')).toBeInTheDocument();
+    expect(screen.getByText(/1,888 kcal and 135g protein still to go/)).toBeInTheDocument();
+    expect(screen.queryByText('Start workout')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Log food' }));
+    expect(onLogFood).toHaveBeenCalled();
+  });
+
+  it('recommends the next meal on a rest day (no session, no scheduled day)', () => {
+    render(
+      <TodayHeroCard workout={null} scheduled={null} hasPlan mesocycleName="Arnold" meal={meal} />
+    );
+
+    expect(screen.getByText('Log dinner')).toBeInTheDocument();
+    expect(screen.getByText(/Next up · 6:58 PM/i)).toBeInTheDocument();
+  });
+
+  it('falls back to the done state when the workout is complete and no meal is suggested', () => {
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, state: 'completed', completedSets: 15 }}
+        scheduled={{ dayName: 'Chest & Back', muscles: ['chest', 'back'] }}
+        hasPlan
+        mesocycleName="Arnold"
+        meal={null}
+      />
+    );
+
+    expect(screen.getByText('View workout')).toBeInTheDocument();
+    expect(screen.getByText('Chest & Back')).toBeInTheDocument();
   });
 });

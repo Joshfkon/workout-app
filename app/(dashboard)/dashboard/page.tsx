@@ -8,6 +8,7 @@ import {
   fetchUserGoal,
   fetchCompletedWorkoutsCount,
   fetchWeeklyMuscleVolume,
+  fetchLiftTrends,
 } from '@/lib/actions/dashboard';
 
 // The page awaits its data BEFORE flushing HTML — deliberately no Suspense
@@ -35,6 +36,7 @@ export default async function DashboardPage() {
     userGoal,
     completedWorkoutsCount,
     muscleVolume,
+    liftTrends,
   ] = await Promise.all([
     fetchMesocycleData(user.id),
     fetchNutritionData(user.id),
@@ -42,6 +44,7 @@ export default async function DashboardPage() {
     fetchUserGoal(user.id),
     fetchCompletedWorkoutsCount(user.id),
     fetchWeeklyMuscleVolume(user.id),
+    fetchLiftTrends(user.id),
   ]);
 
   // Pass server-fetched data to client component as initial props
@@ -59,6 +62,7 @@ export default async function DashboardPage() {
         userGoal: userGoal as any,
         completedWorkoutsCount,
         muscleVolume,
+        liftTrends,
       }}
     />
   );

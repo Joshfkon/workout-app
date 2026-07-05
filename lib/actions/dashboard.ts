@@ -7,6 +7,12 @@ import {
   computeWeeklyMuscleVolume,
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
+import {
+  computeLiftTrends,
+  type LiftTrendsSummary,
+} from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import { computeWeekSessions } from '@/app/(dashboard)/dashboard/_lib/weekSessions';
+import type { PlateauGoal } from '@/services/plateauDetector';
 
 export interface DashboardMesocycle {
   id: string;
@@ -19,6 +25,9 @@ export interface DashboardMesocycle {
   splitType: string;
   daysPerWeek: number;
   preferredWorkoutDays?: WorkoutDay[] | null;
+  /** Sessions completed vs expected inside the current mesocycle week. */
+  weekSessionsDone?: number;
+  weekSessionsTotal?: number;
 }
 
 export interface TodaysWorkoutData {
@@ -73,17 +82,27 @@ export async function fetchMesocycleData(userId: string): Promise<{
   const sessions = mesocycle.workout_sessions || [];
   const completed = sessions.filter((s: any) => s.state === 'completed').length;
 
+  const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
+  const weekSessions = computeWeekSessions(
+    sessions,
+    mesocycle.start_date,
+    currentWeek,
+    mesocycle.days_per_week || 0
+  );
+
   const dashboardMesocycle: DashboardMesocycle = {
     id: mesocycle.id,
     name: mesocycle.name,
     startDate: mesocycle.start_date,
     weeks: mesocycle.total_weeks,
-    currentWeek: Math.min(weeksSinceStart, mesocycle.total_weeks),
+    currentWeek,
     workoutsCompleted: completed,
     totalWorkouts: sessions.length,
     splitType: mesocycle.split_type,
     daysPerWeek: mesocycle.days_per_week,
     preferredWorkoutDays: mesocycle.preferred_workout_days || null,
+    weekSessionsDone: weekSessions?.done,
+    weekSessionsTotal: weekSessions?.total,
   };
 
   // Check for today's workout
@@ -222,6 +241,35 @@ export async function fetchCompletedWorkoutsCount(userId: string): Promise<numbe
     .eq('user_id', userId)
     .eq('state', 'completed');
   return count || 0;
+}
+
+/**
+ * Lift trends for the home "Lifts" glance tile: top-set E1RM trend per
+ * frequently-trained exercise over the last 12 weeks (rising / flat / down
+ * plus the longest stall). Heavy lifting is in the shared pure helper so the
+ * client full-fetch path can reuse it.
+ */
+export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary> {
+  const supabase = await createUntypedServerClient();
+  const since = new Date();
+  since.setDate(since.getDate() - 84);
+
+  const [{ data: sessions }, { data: profile }] = await Promise.all([
+    supabase
+      .from('workout_sessions')
+      .select(`id, completed_at,
+        exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+      .eq('user_id', userId)
+      .eq('state', 'completed')
+      .gte('completed_at', since.toISOString())
+      .order('completed_at', { ascending: true }),
+    supabase.from('users').select('goal').eq('id', userId).single(),
+  ]);
+
+  return computeLiftTrends(
+    (sessions as any) || [],
+    (profile?.goal as PlateauGoal | null) ?? undefined
+  );
 }
 
 /**

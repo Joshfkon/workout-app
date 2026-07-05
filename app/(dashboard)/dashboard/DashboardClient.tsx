@@ -22,6 +22,8 @@ import {
   type VolumeAccumulator,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
+import { computeLiftTrends, type LiftTrendsSummary } from './_lib/liftTrends';
+import { computeWeekSessions } from './_lib/weekSessions';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
 import {
@@ -30,8 +32,8 @@ import {
   fetchDeloadRecommendation,
   type DeloadRecommendation,
 } from '@/lib/training/deloadRecommendation';
-import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector } from '@/components/dashboard/home';
-import type { TodaysWorkout, GlanceVolumeSummary } from '@/components/dashboard/home';
+import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, intakePaceLabel } from '@/components/dashboard/home';
+import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
 // Loading placeholder for lazily-loaded modal content
@@ -128,6 +130,9 @@ interface ActiveMesocycle {
   splitType?: string;
   daysPerWeek?: number;
   preferredWorkoutDays?: WorkoutDay[] | null;
+  /** Sessions completed vs expected inside the current mesocycle week. */
+  weekSessionsDone?: number;
+  weekSessionsTotal?: number;
 }
 
 interface ScheduledWorkout {
@@ -192,6 +197,8 @@ interface DashboardInitialData {
   completedWorkoutsCount: number;
   /** Weekly per-muscle volume (item 6): seeds the atrophy card server-side. */
   muscleVolume?: MuscleVolumeStats[];
+  /** Lift trend summary for the "Lifts" glance tile. */
+  liftTrends?: LiftTrendsSummary | null;
 }
 
 interface DashboardClientProps {
@@ -271,11 +278,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [activeMesocycle, setActiveMesocycle] = useState<ActiveMesocycle | null>(initialData?.mesocycle ?? null);
   const [todaysWorkout, setTodaysWorkout] = useState<TodaysWorkout | null>(initialData?.todaysWorkout ?? null);
   const [scheduledWorkout, setScheduledWorkout] = useState<ScheduledWorkout | null>(() => {
-    // Also computed when today's session exists but has no blocks yet
-    // (blocks are generated on start) — the hero card shows the scheduled
-    // day name instead of a misleading "0 exercises · 0/0 sets".
+    // Computed even when today's session already has blocks — the hero uses
+    // the split-day name ("Chest & Back") as its title and the muscle list
+    // for the recovery note, not just as the block-less fallback.
     if (!initialData?.mesocycle) return null;
-    if (initialData.todaysWorkout && initialData.todaysWorkout.exercises > 0) return null;
     const today = new Date();
     const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
     return getWorkoutForDay(
@@ -292,6 +298,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   // post-hydration weekly-volume fetch. The client fetch below still runs to
   // refresh, but no longer gates first paint.
   const [muscleVolume, setMuscleVolume] = useState<MuscleVolumeStats[]>(initialData?.muscleVolume ?? []);
+  const [liftTrends, setLiftTrends] = useState<LiftTrendsSummary | null>(initialData?.liftTrends ?? null);
   const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>(initialData?.weightUnit ?? 'lb');
   const [todaysWeight, setTodaysWeight] = useState<{ weight: number; unit: string } | null>(initialData?.todaysWeight ?? null);
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>(initialData?.weightHistory ?? []);
@@ -356,10 +363,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   };
 
-  // Recovery data for the glance "Recovery" tile (same source as the recovery card).
-  // While loading, the hook reports every muscle as ready (empty training map), so gate
-  // the tile on recoveryLoading and show a skeleton until real data arrives.
-  const { readyMuscles, recoveringMuscles, isLoading: recoveryLoading } = useMuscleRecovery();
+  // Recovery data for the hero's "all target muscles recovered" note. While
+  // loading, the hook reports every muscle as ready (empty training map), so
+  // the note is suppressed until real data arrives.
+  const { recoveringMuscles, isLoading: recoveryLoading } = useMuscleRecovery();
 
   // Time-based greeting + date — computed client-side after mount so the server render
   // (possibly a different timezone/hour, or across noon/midnight) doesn't cause a
@@ -390,13 +397,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     ? clientNow.getHours() < 12 ? 'Good morning' : clientNow.getHours() < 18 ? 'Good afternoon' : 'Good evening'
     : '';
   const todayLabel = clientNow
-    ? clientNow.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+    ? clientNow.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
     : '';
 
-  // "Week 3 of 5 · PPL" context line under the greeting.
+  // "Wk 1 of 5 · Arnold" context line under the greeting, plus "2/4 sessions".
   const weekContext = activeMesocycle
-    ? `Week ${activeMesocycle.currentWeek} of ${activeMesocycle.weeks}${activeMesocycle.splitType ? ` · ${activeMesocycle.splitType}` : ''}`
+    ? `Wk ${activeMesocycle.currentWeek} of ${activeMesocycle.weeks}${activeMesocycle.splitType ? ` · ${activeMesocycle.splitType}` : ''}`
     : null;
+  const sessionsLabel =
+    activeMesocycle?.weekSessionsDone != null && activeMesocycle.weekSessionsTotal
+      ? `${activeMesocycle.weekSessionsDone}/${activeMesocycle.weekSessionsTotal} sessions`
+      : null;
 
   // Today's daily check-in — drives the readiness pill (present) or the compact
   // check-in prompt (missing). 'loading' hides both until the fetch resolves.
@@ -487,20 +498,114 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     return null;
   }, [heroBlocks, scheduledWorkout]);
 
-  // Weekly weight trend (latest vs the earliest entry within the last ~7 days), in the preferred unit.
-  const weightTrend = (() => {
+  // Recovery note for the hero meta line ("all target muscles recovered" /
+  // "lats still recovering"), comparing today's target muscles against the
+  // recovery hook. Suppressed while recovery data loads.
+  const heroRecoveryNote = useMemo(() => {
+    if (recoveryLoading) return null;
+    const rawTargets =
+      heroBlocks.length > 0
+        ? heroBlocks.map((b) => b.primaryMuscle).filter((m): m is string => !!m)
+        : scheduledWorkout?.muscles ?? [];
+    if (rawTargets.length === 0) return null;
+    const targets = new Set<StandardMuscleGroup>();
+    for (const raw of rawTargets) {
+      const key = raw.toLowerCase().trim();
+      if (isStandardMuscle(key)) {
+        targets.add(key);
+        continue;
+      }
+      const expanded = legacyToStandardMuscles(key);
+      if (expanded.length > 0) {
+        expanded.forEach((m) => targets.add(m));
+        continue;
+      }
+      const single = toStandardMuscleForVolume(key);
+      if (single) targets.add(single);
+    }
+    if (targets.size === 0) return null;
+    const sore = recoveringMuscles.filter((m) => targets.has(m.muscle));
+    if (sore.length === 0) return 'all target muscles recovered';
+    if (sore.length <= 2) return `${sore.map((m) => m.displayName.toLowerCase()).join(', ')} still recovering`;
+    return `${sore.length} target muscles still recovering`;
+  }, [recoveryLoading, heroBlocks, scheduledWorkout, recoveringMuscles]);
+
+  // Meta line for a ready workout hero: "7 exercises · est. 65 min · all
+  // target muscles recovered". Only for the planned state — in-progress
+  // sessions fall back to the live set counts inside the card.
+  const workoutHeroMeta = useMemo(() => {
+    if (todaysWorkout && todaysWorkout.state !== 'planned') return null;
+    const parts: string[] = [];
+    if (todaysWorkout && todaysWorkout.exercises > 0) {
+      parts.push(`${todaysWorkout.exercises} exercises`);
+      parts.push(`est. ${Math.round((10 + todaysWorkout.exercises * 8) / 5) * 5} min`);
+    }
+    if (heroRecoveryNote) parts.push(heroRecoveryNote);
+    return parts.length > 0 ? parts.join(' · ') : null;
+  }, [todaysWorkout, heroRecoveryNote]);
+
+  // "ARNOLD WK 1" eyebrow context for the workout hero.
+  const heroEyebrowContext = activeMesocycle
+    ? `${activeMesocycle.splitType || activeMesocycle.name} wk ${activeMesocycle.currentWeek}`
+    : null;
+
+  // Next-meal hero content — shown when there's no pending workout (done or
+  // rest day) and meaningful calories remain for the day.
+  const mealHero: MealHeroSuggestion | null = useMemo(() => {
+    if (!clientNow || !nutritionTargets) return null;
+    const kcalLeft = Math.round(nutritionTargets.calories - nutritionTotals.calories);
+    if (kcalLeft < 100) return null;
+    const proteinLeft = Math.round(nutritionTargets.protein - nutritionTotals.protein);
+    const pace = intakePaceLabel(nutritionTotals.calories, nutritionTargets.calories, clientNow);
+    return {
+      title: `Log ${inferMealType(clientNow)}`,
+      timeLabel: clientNow.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      meta: `${kcalLeft.toLocaleString()} kcal${proteinLeft > 0 ? ` and ${proteinLeft}g protein` : ''} still to go — you're ${
+        pace === 'behind' ? 'behind pace' : 'on pace'
+      }`,
+    };
+  }, [clientNow, nutritionTargets, nutritionTotals]);
+
+  // Weekly weight-change rate (regression over the last ~3 weeks) vs the
+  // goal-implied target rate, in the preferred display unit.
+  const weightRate: GlanceWeightRate | null = useMemo(() => {
     if (weightHistory.length < 2) return null;
     const sorted = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date));
-    const latest = sorted[sorted.length - 1];
-    const weekAgoTs = Date.parse(latest.date) - 7 * 24 * 60 * 60 * 1000;
-    const baseline = sorted.find((w) => Date.parse(w.date) >= weekAgoTs) ?? sorted[0];
-    if (baseline === latest) return null;
-    const latestDisp = getDisplayWeight(latest.weight, latest.unit as 'lb' | 'kg' | null, weightUnit);
-    const baseDisp = getDisplayWeight(baseline.weight, baseline.unit as 'lb' | 'kg' | null, weightUnit);
-    const delta = latestDisp - baseDisp;
-    if (Math.abs(delta) < 0.05) return null;
-    return { delta, down: delta < 0 };
-  })();
+    const latestTs = Date.parse(sorted[sorted.length - 1].date);
+    const windowStart = latestTs - 21 * 24 * 60 * 60 * 1000;
+    let windowEntries = sorted.filter((w) => Date.parse(w.date) >= windowStart);
+    if (windowEntries.length < 2) windowEntries = sorted.slice(-2);
+
+    const points = windowEntries.map((w) => ({
+      x: Date.parse(w.date) / (24 * 60 * 60 * 1000),
+      y: getDisplayWeight(w.weight, w.unit as 'lb' | 'kg' | null, weightUnit),
+    }));
+    const n = points.length;
+    const sumX = points.reduce((a, p) => a + p.x, 0);
+    const sumY = points.reduce((a, p) => a + p.y, 0);
+    const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
+    const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
+    const denominator = n * sumX2 - sumX * sumX;
+    if (denominator === 0) return null;
+    const slopePerDay = (n * sumXY - sumX * sumY) / denominator;
+    const perWeek = Math.round(slopePerDay * 7 * 10) / 10;
+
+    const target =
+      userGoal === 'bulk'
+        ? weightUnit === 'lb' ? 0.5 : 0.25
+        : userGoal === 'cut'
+        ? weightUnit === 'lb' ? -1.0 : -0.45
+        : null;
+    return { perWeek, target };
+  }, [weightHistory, weightUnit, userGoal]);
+
+  // Latest known weight for the Weight tile (today's log or newest entry).
+  const latestWeight = useMemo(() => {
+    if (todaysWeight) return todaysWeight;
+    if (weightHistory.length === 0) return null;
+    const newest = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date))[weightHistory.length - 1];
+    return { weight: newest.weight, unit: newest.unit };
+  }, [todaysWeight, weightHistory]);
 
   // Weekly-volume summary for the glance "Weekly volume" tile (null = no volume yet).
   // Normalize to standard IDs and fold in untrained (0-set) muscles so the
@@ -773,6 +878,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           weightResult,
           weightHistoryResult,
           weeklyBlocksResult,
+          liftSessionsResult,
         ] = await Promise.all([
           // User profile (goal)
           supabase.from('users').select('goal').eq('id', user.id).single(),
@@ -823,6 +929,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
             .eq('workout_sessions.user_id', user.id)
             .eq('workout_sessions.state', 'completed')
             .gte('workout_sessions.completed_at', weekStart.toISOString()),
+
+          // Lift-trend history (12 weeks) for the "Lifts" glance tile
+          supabase.from('workout_sessions')
+            .select(`id, completed_at,
+              exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+            .eq('user_id', user.id)
+            .eq('state', 'completed')
+            .gte('completed_at', new Date(today.getTime() - 84 * 24 * 60 * 60 * 1000).toISOString())
+            .order('completed_at', { ascending: true }),
         ]);
 
         // Deferred queries - load in background, only needed for food logging
@@ -899,18 +1014,27 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           const weeksSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
           const sessions = mesocycle.workout_sessions || [];
           const completed = sessions.filter((s: any) => s.state === 'completed').length;
+          const currentWeek = Math.min(weeksSinceStart, mesocycle.total_weeks);
+          const weekSessions = computeWeekSessions(
+            sessions,
+            mesocycle.start_date,
+            currentWeek,
+            mesocycle.days_per_week || 0
+          );
 
           setActiveMesocycle({
             id: mesocycle.id,
             name: mesocycle.name,
             startDate: mesocycle.start_date,
             weeks: mesocycle.total_weeks,
-            currentWeek: Math.min(weeksSinceStart, mesocycle.total_weeks),
+            currentWeek,
             workoutsCompleted: completed,
             totalWorkouts: sessions.length,
             splitType: mesocycle.split_type,
             daysPerWeek: mesocycle.days_per_week,
             preferredWorkoutDays: mesocycle.preferred_workout_days || null,
+            weekSessionsDone: weekSessions?.done,
+            weekSessionsTotal: weekSessions?.total,
           });
 
           const todaySession = sessions.find((s: any) =>
@@ -943,17 +1067,16 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               completedSets,
               totalSets: blocks.reduce((sum: number, b: any) => sum + (b.target_sets || 3), 0),
             });
-            // Keep the scheduled-day summary around for block-less sessions —
-            // the hero card uses it in place of "0 exercises · 0/0 sets".
+            // Keep the scheduled-day summary around even with blocks — the
+            // hero uses the split-day name as its title and the muscle list
+            // for the recovery note.
             setScheduledWorkout(
-              blocks.length === 0
-                ? getWorkoutForDay(
-                    mesocycle.split_type || 'Upper/Lower',
-                    dayOfWeek,
-                    mesocycle.days_per_week || 4,
-                    mesocycle.preferred_workout_days
-                  )
-                : null
+              getWorkoutForDay(
+                mesocycle.split_type || 'Upper/Lower',
+                dayOfWeek,
+                mesocycle.days_per_week || 4,
+                mesocycle.preferred_workout_days
+              )
             );
           } else {
             // No session today — clear any stale workout from the previous day (rollover refetch)
@@ -1088,6 +1211,15 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
           setMuscleVolume(stats);
         }
+
+        // Lift trends for the "Lifts" glance tile (same pure helper the
+        // server initial-data path uses).
+        setLiftTrends(
+          computeLiftTrends(
+            (liftSessionsResult.data as any) || [],
+            userProfileResult.data?.goal ?? undefined
+          )
+        );
 
         // NOTE: Frequent foods and system foods are loaded via deferred queries above
         // They don't block initial render and are processed in the background
@@ -1339,7 +1471,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     </div>
   ) : null;
 
-  const atrophyCard = musclesBelowMev.length > 0 ? (
+  // Early-week "ramp" framing for below-MEV muscles (wk 1-2, expected while
+  // the week fills in); later weeks escalate to the full atrophy alert.
+  const rampBanner =
+    glanceVolume && glanceVolume.lowCount > 0 && activeMesocycle && activeMesocycle.currentWeek <= 2 ? (
+      <VolumeRampBanner lowCount={glanceVolume.lowCount} week={activeMesocycle.currentWeek} />
+    ) : null;
+
+  const atrophyCard = !rampBanner && musclesBelowMev.length > 0 ? (
     <AtrophyRiskAlert musclesBelowMev={musclesBelowMev} userGoal={normalizedGoal} />
   ) : null;
 
@@ -1353,40 +1492,41 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           greeting={greeting}
           todayLabel={todayLabel}
           weekContext={weekContext}
+          sessionsLabel={sessionsLabel}
           readinessScore={checkInStatus === 'done' ? checkInReadiness : null}
+          onReadinessClick={userId ? () => setActiveModal('checkin') : undefined}
           phaseChip={<PhaseSelector phase={currentPhase} onPhaseChanged={handlePhaseChanged} />}
         />
       )}
 
-      {/* Today's workout hero — the primary daily action (null on rest days) */}
+      {/* "Next up" hero — pending workout first, otherwise the next meal */}
       <TodayHeroCard
         workout={todaysWorkout}
         scheduled={scheduledWorkout}
         hasPlan={!!activeMesocycle}
         mesocycleName={activeMesocycle?.name ?? null}
+        eyebrowContext={heroEyebrowContext}
+        workoutMeta={workoutHeroMeta}
+        meal={mealHero}
+        onLogFood={() => setActiveModal('food')}
         coachLine={coachLine}
       />
 
-      {/* Glance metric grid: Nutrition · Recovery · Weekly volume · Weight */}
+      {/* Glance metric grid: Nutrition · Lifts · Weekly volume · Weight */}
       <MetricTileGrid
         nutritionTotals={nutritionTotals}
         nutritionTargets={nutritionTargets}
-        recoveryLoading={recoveryLoading}
-        readyMuscles={readyMuscles}
-        recoveringMuscles={recoveringMuscles}
+        liftTrends={liftTrends}
         volume={glanceVolume}
-        todaysWeight={todaysWeight}
+        latestWeight={latestWeight}
         weightUnit={weightUnit}
-        weightTrend={weightTrend}
+        weightHistory={weightHistory}
+        weightRate={weightRate}
+        onLogWeight={() => setActiveModal('weight')}
       />
 
-      {/* Quick log row — each button opens a modal */}
-      <QuickLogRow
-        onLogWeight={() => setActiveModal('weight')}
-        onLogWater={userId ? () => setActiveModal('water') : undefined}
-        onLogFood={() => setActiveModal('food')}
-        onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
-      />
+      {/* Early-week volume ramp insight (links to the volume page) */}
+      {rampBanner}
 
       {/* Contextual insight cards — render only when triggered */}
       {hasInsightCards && (
@@ -1396,6 +1536,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           {atrophyCard}
         </div>
       )}
+
+      {/* Quick log row — each button opens a modal */}
+      <QuickLogRow
+        onLogWeight={() => setActiveModal('weight')}
+        onLogWater={userId ? () => setActiveModal('water') : undefined}
+        onLogFood={() => setActiveModal('food')}
+        onLogCardio={showCardio && userId ? () => setActiveModal('cardio') : undefined}
+      />
 
       {/* Quick-log modals (content lazy-loads on first open) */}
       {activeModal === 'weight' && (
