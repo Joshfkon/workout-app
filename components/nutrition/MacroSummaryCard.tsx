@@ -102,7 +102,12 @@ export function MacroSummaryCard({
   const caloriePct = Math.min((totals.calories / target) * 100, 100);
 
   return (
-    <div className="rounded-xl border border-surface-800 bg-surface-900 p-4">
+    <button
+      type="button"
+      onClick={onCalculateMacros}
+      aria-label="Open macro calculator to review or update your targets"
+      className="w-full text-left rounded-xl border border-surface-800 bg-surface-900 p-4 hover:bg-surface-800/60 active:bg-surface-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50"
+    >
       {/* Row 1: headline + remaining */}
       <div className="flex items-baseline justify-between gap-2">
         <div className="text-[15px] font-medium text-surface-100">
@@ -129,6 +134,6 @@ export function MacroSummaryCard({
         <MacroColumn label="Carbs" value={totals.carbs} target={targets.carbs} fillClass="bg-warning-500" />
         <MacroColumn label="Fat" value={totals.fat} target={targets.fat} fillClass="bg-danger-500" />
       </div>
-    </div>
+    </button>
   );
 }
