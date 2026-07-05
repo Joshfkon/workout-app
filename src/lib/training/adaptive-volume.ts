@@ -307,6 +307,44 @@ export function createInitialVolumeProfile(
   };
 }
 
+/**
+ * Enhanced athletes recover from ~40% more volume (see getAdjustedBaseline).
+ */
+const ENHANCED_VOLUME_MULTIPLIER = 1.4;
+
+/**
+ * Set enhanced-athlete status on an existing profile, rescaling every
+ * muscle's MEV/MRV estimates so the flag change takes effect immediately
+ * (baselines are otherwise only adjusted at profile creation). Learned
+ * estimates are scaled rather than reset so accumulated data is preserved.
+ * Returns the profile unchanged if the status isn't actually changing.
+ */
+export function setEnhancedStatus(
+  profile: UserVolumeProfile,
+  isEnhanced: boolean
+): UserVolumeProfile {
+  if (profile.isEnhanced === isEnhanced) return profile;
+
+  const scale = isEnhanced ? ENHANCED_VOLUME_MULTIPLIER : 1 / ENHANCED_VOLUME_MULTIPLIER;
+
+  const muscleTolerance = {} as Record<MuscleGroup, MuscleTolerance>;
+  for (const [muscle, tolerance] of Object.entries(profile.muscleTolerance)) {
+    muscleTolerance[muscle as MuscleGroup] = {
+      ...tolerance,
+      estimatedMEV: Math.round(tolerance.estimatedMEV * scale),
+      estimatedMRV: Math.round(tolerance.estimatedMRV * scale),
+      lastUpdated: new Date(),
+    };
+  }
+
+  return {
+    ...profile,
+    isEnhanced,
+    muscleTolerance,
+    updatedAt: new Date(),
+  };
+}
+
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================

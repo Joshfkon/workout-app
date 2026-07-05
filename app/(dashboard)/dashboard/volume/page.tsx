@@ -3,11 +3,12 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
+import { Toggle } from '@/components/ui/Toggle';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
-import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
+import { BASELINE_VOLUME_RECOMMENDATIONS, setEnhancedStatus } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
@@ -134,6 +135,7 @@ export default function VolumeProfilePage() {
     fatigueAlerts,
     latestAnalysis,
     isLoading,
+    updateProfile,
   } = useAdaptiveVolume();
 
   const { user } = useUserStore();
@@ -298,17 +300,18 @@ export default function VolumeProfilePage() {
               PEDs significantly increase recovery capacity
             </p>
           </div>
-          <div
-            className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${
-              volumeProfile?.isEnhanced ? 'bg-primary-500' : 'bg-surface-700'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                volumeProfile?.isEnhanced ? 'translate-x-6' : 'translate-x-0'
-              }`}
-            />
-          </div>
+          <Toggle
+            checked={volumeProfile?.isEnhanced ?? false}
+            onChange={(checked) => {
+              if (!volumeProfile) return;
+              const updated = setEnhancedStatus(volumeProfile, checked);
+              updateProfile({
+                isEnhanced: updated.isEnhanced,
+                muscleTolerance: updated.muscleTolerance,
+              });
+            }}
+            disabled={!volumeProfile}
+          />
         </div>
         {volumeProfile?.isEnhanced && (
           <p className="mt-2 text-xs text-primary-400">
