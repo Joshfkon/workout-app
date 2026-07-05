@@ -38,7 +38,16 @@ export const Modal = memo(function Modal({
       // modal content; block everything else (overlay, body) so the page
       // behind the modal doesn't scroll on iOS.
       const content = contentRef.current;
-      let el = e.target as HTMLElement | null;
+      // Range sliders (and other drag-based inputs) rely on touchmove for
+      // their drag gesture — preventDefault here would make them undraggable.
+      const target = e.target as HTMLElement | null;
+      if (
+        content?.contains(target) &&
+        target?.closest('input[type="range"], [data-allow-touch-move]')
+      ) {
+        return;
+      }
+      let el = target;
       while (el && content?.contains(el)) {
         const { overflowY } = window.getComputedStyle(el);
         const scrollable =
