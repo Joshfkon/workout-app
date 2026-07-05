@@ -51,6 +51,7 @@ import {
 } from '@/lib/training/startMesocycleSession';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
@@ -542,6 +543,15 @@ export default function LogPage() {
       blockIds: inProgress.blockIds,
     });
     if (ok) {
+      // The workout store persists activeSession (it drives the global
+      // ResumeWorkoutBanner pill), so if the user opened this session before
+      // discarding it here, clear the store too — otherwise the pill keeps
+      // routing to a deleted/reset session. Matches the workout page's
+      // cancel flow, which calls endSession() after the same DB cleanup.
+      const { activeSession, endSession } = useWorkoutStore.getState();
+      if (activeSession?.id === inProgress.id) {
+        endSession();
+      }
       setInProgress(null);
     } else {
       console.error('Failed to discard workout:', errors);
