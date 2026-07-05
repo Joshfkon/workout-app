@@ -56,6 +56,34 @@ interface Mesocycle {
   exercise_overrides?: ExerciseOverride[];
 }
 
+/**
+ * The program-slot session Start will actually launch for this mesocycle,
+ * or null exactly when the start path falls back to the calendar workout:
+ * program_data yields no session for the slot, or none of its exercises
+ * resolve in the library (programSessionHasUsableExercises). Every caller
+ * that rewrites program_data must re-run this so the card keeps advertising
+ * what Start launches.
+ */
+async function resolveProgramSlotSession(
+  supabase: ReturnType<typeof createUntypedClient>,
+  mesocycle: Mesocycle,
+  programData: FullProgramRecommendation | null,
+  completedCount: number
+): Promise<ExtractedSession | null> {
+  const sessionFromProgram = getSessionFromProgramData(
+    programData,
+    sessionIndexFromCompleted(completedCount, mesocycle.days_per_week),
+    mesocycle.current_week,
+    mesocycle.total_weeks
+  );
+  const slotUsable = await programSessionHasUsableExercises(
+    supabase,
+    sessionFromProgram,
+    mesocycle.exercise_overrides
+  );
+  return slotUsable ? sessionFromProgram : null;
+}
+
 function RenameEditor({
   value,
   onChange,
@@ -371,6 +399,19 @@ export default function MesocyclePage() {
             normalizedPreferredDays
           )
         );
+
+        // program_data was just rewritten, and Start will build from the
+        // regenerated program — re-resolve the slot session so the card's
+        // day name / muscle badges / time estimate advertise the new
+        // program instead of the one loaded on mount.
+        const slotSession = await resolveProgramSlotSession(
+          supabase,
+          mesocycle,
+          newProgram,
+          completedSessions
+        );
+        setProgramSession(slotSession);
+        setEstimatedSessionTime(slotSession ? slotSession.estimatedMinutes : null);
       }
 
       setIsEditingDuration(false);
@@ -456,21 +497,15 @@ export default function MesocyclePage() {
           // its exercises still resolve in the library — otherwise Start's
           // block-building loop skips every entry and falls back to the
           // calendar workout, so the card must advertise that instead.
-          const programData = active.program_data as FullProgramRecommendation | null;
-          const sessionFromProgram = getSessionFromProgramData(
-            programData,
-            sessionIndexFromCompleted(completedCount, active.days_per_week),
-            active.current_week,
-            active.total_weeks
-          );
-          const slotUsable = await programSessionHasUsableExercises(
+          const slotSession = await resolveProgramSlotSession(
             supabase,
-            sessionFromProgram,
-            active.exercise_overrides
+            active,
+            active.program_data as FullProgramRecommendation | null,
+            completedCount
           );
-          setProgramSession(slotUsable ? sessionFromProgram : null);
-          if (slotUsable && sessionFromProgram) {
-            setEstimatedSessionTime(sessionFromProgram.estimatedMinutes);
+          setProgramSession(slotSession);
+          if (slotSession) {
+            setEstimatedSessionTime(slotSession.estimatedMinutes);
           }
         }
       }
