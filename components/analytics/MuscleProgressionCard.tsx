@@ -8,11 +8,14 @@ import {
   type MuscleGroupProgression,
   type ProgressionPace,
 } from '@/services/progressionInsights';
+import type { PlateauGoal } from '@/services/plateauDetector';
 
 interface MuscleProgressionCardProps {
   groups: MuscleGroupProgression[];
   /** exerciseId -> display name, for the expanded per-exercise rows */
   exerciseNames?: Map<string, string>;
+  /** Diet goal, used to explain what "on pace" means for the phase */
+  goal?: PlateauGoal;
 }
 
 function muscleDisplayName(muscle: string): string {
@@ -46,7 +49,7 @@ function formatWeeklyPct(pct: number): string {
  * the expected E1RM gain rate for the user's experience level. Rows expand
  * to show per-exercise pace.
  */
-export function MuscleProgressionCard({ groups, exerciseNames }: MuscleProgressionCardProps) {
+export function MuscleProgressionCard({ groups, exerciseNames, goal }: MuscleProgressionCardProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (muscle: string) => {
@@ -61,14 +64,19 @@ export function MuscleProgressionCard({ groups, exerciseNames }: MuscleProgressi
   if (groups.length === 0) return null;
 
   const expectedPct = groups[0].expectedWeeklyPct;
+  const normalizedGoal = goal === 'maintain' ? 'maintenance' : goal;
+  const subtitle =
+    normalizedGoal === 'cut'
+      ? 'E1RM trend · on a cut, holding strength counts as on track'
+      : normalizedGoal === 'maintenance'
+        ? 'E1RM trend · at maintenance, holding strength counts as on track'
+        : `E1RM trend vs the ~${expectedPct}%/week expected for your level`;
 
   return (
     <Card padding="none">
       <div className="p-4 border-b border-surface-800">
         <h3 className="font-medium text-surface-100">Progression by muscle group</h3>
-        <p className="text-xs text-surface-500 mt-0.5">
-          E1RM trend vs the ~{expectedPct}%/week expected for your level
-        </p>
+        <p className="text-xs text-surface-500 mt-0.5">{subtitle}</p>
       </div>
       <ul className="divide-y divide-surface-800">
         {groups.map((group) => {

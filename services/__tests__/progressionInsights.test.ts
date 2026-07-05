@@ -1,6 +1,7 @@
 import {
   getExerciseProgression,
   getMuscleGroupProgression,
+  getExpectedPace,
   getPaceDisplay,
   formatLastSessionDelta,
   EXPECTED_WEEKLY_E1RM_GAIN_PCT,
@@ -126,6 +127,54 @@ describe('getExerciseProgression', () => {
     expect(result.lastSessionDelta).toEqual({ weightKg: 2.5, reps: 2 });
   });
 
+  it('classifies holding strength on a cut as on_track, not behind', () => {
+    // Flat E1RM is exactly what a cut should deliver. Without the goal this
+    // would read plateaued (bulk expectations).
+    const snapshots = buildSnapshots('ex-1', 8, 100, 0);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'intermediate',
+      goal: 'cut',
+    });
+    expect(result.pace).toBe('on_track');
+    expect(result.expectedWeeklyPct).toBe(0);
+  });
+
+  it('classifies gaining strength on a cut as ahead', () => {
+    const snapshots = buildSnapshots('ex-1', 8, 100, 0.5);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'advanced',
+      goal: 'cut',
+    });
+    expect(result.pace).toBe('ahead');
+  });
+
+  it('still flags a real strength decline on a cut', () => {
+    // -1%/week over 8 weeks is losing strength faster than a cut should cost
+    const snapshots = buildSnapshots('ex-1', 8, 100, -1);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'intermediate',
+      goal: 'cut',
+    });
+    expect(['plateaued', 'behind']).toContain(result.pace);
+  });
+
+  it('classifies holding strength at maintenance as on_track', () => {
+    const snapshots = buildSnapshots('ex-1', 8, 100, 0);
+    const result = getExerciseProgression({
+      exerciseId: 'ex-1',
+      snapshots,
+      experience: 'intermediate',
+      goal: 'maintenance',
+    });
+    expect(result.pace).toBe('on_track');
+  });
+
   it('handles empty snapshots', () => {
     const result = getExerciseProgression({
       exerciseId: 'ex-1',
@@ -200,6 +249,60 @@ describe('getMuscleGroupProgression', () => {
     expect(results[0].pace).toBe('insufficient_data');
     expect(results[0].analyzedCount).toBe(0);
     expect(results[0].exerciseCount).toBe(1);
+  });
+});
+
+describe('getExpectedPace', () => {
+  it('expects the full experience rate on a bulk (and by default)', () => {
+    expect(getExpectedPace('novice', 'bulk').expectedWeeklyPct).toBe(
+      EXPECTED_WEEKLY_E1RM_GAIN_PCT.novice
+    );
+    expect(getExpectedPace('intermediate').expectedWeeklyPct).toBe(
+      EXPECTED_WEEKLY_E1RM_GAIN_PCT.intermediate
+    );
+  });
+
+  it('expects roughly half the bulk rate on a recomp', () => {
+    expect(getExpectedPace('novice', 'recomp').expectedWeeklyPct).toBe(
+      EXPECTED_WEEKLY_E1RM_GAIN_PCT.novice / 2
+    );
+  });
+
+  it('expects no gains on maintenance/cut and normalizes maintain', () => {
+    expect(getExpectedPace('novice', 'cut').expectedWeeklyPct).toBe(0);
+    expect(getExpectedPace('novice', 'maintenance').expectedWeeklyPct).toBe(0);
+    expect(getExpectedPace('novice', 'maintain')).toEqual(
+      getExpectedPace('novice', 'maintenance')
+    );
+  });
+
+  it('tolerates a larger weekly decline on a cut than at maintenance', () => {
+    expect(getExpectedPace('novice', 'cut').onTrackAtPct).toBeLessThan(
+      getExpectedPace('novice', 'maintenance').onTrackAtPct
+    );
+  });
+});
+
+describe('muscle rollup with a goal', () => {
+  it('reads flat lifts as on_track when cutting instead of plateaued', () => {
+    const snapshotsByExercise = new Map([
+      ['squat', buildSnapshots('squat', 8, 140, 0)],
+      ['legpress', buildSnapshots('legpress', 8, 200, 0)],
+    ]);
+    const muscleByExercise = new Map([
+      ['squat', 'quads'],
+      ['legpress', 'quads'],
+    ]);
+
+    const results = getMuscleGroupProgression({
+      snapshotsByExercise,
+      muscleByExercise,
+      experience: 'novice',
+      goal: 'cut',
+    });
+
+    expect(results[0].pace).toBe('on_track');
+    expect(results[0].plateauedCount).toBe(0);
   });
 });
 
