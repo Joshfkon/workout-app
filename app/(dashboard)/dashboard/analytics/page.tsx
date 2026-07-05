@@ -1539,6 +1539,7 @@ export default function AnalyticsPage() {
             <MuscleProgressionCard
               groups={muscleProgression}
               exerciseNames={progressionRaw?.exerciseNames}
+              goal={progressionRaw?.goal}
             />
           )}
           {strengthProfile ? (

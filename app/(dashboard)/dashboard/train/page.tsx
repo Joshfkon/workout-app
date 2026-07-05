@@ -23,6 +23,8 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
 import { getWorkoutForDay, type TodayWorkout } from '@/lib/training/startMesocycleSession';
 import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
+import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
+import { useMuscleProgression } from '@/hooks/useMuscleProgression';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { WorkoutDay } from '@/types/schema';
 
@@ -59,6 +61,12 @@ interface RecentSessionRow {
 export default function TrainPage() {
   const supabase = createUntypedClient();
   const { summary, isLoading: volumeLoading } = useWeeklyVolume();
+  const {
+    groups: progressionGroups,
+    exerciseNames,
+    goal,
+    isLoading: progressionLoading,
+  } = useMuscleProgression();
 
   const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
   const [activeMeso, setActiveMeso] = useState<ActiveMesoSummary | null>(null);
@@ -244,6 +252,22 @@ export default function TrainPage() {
         </span>
         <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
       </Link>
+
+      {/* Progression vs the pace expected for the user's level and diet
+          phase (bulk/cut aware; services/progressionInsights) */}
+      {progressionLoading ? (
+        <div className="p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-[12px] text-surface-500">
+          Analyzing progression...
+        </div>
+      ) : (
+        progressionGroups.length > 0 && (
+          <MuscleProgressionCard
+            groups={progressionGroups}
+            exerciseNames={exerciseNames}
+            goal={goal}
+          />
+        )
+      )}
 
       {/* Muscle recovery */}
       <MuscleRecoveryCard compact limit={6} />

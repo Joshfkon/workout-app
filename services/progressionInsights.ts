@@ -41,6 +41,18 @@ const AHEAD_RATIO = 1.25;
 /** Actual/expected ratio at or above which the lifter is "on track" */
 const ON_TRACK_RATIO = 0.5;
 
+/** Weekly decline (%/week) still counted as "on track" while cutting */
+const CUT_ON_TRACK_FLOOR_PCT = -0.3;
+
+/** Weekly decline (%/week) still counted as "on track" at maintenance */
+const MAINTENANCE_ON_TRACK_FLOOR_PCT = -0.15;
+
+/** Any measurable weekly gain on a deficit/maintenance is "ahead" */
+const ZERO_EXPECTATION_AHEAD_PCT = 0.1;
+
+/** Recomp expects roughly half the bulk-rate gains */
+const RECOMP_RATE_MULTIPLIER = 0.5;
+
 // ============================================
 // TYPES
 // ============================================
@@ -69,6 +81,55 @@ export interface ExerciseProgressionInsight {
     weightKg: number;
     reps: number;
   };
+}
+
+/**
+ * Goal-aware pace expectations. On a bulk the full experience-level gain
+ * rate is expected; recomp roughly halves it; on maintenance or a cut,
+ * E1RM gains aren't the goal — holding strength is on pace and only a
+ * real decline counts as behind.
+ */
+export interface ExpectedPace {
+  /** Expected weekly E1RM change (% of E1RM); 0 on maintenance/cut */
+  expectedWeeklyPct: number;
+  /** weeklyChangePct at or above this is "ahead" */
+  aheadAtPct: number;
+  /** weeklyChangePct at or above this is "on track" */
+  onTrackAtPct: number;
+}
+
+export function getExpectedPace(experience: Experience, goal?: PlateauGoal): ExpectedPace {
+  const base = EXPECTED_WEEKLY_E1RM_GAIN_PCT[experience];
+  const normalized = goal === 'maintain' ? 'maintenance' : goal;
+  switch (normalized) {
+    case 'cut':
+      return {
+        expectedWeeklyPct: 0,
+        aheadAtPct: ZERO_EXPECTATION_AHEAD_PCT,
+        onTrackAtPct: CUT_ON_TRACK_FLOOR_PCT,
+      };
+    case 'maintenance':
+      return {
+        expectedWeeklyPct: 0,
+        aheadAtPct: ZERO_EXPECTATION_AHEAD_PCT,
+        onTrackAtPct: MAINTENANCE_ON_TRACK_FLOOR_PCT,
+      };
+    case 'recomp': {
+      const rate = base * RECOMP_RATE_MULTIPLIER;
+      return {
+        expectedWeeklyPct: rate,
+        aheadAtPct: rate * AHEAD_RATIO,
+        onTrackAtPct: rate * ON_TRACK_RATIO,
+      };
+    }
+    case 'bulk':
+    default:
+      return {
+        expectedWeeklyPct: base,
+        aheadAtPct: base * AHEAD_RATIO,
+        onTrackAtPct: base * ON_TRACK_RATIO,
+      };
+  }
 }
 
 export interface MuscleGroupProgression {
@@ -105,7 +166,8 @@ export function getExerciseProgression(
   input: GetExerciseProgressionInput
 ): ExerciseProgressionInsight {
   const { exerciseId, snapshots, experience, referenceDate, goal } = input;
-  const expectedWeeklyPct = EXPECTED_WEEKLY_E1RM_GAIN_PCT[experience];
+  const expected = getExpectedPace(experience, goal);
+  const expectedWeeklyPct = expected.expectedWeeklyPct;
 
   const sorted = [...snapshots].sort(
     (a, b) => new Date(a.sessionDate).getTime() - new Date(b.sessionDate).getTime()
@@ -146,15 +208,14 @@ export function getExerciseProgression(
   const weeklyChangePct =
     currentE1RM > 0 ? Math.round((weeklyChangeKg / currentE1RM) * 1000) / 10 : 0;
 
-  // Pace from the trend ratio first. The plateau flag only decides the
-  // weak cases: plateauDetector's threshold (<2% over ~4 sessions) would
-  // otherwise label a normally-progressing intermediate/advanced lifter
-  // as plateaued even when they're gaining exactly at the expected rate.
-  const ratio = weeklyChangePct / expectedWeeklyPct;
+  // Pace from goal-aware trend thresholds first. The plateau flag only
+  // decides the weak cases: plateauDetector's bulk threshold (<2% over ~4
+  // sessions) would otherwise label a normally-progressing intermediate/
+  // advanced lifter as plateaued even when gaining at the expected rate.
   let pace: ProgressionPace;
-  if (ratio >= AHEAD_RATIO) {
+  if (weeklyChangePct >= expected.aheadAtPct) {
     pace = 'ahead';
-  } else if (ratio >= ON_TRACK_RATIO) {
+  } else if (weeklyChangePct >= expected.onTrackAtPct) {
     pace = 'on_track';
   } else if (plateau.isPlateaued) {
     pace = 'plateaued';
@@ -199,7 +260,8 @@ export function getMuscleGroupProgression(
   input: GetMuscleGroupProgressionInput
 ): MuscleGroupProgression[] {
   const { snapshotsByExercise, muscleByExercise, experience, referenceDate, goal } = input;
-  const expectedWeeklyPct = EXPECTED_WEEKLY_E1RM_GAIN_PCT[experience];
+  const expected = getExpectedPace(experience, goal);
+  const expectedWeeklyPct = expected.expectedWeeklyPct;
 
   const byMuscle = new Map<string, ExerciseProgressionInsight[]>();
 
@@ -235,12 +297,14 @@ export function getMuscleGroupProgression(
     let pace: ProgressionPace;
     if (analyzed.length === 0) {
       pace = 'insufficient_data';
+    } else if (avgWeeklyChangePct >= expected.aheadAtPct) {
+      pace = 'ahead';
+    } else if (avgWeeklyChangePct >= expected.onTrackAtPct) {
+      pace = 'on_track';
+    } else if (plateauedCount > analyzed.length / 2) {
+      pace = 'plateaued';
     } else {
-      const ratio = avgWeeklyChangePct / expectedWeeklyPct;
-      if (ratio >= AHEAD_RATIO) pace = 'ahead';
-      else if (ratio >= ON_TRACK_RATIO) pace = 'on_track';
-      else if (plateauedCount > analyzed.length / 2) pace = 'plateaued';
-      else pace = 'behind';
+      pace = 'behind';
     }
 
     results.push({
