@@ -613,19 +613,21 @@ export function MacroCalculatorModal({
                 )}
               </div>
 
-              {/* Show requested vs final if they differ */}
-              {(recommendation.requestedCalories !== recommendation.calories || 
-                Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) > 0.01) && (
+              {/* Show requested vs final only when the difference is meaningful —
+                  macro rounding always shifts final calories by a few kcal, and a
+                  "2308 → 2305 (−3 cal)" adjustment is noise, not information */}
+              {(Math.abs(recommendation.calories - recommendation.requestedCalories) >= 25 ||
+                Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) >= 0.023) && (
                 <div className="pt-2 border-t border-surface-800">
                   <p className="text-xs font-medium text-surface-400 mb-1">Adjustments Applied:</p>
-                  {recommendation.requestedCalories !== recommendation.calories && (
+                  {Math.abs(recommendation.calories - recommendation.requestedCalories) >= 25 && (
                     <p className="text-xs text-surface-500">
-                      Calories: {recommendation.requestedCalories} → {recommendation.calories} 
+                      Calories: {recommendation.requestedCalories} → {recommendation.calories}
                       ({recommendation.calories - recommendation.requestedCalories > 0 ? '+' : ''}
                       {recommendation.calories - recommendation.requestedCalories} cal)
                     </p>
                   )}
-                  {Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) > 0.01 && (
+                  {Math.abs(recommendation.requestedWeeklyChangeKg - recommendation.weeklyChangeKg) >= 0.023 && (
                     <p className="text-xs text-surface-500">
                       Weekly change: {recommendation.requestedWeeklyChangeKg.toFixed(3)} kg → {recommendation.weeklyChangeKg.toFixed(3)} kg
                     </p>

@@ -65,6 +65,8 @@ export type Peptide =
   | "tesofensine"
   | "gh_peptides";
 
+export type GoalDirection = "cut" | "maintain" | "bulk";
+
 export interface PeptideInfo {
   id: Peptide;
   name: string;
@@ -72,7 +74,9 @@ export interface PeptideInfo {
   // Modest bump (1.05-1.10) to offset documented lean mass loss risk
   // Still bounded by protein clamp (0.9-1.2 g/lb LBM)
   proteinMultiplier: number;
-  notes: string;
+  // Goal-aware tips: appetite suppression is an asset on a cut but a
+  // liability on a bulk (harder to hit a surplus)
+  notes: Record<GoalDirection, string>;
 }
 
 export interface UserStats {
@@ -288,55 +292,90 @@ const PEPTIDE_CONFIG: Record<Peptide, PeptideInfo> = {
     name: "None",
     description: "Not using peptides",
     proteinMultiplier: 1.0,
-    notes: "",
+    notes: { cut: "", maintain: "", bulk: "" },
   },
   semaglutide: {
     id: "semaglutide",
     name: "Semaglutide",
     description: "GLP-1 agonist",
     proteinMultiplier: 1.08,
-    notes: "Hit protein reliably; don't chase suppression with deeper deficits.",
+    notes: {
+      cut: "Hit protein reliably; don't chase suppression with deeper deficits.",
+      maintain: "Suppression can drift you into an unplanned deficit — watch the scale trend and keep protein consistent.",
+      bulk: "Suppression works against your surplus. Lean on calorie-dense foods and liquid calories (shakes), and eat on a schedule rather than by hunger.",
+    },
   },
   tirzepatide: {
     id: "tirzepatide",
     name: "Tirzepatide",
     description: "GLP-1/GIP dual agonist",
     proteinMultiplier: 1.08,
-    notes: "Keep deficits moderate; appetite suppression ≠ CNS tolerance.",
+    notes: {
+      cut: "Keep deficits moderate; appetite suppression ≠ CNS tolerance.",
+      maintain: "Appetite cues are muted — track intake so maintenance doesn't quietly become a cut.",
+      bulk: "Strong suppression makes a surplus hard to hit. Use calorie-dense foods, liquid calories, and don't skip meals — eat by the clock.",
+    },
   },
   retatrutide: {
     id: "retatrutide",
     name: "Retatrutide",
     description: "GLP-1/GIP/Glucagon triple agonist",
     proteinMultiplier: 1.10,
-    notes: "Most potent suppression; keep deficit sane and carbs non-trivial.",
+    notes: {
+      cut: "Most potent suppression; keep deficit sane and carbs non-trivial.",
+      maintain: "Most potent suppression — weigh in regularly and track intake to avoid sliding below maintenance.",
+      bulk: "Most potent suppression — hitting a surplus will be genuinely hard. Prioritize calorie-dense foods and liquid calories, and never skip scheduled meals.",
+    },
   },
   liraglutide: {
     id: "liraglutide",
     name: "Liraglutide",
     description: "GLP-1 agonist (daily)",
     proteinMultiplier: 1.07,
-    notes: "Keep protein consistent; avoid very low carbs for long stretches.",
+    notes: {
+      cut: "Keep protein consistent; avoid very low carbs for long stretches.",
+      maintain: "Keep protein consistent and monitor weight — suppression can pull intake below maintenance unnoticed.",
+      bulk: "Suppression makes a surplus harder — favor calorie-dense foods and liquid calories, and keep meals on a schedule.",
+    },
   },
   tesofensine: {
     id: "tesofensine",
     name: "Tesofensine",
     description: "Appetite suppressant",
     proteinMultiplier: 1.05,
-    notes: "Nutrient density matters; don't let calories drift too low.",
+    notes: {
+      cut: "Nutrient density matters; don't let calories drift too low.",
+      maintain: "Appetite is blunted — track calories so maintenance intake doesn't drift downward.",
+      bulk: "Blunted appetite fights your surplus — use calorie-dense foods, liquid calories, and scheduled meals instead of relying on hunger.",
+    },
   },
   gh_peptides: {
     id: "gh_peptides",
     name: "GH Peptides",
     description: "Secretagogues",
     proteinMultiplier: 1.05,
-    notes: "No special deficit tolerance; keep protein adequate.",
+    notes: {
+      cut: "No special deficit tolerance; keep protein adequate.",
+      maintain: "Keep protein adequate; no meaningful effect on appetite or energy needs.",
+      bulk: "No appetite suppression to fight — keep protein adequate and track the surplus normally.",
+    },
   },
 };
 
 // ---------------------- Helpers ----------------------
 
 const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+export function getGoalDirection(goal: Goal): GoalDirection {
+  if (goal.includes("cut")) return "cut";
+  if (goal.includes("bulk")) return "bulk";
+  return "maintain";
+}
+
+export function getPeptideNotes(peptide: Peptide, goal: Goal): string | undefined {
+  if (peptide === "none") return undefined;
+  return PEPTIDE_CONFIG[peptide].notes[getGoalDirection(goal)];
+}
 
 export function kgToLbs(kg: number): number {
   return kg * 2.20462;
@@ -363,16 +402,26 @@ export function calculateBMR(stats: UserStats): number {
   return 10 * stats.weightKg + 6.25 * stats.heightCm - 5 * stats.age - 161;
 }
 
+// Net METs (gross MET minus 1 resting MET) for resistance-style training.
+// ASSUMPTION: activityLevel describes NON-EXERCISE activity only — the UI labels
+// it "Daily Activity (excluding workouts)" — so workout energy is always added on
+// top of BMR × activity multiplier. Subtracting the resting MET avoids
+// double-counting the resting energy already inside that base term.
+const WORKOUT_NET_MET: Record<ActivityConfig["workoutIntensity"], number> = {
+  light: 3.0,
+  moderate: 4.0, // ≈5.5 kcal/min at ~80kg — typical moderate resistance training
+  intense: 6.0,
+};
+
 export function calculateTDEE(stats: UserStats, activity: ActivityConfig): number {
   const bmr = calculateBMR(stats);
   let tdee = bmr * ACTIVITY_MULTIPLIERS[activity.activityLevel];
 
-  // Small "intense" bump to avoid double counting
-  if (activity.workoutsPerWeek >= 4 && activity.workoutIntensity === "intense") {
-    const met = 8.0;
-    const hoursPerWeek = (activity.workoutsPerWeek * activity.avgWorkoutMinutes) / 60;
-    const weeklyCalories = met * stats.weightKg * hoursPerWeek;
-    tdee += (weeklyCalories / 7) * 0.5;
+  const weeklyWorkoutMinutes = activity.workoutsPerWeek * activity.avgWorkoutMinutes;
+  if (weeklyWorkoutMinutes > 0) {
+    // kcal/min = MET × 3.5 × kg / 200
+    const kcalPerMinute = (WORKOUT_NET_MET[activity.workoutIntensity] * 3.5 * stats.weightKg) / 200;
+    tdee += (weeklyWorkoutMinutes * kcalPerMinute) / 7;
   }
 
   return Math.round(tdee);
@@ -863,7 +912,6 @@ export function calculateMacros(
   const guardrailsApplied: string[] = [];
 
   const peptide = goalConfig.peptide ?? "none";
-  const peptideCfg = PEPTIDE_CONFIG[peptide];
 
   // Requested weekly change
   const goalDef = GOAL_PERCENT_BW[goalConfig.goal];
@@ -968,7 +1016,7 @@ export function calculateMacros(
     fatPercent,
 
     explanation,
-    peptideNotes: peptide !== "none" ? peptideCfg.notes : undefined,
+    peptideNotes: getPeptideNotes(peptide, goalConfig.goal),
     guardrailsApplied: guardrailsApplied.length ? guardrailsApplied : undefined,
     cardioPrescription,
     phaseStatus,
