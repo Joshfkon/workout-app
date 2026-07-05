@@ -42,15 +42,17 @@ import {
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
+  countCompletedSessions,
   type TodayWorkout,
 } from '@/lib/training/startMesocycleSession';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
-import type { ExerciseOverride } from '@/services/mesocycleHelpers';
+import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
-import type { Experience, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
+import type { Experience, FullProgramRecommendation, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
 
 interface LogExercise {
   id: string;
@@ -206,6 +208,7 @@ export default function LogPage() {
   const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
   const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
   const [todayWorkout, setTodayWorkout] = useState<TodayWorkout | null>(null);
+  const [programDayName, setProgramDayName] = useState<string | null>(null);
   const [exercises, setExercises] = useState<LogExercise[]>([]);
   const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
   const [lastDone, setLastDone] = useState<Map<string, Date>>(new Map());
@@ -282,6 +285,22 @@ export default function LogPage() {
         const dayOfWeek = new Date().getDay() || 7;
         setTodayWorkout(
           getWorkoutForDay(meso.split_type, dayOfWeek, meso.days_per_week, meso.preferred_workout_days)
+        );
+
+        // The session Start actually launches is the program slot at
+        // completedSessions % days_per_week, which diverges from the calendar
+        // weekday after skipped days — advertise that day name instead. Null
+        // (→ calendar fallback) when program_data yields nothing, matching
+        // the start path's own fallback.
+        const completedCount = await countCompletedSessions(supabase, meso.id);
+        const slotSession = getSessionFromProgramData(
+          meso.program_data as FullProgramRecommendation | null,
+          sessionIndexFromCompleted(completedCount, meso.days_per_week),
+          meso.current_week,
+          meso.total_weeks
+        );
+        setProgramDayName(
+          slotSession && slotSession.exercises.length > 0 ? slotSession.dayName : null
         );
       }
 
@@ -507,7 +526,7 @@ export default function LogPage() {
     : todayWorkout
       ? isStartingMeso
         ? 'Starting...'
-        : `Today: ${todayWorkout.dayName}`
+        : `Today: ${programDayName ?? todayWorkout.dayName}`
       : `Rest day · next: ${nextWorkout?.dayName ?? 'view plan'}`;
 
   const handleMesoCardTap = () => {
