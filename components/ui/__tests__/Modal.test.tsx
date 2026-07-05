@@ -155,6 +155,34 @@ describe('Modal', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
+  it('does not block touchmove on range inputs inside the modal', () => {
+    render(
+      <Modal {...defaultProps}>
+        <input type="range" min={3} max={12} aria-label="Sleep hours" />
+      </Modal>
+    );
+
+    const slider = screen.getByLabelText('Sleep hours');
+    const touchMove = new Event('touchmove', {
+      bubbles: true,
+      cancelable: true,
+    });
+    slider.dispatchEvent(touchMove);
+    expect(touchMove.defaultPrevented).toBe(false);
+  });
+
+  it('blocks touchmove on non-scrollable modal content', () => {
+    render(<Modal {...defaultProps} />);
+
+    const content = screen.getByText('Modal content');
+    const touchMove = new Event('touchmove', {
+      bubbles: true,
+      cancelable: true,
+    });
+    content.dispatchEvent(touchMove);
+    expect(touchMove.defaultPrevented).toBe(true);
+  });
+
   it('restores body scroll on unmount', () => {
     const { unmount } = render(<Modal {...defaultProps} />);
     expect(document.body.style.overflow).toBe('hidden');
