@@ -22,9 +22,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
   IconBarbell,
   IconChevronRight,
+  IconClipboardHeart,
   IconLoader2,
   IconPlus,
   IconSalad,
@@ -48,9 +50,19 @@ import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { BottomSheet } from '@/components/workout/BottomSheet';
+import { Modal } from '@/components/ui/Modal';
 import type { ExerciseOverride } from '@/services/mesocycleHelpers';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import type { Experience, MuscleGroup, WarmupSet, WorkoutDay } from '@/types/schema';
+
+// Lazy-load the check-in flow so it only ships when the user opens it
+// (same pattern as the home dashboard's quick-log modals).
+const DailyCheckIn = dynamic(
+  () => import('@/components/dashboard/DailyCheckIn').then((mod) => ({ default: mod.DailyCheckIn })),
+  { ssr: false }
+);
+
+type UserGoal = 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
 
 interface LogExercise {
   id: string;
@@ -213,6 +225,12 @@ export default function LogPage() {
   const [isStartingBlank, setIsStartingBlank] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Daily check-in: a slim link is shown only while today's check-in is
+  // missing ('missing'); 'loading' hides it until the fetch resolves.
+  const [checkInStatus, setCheckInStatus] = useState<'loading' | 'missing' | 'done'>('loading');
+  const [checkInUserId, setCheckInUserId] = useState<string | null>(null);
+  const [userGoal, setUserGoal] = useState<UserGoal | undefined>(undefined);
+  const [showCheckIn, setShowCheckIn] = useState(false);
 
   // AI suggested workout
   const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
@@ -237,7 +255,7 @@ export default function LogPage() {
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      const [inProgressRes, mesoRes, exercisesRes, usageRes] = await Promise.all([
+      const [inProgressRes, mesoRes, exercisesRes, usageRes, checkInRes, goalRes] = await Promise.all([
         supabase
           .from('workout_sessions')
           .select('id, mesocycles(name), exercise_blocks(target_sets, set_logs(id, is_warmup))')
@@ -261,7 +279,23 @@ export default function LogPage() {
           .select('exercise_id, workout_sessions!inner(user_id, started_at)')
           .eq('workout_sessions.user_id', user.id)
           .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
+        supabase
+          .from('daily_check_ins')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('date', today)
+          .maybeSingle(),
+        supabase
+          .from('users')
+          .select('goal')
+          .eq('id', user.id)
+          .maybeSingle(),
       ]);
+
+      setCheckInUserId(user.id);
+      setCheckInStatus(checkInRes.data ? 'done' : 'missing');
+      const goal = (goalRes.data as { goal: string | null } | null)?.goal;
+      if (goal) setUserGoal(goal as UserGoal);
 
       const ipRow = inProgressRes.data?.[0];
       if (ipRow) {
@@ -555,6 +589,21 @@ export default function LogPage() {
         </button>
       )}
 
+      {/* Slim daily check-in link (only until today's check-in is done) */}
+      {checkInStatus === 'missing' && checkInUserId && (
+        <button
+          onClick={() => setShowCheckIn(true)}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+        >
+          <IconClipboardHeart size={18} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
+          <span className="flex-1 text-[13px] text-surface-300">
+            Daily check-in
+            <span className="text-surface-500"> · How are you feeling today?</span>
+          </span>
+          <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+        </button>
+      )}
+
       {/* Four launcher tiles in a 2x2 grid that stretches to fill the screen */}
       <div className="flex-1 grid grid-cols-2 auto-rows-fr gap-3">
         {/* 1. Log food */}
@@ -754,6 +803,20 @@ export default function LogPage() {
           </div>
         )}
       </BottomSheet>
+
+      {/* Daily check-in modal (same flow as the home dashboard) */}
+      {showCheckIn && checkInUserId && (
+        <Modal isOpen onClose={() => setShowCheckIn(false)} title="Daily check-in">
+          <DailyCheckIn
+            userId={checkInUserId}
+            userGoal={userGoal}
+            onComplete={() => {
+              setCheckInStatus('done');
+              setShowCheckIn(false);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
