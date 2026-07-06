@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   startMesocycleWorkoutSession,
+  programSessionHasUsableExercises,
   type StartableMesocycle,
 } from '../startMesocycleSession';
+import type { ExtractedSession } from '@/services/mesocycleHelpers';
 
 // ============================================================
 // Minimal chainable Supabase mock. Each query chain is recorded and
@@ -57,6 +59,7 @@ function createSupabaseMock(responder: Responder) {
         query.filters[col] = vals;
         return builder;
       },
+      limit: () => builder,
       single: () => {
         query.single = true;
         return resolve();
@@ -208,5 +211,105 @@ describe('startMesocycleWorkoutSession — today\'s existing session handling', 
     expect(insert).toBeDefined();
     expect((insert!.payload as { state: string }).state).toBe('in_progress');
     expect((insert!.payload as { mesocycle_id: string }).mesocycle_id).toBe('meso-1');
+  });
+});
+
+// ============================================================
+// programSessionHasUsableExercises — must mirror the start path's
+// block-building skip logic so display surfaces fall back to the calendar
+// workout exactly when Start does.
+// ============================================================
+
+const REAL_UUID = '123e4567-e89b-42d3-a456-426614174000';
+
+function makeSession(
+  exercises: Array<{ exerciseId?: string; exerciseName: string }>
+): ExtractedSession {
+  return {
+    dayName: 'Upper A',
+    focus: 'upper',
+    muscles: ['chest'],
+    exercises: exercises.map((ex) => ({
+      ...ex,
+      primaryMuscle: 'chest' as const,
+      sets: 3,
+      repRange: { min: 8, max: 12 },
+      targetRir: 2,
+      restSeconds: 120,
+    })),
+    estimatedMinutes: 60,
+    totalSets: 9,
+    warmup: [],
+  };
+}
+
+/** Responder for the exercises-by-name lookup: resolves only knownNames. */
+function makeExerciseResponder(knownNames: string[]): Responder {
+  return (query) => {
+    if (query.table === 'exercises') {
+      const requested = (query.filters['name'] as string[]) ?? [];
+      const matches = requested.filter((n) => knownNames.includes(n));
+      return { data: matches.map((n) => ({ id: `id-${n}` })) };
+    }
+    return { data: null };
+  };
+}
+
+describe('programSessionHasUsableExercises', () => {
+  it('is false for a null session or one with no exercises (no query made)', async () => {
+    const { supabase, queries } = createSupabaseMock(makeExerciseResponder([]));
+
+    expect(await programSessionHasUsableExercises(supabase, null)).toBe(false);
+    expect(await programSessionHasUsableExercises(supabase, makeSession([]))).toBe(false);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('is true without querying when an entry carries a real UUID id', async () => {
+    const { supabase, queries } = createSupabaseMock(makeExerciseResponder([]));
+    const session = makeSession([
+      { exerciseId: REAL_UUID, exerciseName: 'Renamed Out Of Library' },
+    ]);
+
+    expect(await programSessionHasUsableExercises(supabase, session)).toBe(true);
+    expect(queries).toHaveLength(0);
+  });
+
+  it('is true when a placeholder-id entry still resolves by name', async () => {
+    const { supabase } = createSupabaseMock(makeExerciseResponder(['Bench Press']));
+    const session = makeSession([
+      { exerciseId: 'db-row', exerciseName: 'Bench Press' },
+    ]);
+
+    expect(await programSessionHasUsableExercises(supabase, session)).toBe(true);
+  });
+
+  it('is false when every entry has a placeholder id and an unresolvable name', async () => {
+    const { supabase } = createSupabaseMock(makeExerciseResponder(['Bench Press']));
+    const session = makeSession([
+      { exerciseId: 'db-row', exerciseName: 'Deleted Exercise' },
+      { exerciseName: 'Also Renamed' },
+    ]);
+
+    expect(await programSessionHasUsableExercises(supabase, session)).toBe(false);
+  });
+
+  it('applies exercise overrides before checking, matching the start path', async () => {
+    const { supabase } = createSupabaseMock(makeExerciseResponder([]));
+    const session = makeSession([
+      { exerciseId: 'db-row', exerciseName: 'Deleted Exercise' },
+    ]);
+
+    // The user swapped the stale exercise for a real library one — Start
+    // builds the replacement's block, so the slot is usable.
+    const overrides = [
+      {
+        originalExerciseName: 'Deleted Exercise',
+        replacementExerciseId: REAL_UUID,
+        replacementExerciseName: 'Incline Dumbbell Press',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ];
+
+    expect(await programSessionHasUsableExercises(supabase, session, overrides)).toBe(true);
   });
 });
