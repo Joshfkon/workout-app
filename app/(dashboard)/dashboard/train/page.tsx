@@ -3,37 +3,79 @@
 /**
  * /dashboard/train — the Train tab's dashboard.
  *
- * A training-focused overview: continue/start a workout, where you are in
- * the active mesocycle, this week's volume, muscle recovery, and recent
- * workouts. The workout launcher itself stays on /dashboard/log (the app's
- * startup surface); this page hands off to it for starting sessions.
+ * Layout (top to bottom):
+ *   1. Title row: "Train" + History / Templates / Exercises pill links.
+ *   2. Unfinished-workout banner when a session is in_progress today
+ *      (Resume opens it, X discards via the workout page's cancel path).
+ *   3. Mesocycle hero: "ARNOLD · WK 1 OF 5 · TODAY|REST DAY" eyebrow with a
+ *      Plan link, the day name, and recovery-aware meta. Training days get a
+ *      full-width Start CTA; rest days get "Train anyway" + "Preview
+ *      tomorrow" (a read-only sheet of the next session's exercises from
+ *      program_data). No active mesocycle prompts to plan one.
+ *   4. Week stats: sets this week · completed/planned sessions · volume
+ *      status line (links to /dashboard/volume).
+ *   5. Recovery: overall % + ready count, per-muscle bars for recovering
+ *      muscles with time remaining, expandable past the first three.
+ *   6. Progression: compact summary (tracked vs building-history muscle
+ *      groups) linking to /dashboard/analytics.
+ *   7. Recent workouts: day name · top muscles, date · sets · duration.
  */
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  IconBarbell,
-  IconCalendarStats,
   IconChevronRight,
   IconHistory,
   IconListDetails,
   IconTemplate,
+  IconTrendingUp,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
-import { getWorkoutForDay, type TodayWorkout } from '@/lib/training/startMesocycleSession';
-import { MuscleRecoveryCard } from '@/components/dashboard/MuscleRecoveryCard';
-import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
-import { useMuscleProgression } from '@/hooks/useMuscleProgression';
+import {
+  startMesocycleWorkoutSession,
+  getWorkoutForDay,
+  type TodayWorkout,
+} from '@/lib/training/startMesocycleSession';
+import {
+  getSessionFromProgramData,
+  applyExerciseOverrides,
+  type ExerciseOverride,
+} from '@/services/mesocycleHelpers';
+import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
+import { useWorkoutStore } from '@/stores/workoutStore';
+import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
-import type { WorkoutDay } from '@/types/schema';
+import { useMuscleProgression } from '@/hooks/useMuscleProgression';
+import {
+  SectionLabel,
+  UnfinishedWorkoutBanner,
+  formatRelativeDay,
+} from '../log/_components/LogPageSections';
+import { BottomSheet } from '@/components/workout/BottomSheet';
+import { Modal } from '@/components/ui/Modal';
+import {
+  STANDARD_MUSCLE_DISPLAY_NAMES,
+  resolveMuscleToStandard,
+  toLegacyMuscleGroup,
+  type StandardMuscleGroup,
+} from '@/types/schema';
+import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
 
 interface InProgressSummary {
   id: string;
-  name: string;
+  /** null for ad-hoc (blank/quick/AI) sessions. */
+  mesocycleId: string | null;
+  startedAt: string | null;
+  setsDone: number;
+  /** exercise_block ids, needed by the discard path. */
+  blockIds: string[];
 }
 
-interface ActiveMesoSummary {
+/** Active mesocycle row: display fields + what the start/preview paths need. */
+interface ActiveMesocycleRow {
   id: string;
   name: string;
   current_week: number;
@@ -42,36 +84,125 @@ interface ActiveMesoSummary {
   split_type: string;
   days_per_week: number;
   preferred_workout_days: WorkoutDay[] | null;
+  program_data: unknown;
+  exercise_overrides?: ExerciseOverride[];
 }
 
 interface RecentWorkout {
   id: string;
   completedAt: Date;
-  name: string;
+  title: string;
   setCount: number;
+  /** null when started_at is missing (can't compute a duration). */
+  durationMin: number | null;
+}
+
+interface InProgressBlockRow {
+  id: string;
+  set_logs: { id: string; is_warmup: boolean | null }[] | null;
 }
 
 interface RecentSessionRow {
   id: string;
   completed_at: string;
-  mesocycles: { name: string } | { name: string }[] | null;
-  exercise_blocks: { set_logs: { is_warmup: boolean | null }[] | null }[] | null;
+  started_at: string | null;
+  exercise_blocks:
+    | {
+        suggestion_reason: string | null;
+        exercises: { primary_muscle: string | null } | { primary_muscle: string | null }[] | null;
+        set_logs: { is_warmup: boolean | null }[] | null;
+      }[]
+    | null;
 }
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * "Pull · Back, Biceps" — the split-day name parsed from the blocks'
+ * suggestion_reason ("Pull - Week 2 ...", written by the start path) plus the
+ * top two muscle groups by working sets. Falls back gracefully when either
+ * half is missing (ad-hoc sessions have neither a day name nor a plan).
+ */
+function deriveWorkoutTitle(blocks: NonNullable<RecentSessionRow['exercise_blocks']>): string {
+  let dayName: string | null = null;
+  for (const block of blocks) {
+    const match = /^(.+?) - Week \d+/.exec(block.suggestion_reason ?? '');
+    if (match) {
+      dayName = match[1];
+      break;
+    }
+  }
+
+  const setsByGroup = new Map<string, number>();
+  blocks.forEach((block) => {
+    const workingSets = (block.set_logs ?? []).filter((l) => !l.is_warmup).length;
+    if (workingSets === 0) return;
+    const exercise = Array.isArray(block.exercises) ? block.exercises[0] : block.exercises;
+    const legacy = exercise?.primary_muscle ? toLegacyMuscleGroup(exercise.primary_muscle) : null;
+    if (!legacy) return;
+    setsByGroup.set(legacy, (setsByGroup.get(legacy) ?? 0) + workingSets);
+  });
+  const topMuscles = Array.from(setsByGroup.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([group]) => capitalize(group))
+    .join(', ');
+
+  if (dayName && topMuscles) return `${dayName} · ${topMuscles}`;
+  return dayName ?? (topMuscles || 'Workout');
+}
+
+/** Row bar/label colors by recovery progress (matches the old RecoveryBar ramp). */
+function recoveryBarColor(recoveryPercent: number): string {
+  if (recoveryPercent >= 75) return 'bg-success-400';
+  if (recoveryPercent >= 50) return 'bg-warning-500';
+  if (recoveryPercent >= 25) return 'bg-orange-500';
+  return 'bg-danger-500';
+}
+
+function recoveryTextColor(recoveryPercent: number): string {
+  if (recoveryPercent >= 75) return 'text-success-300';
+  if (recoveryPercent >= 50) return 'text-warning-400';
+  if (recoveryPercent >= 25) return 'text-orange-400';
+  return 'text-danger-400';
+}
+
+const GRADIENT_CTA_CLASS =
+  'py-3 rounded-xl bg-gradient-to-r from-primary-500 to-accent-500 text-white text-[15px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-60';
+const OUTLINE_CTA_CLASS =
+  'py-3 rounded-xl border border-surface-700 text-surface-100 text-[15px] font-semibold hover:bg-surface-800/70 transition-colors disabled:opacity-60';
+
+const TOOL_PILLS = [
+  { name: 'History', href: '/dashboard/history', icon: IconHistory },
+  { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
+  { name: 'Exercises', href: '/dashboard/exercises', icon: IconListDetails },
+];
+
 export default function TrainPage() {
+  const router = useRouter();
   const supabase = createUntypedClient();
   const { summary, isLoading: volumeLoading } = useWeeklyVolume();
   const {
-    groups: progressionGroups,
-    exerciseNames,
-    goal,
-    isLoading: progressionLoading,
-  } = useMuscleProgression();
+    recoveryStatus,
+    recoveringMuscles,
+    readyMuscles,
+    isLoading: recoveryLoading,
+  } = useMuscleRecovery();
+  const { groups: progressionGroups, isLoading: progressionLoading } = useMuscleProgression();
 
-  const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
-  const [activeMeso, setActiveMeso] = useState<ActiveMesoSummary | null>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [inProgress, setInProgress] = useState<InProgressSummary | null>(null);
+  const [activeMeso, setActiveMeso] = useState<ActiveMesocycleRow | null>(null);
+  const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
+  const [sessionsThisWeek, setSessionsThisWeek] = useState(0);
+  const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
+  const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [isDiscarding, setIsDiscarding] = useState(false);
+  const [showAllRecovering, setShowAllRecovering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchAll() {
@@ -80,55 +211,104 @@ export default function TrainPage() {
         if (!user) return;
 
         const today = getLocalDateString();
-        const [inProgressRes, mesoRes, recentRes] = await Promise.all([
+        // Same rolling 7-day window as useWeeklyVolume, so the sets and
+        // sessions in the week-stats card count the same workouts.
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+        const weekStart = getLocalDateString(sevenDaysAgo);
+
+        const [inProgressRes, mesoRes, recentRes, weekCountRes] = await Promise.all([
           supabase
             .from('workout_sessions')
-            .select('id, mesocycles(name)')
+            .select('id, mesocycle_id, started_at, exercise_blocks(id, set_logs(id, is_warmup))')
             .eq('user_id', user.id)
             .eq('planned_date', today)
             .eq('state', 'in_progress')
             .limit(1),
           supabase
             .from('mesocycles')
-            .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days')
+            .select(
+              'id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides'
+            )
             .eq('user_id', user.id)
             .eq('state', 'active')
             .order('created_at', { ascending: false })
             .limit(1),
           supabase
             .from('workout_sessions')
-            .select('id, completed_at, mesocycles(name), exercise_blocks(set_logs(is_warmup))')
+            .select(
+              'id, completed_at, started_at, exercise_blocks(suggestion_reason, exercises(primary_muscle), set_logs(is_warmup))'
+            )
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .order('completed_at', { ascending: false })
             .limit(3),
+          supabase
+            .from('workout_sessions')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('state', 'completed')
+            .gte('completed_at', weekStart),
         ]);
 
         const ipRow = inProgressRes.data?.[0];
         if (ipRow) {
-          const mesoRel = ipRow.mesocycles as { name: string } | { name: string }[] | null;
-          const mesoName = Array.isArray(mesoRel) ? mesoRel[0]?.name : mesoRel?.name;
-          setInProgress({ id: ipRow.id, name: mesoName || 'workout' });
+          const blocks = (ipRow.exercise_blocks ?? []) as InProgressBlockRow[];
+          const setsDone = blocks.reduce(
+            (sum, b) => sum + (b.set_logs ?? []).filter((l) => !l.is_warmup).length,
+            0
+          );
+          setInProgress({
+            id: ipRow.id,
+            mesocycleId: ipRow.mesocycle_id ?? null,
+            startedAt: ipRow.started_at ?? null,
+            setsDone,
+            blockIds: blocks.map((b) => b.id),
+          });
         }
 
-        setActiveMeso((mesoRes.data?.[0] ?? null) as ActiveMesoSummary | null);
+        const meso = (mesoRes.data?.[0] ?? null) as ActiveMesocycleRow | null;
+        setActiveMeso(meso);
 
         setRecentWorkouts(
           ((recentRes.data ?? []) as RecentSessionRow[]).map((row) => {
-            const mesoRel = row.mesocycles;
-            const mesoName = Array.isArray(mesoRel) ? mesoRel[0]?.name : mesoRel?.name;
-            const setCount = (row.exercise_blocks ?? []).reduce(
+            const blocks = row.exercise_blocks ?? [];
+            const setCount = blocks.reduce(
               (sum, b) => sum + (b.set_logs ?? []).filter((l) => !l.is_warmup).length,
               0
             );
+            const completedAt = new Date(row.completed_at);
+            const durationMin = row.started_at
+              ? Math.round((completedAt.getTime() - new Date(row.started_at).getTime()) / 60000)
+              : null;
             return {
               id: row.id,
-              completedAt: new Date(row.completed_at),
-              name: mesoName || 'Workout',
+              completedAt,
+              title: deriveWorkoutTitle(blocks),
               setCount,
+              durationMin: durationMin != null && durationMin > 0 ? durationMin : null,
             };
           })
         );
+
+        setSessionsThisWeek(weekCountRes.count ?? 0);
+
+        // Completed-session count drives the next session index (the
+        // self-extending scheme the start path uses) and "last done" — one
+        // full cycle (days_per_week sessions) ago in completion order.
+        if (meso) {
+          const { data: completedRows } = await supabase
+            .from('workout_sessions')
+            .select('started_at')
+            .eq('mesocycle_id', meso.id)
+            .eq('state', 'completed')
+            .order('started_at', { ascending: true });
+          const completed = (completedRows ?? []) as { started_at: string | null }[];
+          setMesoCompletedCount(completed.length);
+          const lastCycleIdx = completed.length - meso.days_per_week;
+          const lastStartedAt = lastCycleIdx >= 0 ? completed[lastCycleIdx]?.started_at : null;
+          setLastCycleDone(lastStartedAt ? new Date(lastStartedAt) : null);
+        }
       } catch (err) {
         console.error('Failed to load train dashboard data:', err);
       } finally {
@@ -139,12 +319,12 @@ export default function TrainPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Today's scheduled workout (and the next one, for rest days).
-  const { todayWorkout, nextWorkout } = useMemo((): {
+  // Today's scheduled workout, or the next one with how far out it is.
+  const { todayWorkout, nextWorkoutInfo } = useMemo((): {
     todayWorkout: TodayWorkout | null;
-    nextWorkout: TodayWorkout | null;
+    nextWorkoutInfo: { workout: TodayWorkout; offsetDays: number; dayLabel: string } | null;
   } => {
-    if (!activeMeso) return { todayWorkout: null, nextWorkout: null };
+    if (!activeMeso) return { todayWorkout: null, nextWorkoutInfo: null };
     const todayDow = new Date().getDay() || 7;
     const workoutFor = (dow: number) =>
       getWorkoutForDay(
@@ -154,154 +334,493 @@ export default function TrainPage() {
         activeMeso.preferred_workout_days
       );
     const todays = workoutFor(todayDow);
-    if (todays) return { todayWorkout: todays, nextWorkout: null };
+    if (todays) return { todayWorkout: todays, nextWorkoutInfo: null };
     for (let offset = 1; offset <= 7; offset++) {
-      const next = workoutFor(((todayDow - 1 + offset) % 7) + 1);
-      if (next) return { todayWorkout: null, nextWorkout: next };
+      const workout = workoutFor(((todayDow - 1 + offset) % 7) + 1);
+      if (workout) {
+        const date = new Date();
+        date.setDate(date.getDate() + offset);
+        return {
+          todayWorkout: null,
+          nextWorkoutInfo: {
+            workout,
+            offsetDays: offset,
+            dayLabel:
+              offset === 1 ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' }),
+          },
+        };
+      }
     }
-    return { todayWorkout: null, nextWorkout: null };
+    return { todayWorkout: null, nextWorkoutInfo: null };
   }, [activeMeso]);
 
-  const startSubtitle = isLoading
-    ? 'Loading...'
-    : !activeMeso
-      ? 'Mesocycle, blank, or AI suggested'
-      : todayWorkout
-        ? `Today: ${todayWorkout.dayName}`
-        : `Rest day · next: ${nextWorkout?.dayName ?? 'view plan'}`;
+  // The next session from program_data (exercises, sets, est. minutes) — what
+  // "Start workout" will build and what the preview sheet shows.
+  const nextProgramSession = useMemo(() => {
+    if (!activeMeso || mesoCompletedCount === null) return null;
+    const sessionIndex = sessionIndexFromCompleted(mesoCompletedCount, activeMeso.days_per_week);
+    const programSession = getSessionFromProgramData(
+      activeMeso.program_data as FullProgramRecommendation | null,
+      sessionIndex,
+      activeMeso.current_week,
+      activeMeso.total_weeks
+    );
+    if (!programSession) return null;
+    return {
+      ...programSession,
+      exercises: applyExerciseOverrides(
+        programSession.exercises,
+        (activeMeso.exercise_overrides ?? []) as ExerciseOverride[]
+      ),
+    };
+  }, [activeMeso, mesoCompletedCount]);
+
+  // Rest-day recovery note: of the next workout's target muscles, which will
+  // be recovered by the time that session comes around?
+  const restDayRecoveryNote = useMemo(() => {
+    if (!nextWorkoutInfo || recoveryLoading || recoveryStatus.length === 0) return null;
+    const targets: StandardMuscleGroup[] = Array.from(
+      new Set(nextWorkoutInfo.workout.muscles.flatMap((m) => resolveMuscleToStandard(m)))
+    );
+    if (targets.length === 0) return null;
+    const statusByMuscle = new Map(recoveryStatus.map((s) => [s.muscle, s]));
+    const hoursUntil = nextWorkoutInfo.offsetDays * 24;
+    const readyByThen = targets.filter(
+      (m) => (statusByMuscle.get(m)?.hoursRemaining ?? 0) <= hoursUntil
+    );
+    if (readyByThen.length === targets.length) return 'all muscles ready by then';
+    if (readyByThen.length > 0) {
+      const names = readyByThen
+        .slice(0, 2)
+        .map((m) => STANDARD_MUSCLE_DISPLAY_NAMES[m].toLowerCase());
+      return `${names.join(' & ')} ready by then`;
+    }
+    return `${targets.length} target muscles still recovering`;
+  }, [nextWorkoutInfo, recoveryLoading, recoveryStatus]);
+
+  // Hero eyebrow: "ARNOLD · WK 1 OF 5 · REST DAY" (+ DELOAD when applicable).
+  const heroEyebrow = activeMeso
+    ? [
+        activeMeso.name,
+        `wk ${activeMeso.current_week} of ${activeMeso.total_weeks}`,
+        activeMeso.current_week === activeMeso.deload_week ? 'deload' : null,
+        todayWorkout ? 'today' : 'rest day',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : 'No active plan';
+
+  // Training-day meta: "7 exercises · est. 65 min · last done Thu".
+  const trainingDayMeta = useMemo(() => {
+    if (!todayWorkout) return null;
+    const exerciseCount =
+      nextProgramSession?.exercises.length || todayWorkout.muscles.length * 2;
+    const estMinutes =
+      (nextProgramSession?.estimatedMinutes ?? 0) > 0
+        ? Math.round(nextProgramSession!.estimatedMinutes)
+        : exerciseCount * 9;
+    return [
+      exerciseCount > 0 ? `${exerciseCount} exercises` : null,
+      estMinutes > 0 ? `est. ${estMinutes} min` : null,
+      lastCycleDone ? `last done ${formatRelativeDay(lastCycleDone)}` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ') || 'Exercises are planned when you start';
+  }, [todayWorkout, nextProgramSession, lastCycleDone]);
+
+  // Start the next mesocycle session (today's slot on training days, the
+  // next slot when "training anyway" on a rest day).
+  const handleStartWorkout = async () => {
+    if (!activeMeso || isStarting) return;
+    setIsStarting(true);
+    setError(null);
+    try {
+      const { sessionId } = await startMesocycleWorkoutSession({
+        supabase,
+        mesocycle: activeMeso,
+        todayWorkout: todayWorkout ?? nextWorkoutInfo?.workout ?? null,
+        completedSessions: mesoCompletedCount ?? undefined,
+      });
+      router.push(`/dashboard/workout/${sessionId}`);
+    } catch (err) {
+      console.error('Failed to start workout:', err);
+      setError('Failed to start workout. Please try again.');
+      setIsStarting(false);
+    }
+  };
+
+  // Discard the unfinished workout from the banner's X. Same cleanup as the
+  // workout page's cancel flow: ad-hoc sessions are deleted outright,
+  // mesocycle sessions reset to a restartable planned state.
+  const handleDiscardWorkout = async () => {
+    if (!inProgress || isDiscarding) return;
+    setIsDiscarding(true);
+    setError(null);
+    const { ok, errors } = await cancelWorkoutSession(supabase, {
+      sessionId: inProgress.id,
+      mesocycleId: inProgress.mesocycleId,
+      blockIds: inProgress.blockIds,
+    });
+    if (ok) {
+      // Clear the persisted store too if this session is the one driving the
+      // global resume pill (matches the log page's discard flow).
+      const { activeSession, endSession } = useWorkoutStore.getState();
+      if (activeSession?.id === inProgress.id) {
+        endSession();
+      }
+      setInProgress(null);
+    } else {
+      console.error('Failed to discard workout:', errors);
+      setError('Failed to discard workout. Please try again.');
+    }
+    setIsDiscarding(false);
+    setShowDiscardConfirm(false);
+  };
+
+  const startedAtLabel = inProgress?.startedAt
+    ? new Date(inProgress.startedAt).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+
+  // Recovery card numbers: "86% · 12 of 20 ready".
+  const recoverySummary = useMemo(() => {
+    const avgPercent =
+      recoveryStatus.length > 0
+        ? Math.round(
+            recoveryStatus.reduce((sum, m) => sum + m.recoveryPercent, 0) / recoveryStatus.length
+          )
+        : 100;
+    return { avgPercent, ready: readyMuscles.length, total: recoveryStatus.length };
+  }, [recoveryStatus, readyMuscles]);
+
+  const visibleRecovering = showAllRecovering
+    ? recoveringMuscles
+    : recoveringMuscles.slice(0, 3);
+  const hiddenRecoveringCount = recoveringMuscles.length - 3;
+
+  // Progression summary: "2 muscle groups tracked · 18 building history (wk 1)".
+  const progressionSubtitle = useMemo(() => {
+    if (progressionLoading) return 'Analyzing progression...';
+    const tracked = progressionGroups.filter((g) => g.pace !== 'insufficient_data').length;
+    const building = progressionGroups.length - tracked;
+    if (progressionGroups.length === 0) return 'Complete workouts to build progression history';
+    const weekSuffix = activeMeso ? ` (wk ${activeMeso.current_week})` : '';
+    return (
+      [
+        `${tracked} muscle ${tracked === 1 ? 'group' : 'groups'} tracked`,
+        building > 0 ? `${building} building history` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') + weekSuffix
+    );
+  }, [progressionLoading, progressionGroups, activeMeso]);
+
+  const volumeStatusLine = volumeLoading
+    ? { text: 'Loading...', className: 'text-surface-500' }
+    : summary.totalSets === 0
+      ? { text: 'No sets logged yet this week', className: 'text-surface-500' }
+      : summary.musclesBelowMev.length > 0
+        ? {
+            text: `${summary.musclesBelowMev.length} muscle ${
+              summary.musclesBelowMev.length === 1 ? 'group' : 'groups'
+            } below minimum`,
+            className: 'text-warning-400',
+          }
+        : { text: 'All muscle groups at target', className: 'text-success-400' };
 
   return (
     <div className="max-w-lg mx-auto space-y-4">
-      {/* Slim header */}
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-[17px] font-medium text-surface-100">Train</h1>
+      {/* Title row: Train + tool pills */}
+      <div className="flex items-center gap-2.5">
+        <h1 className="text-[28px] leading-none font-bold text-surface-100 flex-shrink-0">
+          Train
+        </h1>
+        <div className="flex items-center gap-1.5 overflow-x-auto ml-auto">
+          {TOOL_PILLS.map((tool) => {
+            const ToolIcon = tool.icon;
+            return (
+              <Link
+                key={tool.href}
+                href={tool.href}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-surface-900 border border-surface-800 text-[13px] font-medium text-surface-200 whitespace-nowrap hover:bg-surface-800/70 transition-colors"
+              >
+                <ToolIcon size={15} className="text-surface-400" aria-hidden="true" />
+                {tool.name}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Continue card (only when a session is in progress today) */}
-      {inProgress && (
-        <Link
-          href={`/dashboard/workout/${inProgress.id}`}
-          className="w-full flex items-center gap-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-left hover:bg-warning-500/15 transition-colors"
-        >
-          <IconBarbell size={18} className="text-warning-400 flex-shrink-0" aria-hidden="true" />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[13px] font-medium text-warning-300 truncate">
-              Continue {inProgress.name}
-            </span>
-          </span>
-          <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-        </Link>
+      {error && (
+        <div className="p-2.5 rounded-lg bg-danger-500/10 border border-danger-500/20 text-danger-400 text-xs">
+          {error}
+        </div>
       )}
 
-      {/* Start a workout: hands off to the launcher on /dashboard/log */}
-      <Link
-        href="/dashboard/log"
-        className="w-full flex items-center gap-3 p-4 rounded-xl bg-primary-500/10 border border-primary-500/30 text-left hover:bg-primary-500/15 transition-colors"
-      >
-        <IconBarbell size={20} className="text-primary-400 flex-shrink-0" aria-hidden="true" />
-        <span className="flex-1 min-w-0">
-          <span className="block text-[15px] font-medium text-primary-300">Start a workout</span>
-          <span className="block text-[12px] text-surface-500 truncate">{startSubtitle}</span>
-        </span>
-        <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-      </Link>
+      {/* Unfinished workout banner (only when a session is in progress today) */}
+      {inProgress && (
+        <UnfinishedWorkoutBanner
+          startedAtLabel={startedAtLabel}
+          setsDone={inProgress.setsDone}
+          onResume={() => router.push(`/dashboard/workout/${inProgress.id}`)}
+          onDiscard={() => setShowDiscardConfirm(true)}
+        />
+      )}
 
-      {/* Mesocycle status */}
-      <Link
-        href="/dashboard/mesocycle"
-        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
-      >
-        <IconCalendarStats size={18} className="text-surface-400 flex-shrink-0" aria-hidden="true" />
-        <span className="flex-1 min-w-0">
-          <span className="block text-[13px] font-medium text-surface-200 truncate">
-            {activeMeso ? activeMeso.name : 'Mesocycle plan'}
-          </span>
-          <span className="block text-[11px] text-surface-500 mt-0.5">
-            {isLoading
-              ? 'Loading...'
-              : activeMeso
-                ? `Week ${activeMeso.current_week} of ${activeMeso.total_weeks}${
-                    activeMeso.current_week === activeMeso.deload_week ? ' · deload' : ''
-                  }`
-                : 'No active mesocycle — plan one'}
-          </span>
-        </span>
-        <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
-      </Link>
+      {/* Mesocycle hero (training day / rest day / no plan) */}
+      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] font-semibold tracking-[0.12em] uppercase text-surface-500 truncate">
+            {heroEyebrow}
+          </p>
+          {activeMeso && (
+            <Link
+              href="/dashboard/mesocycle"
+              className="flex items-center gap-0.5 text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors flex-shrink-0"
+            >
+              Plan
+              <IconChevronRight size={14} aria-hidden="true" />
+            </Link>
+          )}
+        </div>
 
-      {/* This week's volume at a glance */}
+        {activeMeso && todayWorkout ? (
+          <>
+            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+              {todayWorkout.dayName}
+            </h2>
+            <p className="text-[13px] text-surface-400 mt-1">{trainingDayMeta}</p>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleStartWorkout}
+                disabled={isStarting}
+                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+              >
+                {isStarting
+                  ? 'Starting...'
+                  : inProgress
+                    ? 'Continue workout'
+                    : 'Start workout'}
+              </button>
+            </div>
+          </>
+        ) : activeMeso ? (
+          <>
+            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+              {nextWorkoutInfo ? `Next: ${nextWorkoutInfo.workout.dayName}` : 'Rest day'}
+            </h2>
+            <p className="text-[13px] text-surface-400 mt-1">
+              {nextWorkoutInfo
+                ? [nextWorkoutInfo.dayLabel, restDayRecoveryNote].filter(Boolean).join(' · ')
+                : 'No upcoming workouts scheduled'}
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleStartWorkout}
+                disabled={isStarting || !nextWorkoutInfo}
+                className={`flex-1 ${OUTLINE_CTA_CLASS}`}
+              >
+                {isStarting ? 'Starting...' : 'Train anyway'}
+              </button>
+              <button
+                onClick={() => setShowPreview(true)}
+                disabled={!nextWorkoutInfo}
+                className={`flex-1 ${GRADIENT_CTA_CLASS}`}
+              >
+                Preview {nextWorkoutInfo?.dayLabel === 'Tomorrow' ? 'tomorrow' : 'next'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-[26px] leading-tight font-bold text-surface-100 mt-1.5">
+              {isLoading ? 'Loading...' : 'No training plan'}
+            </h2>
+            <p className="text-[13px] text-surface-400 mt-1">
+              {isLoading
+                ? ' '
+                : 'Plan a mesocycle for smart progression and volume tracking'}
+            </p>
+            {!isLoading && (
+              <div className="flex gap-2 mt-4">
+                <Link
+                  href="/dashboard/mesocycle/new"
+                  className={`flex-1 text-center ${GRADIENT_CTA_CLASS}`}
+                >
+                  Plan a mesocycle
+                </Link>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Week stats: sets · sessions · volume status */}
       <Link
         href="/dashboard/volume"
-        className="w-full flex items-center gap-3 p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+        className="w-full flex items-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
       >
         <span className="flex-1 min-w-0">
-          <span className="block text-[13px] font-medium text-surface-200">This week&apos;s volume</span>
-          <span className="block text-[11px] text-surface-500 mt-0.5">
-            {volumeLoading
-              ? 'Loading...'
-              : summary.totalSets === 0
-                ? 'No sets logged yet this week'
-                : `${summary.totalSets} sets · ${
-                    summary.musclesBelowMev.length === 0
-                      ? 'all muscle groups at target'
-                      : `${summary.musclesBelowMev.length} muscle ${
-                          summary.musclesBelowMev.length === 1 ? 'group' : 'groups'
-                        } below minimum`
-                  }`}
+          <span className="block text-[15px] text-surface-400">
+            <span className="font-semibold text-surface-100">
+              {volumeLoading ? '—' : summary.totalSets} sets
+            </span>{' '}
+            this week ·{' '}
+            <span className="font-semibold text-surface-100">
+              {isLoading
+                ? '—'
+                : activeMeso
+                  ? `${sessionsThisWeek}/${activeMeso.days_per_week}`
+                  : sessionsThisWeek}{' '}
+              sessions
+            </span>
+          </span>
+          <span className={`block text-[13px] mt-0.5 ${volumeStatusLine.className}`}>
+            {volumeStatusLine.text}
           </span>
         </span>
         <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
       </Link>
 
-      {/* Progression vs the pace expected for the user's level and diet
-          phase (bulk/cut aware; services/progressionInsights) */}
-      {progressionLoading ? (
-        <div className="p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-[12px] text-surface-500">
-          Analyzing progression...
+      {/* Recovery */}
+      <div className="rounded-2xl p-4 bg-surface-900 border border-surface-800">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[15px] font-semibold text-surface-100">Recovery</h3>
+          {recoveryLoading ? (
+            <span className="text-[13px] text-surface-500">Loading...</span>
+          ) : (
+            <span className="text-[15px] text-surface-400">
+              <span
+                className={`font-semibold ${
+                  recoverySummary.avgPercent >= 80
+                    ? 'text-success-400'
+                    : recoverySummary.avgPercent >= 50
+                      ? 'text-warning-400'
+                      : 'text-danger-400'
+                }`}
+              >
+                {recoverySummary.avgPercent}%
+              </span>{' '}
+              · {recoverySummary.ready} of {recoverySummary.total} ready
+            </span>
+          )}
         </div>
-      ) : (
-        progressionGroups.length > 0 && (
-          <MuscleProgressionCard
-            groups={progressionGroups}
-            exerciseNames={exerciseNames}
-            goal={goal}
-          />
-        )
-      )}
 
-      {/* Muscle recovery */}
-      <MuscleRecoveryCard compact limit={6} />
+        {recoveryLoading ? (
+          <div className="animate-pulse space-y-3 mt-3">
+            <div className="h-1.5 bg-surface-800 rounded-full" />
+            <div className="h-1.5 bg-surface-800 rounded-full w-2/3" />
+            <div className="h-1.5 bg-surface-800 rounded-full w-1/2" />
+          </div>
+        ) : (
+          <>
+            <div className="mt-3 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  recoverySummary.avgPercent >= 80
+                    ? 'bg-success-500'
+                    : recoverySummary.avgPercent >= 50
+                      ? 'bg-warning-500'
+                      : 'bg-danger-500'
+                }`}
+                style={{ width: `${recoverySummary.avgPercent}%` }}
+              />
+            </div>
+
+            {recoveringMuscles.length === 0 ? (
+              <p className="mt-3 text-[13px] text-success-400">
+                All muscle groups ready to train
+              </p>
+            ) : (
+              <>
+                <div className="mt-4 space-y-3">
+                  {visibleRecovering.map((status: MuscleRecoveryStatus) => (
+                    <div key={status.muscle} className="flex items-center gap-3">
+                      <span className="w-24 text-[13px] text-surface-200 truncate flex-shrink-0">
+                        {status.displayName}
+                      </span>
+                      <div className="flex-1 h-1.5 bg-surface-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 ${recoveryBarColor(status.recoveryPercent)}`}
+                          style={{ width: `${status.recoveryPercent}%` }}
+                        />
+                      </div>
+                      <span
+                        className={`w-12 text-right text-[13px] font-medium flex-shrink-0 ${recoveryTextColor(status.recoveryPercent)}`}
+                      >
+                        {status.statusText}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {hiddenRecoveringCount > 0 && (
+                  <button
+                    onClick={() => setShowAllRecovering(!showAllRecovering)}
+                    className="mt-4 w-full text-center text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
+                  >
+                    {showAllRecovering
+                      ? 'Show less'
+                      : `Show ${hiddenRecoveringCount} more recovering`}
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Progression summary */}
+      <Link
+        href="/dashboard/analytics"
+        className="w-full flex items-center gap-3.5 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+      >
+        <span className="w-12 h-12 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
+          <IconTrendingUp size={22} className="text-surface-200" aria-hidden="true" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[15px] font-semibold text-surface-100">Progression</span>
+          <span className="block text-[13px] text-surface-400 mt-0.5">
+            {progressionSubtitle}
+          </span>
+        </span>
+        <IconChevronRight size={16} className="text-surface-500 flex-shrink-0" aria-hidden="true" />
+      </Link>
 
       {/* Recent workouts */}
       <div className="space-y-2">
         <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-[13px] font-medium text-surface-300">Recent workouts</h2>
+          <SectionLabel>Recent workouts</SectionLabel>
           <Link
             href="/dashboard/history"
-            className="text-[11px] text-primary-400 hover:text-primary-300 transition-colors"
+            className="text-[13px] font-medium text-primary-400 hover:text-primary-300 transition-colors"
           >
             View all
           </Link>
         </div>
         {isLoading ? (
-          <div className="p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-[12px] text-surface-500">
+          <div className="p-4 rounded-2xl bg-surface-900 border border-surface-800 text-[13px] text-surface-500">
             Loading...
           </div>
         ) : recentWorkouts.length === 0 ? (
-          <div className="p-3.5 rounded-xl bg-surface-900 border border-surface-800 text-[12px] text-surface-500">
+          <div className="p-4 rounded-2xl bg-surface-900 border border-surface-800 text-[13px] text-surface-500">
             No completed workouts yet — start one above.
           </div>
         ) : (
-          <div className="rounded-xl bg-surface-900 border border-surface-800 overflow-hidden">
+          <div className="space-y-2">
             {recentWorkouts.map((workout) => (
               <Link
                 key={workout.id}
                 href="/dashboard/history"
-                className="flex items-center gap-3 px-3.5 py-3 border-b border-surface-800/50 last:border-b-0 hover:bg-surface-800/70 transition-colors"
+                className="flex items-center gap-3 p-4 rounded-2xl bg-surface-900 border border-surface-800 hover:bg-surface-800/70 transition-colors"
               >
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[13px] text-surface-200 truncate">{workout.name}</span>
-                  <span className="block text-[11px] text-surface-500 mt-0.5">
+                  <span className="block text-[15px] font-semibold text-surface-100 truncate">
+                    {workout.title}
+                  </span>
+                  <span className="block text-[13px] text-surface-500 mt-0.5">
                     {workout.completedAt.toLocaleDateString('en-US', {
                       weekday: 'short',
                       month: 'short',
@@ -309,35 +828,125 @@ export default function TrainPage() {
                     })}
                     {' · '}
                     {workout.setCount} {workout.setCount === 1 ? 'set' : 'sets'}
+                    {workout.durationMin != null ? ` · ${workout.durationMin} min` : ''}
                   </span>
                 </span>
-                <IconChevronRight size={14} className="text-surface-600 flex-shrink-0" aria-hidden="true" />
+                <IconChevronRight
+                  size={16}
+                  className="text-surface-500 flex-shrink-0"
+                  aria-hidden="true"
+                />
               </Link>
             ))}
           </div>
         )}
       </div>
 
-      {/* Tools */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { name: 'History', href: '/dashboard/history', icon: IconHistory },
-          { name: 'Templates', href: '/dashboard/templates', icon: IconTemplate },
-          { name: 'Exercises', href: '/dashboard/exercises', icon: IconListDetails },
-        ].map((tool) => {
-          const ToolIcon = tool.icon;
-          return (
-            <Link
-              key={tool.href}
-              href={tool.href}
-              className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface-900 border border-surface-800 hover:bg-surface-800/70 transition-colors"
+      {/* Preview sheet: the next session's exercises from program_data */}
+      <BottomSheet
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        title={nextWorkoutInfo ? `Next: ${nextWorkoutInfo.workout.dayName}` : 'Next workout'}
+      >
+        <div className="space-y-3">
+          {nextWorkoutInfo && (
+            <p className="text-[13px] text-surface-400">
+              {[
+                nextWorkoutInfo.dayLabel,
+                nextProgramSession
+                  ? `${nextProgramSession.exercises.length} exercises`
+                  : null,
+                (nextProgramSession?.estimatedMinutes ?? 0) > 0
+                  ? `est. ${Math.round(nextProgramSession!.estimatedMinutes)} min`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+
+          {nextProgramSession && nextProgramSession.exercises.length > 0 ? (
+            <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
+              {nextProgramSession.exercises.map((exercise, i) => (
+                <div
+                  key={`${exercise.exerciseName}-${i}`}
+                  className="px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
+                >
+                  <span className="block text-[13px] text-surface-200 truncate">
+                    {exercise.exerciseName}
+                  </span>
+                  <span className="block text-[11px] text-surface-500 mt-0.5">
+                    {exercise.sets} {exercise.sets === 1 ? 'set' : 'sets'} ·{' '}
+                    {exercise.repRange.min}–{exercise.repRange.max} reps · {exercise.targetRir} RIR
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-surface-800 bg-surface-950/40 p-3">
+              <p className="text-[13px] text-surface-400">
+                Exercises are planned when you start. Target muscles:{' '}
+                <span className="text-surface-200">
+                  {nextWorkoutInfo?.workout.muscles.map(capitalize).join(', ') ?? '—'}
+                </span>
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                setShowPreview(false);
+                handleStartWorkout();
+              }}
+              disabled={isStarting}
+              className={`w-full ${GRADIENT_CTA_CLASS}`}
             >
-              <ToolIcon size={16} className="text-surface-400" aria-hidden="true" />
-              <span className="text-[11px] font-medium text-surface-300">{tool.name}</span>
-            </Link>
-          );
-        })}
-      </div>
+              {isStarting ? 'Starting...' : 'Train anyway today'}
+            </button>
+            <button
+              onClick={() => setShowPreview(false)}
+              className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Discard confirmation for the unfinished-workout banner's X */}
+      {showDiscardConfirm && inProgress && (
+        <Modal isOpen onClose={() => setShowDiscardConfirm(false)} title="Discard workout?">
+          <div className="space-y-4">
+            <p className="text-[13px] text-surface-400">
+              {inProgress.setsDone > 0
+                ? `This will delete the ${inProgress.setsDone} ${
+                    inProgress.setsDone === 1 ? 'set' : 'sets'
+                  } you logged. `
+                : ''}
+              {inProgress.mesocycleId
+                ? 'The planned workout stays on your schedule so you can restart it fresh.'
+                : 'This removes the workout session entirely.'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowDiscardConfirm(false)}
+                disabled={isDiscarding}
+                className="flex-1 py-2.5 rounded-lg bg-surface-800 text-surface-200 text-[13px] font-medium hover:bg-surface-700 transition-colors disabled:opacity-60"
+              >
+                Keep workout
+              </button>
+              <button
+                onClick={handleDiscardWorkout}
+                disabled={isDiscarding}
+                className="flex-1 py-2.5 rounded-lg bg-danger-500 text-white text-[13px] font-medium hover:bg-danger-600 transition-colors disabled:opacity-60"
+              >
+                {isDiscarding ? 'Discarding...' : 'Discard'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
