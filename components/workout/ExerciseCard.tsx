@@ -1171,7 +1171,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   // pair recomputes).
   const lastReportedSuggestionRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!onActiveSuggestionChange) return;
+    if (!onActiveSuggestionChange) {
+      // Deactivated (another card is current). Clear the guard so switching
+      // back to this card always re-reports — the parent's label currently
+      // belongs to the other card, so an unchanged-label suppression here
+      // would leave the rest bar showing the wrong exercise's target.
+      lastReportedSuggestionRef.current = undefined;
+      return;
+    }
     let label: string | null = null;
     if (isActive && !pendingDropset && !dropsetMode && pendingSetsCount > 0 && pendingInputs.length > 0) {
       const activeIsAmrap = isAmrapSuggested && pendingSetsCount === 1;
