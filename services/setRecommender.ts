@@ -128,11 +128,13 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
   const n = Math.max(0, Math.floor(input.setsCompletedThisExercise ?? 0));
 
-  // Guard bad inputs: keep the last set's shape.
+  // Guard bad inputs: keep the last set's load, but pull the rep target into
+  // the range — zero-load history (bodyweight without a check-in) has no
+  // weight lever, so the reps must follow a moved rep range.
   if (lastWeightKg <= 0 || lastReps <= 0) {
     return {
       weightKg: Math.max(0, lastWeightKg),
-      reps: Math.max(repMin, lastReps || repMin),
+      reps: clamp(lastReps || repMin, repMin, repMax),
       rir: targetRir,
       rationale: 'maintain',
     };
@@ -148,19 +150,21 @@ export function recommendSet(input: SetRecommenderInput): SetRecommendation {
   let weightKg: number;
   let rationale: SetRecommendation['rationale'];
 
-  if (lastReps < repMin || dev <= -DEADBAND_RIR) {
+  if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
+    // Too light — either an unambiguous rep-overshoot (reps prove it regardless
+    // of RIR — checked BEFORE the effort branch, so a rep range moved down by
+    // the one-tap plateau switch reprices upward even off a near-failure set)
+    // OR cleared the top of the range with >= DEADBAND reserve.
+    const ideal = weightForReps(e1rm, repMax, targetRir);
+    weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + MAX_STEP_PCT)), inc);
+    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
+    rationale = 'increase_load';
+  } else if (lastReps < repMin || dev <= -DEADBAND_RIR) {
     // Too heavy, or went too close to failure → reduce toward mid-range.
     const ideal = weightForReps(e1rm, mid, targetRir);
     weightKg = roundToIncrement(Math.max(ideal, lastWeightKg * (1 - MAX_REDUCE_PCT)), inc);
     if (weightKg >= lastWeightKg) weightKg = Math.max(inc, lastWeightKg - inc);
     rationale = 'reduce_load';
-  } else if (lastReps > repMax + REP_OVERSHOOT || (lastReps >= repMax && dev >= DEADBAND_RIR)) {
-    // Too light — either an unambiguous rep-overshoot (reps prove it regardless of
-    // RIR) OR cleared the top of the range with >= DEADBAND reserve.
-    const ideal = weightForReps(e1rm, repMax, targetRir);
-    weightKg = roundToIncrement(Math.min(ideal, lastWeightKg * (1 + MAX_STEP_PCT)), inc);
-    if (weightKg <= lastWeightKg) weightKg = lastWeightKg + inc;
-    rationale = 'increase_load';
   } else {
     weightKg = lastWeightKg;
     rationale = 'maintain';
@@ -213,9 +217,10 @@ export function recommendSessionStart(input: SessionStartInput): SetRecommendati
     targetRir: input.targetRir,
     minIncrementKg: input.minIncrementKg,
   });
-  if (rec.rationale === 'maintain' && input.prevReps > 0) {
+  if (rec.rationale === 'maintain' && input.prevReps > 0 && input.prevWeightKg > 0) {
     // Honest reps (design §7): repeat what the set actually was, capped only
-    // at the display overshoot ceiling.
+    // at the display overshoot ceiling. Zero-load references skip this — with
+    // no weight lever, the guard's in-range rep target IS the seed.
     return { ...rec, reps: clamp(input.prevReps, 1, input.targetRepRange[1] + OVERSHOOT_CEILING) };
   }
   return rec;

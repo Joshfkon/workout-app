@@ -282,6 +282,23 @@ describe('recommendSessionStart', () => {
     expect(r.weightKg).toBeGreaterThan(100);
   });
 
+  it('rep-overshoot beats the RIR deadband: a rep range moved down reprices UP off a near-failure set', () => {
+    // 100×10 @ 0 RIR against a switched 5-6 @ 2 target: the 10 reps prove the
+    // load is light for the NEW range even though the set ran to failure.
+    // E1RM at 0 RIR = 133.3; weight for 6 @ 2 RIR ≈ 105.3 → 105.
+    const r = recommendSessionStart(start({ prevReps: 10, prevRir: 0, targetRepRange: [5, 6] }));
+    expect(r.rationale).toBe('increase_load');
+    expect(r.weightKg).toBe(105);
+    expect(r.reps).toBe(6);
+  });
+
+  it('zero-load seeds follow a moved rep range instead of repeating out-of-range reps', () => {
+    // Bodyweight history has no weight lever — the reps ARE the switch.
+    const r = recommendSessionStart(start({ prevWeightKg: 0, prevReps: 10, prevRir: undefined, targetRepRange: [5, 6] }));
+    expect(r.weightKg).toBe(0); // never floored up to the increment
+    expect(r.reps).toBe(6);
+  });
+
   it('handles degenerate inputs without throwing', () => {
     const r = recommendSessionStart(start({ prevWeightKg: 0, prevReps: 0 }));
     expect(r.rationale).toBe('maintain');
