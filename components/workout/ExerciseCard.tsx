@@ -1161,6 +1161,14 @@ export const ExerciseCard = memo(function ExerciseCard({
   // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
   // conditions/values exactly so the two surfaces can't disagree. Runs after
   // every render; the ref guard means the parent only hears actual changes.
+  //
+  // TODO(live-suggestion-state): this card→page callback is a point-to-point
+  // patch. If any other consumer of the live recommendation appears, move the
+  // suggestion into workoutStore and have the banner, rest bar, and pending
+  // set pre-fills all read the same state. Known symptom of today's split
+  // sources: after inline-editing a logged set, the pending next set's
+  // pre-fill does not re-sync with the correction (only this banner/rest-bar
+  // pair recomputes).
   const lastReportedSuggestionRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!onActiveSuggestionChange) return;
