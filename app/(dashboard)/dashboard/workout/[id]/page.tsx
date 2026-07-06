@@ -1146,12 +1146,17 @@ export default function WorkoutPage() {
         .map(block => block.exercise)
         .filter((ex): ex is Exercise => ex !== undefined);
 
-      // Extract base blocks (without exercise property) for the store
-      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
+      // Extract base blocks (without exercise property) for the store.
+      // Skipped blocks are excluded so the resume pill's label and set
+      // totals match this page's own counts (finish dialog, progress),
+      // which are all computed over activeBlocks.
+      const baseBlocks: ExerciseBlock[] = blocks
+        .filter((b) => !skippedBlockIds.has(b.id))
+        .map(({ exercise: _exercise, ...rest }) => rest);
 
       startWorkoutSession(session, baseBlocks, exercisesList);
     }
-  }, [session, blocks, phase, startWorkoutSession]);
+  }, [session, blocks, phase, skippedBlockIds, startWorkoutSession]);
 
   // Sync current block index to store
   useEffect(() => {
@@ -4098,7 +4103,9 @@ export default function WorkoutPage() {
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
-  const workoutLabel = deriveWorkoutLabel(blocks.map(b => b.exercise.primaryMuscle));
+  // Derived from activeBlocks (skipped excluded) so it matches the resume
+  // pill, which is fed the same filtered block list via the store sync.
+  const workoutLabel = deriveWorkoutLabel(activeBlocks.map(b => b.exercise.primaryMuscle));
   const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
     isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'
   );
