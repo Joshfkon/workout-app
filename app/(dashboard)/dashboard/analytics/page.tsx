@@ -1712,7 +1712,11 @@ export default function AnalyticsPage() {
                 <Card className="p-4">
                   <p className="text-xs text-surface-500 uppercase tracking-wider">Volume</p>
                   <p className="text-2xl font-bold text-primary-400 mt-1">
-                    {formatWeight(analytics.totalVolume / 1000, units, 0)}k
+                    {(() => {
+                      const vol = units === 'lb' ? kgToLbs(analytics.totalVolume) : analytics.totalVolume;
+                      const unitLabel = units === 'lb' ? 'lbs' : 'kg';
+                      return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k ${unitLabel}` : `${Math.round(vol)} ${unitLabel}`;
+                    })()}
                   </p>
                 </Card>
                 <Card className="p-4">
