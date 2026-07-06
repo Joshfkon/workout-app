@@ -1067,8 +1067,16 @@ export const ExerciseCard = memo(function ExerciseCard({
     let weight = '';
     let reps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
 
-    const deltaLabel = (deltaKg: number) =>
-      `${deltaKg > 0 ? '+' : '-'}${convertWeightForDisplay(Math.abs(deltaKg), unit)} ${weightLabel}`;
+    // Delta between the anchor set and the weight the banner actually shows
+    // (display units, after plate rounding) so the copy can't contradict the
+    // numbers on screen — a raw-kg delta said "down -1.5 kg" for a 4 kg → 3 kg
+    // drop. Unsigned: "up"/"down" in the sentence already carries direction.
+    const deltaLabel = (anchorKg: number, shownWeight: string) => {
+      const shown = parseFloat(shownWeight);
+      if (!Number.isFinite(shown)) return '';
+      const delta = Number(Math.abs(shown - convertWeightForDisplay(anchorKg, unit)).toFixed(1));
+      return delta > 0 ? `${delta} ${weightLabel}` : '';
+    };
 
     if (lastCompleted) {
       const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
@@ -1078,11 +1086,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (isAmrap && lastCompleted.rpe) {
         reps = Math.max(amrapReps(lastSetData), reps);
       }
-      const deltaKg = rec.weightKg - lastCompleted.weightKg;
+      const deltaText = deltaLabel(lastCompleted.weightKg, weight);
       if (rec.rationale === 'increase_load') {
-        reason = `up ${deltaLabel(deltaKg)} — last set was clearly too light`;
+        reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
       } else if (rec.rationale === 'reduce_load') {
-        reason = `down ${deltaLabel(deltaKg)} — last set was harder than the target effort`;
+        reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
       } else {
         reason = 'holding the weight — your last set matched the target effort';
       }
@@ -1097,18 +1105,18 @@ export const ExerciseCard = memo(function ExerciseCard({
         const rec = seedFromPreviousSet(prevSet, block.targetRepRange);
         reps = rec.reps;
         weight = seedWeightString(rec.weightKg, prevSet.weightKg);
-        const deltaKg = rec.weightKg - prevSet.weightKg;
+        const deltaText = deltaLabel(prevSet.weightKg, weight);
         const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
         explanation.push(
           `Anchored to your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
         if (rec.rationale === 'increase_load') {
-          reason = `up ${deltaLabel(deltaKg)} vs last session — it was clearly too light`;
+          reason = `up ${deltaText || 'slightly'} vs last session — it was clearly too light`;
           explanation.push(
             `That set cleared the ${block.targetRepRange[0]}-${block.targetRepRange[1]} rep target with effort to spare, so the load steps up to bring the target effort back in range.`
           );
         } else if (rec.rationale === 'reduce_load') {
-          reason = `down ${deltaLabel(deltaKg)} vs last session — it was harder than the target effort`;
+          reason = `down ${deltaText || 'slightly'} vs last session — it was harder than the target effort`;
           explanation.push(
             'That set fell short of the rep target or went too close to failure, so the load steps down toward the middle of the range.'
           );
