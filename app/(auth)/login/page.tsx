@@ -22,14 +22,20 @@ export default function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const message = params.get('message');
-    const emailParam = params.get('email');
     if (message) {
       setInfoMessage(message);
       if (message.toLowerCase().includes('check your email')) {
         setNeedsConfirmation(true);
       }
     }
-    if (emailParam) setEmail(emailParam);
+    // Post-register prefill comes via sessionStorage rather than a query
+    // param so the email doesn't land in browser history or access logs.
+    try {
+      const pendingEmail = sessionStorage.getItem('ht-pending-confirmation-email');
+      if (pendingEmail) setEmail(pendingEmail);
+    } catch {
+      // Storage unavailable — skip the prefill.
+    }
   }, []);
 
   const handleResendConfirmation = async () => {
@@ -81,6 +87,11 @@ export default function LoginPage() {
           setError('Sign-in failed. Please try again.');
         }
       } else {
+        try {
+          sessionStorage.removeItem('ht-pending-confirmation-email');
+        } catch {
+          // Storage unavailable — nothing to clean up.
+        }
         router.push('/dashboard/log');
         router.refresh();
       }

@@ -64,9 +64,14 @@ export default function RegisterPage() {
 
       // If email confirmation is required
       if (data.user && !data.session) {
-        router.push(
-          `/login?message=${encodeURIComponent('Check your email to confirm your account')}&email=${encodeURIComponent(email)}`
-        );
+        // Hand the email to the login page via sessionStorage, not the URL —
+        // a query param would put PII in browser history and access logs.
+        try {
+          sessionStorage.setItem('ht-pending-confirmation-email', email);
+        } catch {
+          // Storage unavailable (private mode etc.) — login just won't prefill.
+        }
+        router.push(`/login?message=${encodeURIComponent('Check your email to confirm your account')}`);
         return;
       }
 
