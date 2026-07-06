@@ -127,6 +127,37 @@ describe('TodayHeroCard — next-up recommendation', () => {
     expect(screen.getByText(/Next up · 6:58 PM/i)).toBeInTheDocument();
   });
 
+  it('keeps the plan CTA over the meal when there is no active mesocycle', () => {
+    render(
+      <TodayHeroCard
+        workout={null}
+        scheduled={null}
+        hasPlan={false}
+        mesocycleName={null}
+        meal={meal}
+      />
+    );
+
+    expect(screen.getByText('No training plan yet')).toBeInTheDocument();
+    expect(screen.getByText('Plan a mesocycle')).toBeInTheDocument();
+    expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
+  });
+
+  it('shows the done state for a completed quick workout without a plan', () => {
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, state: 'completed', completedSets: 15 }}
+        scheduled={null}
+        hasPlan={false}
+        mesocycleName={null}
+        meal={meal}
+      />
+    );
+
+    expect(screen.getByText('View workout')).toBeInTheDocument();
+    expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
+  });
+
   it('falls back to the done state when the workout is complete and no meal is suggested', () => {
     render(
       <TodayHeroCard

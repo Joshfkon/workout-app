@@ -1473,9 +1473,13 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
   // Early-week "ramp" framing for below-MEV muscles (wk 1-2, expected while
   // the week fills in); later weeks escalate to the full atrophy alert.
+  // With zero sets logged this week glanceVolume is null while every muscle
+  // is below MEV — fall back to musclesBelowMev so a brand-new week gets the
+  // calm ramp message instead of the full atrophy alert.
+  const belowMevCount = glanceVolume?.lowCount ?? musclesBelowMev.length;
   const rampBanner =
-    glanceVolume && glanceVolume.lowCount > 0 && activeMesocycle && activeMesocycle.currentWeek <= 2 ? (
-      <VolumeRampBanner lowCount={glanceVolume.lowCount} week={activeMesocycle.currentWeek} />
+    belowMevCount > 0 && activeMesocycle && activeMesocycle.currentWeek <= 2 ? (
+      <VolumeRampBanner lowCount={belowMevCount} week={activeMesocycle.currentWeek} />
     ) : null;
 
   const atrophyCard = !rampBanner && musclesBelowMev.length > 0 ? (
