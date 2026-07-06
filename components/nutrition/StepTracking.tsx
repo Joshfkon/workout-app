@@ -80,7 +80,9 @@ export const StepTracking = memo(function StepTracking({ date, userWeightKg }: S
   const displayDate = isToday 
     ? 'Today' 
     : mounted
-      ? new Date(date).toLocaleDateString('en-US', { 
+      // date is YYYY-MM-DD; anchor to local noon so it doesn't parse as UTC
+      // midnight and render the previous day west of UTC.
+      ? new Date(`${date}T12:00:00`).toLocaleDateString('en-US', {
           weekday: 'short', 
           month: 'short', 
           day: 'numeric' 

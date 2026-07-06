@@ -536,6 +536,9 @@ export default function ExercisesPage() {
           </p>
         </div>
         <div className="flex gap-3">
+          {/* Dev-only bulk AI enrichment — hidden from end users (set
+              NEXT_PUBLIC_DEV_TOOLS=true locally to expose it) */}
+          {process.env.NEXT_PUBLIC_DEV_TOOLS === 'true' && (
           <Button
             variant="outline"
             onClick={async () => {
@@ -581,6 +584,7 @@ export default function ExercisesPage() {
               </>
             )}
           </Button>
+          )}
           <Link href="/dashboard/exercises/add">
             <Button>
               <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

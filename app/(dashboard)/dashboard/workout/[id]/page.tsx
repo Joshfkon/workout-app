@@ -48,7 +48,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
-import { formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -354,6 +354,10 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
+  // Live next-set suggestion reported by the current ExerciseCard's banner
+  // (e.g. "60 kg × 7"). The sticky rest bar prefers this over the block's
+  // planned target, which goes stale as soon as the suggestion moves.
+  const [activeSuggestionLabel, setActiveSuggestionLabel] = useState<string | null>(null);
   // Blocks the user skipped for this session ("Skip today" on an up-next row).
   // Mirrors exercise_blocks.skipped_at; excluded from progress, summary
   // aggregates, and progression/feedback derivations.
@@ -1142,12 +1146,17 @@ export default function WorkoutPage() {
         .map(block => block.exercise)
         .filter((ex): ex is Exercise => ex !== undefined);
 
-      // Extract base blocks (without exercise property) for the store
-      const baseBlocks: ExerciseBlock[] = blocks.map(({ exercise: _exercise, ...rest }) => rest);
+      // Extract base blocks (without exercise property) for the store.
+      // Skipped blocks are excluded so the resume pill's label and set
+      // totals match this page's own counts (finish dialog, progress),
+      // which are all computed over activeBlocks.
+      const baseBlocks: ExerciseBlock[] = blocks
+        .filter((b) => !skippedBlockIds.has(b.id))
+        .map(({ exercise: _exercise, ...rest }) => rest);
 
       startWorkoutSession(session, baseBlocks, exercisesList);
     }
-  }, [session, blocks, phase, startWorkoutSession]);
+  }, [session, blocks, phase, skippedBlockIds, startWorkoutSession]);
 
   // Sync current block index to store
   useEffect(() => {
@@ -4094,16 +4103,9 @@ export default function WorkoutPage() {
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
-  const workoutLabel = (() => {
-    if (blocks.length === 0) return 'Workout';
-    const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
-    if (muscles.length >= 5) return 'Full Body';
-    if (muscles.includes('chest') && muscles.includes('back')) return 'Upper Body';
-    if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
-    if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
-    if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
-    return muscles.map(formatMuscleName).join(' & ');
-  })();
+  // Derived from activeBlocks (skipped excluded) so it matches the resume
+  // pill, which is fed the same filtered block list via the store sync.
+  const workoutLabel = deriveWorkoutLabel(activeBlocks.map(b => b.exercise.primaryMuscle));
   const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
     isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'
   );
@@ -4592,6 +4594,7 @@ export default function WorkoutPage() {
                       }))
                     )}
                     isActive={isCurrent}
+                    onActiveSuggestionChange={isCurrent ? setActiveSuggestionLabel : undefined}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
@@ -5003,9 +5006,11 @@ export default function WorkoutPage() {
               setShowRestTimer(false);
             }}
             nextLabel={
-              currentBlock
-                ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
-                : undefined
+              activeSuggestionLabel
+                ? `next · ${activeSuggestionLabel}`
+                : currentBlock
+                  ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
+                  : undefined
             }
             onBarTap={() => {
               document

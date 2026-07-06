@@ -64,7 +64,9 @@ export default function RegisterPage() {
 
       // If email confirmation is required
       if (data.user && !data.session) {
-        router.push('/login?message=Check your email to confirm your account');
+        router.push(
+          `/login?message=${encodeURIComponent('Check your email to confirm your account')}&email=${encodeURIComponent(email)}`
+        );
         return;
       }
 

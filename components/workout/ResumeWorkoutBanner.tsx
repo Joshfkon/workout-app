@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { Button } from '@/components/ui';
-import { formatDistanceToNow, formatDuration } from '@/lib/utils';
+import { deriveWorkoutLabel, formatDistanceToNow, formatDuration } from '@/lib/utils';
 
 /** Matches hooks/useRestTimer's persisted shape. */
 const TIMER_STORAGE_KEY = 'workout_rest_timer';
@@ -57,10 +57,12 @@ export function ResumeWorkoutBanner() {
   // Don't show if we're already on the workout page for this session
   if (pathname?.includes(`/dashboard/workout/${activeSession.id}`)) return null;
 
-  // Calculate completed sets count
+  // Calculate completed sets count (only for blocks still in the workout,
+  // so sets from removed/swapped exercises don't inflate the count)
+  const blockIds = new Set(exerciseBlocks.map((b) => b.id));
   let completedSetsCount = 0;
-  Object.values(setLogs).forEach((sets) => {
-    completedSetsCount += sets.length;
+  Object.entries(setLogs).forEach(([blockId, sets]) => {
+    if (blockIds.has(blockId)) completedSetsCount += sets.length;
   });
   const targetSetsTotal = exerciseBlocks.reduce((sum, b) => sum + (b.targetSets || 0), 0);
 
@@ -89,10 +91,15 @@ export function ResumeWorkoutBanner() {
     setShowDiscardConfirm(false);
   };
 
-  // Get first exercise name for context
-  const firstBlock = exerciseBlocks[0];
-  const firstExercise = firstBlock ? exercises[firstBlock.exerciseId]?.name : undefined;
-  const exerciseCount = exerciseBlocks.length;
+  // Same derived label the workout page header shows ("Upper Body", "Push")
+  const workoutLabel =
+    exerciseBlocks.length > 0
+      ? deriveWorkoutLabel(
+          exerciseBlocks
+            .map((b) => exercises[b.exerciseId]?.primaryMuscle)
+            .filter((m): m is string => Boolean(m))
+        )
+      : 'Workout in progress';
 
   return (
     <>
@@ -113,9 +120,7 @@ export function ResumeWorkoutBanner() {
               <div className="w-2.5 h-2.5 flex-shrink-0 rounded-full bg-success-400 animate-pulse" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-surface-100 truncate">
-                  {firstExercise && exerciseCount > 1
-                    ? `${firstExercise} + ${exerciseCount - 1} more`
-                    : firstExercise || 'Workout in progress'}
+                  {workoutLabel}
                 </p>
                 <p className="text-[11px] text-surface-400 truncate tabular-nums">
                   {restRemaining !== null && `rest ${formatDuration(restRemaining)} · `}

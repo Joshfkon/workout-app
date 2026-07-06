@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Card } from '@/components/ui';
@@ -11,7 +11,47 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // Banner from redirects like /login?message=... (post-register confirmation,
+  // auth-callback failures). Read from window.location instead of
+  // useSearchParams() so the page doesn't need a Suspense boundary.
+  const [infoMessage, setInfoMessage] = useState('');
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resendStatus, setResendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const router = useRouter();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const message = params.get('message');
+    const emailParam = params.get('email');
+    if (message) {
+      setInfoMessage(message);
+      if (message.toLowerCase().includes('check your email')) {
+        setNeedsConfirmation(true);
+      }
+    }
+    if (emailParam) setEmail(emailParam);
+  }, []);
+
+  const handleResendConfirmation = async () => {
+    if (!email) {
+      setResendStatus('error');
+      return;
+    }
+    setResendStatus('sending');
+    try {
+      const supabase = createClient();
+      const { error: resendError } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
+        },
+      });
+      setResendStatus(resendError ? 'error' : 'sent');
+    } catch {
+      setResendStatus('error');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +74,7 @@ export default function LoginPage() {
           setError('Please enter your email address.');
         } else if (msg.includes('email not confirmed')) {
           setError('Please confirm your email first — check your inbox for the confirmation link.');
+          setNeedsConfirmation(true);
         } else if (/fetch|network/.test(msg)) {
           setError('Can’t reach the server — check your connection and try again.');
         } else {
@@ -70,6 +111,26 @@ export default function LoginPage() {
           <p className="text-surface-400 mt-1">Sign in to continue your training</p>
         </div>
 
+        {infoMessage && (
+          <div
+            role="status"
+            className={`p-3 rounded-lg mb-4 border ${
+              needsConfirmation
+                ? 'bg-success-500/10 border-success-500/20'
+                : 'bg-danger-500/10 border-danger-500/20'
+            }`}
+          >
+            <p className={`text-sm font-medium ${needsConfirmation ? 'text-success-400' : 'text-danger-400'}`}>
+              {infoMessage}
+            </p>
+            {needsConfirmation && (
+              <p className="text-sm text-surface-400 mt-1">
+                You need to confirm your email before signing in.
+              </p>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             label="Email"
@@ -101,6 +162,30 @@ export default function LoginPage() {
           {error && (
             <div className="p-3 rounded-lg bg-danger-500/10 border border-danger-500/20">
               <p className="text-sm text-danger-400">{error}</p>
+            </div>
+          )}
+
+          {needsConfirmation && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleResendConfirmation}
+                disabled={resendStatus === 'sending' || resendStatus === 'sent'}
+                className="text-sm text-primary-400 hover:text-primary-300 font-medium underline disabled:opacity-60 disabled:no-underline"
+              >
+                {resendStatus === 'sending'
+                  ? 'Sending…'
+                  : resendStatus === 'sent'
+                    ? 'Confirmation email sent ✓'
+                    : 'Resend confirmation email'}
+              </button>
+              {resendStatus === 'error' && (
+                <p className="text-xs text-danger-400 mt-1">
+                  {email
+                    ? 'Could not resend the email. Please try again in a minute.'
+                    : 'Enter your email above first, then tap resend.'}
+                </p>
+              )}
             </div>
           )}
 

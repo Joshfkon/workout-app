@@ -205,6 +205,11 @@ interface ExerciseCardProps {
   // Per-set write status (P0-2): drives the saved/saving/queued glyph on
   // completed set lines. Sets absent from the map (loaded from DB) are saved.
   setSyncStatus?: Record<string, SetSyncStatus>;
+  // Reports the active set's live suggestion (the SuggestionBanner values,
+  // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
+  // instead of the block's stale planned weight. Called with null when no
+  // active suggestion is shown.
+  onActiveSuggestionChange?: (label: string | null) => void;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -257,6 +262,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onRepRangeChange,
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
+  onActiveSuggestionChange,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -1061,8 +1067,16 @@ export const ExerciseCard = memo(function ExerciseCard({
     let weight = '';
     let reps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
 
-    const deltaLabel = (deltaKg: number) =>
-      `${deltaKg > 0 ? '+' : '-'}${convertWeightForDisplay(Math.abs(deltaKg), unit)} ${weightLabel}`;
+    // Delta between the anchor set and the weight the banner actually shows
+    // (display units, after plate rounding) so the copy can't contradict the
+    // numbers on screen — a raw-kg delta said "down -1.5 kg" for a 4 kg → 3 kg
+    // drop. Unsigned: "up"/"down" in the sentence already carries direction.
+    const deltaLabel = (anchorKg: number, shownWeight: string) => {
+      const shown = parseFloat(shownWeight);
+      if (!Number.isFinite(shown)) return '';
+      const delta = Number(Math.abs(shown - convertWeightForDisplay(anchorKg, unit)).toFixed(1));
+      return delta > 0 ? `${delta} ${weightLabel}` : '';
+    };
 
     if (lastCompleted) {
       const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
@@ -1072,11 +1086,11 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (isAmrap && lastCompleted.rpe) {
         reps = Math.max(amrapReps(lastSetData), reps);
       }
-      const deltaKg = rec.weightKg - lastCompleted.weightKg;
+      const deltaText = deltaLabel(lastCompleted.weightKg, weight);
       if (rec.rationale === 'increase_load') {
-        reason = `up ${deltaLabel(deltaKg)} — last set was clearly too light`;
+        reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
       } else if (rec.rationale === 'reduce_load') {
-        reason = `down ${deltaLabel(deltaKg)} — last set was harder than the target effort`;
+        reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
       } else {
         reason = 'holding the weight — your last set matched the target effort';
       }
@@ -1091,18 +1105,18 @@ export const ExerciseCard = memo(function ExerciseCard({
         const rec = seedFromPreviousSet(prevSet, block.targetRepRange);
         reps = rec.reps;
         weight = seedWeightString(rec.weightKg, prevSet.weightKg);
-        const deltaKg = rec.weightKg - prevSet.weightKg;
+        const deltaText = deltaLabel(prevSet.weightKg, weight);
         const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
         explanation.push(
           `Anchored to your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
         );
         if (rec.rationale === 'increase_load') {
-          reason = `up ${deltaLabel(deltaKg)} vs last session — it was clearly too light`;
+          reason = `up ${deltaText || 'slightly'} vs last session — it was clearly too light`;
           explanation.push(
             `That set cleared the ${block.targetRepRange[0]}-${block.targetRepRange[1]} rep target with effort to spare, so the load steps up to bring the target effort back in range.`
           );
         } else if (rec.rationale === 'reduce_load') {
-          reason = `down ${deltaLabel(deltaKg)} vs last session — it was harder than the target effort`;
+          reason = `down ${deltaText || 'slightly'} vs last session — it was harder than the target effort`;
           explanation.push(
             'That set fell short of the rep target or went too close to failure, so the load steps down toward the middle of the range.'
           );
@@ -1142,6 +1156,38 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     return { weight, reps: String(reps), reason, explanation };
   };
+
+  // Report the active set's live suggestion to the parent (the page's sticky
+  // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
+  // conditions/values exactly so the two surfaces can't disagree. Runs after
+  // every render; the ref guard means the parent only hears actual changes.
+  //
+  // TODO(live-suggestion-state): this card→page callback is a point-to-point
+  // patch. If any other consumer of the live recommendation appears, move the
+  // suggestion into workoutStore and have the banner, rest bar, and pending
+  // set pre-fills all read the same state. Known symptom of today's split
+  // sources: after inline-editing a logged set, the pending next set's
+  // pre-fill does not re-sync with the correction (only this banner/rest-bar
+  // pair recomputes).
+  const lastReportedSuggestionRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!onActiveSuggestionChange) return;
+    let label: string | null = null;
+    if (isActive && !pendingDropset && !dropsetMode && pendingSetsCount > 0 && pendingInputs.length > 0) {
+      const activeIsAmrap = isAmrapSuggested && pendingSetsCount === 1;
+      const suggestion = buildSuggestionInfo(activeIsAmrap);
+      const bannerWeight = isBodyweightExercise
+        ? weightMode === 'bodyweight'
+          ? 'BW'
+          : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
+        : `${suggestion.weight || '—'} ${weightLabel}`;
+      label = `${bannerWeight} × ${suggestion.reps || '—'}${isDurationBased ? 's' : ''}`;
+    }
+    if (lastReportedSuggestionRef.current !== label) {
+      lastReportedSuggestionRef.current = label;
+      onActiveSuggestionChange(label);
+    }
+  });
 
   // Single meta line under the exercise name (mockup 2.4):
   // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"
