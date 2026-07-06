@@ -205,6 +205,11 @@ interface ExerciseCardProps {
   // Per-set write status (P0-2): drives the saved/saving/queued glyph on
   // completed set lines. Sets absent from the map (loaded from DB) are saved.
   setSyncStatus?: Record<string, SetSyncStatus>;
+  // Reports the active set's live suggestion (the SuggestionBanner values,
+  // e.g. "60 kg × 7") so the page's sticky rest bar shows the same target
+  // instead of the block's stale planned weight. Called with null when no
+  // active suggestion is shown.
+  onActiveSuggestionChange?: (label: string | null) => void;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -257,6 +262,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onRepRangeChange,
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
+  onActiveSuggestionChange,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -1142,6 +1148,30 @@ export const ExerciseCard = memo(function ExerciseCard({
 
     return { weight, reps: String(reps), reason, explanation };
   };
+
+  // Report the active set's live suggestion to the parent (the page's sticky
+  // rest bar renders it as "next · 60 kg × 7"). Mirrors the SuggestionBanner
+  // conditions/values exactly so the two surfaces can't disagree. Runs after
+  // every render; the ref guard means the parent only hears actual changes.
+  const lastReportedSuggestionRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!onActiveSuggestionChange) return;
+    let label: string | null = null;
+    if (isActive && !pendingDropset && !dropsetMode && pendingSetsCount > 0 && pendingInputs.length > 0) {
+      const activeIsAmrap = isAmrapSuggested && pendingSetsCount === 1;
+      const suggestion = buildSuggestionInfo(activeIsAmrap);
+      const bannerWeight = isBodyweightExercise
+        ? weightMode === 'bodyweight'
+          ? 'BW'
+          : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
+        : `${suggestion.weight || '—'} ${weightLabel}`;
+      label = `${bannerWeight} × ${suggestion.reps || '—'}${isDurationBased ? 's' : ''}`;
+    }
+    if (lastReportedSuggestionRef.current !== label) {
+      lastReportedSuggestionRef.current = label;
+      onActiveSuggestionChange(label);
+    }
+  });
 
   // Single meta line under the exercise name (mockup 2.4):
   // "{muscle} · last session 60 lbs × 9, × 8 @ 2 RIR"

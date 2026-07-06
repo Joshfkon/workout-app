@@ -354,6 +354,10 @@ export default function WorkoutPage() {
   const [currentSetNumber, setCurrentSetNumber] = useState(1);
   const [showRestTimer, setShowRestTimer] = useState(false);
   const [restTimerDuration, setRestTimerDuration] = useState<number | null>(null); // Custom rest time (for warmups)
+  // Live next-set suggestion reported by the current ExerciseCard's banner
+  // (e.g. "60 kg × 7"). The sticky rest bar prefers this over the block's
+  // planned target, which goes stale as soon as the suggestion moves.
+  const [activeSuggestionLabel, setActiveSuggestionLabel] = useState<string | null>(null);
   // Blocks the user skipped for this session ("Skip today" on an up-next row).
   // Mirrors exercise_blocks.skipped_at; excluded from progress, summary
   // aggregates, and progression/feedback derivations.
@@ -4583,6 +4587,7 @@ export default function WorkoutPage() {
                       }))
                     )}
                     isActive={isCurrent}
+                    onActiveSuggestionChange={isCurrent ? setActiveSuggestionLabel : undefined}
                     unit={preferences.units}
                     recommendedWeight={aiRecommendedWeightKg}
                     userBodyweightKg={todayCheckInData?.bodyweightKg || undefined}
@@ -4994,9 +4999,11 @@ export default function WorkoutPage() {
               setShowRestTimer(false);
             }}
             nextLabel={
-              currentBlock
-                ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
-                : undefined
+              activeSuggestionLabel
+                ? `next · ${activeSuggestionLabel}`
+                : currentBlock
+                  ? `next · ${formatWeight(currentBlock.targetWeightKg, preferences.units)} × ${currentBlock.targetRepRange[0]}–${currentBlock.targetRepRange[1]}`
+                  : undefined
             }
             onBarTap={() => {
               document
