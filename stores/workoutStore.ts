@@ -72,10 +72,15 @@ export const useWorkoutStore = create<WorkoutState>()(
         const exerciseRecord: Record<string, Exercise> = {};
         exercises.forEach((ex) => { exerciseRecord[ex.id] = ex; });
 
+        // The workout page re-syncs the same session whenever its blocks
+        // change (exercise added, page reload). Wiping setLogs on those
+        // re-syncs zeroed the resume pill's "N/M sets" progress count.
+        const isSameSession = get().activeSession?.id === session.id;
+
         set({
           activeSession: session,
           exerciseBlocks: blocks,
-          setLogs: {},
+          setLogs: isSameSession ? get().setLogs : {},
           currentBlockIndex: 0,
           isPaused: false,
           pausedAt: null,

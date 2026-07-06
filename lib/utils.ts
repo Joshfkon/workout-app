@@ -98,6 +98,22 @@ export function formatMuscleName(muscle: string): string {
     .join(' ');
 }
 
+/**
+ * Derive a workout display label ("Upper Body", "Push", "Chest & Triceps")
+ * from the primary muscles of its exercises. Shared by the live workout
+ * header and the resume pill so both surfaces show the same name.
+ */
+export function deriveWorkoutLabel(primaryMuscles: string[]): string {
+  const muscles = Array.from(new Set(primaryMuscles));
+  if (muscles.length === 0) return 'Workout';
+  if (muscles.length >= 5) return 'Full Body';
+  if (muscles.includes('chest') && muscles.includes('back')) return 'Upper Body';
+  if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
+  if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
+  if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
+  return muscles.map(formatMuscleName).join(' & ');
+}
+
 export function formatDuration(seconds: number): string {
   // Handle negative, NaN, or invalid values
   if (!Number.isFinite(seconds) || seconds < 0) {

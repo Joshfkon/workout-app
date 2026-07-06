@@ -48,7 +48,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
-import { formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
 import { generateWorkoutCoachNotes, type WorkoutCoachNotesInput } from '@/lib/actions/coaching';
 import { 
   getInjuryRisk, 
@@ -4094,16 +4094,7 @@ export default function WorkoutPage() {
   const overallProgress = totalPlannedSets > 0 ? (totalCompletedSets / totalPlannedSets) * 100 : 0;
 
   // Header: workout label + per-exercise progress segments (skipped excluded)
-  const workoutLabel = (() => {
-    if (blocks.length === 0) return 'Workout';
-    const muscles = Array.from(new Set(blocks.map(b => b.exercise.primaryMuscle)));
-    if (muscles.length >= 5) return 'Full Body';
-    if (muscles.includes('chest') && muscles.includes('back')) return 'Upper Body';
-    if (muscles.includes('quads') && muscles.includes('hamstrings')) return 'Lower Body';
-    if (muscles.includes('chest') && muscles.includes('shoulders') && muscles.includes('triceps')) return 'Push';
-    if (muscles.includes('back') && muscles.includes('biceps')) return 'Pull';
-    return muscles.map(formatMuscleName).join(' & ');
-  })();
+  const workoutLabel = deriveWorkoutLabel(blocks.map(b => b.exercise.primaryMuscle));
   const headerSegments: ExerciseSegmentStatus[] = activeBlocks.map((b) =>
     isBlockComplete(b) ? 'completed' : b.id === currentBlock?.id ? 'active' : 'pending'
   );
