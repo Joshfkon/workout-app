@@ -29,22 +29,81 @@ export interface OpenFoodFactsProduct {
   product_name: string;
   brands?: string;
   serving_size?: string;
-  nutriments: {
-    'energy-kcal_100g'?: number;
-    'energy-kcal_serving'?: number;
-    proteins_100g?: number;
-    proteins_serving?: number;
-    carbohydrates_100g?: number;
-    carbohydrates_serving?: number;
-    fat_100g?: number;
-    fat_serving?: number;
-    fiber_100g?: number;
-    sugars_100g?: number;
-    sodium_100g?: number;
-  };
-  serving_quantity?: number;
+  // OFF nutriment keys vary by product ("proteins_serving", "proteins_100g",
+  // "energy-kcal_serving", ...) and values are sometimes strings.
+  nutriments: Record<string, number | string | undefined>;
+  serving_quantity?: number | string;
   image_url?: string;
   image_small_url?: string;
+}
+
+/** Coerce OFF's number-or-numeric-string values; undefined when not parseable. */
+function toFiniteNumber(value: unknown): number | undefined {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return typeof num === 'number' && Number.isFinite(num) ? num : undefined;
+}
+
+export interface ExtractedNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+}
+
+/**
+ * Extract per-serving nutrition from an OFF nutriments object.
+ *
+ * Products frequently have a mix of `_serving` and `_100g` fields (e.g.
+ * per-serving calories but only per-100g macros), so each nutrient falls
+ * back independently: `<key>_serving` first, then `<key>_100g` scaled by
+ * the serving weight. A single "has serving data" switch would zero out
+ * whichever macros are missing their `_serving` variant.
+ */
+export function extractNutritionPerServing(
+  nutriments: Record<string, number | string | undefined>,
+  servingQuantityGrams: number
+): ExtractedNutrition {
+  const per100Factor = servingQuantityGrams / 100;
+
+  const pick = (baseKey: string): number | undefined => {
+    const perServing = toFiniteNumber(nutriments[`${baseKey}_serving`]);
+    if (perServing !== undefined) return perServing;
+    const per100 = toFiniteNumber(nutriments[`${baseKey}_100g`]);
+    if (per100 !== undefined) return per100 * per100Factor;
+    return undefined;
+  };
+
+  // Energy: prefer kcal fields; some products only report kJ ("energy_*")
+  let calories = pick('energy-kcal');
+  if (calories === undefined) {
+    const kilojoules = pick('energy');
+    if (kilojoules !== undefined) calories = kilojoules / 4.184;
+  }
+
+  const fiber = pick('fiber');
+
+  return {
+    calories: Math.round(calories ?? 0),
+    protein: Math.round((pick('proteins') ?? 0) * 10) / 10,
+    carbs: Math.round((pick('carbohydrates') ?? 0) * 10) / 10,
+    fat: Math.round((pick('fat') ?? 0) * 10) / 10,
+    fiber: fiber !== undefined && fiber > 0 ? Math.round(fiber * 10) / 10 : undefined,
+  };
+}
+
+/**
+ * Resolve the serving weight in grams: numeric `serving_quantity` first,
+ * then a weight parsed out of the `serving_size` text, else 100g.
+ */
+export function resolveServingQuantity(product: {
+  serving_quantity?: number | string;
+  serving_size?: string;
+}): number {
+  const quantity = toFiniteNumber(product.serving_quantity);
+  if (quantity !== undefined && quantity > 0) return quantity;
+  if (product.serving_size) return parseGramsFromServingSize(product.serving_size);
+  return 100;
 }
 
 export interface BarcodeSearchResult {
@@ -182,31 +241,11 @@ async function lookupBarcodeOpenFoodFacts(cleanBarcode: string): Promise<Barcode
     const product: OpenFoodFactsProduct = data.product;
     const nutriments = product.nutriments || {};
 
-    // Calculate per serving or per 100g
-    const hasServingData = nutriments['energy-kcal_serving'] !== undefined;
-    const servingQuantity = product.serving_quantity || 100;
-    
-    let calories: number;
-    let protein: number;
-    let carbs: number;
-    let fat: number;
-    let fiber: number | undefined;
-
-    if (hasServingData) {
-      // Use per-serving values if available
-      calories = Math.round(nutriments['energy-kcal_serving'] || 0);
-      protein = Math.round((nutriments.proteins_serving || 0) * 10) / 10;
-      carbs = Math.round((nutriments.carbohydrates_serving || 0) * 10) / 10;
-      fat = Math.round((nutriments.fat_serving || 0) * 10) / 10;
-    } else {
-      // Calculate from per 100g values
-      const factor = servingQuantity / 100;
-      calories = Math.round((nutriments['energy-kcal_100g'] || 0) * factor);
-      protein = Math.round((nutriments.proteins_100g || 0) * factor * 10) / 10;
-      carbs = Math.round((nutriments.carbohydrates_100g || 0) * factor * 10) / 10;
-      fat = Math.round((nutriments.fat_100g || 0) * factor * 10) / 10;
-      fiber = nutriments.fiber_100g ? Math.round((nutriments.fiber_100g || 0) * factor * 10) / 10 : undefined;
-    }
+    const servingQuantity = resolveServingQuantity(product);
+    const { calories, protein, carbs, fat, fiber } = extractNutritionPerServing(
+      nutriments,
+      servingQuantity
+    );
 
     // Build product name
     let name = product.product_name || 'Unknown Product';
@@ -257,8 +296,11 @@ export async function searchOpenFoodFacts(query: string, limit: number = 10): Pr
 
     for (const product of data.products || []) {
       const nutriments = product.nutriments || {};
-      const servingQuantity = product.serving_quantity || 100;
-      const factor = servingQuantity / 100;
+      const servingQuantity = resolveServingQuantity(product);
+      const { calories, protein, carbs, fat } = extractNutritionPerServing(
+        nutriments,
+        servingQuantity
+      );
 
       let name = product.product_name || 'Unknown Product';
       if (product.brands && !name.toLowerCase().includes(product.brands.toLowerCase())) {
@@ -270,10 +312,10 @@ export async function searchOpenFoodFacts(query: string, limit: number = 10): Pr
         brand: product.brands,
         servingSize: product.serving_size || `${servingQuantity}g`,
         servingQuantity,
-        calories: Math.round((nutriments['energy-kcal_100g'] || 0) * factor),
-        protein: Math.round((nutriments.proteins_100g || 0) * factor * 10) / 10,
-        carbs: Math.round((nutriments.carbohydrates_100g || 0) * factor * 10) / 10,
-        fat: Math.round((nutriments.fat_100g || 0) * factor * 10) / 10,
+        calories,
+        protein,
+        carbs,
+        fat,
         imageUrl: product.image_small_url || product.image_url,
         barcode: product.code,
       });

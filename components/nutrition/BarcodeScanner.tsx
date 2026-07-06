@@ -17,6 +17,69 @@ const SCAN_DEBOUNCE_MS = 3000;
 
 const DEFAULT_SERVING_SIZE = '1 serving';
 
+/** Decode attempts per second for the live web scanner. ~10fps keeps the
+ * main thread responsive on older phones while still feeling instant. */
+const WEB_SCAN_FPS = 10;
+
+// Only scan barcode formats commonly used on food products.
+// This speeds up detection by not checking for QR codes.
+const FOOD_BARCODE_FORMATS = [
+  Html5QrcodeSupportedFormats.EAN_13,    // Most common for food (13-digit)
+  Html5QrcodeSupportedFormats.EAN_8,     // Short EAN (8-digit)
+  Html5QrcodeSupportedFormats.UPC_A,     // US/Canada products (12-digit)
+  Html5QrcodeSupportedFormats.UPC_E,     // Compressed UPC (6-digit)
+  Html5QrcodeSupportedFormats.CODE_128,  // Versatile barcode format
+  Html5QrcodeSupportedFormats.CODE_39,   // Alphanumeric barcodes
+];
+
+// focusMode/zoom are real capabilities on mobile Chrome/Safari but missing
+// from the standard TS DOM lib types.
+type ExtendedTrackCapabilities = MediaTrackCapabilities & {
+  focusMode?: string[];
+  zoom?: { min?: number; max?: number; step?: number };
+};
+
+/**
+ * Best-effort camera tuning for barcode scanning:
+ * - continuous autofocus (blurry frames are the #1 cause of failed decodes)
+ * - a modest zoom so the user can hold the package farther away; phone
+ *   cameras can't focus closer than their minimum focus distance.
+ * Every step is wrapped in try/catch — iOS Safari supports none of this.
+ */
+async function tuneVideoTrackForScanning(track: MediaStreamTrack): Promise<void> {
+  let capabilities: ExtendedTrackCapabilities;
+  try {
+    capabilities = track.getCapabilities() as ExtendedTrackCapabilities;
+  } catch {
+    return;
+  }
+
+  if (capabilities.focusMode?.includes('continuous')) {
+    try {
+      await track.applyConstraints({
+        advanced: [{ focusMode: 'continuous' } as MediaTrackConstraintSet],
+      });
+    } catch {
+      // Focus mode not applicable - ignore
+    }
+  }
+
+  const zoomRange = capabilities.zoom;
+  if (zoomRange && typeof zoomRange.max === 'number') {
+    const min = typeof zoomRange.min === 'number' ? zoomRange.min : 1;
+    const target = Math.min(Math.max(1.5, min), zoomRange.max);
+    if (target > min) {
+      try {
+        await track.applyConstraints({
+          advanced: [{ zoom: target } as MediaTrackConstraintSet],
+        });
+      } catch {
+        // Zoom not applicable - ignore
+      }
+    }
+  }
+}
+
 /**
  * Haptic + audio feedback on a successful decode.
  * Every path is best-effort: web without Capacitor, muted devices, and
@@ -213,7 +276,10 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
   });
   const [isSavingCustom, setIsSavingCustom] = useState(false);
 
+  const [isDecodingPhoto, setIsDecodingPhoto] = useState(false);
+
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const mlkitRef = useRef<MLKitBarcodeModule | null>(null);
   const nativeListenersRef = useRef<PluginListenerHandle[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -589,19 +655,8 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
     setDebugInfo('Starting camera...');
 
     try {
-      // Only scan barcode formats commonly used on food products
-      // This speeds up detection by not checking for QR codes
-      const formatsToSupport = [
-        Html5QrcodeSupportedFormats.EAN_13,    // Most common for food (13-digit)
-        Html5QrcodeSupportedFormats.EAN_8,     // Short EAN (8-digit)
-        Html5QrcodeSupportedFormats.UPC_A,     // US/Canada products (12-digit)
-        Html5QrcodeSupportedFormats.UPC_E,     // Compressed UPC (6-digit)
-        Html5QrcodeSupportedFormats.CODE_128,  // Versatile barcode format
-        Html5QrcodeSupportedFormats.CODE_39,   // Alphanumeric barcodes
-      ];
-
       const html5QrCode = new Html5Qrcode('barcode-reader', {
-        formatsToSupport,
+        formatsToSupport: FOOD_BARCODE_FORMATS,
         verbose: false,
         // Use native BarcodeDetector API if available (faster)
         experimentalFeatures: {
@@ -613,9 +668,18 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       await html5QrCode.start(
         { facingMode: 'environment' },
         {
-          fps: 15,  // Increased from 10 for faster scanning
-          qrbox: { width: 300, height: 180 },  // Larger scan area for easier alignment
+          fps: WEB_SCAN_FPS,
+          // Decode only the region inside the visible guide box, not the
+          // full frame - faster and fewer false negatives
+          qrbox: { width: 300, height: 180 },
           aspectRatio: 1.777778,
+          // Request a high-res stream: 1080p frames make small barcode
+          // modules resolvable where 480p/720p defaults come out too soft
+          videoConstraints: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
         },
         (decodedText) => {
           // Time-based duplicate debounce + single lookup at a time
@@ -640,6 +704,19 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
 
       if (isMountedRef.current) {
         setDebugInfo('Camera ready. Point at barcode.');
+      }
+
+      // Tune the running track: continuous autofocus + modest zoom.
+      // html5-qrcode doesn't expose the MediaStreamTrack, so grab it from
+      // the <video> element it renders.
+      try {
+        const video = document.querySelector<HTMLVideoElement>('#barcode-reader video');
+        const track = (video?.srcObject as MediaStream | null | undefined)?.getVideoTracks()[0];
+        if (track) {
+          await tuneVideoTrackForScanning(track);
+        }
+      } catch {
+        // Camera tuning is best-effort - scanning works without it
       }
 
       // Feature-detect torch support (v2.3.8 camera capabilities API)
@@ -700,6 +777,65 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       setIsScanning(false);
       setTorchSupported(false);
       setTorchOn(false);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Still-photo fallback: capture a photo and decode it. Stills are sharper
+  // than live video frames (full autofocus + full sensor resolution), so
+  // they often decode when the live scan can't get focus.
+  // ---------------------------------------------------------------------------
+
+  const handlePhotoSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Reset so picking the same photo again re-fires onChange
+    event.target.value = '';
+    if (!file) return;
+
+    setError(null);
+    setIsDecodingPhoto(true);
+    setDebugInfo('Decoding photo...');
+
+    // scanFileV2 can't run while a camera scan is active on the same element
+    const wasScanning = scannerRef.current !== null;
+    if (wasScanning) {
+      await stopWebScanner();
+    }
+
+    let fileDecoder: Html5Qrcode | null = null;
+    try {
+      fileDecoder = new Html5Qrcode('barcode-reader-photo', {
+        formatsToSupport: FOOD_BARCODE_FORMATS,
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      });
+      const result = await fileDecoder.scanFileV2(file, /* showImage */ false);
+      const decodedText = result.decodedText;
+
+      void triggerScanFeedback();
+      if (isMountedRef.current) {
+        setIsDecodingPhoto(false);
+        setDebugInfo(`Decoded from photo: ${decodedText}`);
+      }
+      await processBarcode(decodedText);
+    } catch {
+      if (!isMountedRef.current) return;
+      setIsDecodingPhoto(false);
+      setErrorType('info');
+      setError("Couldn't read a barcode from that photo. Center the barcode, fill most of the frame, and make sure it's well lit.");
+      setDebugInfo('Photo decode failed');
+      // Resume the live scan the user was in the middle of
+      if (wasScanning) {
+        await startWebScanner();
+      }
+    } finally {
+      try {
+        fileDecoder?.clear();
+      } catch {
+        // Decoder cleanup is best-effort
+      }
     }
   };
 
@@ -848,12 +984,26 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
         </button>
       </div>
 
+      {/* Hidden still-photo capture input (fallback when live scan can't focus) */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handlePhotoSelected}
+        className="hidden"
+      />
+      {/* Off-screen mount point for the still-photo decoder */}
+      <div id="barcode-reader-photo" className="hidden" />
+
       {/* Scanner area */}
       <div className="p-4 space-y-4">
-        {isLookingUp && !isScanning ? (
+        {(isLookingUp || isDecodingPhoto) && !isScanning ? (
           <div className="flex flex-col items-center justify-center py-8">
             <LoadingAnimation type="dots" size="md" />
-            <p className="mt-3 text-surface-400">Looking up product...</p>
+            <p className="mt-3 text-surface-400">
+              {isDecodingPhoto ? 'Reading photo...' : 'Looking up product...'}
+            </p>
           </div>
         ) : (
           <>
@@ -879,6 +1029,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                     </svg>
                     Start Camera Scanner
                   </Button>
+                  {!Capacitor.isNativePlatform() && (
+                    <Button
+                      onClick={() => photoInputRef.current?.click()}
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Take Photo Instead
+                    </Button>
+                  )}
                   <p className="text-xs text-surface-500 mt-2 text-center">
                     Point your camera at a barcode to scan
                   </p>
@@ -910,9 +1074,20 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
                     </button>
                   )}
 
-                  <div className="absolute bottom-2 left-0 right-0 flex justify-center">
+                  <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-2">
                     <Button onClick={stopWebScanner} variant="secondary" size="sm">
                       Stop Scanner
+                    </Button>
+                    <Button
+                      onClick={() => photoInputRef.current?.click()}
+                      variant="secondary"
+                      size="sm"
+                    >
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      Take Photo
                     </Button>
                   </div>
                 </>
@@ -956,7 +1131,7 @@ export function BarcodeScanner(props: BarcodeScannerProps) {
       <div className="px-4 pb-2">
         <div className="p-2 bg-surface-900/50 rounded-lg">
           <p className="text-xs text-surface-500">
-            💡 Hold steady within the scan area. Works at an angle too!
+            💡 Hold the barcode 6–10 inches (15–25 cm) from the camera — too close and it can&apos;t focus. If it stays blurry, use Take Photo instead.
           </p>
         </div>
       </div>

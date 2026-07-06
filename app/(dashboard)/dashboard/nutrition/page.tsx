@@ -908,15 +908,18 @@ export default function NutritionPage() {
     protein: number;
     carbs: number;
     fat: number;
+    perServing?: { calories: number; protein: number; carbs: number; fat: number };
   }) {
+    const { perServing, ...logUpdates } = updates;
+
     const { error } = await supabase
       .from('food_log')
       .update({
-        servings: updates.servings,
-        calories: updates.calories,
-        protein: updates.protein,
-        carbs: updates.carbs,
-        fat: updates.fat,
+        servings: logUpdates.servings,
+        calories: logUpdates.calories,
+        protein: logUpdates.protein,
+        carbs: logUpdates.carbs,
+        fat: logUpdates.fat,
       })
       .eq('id', id);
 
@@ -925,7 +928,46 @@ export default function NutritionPage() {
       throw error;
     }
 
-    setFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
+    const entry = foodEntries.find((e) => e.id === id);
+    setFoodEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...logUpdates } : e)));
+
+    // The user hand-corrected per-serving nutrition (e.g. a barcode lookup
+    // that returned calories but zero macros). Propagate the fix to the
+    // matching custom_foods record so future scans/logs use the corrected
+    // values. Best-effort: the log entry itself is already updated.
+    if (perServing && entry) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: matches } = await supabase
+          .from('custom_foods')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('food_name', entry.food_name);
+
+        if (matches && matches.length > 0) {
+          const ids = matches.map((m: { id: string }) => m.id);
+          const { error: customError } = await supabase
+            .from('custom_foods')
+            .update({
+              calories: perServing.calories,
+              protein: perServing.protein,
+              carbs: perServing.carbs,
+              fat: perServing.fat,
+            })
+            .in('id', ids);
+
+          if (!customError) {
+            setCustomFoods((prev) =>
+              prev.map((f) => (ids.includes(f.id) ? { ...f, ...perServing } : f))
+            );
+          }
+        }
+      } catch (customError) {
+        console.error('Error updating custom food nutrition:', customError);
+      }
+    }
   }
 
   function openEditFood(entry: FoodLogEntry) {
