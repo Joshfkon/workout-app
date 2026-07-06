@@ -116,6 +116,13 @@ interface ExerciseHistoryData {
   progressPercent: number;
 }
 
+// Parse a YYYY-MM-DD key as a LOCAL date. new Date('YYYY-MM-DD') parses as
+// UTC midnight, which renders as the previous day in timezones west of UTC.
+function parseDateKey(dateKey: string): Date {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function HistoryPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -549,7 +556,9 @@ function HistoryPageContent() {
         const session = block.workout_sessions;
         if (!session?.completed_at) return;
 
-        const dateKey = session.completed_at.split('T')[0];
+        // Group by LOCAL calendar day — completed_at is a UTC timestamp, so
+        // splitting on 'T' would bucket evening workouts into the next day.
+        const dateKey = getLocalDateString(new Date(session.completed_at));
         const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup);
         
         if (workingSets.length === 0) return;
@@ -599,7 +608,7 @@ function HistoryPageContent() {
         } else {
           historyMap.set(dateKey, {
             date: dateKey,
-            displayDate: new Date(dateKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            displayDate: parseDateKey(dateKey).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             bestWeight: sessionBestWeight,
             bestReps: sessionBestReps,
             totalSets: workingSets.length,
@@ -610,8 +619,8 @@ function HistoryPageContent() {
         }
       });
 
-      const history = Array.from(historyMap.values()).sort((a, b) => 
-        new Date(a.date).getTime() - new Date(b.date).getTime()
+      const history = Array.from(historyMap.values()).sort((a, b) =>
+        a.date.localeCompare(b.date)
       );
 
       // Calculate progress
@@ -856,7 +865,7 @@ function HistoryPageContent() {
                       <div key={idx} className="bg-surface-800/50 rounded-lg p-3">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium text-surface-200">
-                            {new Date(entry.date).toLocaleDateString('en-US', {
+                            {parseDateKey(entry.date).toLocaleDateString('en-US', {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric',
