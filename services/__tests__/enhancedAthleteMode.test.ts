@@ -220,6 +220,7 @@ describe('sandbagging detection (enhanced constants)', () => {
       confidenceLevel: 'high',
       lastCalibrated: new Date(),
       dataPoints: 6,
+      method: 'fatigue_adjusted_v2',
     };
   }
 
