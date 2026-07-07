@@ -9,7 +9,13 @@
  */
 
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT } from '@/services/volumeTracker';
-import { resolveMuscleToStandard, STANDARD_MUSCLE_GROUPS, type StandardMuscleGroup } from '@/types/schema';
+import {
+  isStandardMuscle,
+  legacyToStandardMuscles,
+  resolveMuscleToStandard,
+  STANDARD_MUSCLE_GROUPS,
+  type StandardMuscleGroup,
+} from '@/types/schema';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
 // MEV per standard muscle (20 muscles) — the threshold for the 'low' status.
@@ -123,4 +129,78 @@ export function computeWeeklyMuscleVolume(blocks: WeeklyVolumeBlockRow[]): Muscl
     accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
   }
   return volumeAccumulatorToStats(volumeByMuscle);
+}
+
+/** One row of the weekly MEV breakdown (trained stats + untrained muscles). */
+export interface MuscleMevEntry {
+  /** Muscle key as reported by the stats (may be legacy) or a standard id. */
+  muscle: string;
+  sets: number;
+  mev: number;
+  belowMev: boolean;
+}
+
+/**
+ * Weekly volume rolled up against MEV — the single source for BOTH the home
+ * "Weekly volume" glance tile (totalSets / totalTarget / lowCount) and the
+ * volume page's "this week vs MEV" breakdown (entries), so the number the
+ * user taps is the number they land on.
+ */
+export interface WeeklyMevSummary {
+  totalSets: number;
+  totalTarget: number;
+  /** Muscles below MEV: trained-but-low plus completely untrained ones. */
+  lowCount: number;
+  /** Per-muscle breakdown, below-MEV first (untrained at 0 sets included). */
+  entries: MuscleMevEntry[];
+}
+
+/**
+ * Roll weekly per-muscle stats up against MEV. Normalizes to standard IDs and
+ * folds in untrained (0-set) muscles so the count isn't inflated/deflated by
+ * legacy names or missing muscles. A legacy group (e.g. "shoulders") maps to
+ * MULTIPLE standard muscles, so expand it to all of them — taking only the
+ * first would leave the rest counted as untrained. Returns null when no
+ * volume has been logged yet (callers show their own empty state).
+ */
+export function computeWeeklyMevSummary(muscleVolume: MuscleVolumeStats[]): WeeklyMevSummary | null {
+  if (muscleVolume.length === 0) return null;
+
+  const trainedMuscles = new Set<StandardMuscleGroup>(
+    muscleVolume.flatMap((mv) => {
+      const key = mv.muscle.toLowerCase().trim();
+      // Some standard ids ("glutes", "abs") are ALSO legacy-map keys, so check
+      // standard first — expanding those would wrongly credit sibling muscles
+      // (glute_med, obliques) and understate the below-target count.
+      if (isStandardMuscle(key)) return [key];
+      const expanded = legacyToStandardMuscles(key);
+      if (expanded.length > 0) return expanded;
+      const single = toStandardMuscleForVolume(mv.muscle);
+      return single ? [single] : [];
+    })
+  );
+  const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
+
+  const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
+  const totalTarget =
+    muscleVolume.reduce((s, mv) => s + mv.target, 0) +
+    untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
+  const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length + untrained.length;
+
+  const entries: MuscleMevEntry[] = [
+    ...muscleVolume.map((mv) => ({
+      muscle: mv.muscle,
+      sets: mv.sets,
+      mev: getMevForMuscle(mv.muscle),
+      belowMev: mv.status === 'low',
+    })),
+    ...untrained.map((m) => ({
+      muscle: m as string,
+      sets: 0,
+      mev: getMevForMuscle(m),
+      belowMev: true,
+    })),
+  ].sort((a, b) => Number(b.belowMev) - Number(a.belowMev) || b.sets - a.sets);
+
+  return { totalSets, totalTarget, lowCount, entries };
 }

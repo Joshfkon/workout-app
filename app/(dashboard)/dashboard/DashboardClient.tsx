@@ -7,7 +7,6 @@ import { Button, LoadingAnimation } from '@/components/ui';
 import { Modal } from '@/components/ui/Modal';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
-import { getDisplayWeight } from '@/lib/weightUtils';
 import type { FrequentFood, SystemFood, MealType } from '@/types/nutrition';
 import { resolvePrimaryMuscleCredits, SECONDARY_MUSCLE_CREDIT, type MuscleVolumeData } from '@/services/volumeTracker';
 import { STANDARD_MUSCLE_GROUPS, STANDARD_MUSCLE_DISPLAY_NAMES, legacyToStandardMuscles, isStandardMuscle, resolveMuscleToStandard, type StandardMuscleGroup, type WorkoutDay, type Rating } from '@/types/schema';
@@ -19,10 +18,12 @@ import {
   getMevForMuscle,
   accumulateExerciseVolume,
   volumeAccumulatorToStats,
+  computeWeeklyMevSummary,
   type VolumeAccumulator,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
-import { computeLiftTrends, type LiftTrendsSummary } from './_lib/liftTrends';
+import { computeLiftTrends, LIFT_TREND_WINDOW_DAYS, type LiftTrendsSummary } from './_lib/liftTrends';
+import { computeWeightRate } from './_lib/weightRate';
 import { computeWeekSessions } from './_lib/weekSessions';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
 import { calculateReadinessScore } from '@/services/fatigueEngine';
@@ -567,37 +568,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   }, [clientNow, nutritionTargets, nutritionTotals]);
 
   // Weekly weight-change rate (regression over the last ~3 weeks) vs the
-  // goal-implied target rate, in the preferred display unit.
-  const weightRate: GlanceWeightRate | null = useMemo(() => {
-    if (weightHistory.length < 2) return null;
-    const sorted = [...weightHistory].sort((a, b) => a.date.localeCompare(b.date));
-    const latestTs = Date.parse(sorted[sorted.length - 1].date);
-    const windowStart = latestTs - 21 * 24 * 60 * 60 * 1000;
-    let windowEntries = sorted.filter((w) => Date.parse(w.date) >= windowStart);
-    if (windowEntries.length < 2) windowEntries = sorted.slice(-2);
-
-    const points = windowEntries.map((w) => ({
-      x: Date.parse(w.date) / (24 * 60 * 60 * 1000),
-      y: getDisplayWeight(w.weight, w.unit as 'lb' | 'kg' | null, weightUnit),
-    }));
-    const n = points.length;
-    const sumX = points.reduce((a, p) => a + p.x, 0);
-    const sumY = points.reduce((a, p) => a + p.y, 0);
-    const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
-    const sumX2 = points.reduce((a, p) => a + p.x * p.x, 0);
-    const denominator = n * sumX2 - sumX * sumX;
-    if (denominator === 0) return null;
-    const slopePerDay = (n * sumXY - sumX * sumY) / denominator;
-    const perWeek = Math.round(slopePerDay * 7 * 10) / 10;
-
-    const target =
-      userGoal === 'bulk'
-        ? weightUnit === 'lb' ? 0.5 : 0.25
-        : userGoal === 'cut'
-        ? weightUnit === 'lb' ? -1.0 : -0.45
-        : null;
-    return { perWeek, target };
-  }, [weightHistory, weightUnit, userGoal]);
+  // goal-implied target rate, in the preferred display unit. Shared with the
+  // nutrition page's Weight tab (the tile's tap-through destination).
+  const weightRate: GlanceWeightRate | null = useMemo(
+    () => computeWeightRate(weightHistory, weightUnit, userGoal),
+    [weightHistory, weightUnit, userGoal]
+  );
 
   // Latest known weight for the Weight tile (today's log or newest entry).
   const latestWeight = useMemo(() => {
@@ -607,34 +583,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     return { weight: newest.weight, unit: newest.unit };
   }, [todaysWeight, weightHistory]);
 
-  // Weekly-volume summary for the glance "Weekly volume" tile (null = no volume yet).
-  // Normalize to standard IDs and fold in untrained (0-set) muscles so the
-  // count isn't inflated/deflated by legacy names or missing muscles. A legacy
-  // group (e.g. "shoulders") maps to MULTIPLE standard muscles, so expand it to
-  // all of them — taking only the first would leave the rest counted as untrained.
-  const glanceVolume: GlanceVolumeSummary | null = (() => {
-    if (muscleVolume.length === 0) return null;
-    const trainedMuscles = new Set<StandardMuscleGroup>(
-      muscleVolume.flatMap((mv) => {
-        const key = mv.muscle.toLowerCase().trim();
-        // Some standard ids ("glutes", "abs") are ALSO legacy-map keys, so check
-        // standard first — expanding those would wrongly credit sibling muscles
-        // (glute_med, obliques) and understate the below-target count.
-        if (isStandardMuscle(key)) return [key];
-        const expanded = legacyToStandardMuscles(key);
-        if (expanded.length > 0) return expanded;
-        const single = toStandardMuscleForVolume(mv.muscle);
-        return single ? [single] : [];
-      })
-    );
-    const untrained = ALL_MUSCLE_GROUPS.filter((m) => !trainedMuscles.has(m));
-    const totalSets = muscleVolume.reduce((s, mv) => s + mv.sets, 0);
-    const totalTarget =
-      muscleVolume.reduce((s, mv) => s + mv.target, 0) +
-      untrained.reduce((s, m) => s + getMevForMuscle(m), 0);
-    const lowCount = muscleVolume.filter((mv) => mv.status === 'low').length + untrained.length;
-    return { totalSets, totalTarget, lowCount };
-  })();
+  // Weekly-volume summary for the glance "Weekly volume" tile (null = no
+  // volume yet). Computed by the same shared helper the volume page's
+  // "this week vs MEV" breakdown uses, so tile and destination agree.
+  const glanceVolume: GlanceVolumeSummary | null = computeWeeklyMevSummary(muscleVolume);
 
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [systemFoods, setSystemFoods] = useState<SystemFood[]>([]);
@@ -936,7 +888,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
             .eq('user_id', user.id)
             .eq('state', 'completed')
-            .gte('completed_at', new Date(today.getTime() - 84 * 24 * 60 * 60 * 1000).toISOString())
+            .gte('completed_at', new Date(today.getTime() - LIFT_TREND_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString())
             .order('completed_at', { ascending: true }),
         ]);
 
@@ -1213,11 +1165,14 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         // Lift trends for the "Lifts" glance tile (same pure helper the
-        // server initial-data path uses).
+        // server initial-data path uses). The active program's start date
+        // gates confidence for lifts whose window spans the program switch.
         setLiftTrends(
           computeLiftTrends(
             (liftSessionsResult.data as any) || [],
-            userProfileResult.data?.goal ?? undefined
+            userProfileResult.data?.goal ?? undefined,
+            new Date(),
+            { programStartDate: mesocycle?.start_date ?? null }
           )
         );
 

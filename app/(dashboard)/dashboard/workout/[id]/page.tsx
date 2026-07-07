@@ -35,7 +35,24 @@ import { useWorkoutTimer } from '@/hooks/useWorkoutTimer';
 // Dynamic imports for components not needed on initial render
 const WarmupProtocol = dynamic(() => import('@/components/workout').then(m => m.WarmupProtocol), { ssr: false });
 const ReadinessCheckIn = dynamic(() => import('@/components/workout').then(m => m.ReadinessCheckIn), { ssr: false });
-const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), { ssr: false });
+// The summary chunk loads over the network the first time the user finishes
+// a workout — without a loading fallback the screen renders BLANK until it
+// arrives (looks frozen on a slow connection), so show a matching skeleton.
+const SessionSummary = dynamic(() => import('@/components/workout').then(m => m.SessionSummary), {
+  ssr: false,
+  loading: () => (
+    <div className="max-w-lg mx-auto space-y-6 animate-pulse" aria-busy="true">
+      <div className="text-center">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-800" />
+        <div className="h-7 bg-surface-800 rounded w-56 mx-auto" />
+        <div className="h-4 bg-surface-800 rounded w-40 mx-auto mt-2" />
+      </div>
+      <div className="h-40 bg-surface-800/60 rounded-xl" />
+      <div className="h-32 bg-surface-800/60 rounded-xl" />
+      <div className="h-32 bg-surface-800/60 rounded-xl" />
+    </div>
+  ),
+});
 const ExerciseDetailsModal = dynamic(() => import('@/components/workout').then(m => m.ExerciseDetailsModal), { ssr: false });
 const PlateCalculatorModal = dynamic(() => import('@/components/workout').then(m => m.PlateCalculatorModal), { ssr: false });
 import type { Exercise, ExerciseBlock, SetLog, WorkoutSession, WeightUnit, DexaRegionalData, TemporaryInjury, PreWorkoutCheckIn, SetFeedback, Rating, BodyweightData, ExerciseType, StandardMuscleGroup, ExercisePerformanceSnapshot, RepsInTank } from '@/types/schema';
@@ -102,7 +119,7 @@ import { cancelWorkoutSession } from './_lib/cancelWorkout';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { countCompletedSessions } from '@/lib/training/startMesocycleSession';
 import { matchAdhocToPlannedSession } from '@/lib/training/adhocClaim';
-import { runPostSessionMesoUpdates } from './_lib/postSessionMeso';
+import { submitFinishOptimistic, confirmClaimOptimistic } from './_lib/finishWorkout';
 import type {
   AvailableExercise,
   CalibratedLift,
@@ -277,7 +294,9 @@ export default function WorkoutPage() {
   const [outboxSize, setOutboxSize] = useState(0);
 
   const refreshOutboxCount = useCallback(() => {
-    void outboxCount().then(setOutboxSize).catch(() => {});
+    // Banner copy says "N sets queued" — don't count queued finish/feedback
+    // entries left over from a previously finished offline workout.
+    void outboxCount('set_logs').then(setOutboxSize).catch(() => {});
   }, []);
 
   // Derive per-set statuses from the outbox itself. This is the source of
@@ -289,7 +308,7 @@ export default function WorkoutPage() {
     try {
       const entries = await listOutbox();
       const queuedIds = new Set(entries.map(e => e.id));
-      setOutboxSize(entries.length);
+      setOutboxSize(entries.filter(e => e.table === 'set_logs').length);
       setSetSync(prev => {
         let changed = false;
         const next = { ...prev };
@@ -367,7 +386,6 @@ export default function WorkoutPage() {
   // toward the plan (sets mesocycle_id — never claimed silently).
   const [claimCandidate, setClaimCandidate] = useState<{ mesocycleId: string; dayName: string } | null>(null);
   const [showClaimPrompt, setShowClaimPrompt] = useState(false);
-  const [isClaiming, setIsClaiming] = useState(false);
   // Session RPE from the submitted summary, kept for the claim path's
   // post-session meso updates (the summary data is gone once the prompt shows).
   const [submittedSessionRpe, setSubmittedSessionRpe] = useState<number | null>(null);
@@ -1109,6 +1127,8 @@ export default function WorkoutPage() {
               confidenceLevel: cal.confidence_level as 'low' | 'medium' | 'high',
               lastCalibrated: new Date(cal.calibrated_at),
               dataPoints: cal.data_points,
+              rawPredictedMaxReps: cal.raw_predicted_max_reps ?? undefined,
+              method: (cal.method ?? 'naive_v1') as 'naive_v1' | 'fatigue_adjusted_v2',
               exerciseId: cal.exercise_id,
               weightKg: cal.weight_kg,
               setLogId: cal.set_log_id,
@@ -2070,6 +2090,8 @@ export default function WorkoutPage() {
                   bias_interpretation: calibResult.biasInterpretation,
                   confidence_level: calibResult.confidenceLevel,
                   data_points: calibResult.dataPoints,
+                  raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
+                  method: calibResult.method ?? 'fatigue_adjusted_v2',
                   calibrated_at: calibResult.lastCalibrated.toISOString(),
                 }).then(({ error }: { error: Error | null }) => {
                   if (error) console.error('Failed to save AMRAP calibration:', error);
@@ -3696,87 +3718,38 @@ export default function WorkoutPage() {
     }
   };
 
+  // Optimistic finish (see _lib/finishWorkout): the completion + feedback
+  // writes are queued in the durable outbox and the UI responds immediately
+  // — the old flow awaited two timeout-less network round-trips here, which
+  // froze the "Save & Finish" tap for 10-15s on a slow connection and LOST
+  // the completion entirely when offline.
   const handleSummarySubmit = async (data: {
     sessionRpe: number;
     pumpRating: number;
     notes: string;
     muscleFeedback: SessionMuscleFeedbackEntry[];
   }) => {
-    try {
-      const supabase = createUntypedClient();
-
-      // Update workout session
-      await supabase
-        .from('workout_sessions')
-        .update({
-          state: 'completed',
-          completed_at: new Date().toISOString(),
-          session_rpe: data.sessionRpe,
-          pump_rating: data.pumpRating,
-          session_notes: data.notes,
-          completion_percent: 100,
-        })
-        .eq('id', sessionId);
-
-      // Persist per-muscle pump/workload chips (weeklyProgressionEngine input).
-      // Non-blocking for the user: failures are logged, finishing still works.
-      if (session && data.muscleFeedback.length > 0) {
-        const { errors: feedbackErrors } = await upsertSessionMuscleFeedback(
-          supabase,
-          session.userId,
-          data.muscleFeedback.map((entry) => ({
-            sessionId,
-            muscleGroup: entry.muscleGroup,
-            pump: entry.pump,
-            workload: entry.workload,
-          }))
-        );
-        if (feedbackErrors.length > 0) {
-          console.error('Failed to save per-muscle feedback:', feedbackErrors);
-        }
-      }
-
-      // Deload trigger check (Phase 1.4) + week advance from the completed-
-      // session count (see _lib/postSessionMeso). Fire-and-forget: must never
-      // block or fail the finish flow.
-      if (session?.mesocycleId) {
-        void runPostSessionMesoUpdates(supabase, {
-          mesocycleId: session.mesocycleId,
-          userId: session.userId,
-          sessionRpe: data.sessionRpe,
-          checkIn: session.preWorkoutCheckIn ?? null,
-        });
-      }
-
-      // Calculate and save workout calories (set-based HyperTrack method) in
-      // the background. It runs several sequential DB round-trips and the
-      // result isn't needed to leave the summary, so awaiting it here just
-      // stalls the "Finish" tap. Fire-and-forget; it's okay if it fails.
-      if (session?.plannedDate) {
-        const plannedDate = session.plannedDate;
-        import('@/lib/actions/workout-calories')
-          .then(({ calculateAndSaveWorkoutCalories }) =>
-            calculateAndSaveWorkoutCalories(sessionId, plannedDate)
-          )
-          .catch((err) => console.error('Workout calorie calculation failed:', err));
-      }
-
-      // B1: ad-hoc workout that matches the mesocycle's next pending session
-      // — hold navigation and ask whether to count it toward the plan.
-      if (!session?.mesocycleId && claimCandidate) {
-        setSubmittedSessionRpe(data.sessionRpe);
-        setShowClaimPrompt(true);
-        return;
-      }
-
-      // Clear store state and navigate to dashboard to see weekly volume
-      endWorkoutSession();
-      router.push('/dashboard');
-    } catch (err) {
-      console.error('Failed to complete workout:', err);
-      endWorkoutSession();
-      router.push('/dashboard');
+    if (!session) {
+      finishToDashboard();
+      return;
     }
+
+    // B1: ad-hoc workout that matches the mesocycle's next pending session —
+    // show the claim prompt instead of navigating (the queued writes sync in
+    // the background while the user decides).
+    const claimArmed = !session.mesocycleId && !!claimCandidate;
+    if (claimArmed) setSubmittedSessionRpe(data.sessionRpe);
+
+    await submitFinishOptimistic(
+      {
+        supabase: createUntypedClient(),
+        sessionId,
+        session,
+        navigate: finishToDashboard,
+        showClaimPrompt: claimArmed ? () => setShowClaimPrompt(true) : null,
+      },
+      data
+    );
   };
 
   const finishToDashboard = () => {
@@ -3793,33 +3766,22 @@ export default function WorkoutPage() {
   // mesocycle_id (session counting, week advancement, and weekly-rollover
   // feedback all key off that), then run the same post-session updates a
   // programmed session gets — they were skipped at finish because the
-  // session had no mesocycle_id yet.
+  // session had no mesocycle_id yet. Optimistic like the finish itself: the
+  // link is queued durably and synced in the background, so the tap never
+  // hangs on the network.
   const handleConfirmClaim = async () => {
-    if (!claimCandidate || !session) {
-      setShowClaimPrompt(false);
-      finishToDashboard();
-      return;
-    }
-    setIsClaiming(true);
-    try {
-      const supabase = createUntypedClient();
-      const { error: claimError } = await supabase
-        .from('workout_sessions')
-        .update({ mesocycle_id: claimCandidate.mesocycleId })
-        .eq('id', sessionId);
-      if (claimError) throw claimError;
-
-      void runPostSessionMesoUpdates(supabase, {
+    if (claimCandidate && session) {
+      // Resolves once the claim is queued durably in IndexedDB (a few ms) —
+      // the network sync stays in the background. Awaiting it closes the
+      // kill-window between accepting the tap and persisting the claim.
+      await confirmClaimOptimistic({
+        supabase: createUntypedClient(),
+        sessionId,
+        session,
         mesocycleId: claimCandidate.mesocycleId,
-        userId: session.userId,
         sessionRpe: submittedSessionRpe,
-        checkIn: session.preWorkoutCheckIn ?? null,
       });
-    } catch (err) {
-      // Non-fatal: the workout is already saved; it just stays ad-hoc.
-      console.error('Failed to count workout toward mesocycle:', err);
     }
-    setIsClaiming(false);
     setShowClaimPrompt(false);
     finishToDashboard();
   };
@@ -3897,6 +3859,7 @@ export default function WorkoutPage() {
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
           amrapCalibrations={sessionCalibrations}
+          enhancedAthleteMode={enhancedAthleteModeActive}
           unit={preferences.units}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
@@ -3938,7 +3901,6 @@ export default function WorkoutPage() {
           message={`This workout looks like ${claimCandidate?.dayName ?? 'your next planned session'}. Counting it advances your program to the next session — otherwise it stays an extra workout.`}
           confirmText="Count it"
           cancelText="Keep as extra"
-          isLoading={isClaiming}
         />
       </div>
     );
@@ -5569,6 +5531,7 @@ export default function WorkoutPage() {
           <div className="max-w-md w-full">
             <CalibrationResultCard
               result={calibrationResult}
+              enhancedAthleteMode={enhancedAthleteModeActive}
               onDismiss={() => setCalibrationResult(null)}
             />
           </div>

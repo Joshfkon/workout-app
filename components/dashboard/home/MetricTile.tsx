@@ -9,12 +9,8 @@ interface MetricTileProps {
   label: string;
   /** When set, the tile becomes a tap-through link to the detail page. */
   href?: string;
-  /**
-   * Header-right action (e.g. the Weight tile's "+ log" button). Combinable
-   * with href: the action sits on top of the link, so give it an onClick
-   * that stops propagation and prevents default (see MetricTileGrid's
-   * Weight tile) or the tap will also navigate.
-   */
+  /** Header-right action (e.g. the Weight tile's "+ log" button). With href,
+   *  clicks on the action are kept from triggering the tile navigation. */
   action?: ReactNode;
   /** 'warning' draws attention with an amber border (e.g. volume below MEV). */
   accent?: 'warning';
@@ -30,7 +26,19 @@ export function MetricTile({ icon: TileIcon, label, href, action, accent, childr
         <div className="flex items-center gap-1.5 text-xs text-surface-500">
           <TileIcon size={14} aria-hidden="true" /> {label}
         </div>
-        {action}
+        {action && href ? (
+          // Keep the action tappable inside the link without navigating.
+          <span
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            {action}
+          </span>
+        ) : (
+          action
+        )}
       </div>
       {children}
     </>

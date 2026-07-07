@@ -5,28 +5,37 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import type { CalibrationResult } from '@/services/rpeCalibration';
-import { getBiasLevel, getBiasColor, formatBias } from '@/services/rpeCalibration';
+import { getCalibrationVerdict, formatBias } from '@/services/rpeCalibration';
 import { cn } from '@/lib/utils';
 
 export interface CalibrationResultCardProps {
   result: CalibrationResult;
+  enhancedAthleteMode?: boolean;
   onDismiss: () => void;
   onLearnMore?: () => void;
 }
 
 /**
- * Displays AMRAP calibration results comparing predicted vs actual performance
- * Shows the user their RPE perception bias
+ * Displays AMRAP calibration results comparing predicted vs actual performance.
+ * Always shows the raw numbers (predicted/actual/bias); the judgment (badge,
+ * colors, copy) is confidence-gated via getCalibrationVerdict — low-confidence
+ * results stay neutral instead of handing down verdicts off 1-2 data points.
  */
 export const CalibrationResultCard = memo(function CalibrationResultCard({
   result,
+  enhancedAthleteMode,
   onDismiss,
   onLearnMore,
 }: CalibrationResultCardProps) {
-  const biasLevel = getBiasLevel(result.bias);
-  const biasColor = getBiasColor(result.bias);
+  const verdict = getCalibrationVerdict(result, enhancedAthleteMode);
 
   const colorClasses = {
+    gray: {
+      border: 'border-surface-600/50',
+      bg: 'bg-surface-700/30',
+      text: 'text-surface-300',
+      accent: 'text-surface-200',
+    },
     green: {
       border: 'border-success-500/30',
       bg: 'bg-success-500/10',
@@ -47,7 +56,7 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
     },
   };
 
-  const colors = colorClasses[biasColor];
+  const colors = colorClasses[verdict.color];
 
   return (
     <Card
@@ -57,13 +66,8 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">AMRAP Calibration Result</CardTitle>
-          <Badge
-            variant={biasLevel === 'accurate' ? 'success' : biasLevel === 'sandbagging' ? 'warning' : 'danger'}
-            size="sm"
-          >
-            {biasLevel === 'accurate' && 'Well Calibrated'}
-            {biasLevel === 'sandbagging' && 'Sandbagging'}
-            {biasLevel === 'overreaching' && 'Pushing Too Hard'}
+          <Badge variant={verdict.badgeVariant} size="sm">
+            {verdict.badgeLabel}
           </Badge>
         </div>
       </CardHeader>
@@ -96,10 +100,10 @@ export const CalibrationResultCard = memo(function CalibrationResultCard({
           </div>
         </div>
 
-        {/* Interpretation */}
+        {/* Interpretation (confidence-gated) */}
         <div className={cn('p-3 rounded-lg', colors.bg)}>
           <p className={cn('text-sm', colors.text)}>
-            {result.biasInterpretation}
+            {verdict.message}
           </p>
         </div>
 

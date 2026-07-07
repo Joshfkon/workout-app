@@ -9,7 +9,10 @@
  */
 
 import type { RepsInTank } from '@/types/schema';
-import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
+import {
+  ENHANCED_RECOVERY_MULTIPLIER,
+  AMRAP_DECAY_CONSTANTS,
+} from '@/services/shared/fatigueConstants';
 
 // ============================================
 // CONSTANTS
@@ -20,6 +23,31 @@ export const SANDBAGGING_BIAS_THRESHOLD = 2;
 
 /** Per-exercise bias (reps) at or above which the display level reads 'sandbagging'. */
 export const SANDBAGGING_DISPLAY_THRESHOLD = 1.5;
+
+/** Per-exercise bias (reps) at or below which the display level reads 'overreaching'. */
+export const OVERREACHING_DISPLAY_THRESHOLD = -1.5;
+
+/**
+ * Adjusted bias within +/- this many reps reads "well calibrated" — honest
+ * self-report noise, never flagged in either direction.
+ */
+export const WELL_CALIBRATED_DEAD_ZONE = 1;
+
+/** Data points needed before any verdict (medium confidence) is rendered. */
+export const MIN_DATA_POINTS_FOR_VERDICT = 3;
+
+/**
+ * How the predicted max reps (and therefore the bias) were computed.
+ * - 'naive_v1': raw average of reps + reported RIR from recent sets — NOT
+ *   fatigue-adjusted, systematically misreads intra-session rep decay as
+ *   overestimation.
+ * - 'fatigue_adjusted_v2': prediction decayed per intervening working set
+ *   (AMRAP_DECAY_CONSTANTS) before comparing to the AMRAP result.
+ */
+export type CalibrationMethod = 'naive_v1' | 'fatigue_adjusted_v2';
+
+/** Method used for all newly computed calibration records. */
+export const CURRENT_CALIBRATION_METHOD: CalibrationMethod = 'fatigue_adjusted_v2';
 
 // ============================================
 // TYPES
@@ -46,7 +74,11 @@ export interface CalibrationSetLog {
  */
 export interface CalibrationResult {
   exerciseName: string;
-  /** What their RIR reports implied they could do */
+  /**
+   * Expected AMRAP reps used for display and bias. Under
+   * 'fatigue_adjusted_v2' this is the fatigue-adjusted expectation; the
+   * naive value is kept in rawPredictedMaxReps for auditability.
+   */
   predictedMaxReps: number;
   /** What AMRAP actually showed */
   actualMaxReps: number;
@@ -57,6 +89,10 @@ export interface CalibrationResult {
   lastCalibrated: Date;
   /** Number of data points used for this calibration */
   dataPoints: number;
+  /** Naive (non-fatigue-adjusted) prediction: avg of reps + reported RIR. */
+  rawPredictedMaxReps?: number;
+  /** Absent on legacy records — treated as 'naive_v1' and excluded from the rolling bias. */
+  method?: CalibrationMethod;
 }
 
 /**
@@ -84,6 +120,137 @@ export interface AdjustedRIRResult {
   hasAdjustment: boolean;
   /** Explanation if adjustment was made */
   adjustmentReason?: string;
+}
+
+// ============================================
+// FATIGUE-ADJUSTED PREDICTION
+// ============================================
+
+export interface FatigueAdjustedPrediction {
+  /** Naive prediction: average of reps + reported RIR across comparison sets. */
+  rawPredictedMaxReps: number;
+  /** Prediction decayed for the working sets between each source set and the AMRAP. */
+  fatigueAdjustedMaxReps: number;
+}
+
+/**
+ * 1-based position of a set within its own session, counting same-exercise
+ * working (non-AMRAP) sets up to and including it. Sessions are reconstructed
+ * from timestamps (sets within SAME_SESSION_WINDOW_MS of each other).
+ */
+function setPositionInSession(set: CalibrationSetLog, sameExerciseSets: CalibrationSetLog[]): number {
+  const t = set.timestamp.getTime();
+  return sameExerciseSets.filter(s =>
+    !s.wasAMRAP &&
+    s.timestamp.getTime() <= t &&
+    t - s.timestamp.getTime() <= AMRAP_DECAY_CONSTANTS.SAME_SESSION_WINDOW_MS
+  ).length;
+}
+
+/**
+ * Estimate the rest interval (seconds) in the AMRAP's session. Prefers
+ * explicit restTimeSeconds; falls back to the median gap between consecutive
+ * same-session set completions minus a nominal set duration. Returns null
+ * when nothing usable exists (treated as reference rest).
+ */
+function estimateSessionRestSeconds(
+  amrapSet: CalibrationSetLog,
+  sameSessionSets: CalibrationSetLog[]
+): number | null {
+  const explicit = [...sameSessionSets, amrapSet]
+    .map(s => s.restTimeSeconds)
+    .filter((r): r is number => typeof r === 'number' && r > 0);
+  if (explicit.length > 0) {
+    return explicit.reduce((a, b) => a + b, 0) / explicit.length;
+  }
+
+  const times = [...sameSessionSets.map(s => s.timestamp.getTime()), amrapSet.timestamp.getTime()]
+    .sort((a, b) => a - b);
+  const gaps: number[] = [];
+  for (let i = 1; i < times.length; i++) {
+    const gapSeconds = (times[i] - times[i - 1]) / 1000;
+    if (gapSeconds > 0) {
+      gaps.push(Math.max(0, gapSeconds - AMRAP_DECAY_CONSTANTS.NOMINAL_SET_DURATION_SECONDS));
+    }
+  }
+  if (gaps.length === 0) return null;
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)];
+}
+
+/** Decay multiplier for the estimated rest interval (1 at reference rest). */
+function restDecayMultiplier(restSeconds: number | null): number {
+  if (restSeconds === null) return 1;
+  if (restSeconds <= AMRAP_DECAY_CONSTANTS.SHORT_REST_THRESHOLD_SECONDS) {
+    return AMRAP_DECAY_CONSTANTS.SHORT_REST_MULTIPLIER;
+  }
+  if (restSeconds >= AMRAP_DECAY_CONSTANTS.LONG_REST_THRESHOLD_SECONDS) {
+    return AMRAP_DECAY_CONSTANTS.LONG_REST_MULTIPLIER;
+  }
+  return 1;
+}
+
+/**
+ * Compute both the naive and the fatigue-adjusted AMRAP prediction.
+ *
+ * Each comparison set's "reps + reported RIR" implies the max AT THAT SET'S
+ * POSITION in its session — the report already embeds the fatigue of getting
+ * TO that set, but not the cost of performing it or of any set after it.
+ * The expectation for the AMRAP is therefore decayed by one step per
+ * position difference: a prediction sourced from set N-1 decays at least one
+ * step for an AMRAP at set N (the off-by-one the naive method missed).
+ *
+ * Cross-session sources use the same position algebra (their implied max
+ * reflects their own within-session position), so a fresh AMRAP compared to
+ * fresh sets from last week decays by zero steps and stays naive.
+ *
+ * Enhanced athlete mode divides per-step decay by ENHANCED_RECOVERY_MULTIPLIER:
+ * faster inter-set recovery means less expected rep loss, so a recovered
+ * enhanced user isn't misread in either direction. Sandbagging detection
+ * reads the biases produced here, so both verdicts share these constants.
+ */
+export function computeFatigueAdjustedPrediction(
+  amrapSet: CalibrationSetLog,
+  comparisonSets: CalibrationSetLog[],
+  sameExerciseSets: CalibrationSetLog[],
+  enhancedAthleteMode: boolean = false
+): FatigueAdjustedPrediction {
+  const amrapTime = amrapSet.timestamp.getTime();
+  const sameSessionSets = sameExerciseSets.filter(s =>
+    !s.wasAMRAP &&
+    s.timestamp.getTime() < amrapTime &&
+    amrapTime - s.timestamp.getTime() <= AMRAP_DECAY_CONSTANTS.SAME_SESSION_WINDOW_MS
+  );
+  const amrapPosition = sameSessionSets.length + 1;
+  const restMultiplier = restDecayMultiplier(estimateSessionRestSeconds(amrapSet, sameSessionSets));
+  const recoveryDivisor = enhancedAthleteMode ? ENHANCED_RECOVERY_MULTIPLIER : 1;
+
+  let rawSum = 0;
+  let adjustedSum = 0;
+  for (const set of comparisonSets) {
+    const impliedMax = set.actualReps + set.reportedRIR;
+    const sourcePosition = setPositionInSession(set, sameExerciseSets);
+    const interveningSets = Math.max(0, amrapPosition - sourcePosition);
+
+    const decayPerSet =
+      Math.min(
+        AMRAP_DECAY_CONSTANTS.MAX_DECAY_PER_SET,
+        Math.max(
+          AMRAP_DECAY_CONSTANTS.MIN_DECAY_PER_SET,
+          AMRAP_DECAY_CONSTANTS.DECAY_RATE_PER_SET * impliedMax
+        )
+      ) * restMultiplier / recoveryDivisor;
+    const totalDecay = Math.min(AMRAP_DECAY_CONSTANTS.MAX_TOTAL_DECAY, interveningSets * decayPerSet);
+
+    rawSum += impliedMax;
+    adjustedSum += Math.max(1, impliedMax - totalDecay);
+  }
+
+  const n = Math.max(1, comparisonSets.length);
+  return {
+    rawPredictedMaxReps: rawSum / n,
+    fatigueAdjustedMaxReps: adjustedSum / n,
+  };
 }
 
 // ============================================
@@ -165,29 +332,44 @@ export class RPECalibrationEngine {
         confidenceLevel: 'low',
         lastCalibrated: amrapSet.timestamp,
         dataPoints: 0,
+        rawPredictedMaxReps: amrapSet.actualReps,
+        method: CURRENT_CALIBRATION_METHOD,
       };
       this.calibrationResults.set(key, result);
       return result;
     }
 
-    // Calculate what their RIR reports predicted
-    // If they did 8 reps @ RIR 3, they implied they could do 11
-    const predictions = recentSets.map(s => s.actualReps + s.reportedRIR);
-    const avgPrediction = predictions.reduce((a, b) => a + b, 0) / predictions.length;
+    // What their RIR reports predicted (8 reps @ RIR 3 implies a max of 11),
+    // decayed for the working sets performed between each report and the
+    // AMRAP — an AMRAP done as set 4 is compared to set-4 capacity, not to
+    // the fresher capacity earlier reports implied.
+    const sameExerciseSets = this.setHistory.filter(
+      s => s.exerciseName.toLowerCase() === key && s.timestamp <= amrapSet.timestamp
+    );
+    const { rawPredictedMaxReps, fatigueAdjustedMaxReps } = computeFatigueAdjustedPrediction(
+      amrapSet,
+      recentSets,
+      sameExerciseSets,
+      this.enhancedAthleteMode
+    );
 
-    // Bias = actual - predicted
+    // Bias = actual - fatigue-adjusted expectation
     // Positive bias = they could do more than they thought (sandbagging)
-    const bias = amrapSet.actualReps - avgPrediction;
+    const bias = amrapSet.actualReps - fatigueAdjustedMaxReps;
+    const confidenceLevel: CalibrationResult['confidenceLevel'] =
+      recentSets.length >= 6 ? 'high' : recentSets.length >= MIN_DATA_POINTS_FOR_VERDICT ? 'medium' : 'low';
 
     const result: CalibrationResult = {
       exerciseName: amrapSet.exerciseName,
-      predictedMaxReps: Math.round(avgPrediction * 10) / 10,
+      predictedMaxReps: Math.round(fatigueAdjustedMaxReps * 10) / 10,
       actualMaxReps: amrapSet.actualReps,
       bias: Math.round(bias * 10) / 10,
-      biasInterpretation: interpretBias(bias),
-      confidenceLevel: recentSets.length >= 6 ? 'high' : recentSets.length >= 3 ? 'medium' : 'low',
+      biasInterpretation: interpretBias(bias, confidenceLevel, recentSets.length),
+      confidenceLevel,
       lastCalibrated: amrapSet.timestamp,
       dataPoints: recentSets.length,
+      rawPredictedMaxReps: Math.round(rawPredictedMaxReps * 10) / 10,
+      method: CURRENT_CALIBRATION_METHOD,
     };
 
     this.calibrationResults.set(key, result);
@@ -205,7 +387,16 @@ export class RPECalibrationEngine {
    * Analyze overall bias patterns across all exercises
    */
   analyzeOverallBias(): RPEBiasAnalysis {
-    const calibrations = Array.from(this.calibrationResults.values());
+    const allCalibrations = Array.from(this.calibrationResults.values());
+
+    // Legacy (naive-method) records were computed without fatigue adjustment
+    // and would drag the average toward false overestimation — they are
+    // excluded, never silently mixed. Old points recompute under the new
+    // method when the engine replays raw set history; records restored
+    // without their inputs simply expire from the rolling bias.
+    const calibrations = allCalibrations.filter(
+      c => (c.method ?? 'naive_v1') === CURRENT_CALIBRATION_METHOD
+    );
 
     if (calibrations.length === 0) {
       return {
@@ -213,7 +404,9 @@ export class RPECalibrationEngine {
         exerciseSpecificBias: new Map(),
         sandbaggingDetected: false,
         overreachingDetected: false,
-        recommendation: 'Complete some AMRAP sets to calibrate your RPE perception.',
+        recommendation: allCalibrations.length > 0
+          ? 'Your previous calibration data used an older method. Complete new AMRAP sets to recalibrate.'
+          : 'Complete some AMRAP sets to calibrate your RPE perception.',
         calibratedExercises: 0,
         needsMoreData: true,
       };
@@ -264,7 +457,15 @@ export class RPECalibrationEngine {
   getAdjustedRIR(exerciseName: string, targetRIR: number): AdjustedRIRResult {
     const calibration = this.calibrationResults.get(exerciseName.toLowerCase());
 
-    if (!calibration || calibration.confidenceLevel === 'low') {
+    // No adjustment from missing data, low confidence, legacy-method records
+    // (naive bias is polluted by intra-session fatigue), or bias inside the
+    // well-calibrated dead zone (honest self-report noise).
+    if (
+      !calibration ||
+      calibration.confidenceLevel === 'low' ||
+      (calibration.method ?? 'naive_v1') !== CURRENT_CALIBRATION_METHOD ||
+      Math.abs(calibration.bias) <= WELL_CALIBRATED_DEAD_ZONE
+    ) {
       return {
         prescribedRIR: targetRIR,
         internalTargetRIR: targetRIR,
@@ -395,25 +596,116 @@ export class RPECalibrationEngine {
 // ============================================
 
 /**
- * Interpret bias value into human-readable text
+ * Interpret bias into human-readable text, gated by confidence.
+ *
+ * Low confidence is informational only — no judgment. Medium hedges
+ * ("early pattern suggests"). Strong verdicts — including the "closer to
+ * failure than you realize" warning, reserved for bias <= -2 — require
+ * high confidence.
  */
-function interpretBias(bias: number): string {
-  if (bias >= 4) {
-    return 'Significant sandbagging - you had 4+ more reps than you thought';
+function interpretBias(
+  bias: number,
+  confidenceLevel: 'low' | 'medium' | 'high',
+  dataPoints: number
+): string {
+  if (confidenceLevel === 'low') {
+    const needed = Math.max(1, MIN_DATA_POINTS_FOR_VERDICT - dataPoints);
+    return `Still gathering data — need ${needed} more AMRAP ${needed === 1 ? 'set' : 'sets'} before drawing conclusions.`;
   }
-  if (bias >= 2) {
-    return 'Moderate sandbagging - you\'re stopping 2-3 reps earlier than necessary';
+
+  // Well-calibrated dead zone: within honest self-report noise.
+  if (Math.abs(bias) <= WELL_CALIBRATED_DEAD_ZONE) {
+    return confidenceLevel === 'high'
+      ? 'Well calibrated — your RIR estimates match your actual performance.'
+      : 'Looking well calibrated so far — your RIR estimates match your fatigue-adjusted performance.';
   }
-  if (bias >= 0.5) {
-    return 'Slight underestimate - pretty well calibrated';
+
+  if (bias > 0) {
+    if (confidenceLevel === 'medium') {
+      return 'Early pattern suggests you may have more reps in the tank than you report — a few more AMRAP sets will confirm.';
+    }
+    if (bias >= 4) {
+      return 'Significant sandbagging - you had 4+ more reps than you thought';
+    }
+    if (bias >= 2) {
+      return 'Moderate sandbagging - you\'re stopping 2-3 reps earlier than necessary';
+    }
+    return 'Slight underestimate — you occasionally stop a rep or two before you need to.';
   }
-  if (bias >= -0.5) {
-    return 'Excellent calibration - your RIR estimates are accurate';
+
+  // bias < -WELL_CALIBRATED_DEAD_ZONE
+  if (confidenceLevel === 'medium') {
+    return 'Early pattern suggests your RIR estimates may run slightly optimistic — worth watching, but more data is needed.';
   }
-  if (bias >= -2) {
-    return 'Slight overestimate - you\'re pushing a bit harder than you think';
+  if (bias <= -2) {
+    return 'Significant overestimate - be careful, you\'re closer to failure than you realize';
   }
-  return 'Significant overestimate - be careful, you\'re closer to failure than you realize';
+  return 'You tend to push slightly harder than you report. That\'s fine — just keep an eye on recovery.';
+}
+
+// ============================================
+// CONFIDENCE-GATED VERDICT DISPLAY
+// ============================================
+
+export type CalibrationVerdictLevel = 'calibrating' | 'accurate' | 'sandbagging' | 'overreaching';
+
+export interface CalibrationVerdict {
+  level: CalibrationVerdictLevel;
+  /** neutral = no judgment (low confidence), tentative = hedged, strong = full verdict. */
+  severity: 'neutral' | 'tentative' | 'strong';
+  badgeLabel: string;
+  badgeVariant: 'default' | 'success' | 'warning' | 'danger';
+  color: 'gray' | 'green' | 'yellow' | 'red';
+  message: string;
+}
+
+/**
+ * Single source of truth for how a calibration result is judged in the UI.
+ * Gates the JUDGMENT by confidence — the raw numbers (predicted/actual/bias)
+ * should always be shown alongside, never hidden.
+ */
+export function getCalibrationVerdict(
+  result: Pick<CalibrationResult, 'bias' | 'confidenceLevel' | 'dataPoints'>,
+  enhancedAthleteMode?: boolean
+): CalibrationVerdict {
+  const message = interpretBias(result.bias, result.confidenceLevel, result.dataPoints);
+
+  if (result.confidenceLevel === 'low') {
+    return {
+      level: 'calibrating',
+      severity: 'neutral',
+      badgeLabel: 'Calibrating…',
+      badgeVariant: 'default',
+      color: 'gray',
+      message,
+    };
+  }
+
+  const severity = result.confidenceLevel === 'high' ? 'strong' : 'tentative';
+  const level = getBiasLevel(result.bias, enhancedAthleteMode);
+
+  if (level === 'accurate') {
+    return { level, severity, badgeLabel: 'Well Calibrated', badgeVariant: 'success', color: 'green', message };
+  }
+  if (level === 'sandbagging') {
+    return {
+      level,
+      severity,
+      badgeLabel: severity === 'strong' ? 'Sandbagging' : 'Possibly Sandbagging',
+      badgeVariant: 'warning',
+      color: 'yellow',
+      message,
+    };
+  }
+  // Overreaching: red + alarming label only at high confidence.
+  return {
+    level,
+    severity,
+    badgeLabel: severity === 'strong' ? 'Pushing Too Hard' : 'Possibly Overreaching',
+    badgeVariant: severity === 'strong' ? 'danger' : 'warning',
+    color: severity === 'strong' ? 'red' : 'yellow',
+    message,
+  };
 }
 
 /**
@@ -448,7 +740,7 @@ export function getBiasLevel(
   const sandbagThreshold =
     SANDBAGGING_DISPLAY_THRESHOLD * (enhancedAthleteMode ? ENHANCED_RECOVERY_MULTIPLIER : 1);
   if (bias >= sandbagThreshold) return 'sandbagging';
-  if (bias <= -1.5) return 'overreaching';
+  if (bias <= OVERREACHING_DISPLAY_THRESHOLD) return 'overreaching';
   return 'accurate';
 }
 

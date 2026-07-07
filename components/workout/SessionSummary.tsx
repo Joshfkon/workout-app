@@ -22,6 +22,7 @@ import {
 } from '@/types/schema';
 import { formatDuration, formatWeight, estimateE1RM } from '@/lib/utils';
 import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
+import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
 
 /** Per-muscle end-of-session feedback captured in the summary (0-3 scales). */
 export interface SessionMuscleFeedbackEntry {
@@ -68,6 +69,7 @@ interface ExerciseWithHistory {
 
 interface AMRAPCalibration {
   exerciseName: string;
+  /** Fatigue-adjusted expectation on 'fatigue_adjusted_v2' records; naive on legacy rows. */
   predictedMaxReps: number;
   actualMaxReps: number;
   bias: number;
@@ -75,6 +77,8 @@ interface AMRAPCalibration {
   confidenceLevel: 'low' | 'medium' | 'high';
   lastCalibrated: Date;
   dataPoints: number;
+  rawPredictedMaxReps?: number;
+  method?: CalibrationMethod;
   exerciseId?: string;
   weightKg: number;
 }
@@ -85,6 +89,7 @@ interface SessionSummaryProps {
   allSets: SetLog[];
   exerciseHistories?: Record<string, ExerciseWithHistory>;
   amrapCalibrations?: AMRAPCalibration[];
+  enhancedAthleteMode?: boolean;
   unit?: WeightUnit;
   onSubmit?: (data: {
     sessionRpe: number;
@@ -113,6 +118,7 @@ export function SessionSummary({
   allSets,
   exerciseHistories,
   amrapCalibrations = [],
+  enhancedAthleteMode,
   unit = 'kg',
   onSubmit,
   readOnly = false,
@@ -137,6 +143,9 @@ export function SessionSummary({
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [showExerciseDetails, setShowExerciseDetails] = useState(true);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
+  // Guards against double-submits; navigation away happens right after
+  // onSubmit, so the "Finishing…" state is only briefly visible.
+  const [submitting, setSubmitting] = useState(false);
 
   // Calculate stats
   const workingSets = allSets.filter((s) => !s.isWarmup);
@@ -421,7 +430,8 @@ export function SessionSummary({
   };
 
   const handleSubmit = () => {
-    if (onSubmit) {
+    if (onSubmit && !submitting) {
+      setSubmitting(true);
       onSubmit({
         sessionRpe,
         pumpRating,
@@ -529,26 +539,22 @@ export function SessionSummary({
           </p>
           <div className="space-y-3">
             {amrapCalibrations.map((cal, idx) => {
-              const biasLevel = cal.bias >= 1.5 ? 'sandbagging' : cal.bias <= -1.5 ? 'overreaching' : 'accurate';
-              const biasColor = biasLevel === 'accurate' ? 'green' : biasLevel === 'sandbagging' ? 'yellow' : 'red';
+              // Judgment is confidence-gated; the raw numbers below always show.
+              const verdict = getCalibrationVerdict(cal, enhancedAthleteMode);
               const colorClasses = {
+                gray: { bg: 'bg-surface-700/30', text: 'text-surface-300', border: 'border-surface-600/50' },
                 green: { bg: 'bg-success-500/20', text: 'text-success-400', border: 'border-success-500/30' },
                 yellow: { bg: 'bg-warning-500/20', text: 'text-warning-400', border: 'border-warning-500/30' },
                 red: { bg: 'bg-danger-500/20', text: 'text-danger-400', border: 'border-danger-500/30' },
               };
-              const colors = colorClasses[biasColor];
+              const colors = colorClasses[verdict.color];
 
               return (
                 <div key={idx} className={`p-3 rounded-lg border ${colors.border} ${colors.bg}`}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-medium text-surface-100">{cal.exerciseName}</span>
-                    <Badge
-                      variant={biasLevel === 'accurate' ? 'success' : biasLevel === 'sandbagging' ? 'warning' : 'danger'}
-                      size="sm"
-                    >
-                      {biasLevel === 'accurate' && 'Well Calibrated'}
-                      {biasLevel === 'sandbagging' && 'Sandbagging'}
-                      {biasLevel === 'overreaching' && 'Pushing Too Hard'}
+                    <Badge variant={verdict.badgeVariant} size="sm">
+                      {verdict.badgeLabel}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-center mb-2">
@@ -567,7 +573,7 @@ export function SessionSummary({
                       </p>
                     </div>
                   </div>
-                  <p className={`text-xs ${colors.text}`}>{cal.biasInterpretation}</p>
+                  <p className={`text-xs ${colors.text}`}>{verdict.message}</p>
                   <div className="flex items-center gap-2 mt-2 text-xs text-surface-500">
                     <span>@ {displayWeight(cal.weightKg)}{weightUnit}</span>
                     <span>•</span>
@@ -1145,8 +1151,8 @@ export function SessionSummary({
 
       {/* Submit - only shown when not in read-only mode */}
       {!readOnly && (
-        <Button onClick={handleSubmit} size="lg" className="w-full">
-          Save & Finish
+        <Button onClick={handleSubmit} size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Finishing…' : 'Save & Finish'}
         </Button>
       )}
     </div>

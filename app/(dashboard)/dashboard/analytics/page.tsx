@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardContent, Button, Badge, FullPageLoading } from '@/components/ui';
 import { BodyMeasurements } from '@/components/dashboard/BodyMeasurements';
 import { useMusclePriorities } from '@/components/settings/MusclePrioritySettings';
@@ -54,6 +54,12 @@ import { BodyHubTrends } from '@/components/body/BodyHubTrends';
 import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
 import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
+import { LiftTrendsCard } from '@/components/analytics/LiftTrendsCard';
+import {
+  computeLiftTrends,
+  LIFT_TREND_WINDOW_DAYS,
+  type LiftTrendsSummary,
+} from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
@@ -139,6 +145,18 @@ const MuscleRecoveryCard = dynamic(
 
 // Tab types
 type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
+
+// Valid ?tab= values — tab targeting is a route parameter so any surface
+// (home tiles, notifications, weekly summary) can deep-link a specific tab,
+// e.g. /dashboard/analytics?tab=strength&section=lift-trends.
+const TAB_IDS: readonly TabType[] = ['body-composition', 'goals', 'strength', 'volume', 'wellness'];
+
+function parseTabParam(value: string | null): TabType | null {
+  // 'body' is the friendly alias the Home Weight tile links to (the tab is
+  // labelled "Body" — it's the Body data hub).
+  if (value === 'body') return 'body-composition';
+  return value && (TAB_IDS as readonly string[]).includes(value) ? (value as TabType) : null;
+}
 
 /** Get display name for a muscle group */
 function getMuscleDisplayName(muscle: string): string {
@@ -350,24 +368,32 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   );
 }
 
-/**
- * Initial tab from the ?tab= query param (e.g. the Home Weight tile links to
- * ?tab=body). Read imperatively instead of useSearchParams so this client
- * page doesn't need a Suspense boundary just for a one-shot read.
- */
-function initialTabFromQuery(): TabType {
-  if (typeof window === 'undefined') return 'body-composition';
-  const tab = new URLSearchParams(window.location.search).get('tab');
-  if (tab === 'body' || tab === 'body-composition') return 'body-composition';
-  if (tab === 'goals' || tab === 'strength' || tab === 'volume' || tab === 'wellness') return tab;
-  return 'body-composition';
-}
-
-export default function AnalyticsPage() {
+function AnalyticsPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
-  const [activeTab, setActiveTab] = useState<TabType>(initialTabFromQuery);
+  const [activeTab, setActiveTab] = useState<TabType>(
+    () => parseTabParam(searchParams.get('tab')) ?? 'body-composition'
+  );
+  const sectionParam = searchParams.get('section');
   const [isLoading, setIsLoading] = useState(true);
+
+  // Follow URL changes (back/forward, in-app deep links to another tab).
+  // No/invalid param means the default tab — a base-route navigation (e.g.
+  // the Progress nav item) must reset a previously deep-linked tab.
+  useEffect(() => {
+    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'body-composition');
+  }, [searchParams]);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    // Keep the URL linkable/shareable without adding history entries per tap.
+    router.replace(
+      tab === 'body-composition' ? pathname : `${pathname}?tab=${tab}`,
+      { scroll: false }
+    );
+  };
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
 
   // Body composition state
@@ -391,6 +417,9 @@ export default function AnalyticsPage() {
   const [strengthProfile, setStrengthProfile] = useState<StrengthProfile | null>(null);
   const [sex, setSex] = useState<'male' | 'female'>('male');
   const [userId, setUserId] = useState<string | null>(null);
+  // Per-lift trend breakdown behind the home "Lifts" tile (shared function +
+  // identical query window, so the tile aggregate and this detail agree).
+  const [liftTrendsSummary, setLiftTrendsSummary] = useState<LiftTrendsSummary | null>(null);
 
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -593,6 +622,62 @@ export default function AnalyticsPage() {
 
     fetchData();
   }, [router]);
+
+  // Fetch lift-trend data for the Strength tab. Deliberately the SAME query
+  // shape, window (LIFT_TREND_WINDOW_DAYS), and pure function as the home
+  // "Lifts" glance tile (lib/actions/dashboard.ts fetchLiftTrends), so the
+  // tile's "N rising of M" and this detail list can never disagree.
+  useEffect(() => {
+    async function fetchLiftTrendData() {
+      if (!userId) return;
+
+      const supabase = createUntypedClient();
+      const since = new Date();
+      since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
+
+      try {
+        const [{ data: sessions }, { data: goalRow }, { data: activeMesos }] = await Promise.all([
+          supabase
+            .from('workout_sessions')
+            .select(`id, completed_at,
+              exercise_blocks (exercises (id, name), set_logs (weight_kg, reps, is_warmup))`)
+            .eq('user_id', userId)
+            .eq('state', 'completed')
+            .gte('completed_at', since.toISOString())
+            .order('completed_at', { ascending: true }),
+          supabase.from('users').select('goal').eq('id', userId).single(),
+          supabase
+            .from('mesocycles')
+            .select('start_date')
+            .eq('user_id', userId)
+            .or('is_active.eq.true,state.eq.active')
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ]);
+
+        setLiftTrendsSummary(
+          computeLiftTrends(
+            (sessions as any) || [],
+            (goalRow?.goal as PlateauGoal | null) ?? undefined,
+            new Date(),
+            { programStartDate: activeMesos?.[0]?.start_date ?? null }
+          )
+        );
+      } catch (error) {
+        console.error('Failed to fetch lift trend data:', error);
+      }
+    }
+
+    fetchLiftTrendData();
+  }, [userId]);
+
+  // Deep-link scroll target (?section=lift-trends): retried as the section's
+  // data lands so a cold load still ends up anchored on the right card.
+  useEffect(() => {
+    if (!sectionParam || isLoading) return;
+    const el = document.getElementById(sectionParam);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [sectionParam, activeTab, isLoading, liftTrendsSummary]);
 
   // Fetch goals tab data (mesocycle, targets, weight history, measurements)
   useEffect(() => {
@@ -1344,7 +1429,7 @@ export default function AnalyticsPage() {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id)}
             className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-surface-700 text-surface-100 shadow-sm'
@@ -1609,6 +1694,11 @@ export default function AnalyticsPage() {
 
       {activeTab === 'strength' && (
         <div className="space-y-6">
+          {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
+              First so ?section=lift-trends deep links land above the fold. */}
+          {liftTrendsSummary && (
+            <LiftTrendsCard summary={liftTrendsSummary} units={units === 'lb' ? 'lb' : 'kg'} />
+          )}
           {/* Plateau alerts derived from per-exercise E1RM trends. Hidden when none. */}
           {plateauAlerts.length > 0 && (
             <PlateauAlertList alerts={plateauAlerts} />
@@ -2743,6 +2833,17 @@ export default function AnalyticsPage() {
         />
       )}
     </div>
+  );
+}
+
+// useSearchParams (deep-linkable ?tab=/&section=) requires a Suspense
+// boundary for the static prerender pass — the fallback matches the page's
+// own loading state so nothing visibly changes.
+export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<FullPageLoading text="Loading your analytics..." type="heartbeat" />}>
+      <AnalyticsPageContent />
+    </Suspense>
   );
 }
 
