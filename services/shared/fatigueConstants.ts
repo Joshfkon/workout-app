@@ -52,6 +52,55 @@ export function effectiveFatigueRecoveryRate(enhancedAthleteMode?: boolean): num
 }
 
 // ============================================
+// AMRAP CALIBRATION — INTRA-SESSION REP DECAY
+// ============================================
+
+/**
+ * Expected-decay model for fatigue-adjusting AMRAP calibration predictions.
+ *
+ * A prior set's "reps + reported RIR" implies the lifter's max AT THAT SET'S
+ * POSITION in the session. An AMRAP performed sets later is done under more
+ * accumulated fatigue, so the naive prediction must be decayed by the working
+ * sets performed in between — otherwise normal intra-session rep decline
+ * (e.g. 9 -> 8 -> 8 -> 6 at a fixed load) reads as RIR overestimation.
+ *
+ * Baseline: ~1-2 reps of decay per intervening working set of the same
+ * exercise at 2-3 min rest, scaled by the set's rep range (higher-rep sets
+ * lose more absolute reps per set) and by rest duration.
+ *
+ * Read by BOTH the calibration bias and the sandbagging detection so the two
+ * verdicts share one fatigue baseline (see rpeCalibration.ts).
+ */
+export const AMRAP_DECAY_CONSTANTS = {
+  /** Fraction of a set's implied max reps lost per intervening working set. */
+  DECAY_RATE_PER_SET: 0.15,
+  /** Lower bound on per-set decay (reps) — even low-rep work costs something. */
+  MIN_DECAY_PER_SET: 1,
+  /** Upper bound on per-set decay (reps) — keeps high-rep work sane. */
+  MAX_DECAY_PER_SET: 3,
+  /** Cap on total decay applied to any single prediction (reps). */
+  MAX_TOTAL_DECAY: 6,
+  /** Rest at or below this (seconds) increases decay. */
+  SHORT_REST_THRESHOLD_SECONDS: 120,
+  /** Decay multiplier for short rest. */
+  SHORT_REST_MULTIPLIER: 1.25,
+  /** Rest at or above this (seconds) reduces decay. */
+  LONG_REST_THRESHOLD_SECONDS: 300,
+  /** Decay multiplier for long rest. */
+  LONG_REST_MULTIPLIER: 0.75,
+  /**
+   * Sets closer together than this are treated as the same session when the
+   * calibration engine reconstructs set positions from timestamps.
+   */
+  SAME_SESSION_WINDOW_MS: 3 * 60 * 60 * 1000,
+  /**
+   * Approximate seconds a set itself takes; subtracted from set-completion
+   * timestamp gaps when estimating rest intervals.
+   */
+  NOMINAL_SET_DURATION_SECONDS: 40,
+} as const;
+
+// ============================================
 // READINESS ASSESSMENT
 // ============================================
 

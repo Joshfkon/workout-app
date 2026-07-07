@@ -1109,6 +1109,8 @@ export default function WorkoutPage() {
               confidenceLevel: cal.confidence_level as 'low' | 'medium' | 'high',
               lastCalibrated: new Date(cal.calibrated_at),
               dataPoints: cal.data_points,
+              rawPredictedMaxReps: cal.raw_predicted_max_reps ?? undefined,
+              method: (cal.method ?? 'naive_v1') as 'naive_v1' | 'fatigue_adjusted_v2',
               exerciseId: cal.exercise_id,
               weightKg: cal.weight_kg,
               setLogId: cal.set_log_id,
@@ -2070,6 +2072,8 @@ export default function WorkoutPage() {
                   bias_interpretation: calibResult.biasInterpretation,
                   confidence_level: calibResult.confidenceLevel,
                   data_points: calibResult.dataPoints,
+                  raw_predicted_max_reps: calibResult.rawPredictedMaxReps ?? calibResult.predictedMaxReps,
+                  method: calibResult.method ?? 'fatigue_adjusted_v2',
                   calibrated_at: calibResult.lastCalibrated.toISOString(),
                 }).then(({ error }: { error: Error | null }) => {
                   if (error) console.error('Failed to save AMRAP calibration:', error);
@@ -3897,6 +3901,7 @@ export default function WorkoutPage() {
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
           amrapCalibrations={sessionCalibrations}
+          enhancedAthleteMode={enhancedAthleteModeActive}
           unit={preferences.units}
           onSubmit={isViewingCompleted ? undefined : handleSummarySubmit}
           readOnly={isViewingCompleted}
@@ -5569,6 +5574,7 @@ export default function WorkoutPage() {
           <div className="max-w-md w-full">
             <CalibrationResultCard
               result={calibrationResult}
+              enhancedAthleteMode={enhancedAthleteModeActive}
               onDismiss={() => setCalibrationResult(null)}
             />
           </div>

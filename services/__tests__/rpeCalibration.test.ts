@@ -7,12 +7,16 @@ import {
   RPECalibrationEngine,
   getBiasLevel,
   getBiasColor,
+  getCalibrationVerdict,
+  computeFatigueAdjustedPrediction,
   repsInTankToRIR,
   formatBias,
   createCalibrationSetLog,
+  CURRENT_CALIBRATION_METHOD,
   type CalibrationSetLog,
   type CalibrationResult,
 } from '../rpeCalibration';
+import { ENHANCED_RECOVERY_MULTIPLIER } from '../shared/fatigueConstants';
 
 // ============================================
 // HELPER FUNCTIONS
@@ -42,8 +46,41 @@ function createMockCalibrationResult(overrides: Partial<CalibrationResult> = {})
     confidenceLevel: 'medium',
     lastCalibrated: new Date(),
     dataPoints: 3,
+    method: CURRENT_CALIBRATION_METHOD,
     ...overrides,
   };
+}
+
+/**
+ * Build a same-session sequence: `priorSets` working sets followed by an
+ * AMRAP, spaced `gapSeconds` apart (rest + set time), all at `weight`.
+ */
+function buildSameSessionScenario(
+  priorSets: Array<{ reps: number; rir: number }>,
+  amrap: { reps: number; rir?: number },
+  opts: { weight?: number; gapSeconds?: number; exerciseName?: string } = {}
+): { logs: CalibrationSetLog[]; amrapLog: CalibrationSetLog } {
+  const { weight = 85, gapSeconds = 210, exerciseName = 'Machine Chest Press' } = opts;
+  const start = new Date('2026-07-01T10:00:00Z').getTime();
+  const logs = priorSets.map((s, i) =>
+    createMockSetLog({
+      exerciseName,
+      weight,
+      actualReps: s.reps,
+      reportedRIR: s.rir,
+      wasAMRAP: false,
+      timestamp: new Date(start + i * gapSeconds * 1000),
+    })
+  );
+  const amrapLog = createMockSetLog({
+    exerciseName,
+    weight,
+    actualReps: amrap.reps,
+    reportedRIR: amrap.rir ?? 0,
+    wasAMRAP: true,
+    timestamp: new Date(start + priorSets.length * gapSeconds * 1000),
+  });
+  return { logs, amrapLog };
 }
 
 // ============================================
@@ -543,6 +580,332 @@ describe('RPECalibrationEngine', () => {
       expect(data.history).toHaveLength(1);
       expect(data.calibrations).toHaveLength(1);
     });
+  });
+});
+
+// ============================================
+// FATIGUE-ADJUSTED CALIBRATION TESTS
+// ============================================
+
+describe('fatigue-adjusted AMRAP calibration', () => {
+  it('does not flag normal intra-session rep decay as overestimation (9/8/8 -> AMRAP 6)', () => {
+    // Real-world false-positive case: 85 x 9 @ 1 RIR, x 8 @ 2, x 8 @ 1, then
+    // AMRAP x 6 @ 0, ~3 min rest. The naive method predicted ~9.7 and read
+    // bias -3+; fatigue-adjusted bias must land within honest noise.
+    const { logs, amrapLog } = buildSameSessionScenario(
+      [
+        { reps: 9, rir: 1 },
+        { reps: 8, rir: 2 },
+        { reps: 8, rir: 1 },
+      ],
+      { reps: 6 }
+    );
+
+    const engine = new RPECalibrationEngine();
+    logs.forEach(l => engine.addSetLog(l));
+    const result = engine.addSetLog(amrapLog)!;
+
+    expect(result.bias).toBeGreaterThanOrEqual(-1);
+    expect(result.bias).toBeLessThanOrEqual(1);
+
+    // Both predictions stored: raw stays naive, display value is adjusted
+    expect(result.method).toBe(CURRENT_CALIBRATION_METHOD);
+    expect(result.rawPredictedMaxReps).toBeCloseTo(9.7, 1);
+    expect(result.predictedMaxReps).toBeLessThan(result.rawPredictedMaxReps!);
+    expect(result.actualMaxReps - result.predictedMaxReps).toBeCloseTo(result.bias, 1);
+
+    // No "Pushing Too Hard" verdict in any surface
+    const verdict = getCalibrationVerdict(result);
+    expect(verdict.level).toBe('accurate');
+    expect(verdict.badgeLabel).toBe('Well Calibrated');
+    expect(getBiasLevel(result.bias)).toBe('accurate');
+  });
+
+  it('still flags a true overestimator at high confidence', () => {
+    // 6 fresh comparison sets (10 @ 3 RIR -> implied 13) from a prior
+    // session; AMRAP performed fresh lands at 10 -> adjusted bias -3.
+    const engine = new RPECalibrationEngine();
+    const weekAgo = new Date('2026-07-01T10:00:00Z');
+    for (let i = 0; i < 6; i++) {
+      engine.addSetLog(
+        createMockSetLog({
+          weight: 100,
+          actualReps: 10,
+          reportedRIR: 3,
+          wasAMRAP: false,
+          timestamp: new Date(weekAgo.getTime() + i * 210 * 1000),
+        })
+      );
+    }
+    const result = engine.addSetLog(
+      createMockSetLog({
+        weight: 100,
+        actualReps: 10,
+        reportedRIR: 0,
+        wasAMRAP: true,
+        timestamp: new Date(weekAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+      })
+    )!;
+
+    expect(result.confidenceLevel).toBe('high');
+    expect(result.bias).toBeLessThanOrEqual(-2);
+
+    const verdict = getCalibrationVerdict(result);
+    expect(verdict.level).toBe('overreaching');
+    expect(verdict.severity).toBe('strong');
+    expect(verdict.badgeLabel).toBe('Pushing Too Hard');
+    expect(verdict.color).toBe('red');
+    expect(verdict.message).toContain('closer to failure');
+    expect(engine.analyzeOverallBias().overreachingDetected).toBe(true);
+  });
+
+  it('flags an overestimator tentatively when the AMRAP lands >= 2 below the fatigue-adjusted expectation same-session', () => {
+    // 3 sets of 10 @ 3 RIR (implied 13) then AMRAP 6: even after decay the
+    // adjusted expectation is ~9.1, so the miss is real (bias ~ -3.1).
+    const { logs, amrapLog } = buildSameSessionScenario(
+      [
+        { reps: 10, rir: 3 },
+        { reps: 10, rir: 3 },
+        { reps: 10, rir: 3 },
+      ],
+      { reps: 6 }
+    );
+    const engine = new RPECalibrationEngine();
+    logs.forEach(l => engine.addSetLog(l));
+    const result = engine.addSetLog(amrapLog)!;
+
+    expect(result.bias).toBeLessThanOrEqual(-2);
+    const verdict = getCalibrationVerdict(result);
+    expect(verdict.level).toBe('overreaching');
+    // Only 3 data points -> tentative, not the red strong verdict
+    expect(verdict.severity).toBe('tentative');
+    expect(verdict.color).toBe('yellow');
+    expect(verdict.message).toContain('Early pattern');
+  });
+
+  it('still fires the sandbagging path when the AMRAP beats the fatigue-adjusted expectation by 3+', () => {
+    // 3 sets of 10 @ 1 RIR (implied 11), AMRAP 12: adjusted expectation
+    // ~7.7 -> bias ~ +4.3.
+    const { logs, amrapLog } = buildSameSessionScenario(
+      [
+        { reps: 10, rir: 1 },
+        { reps: 10, rir: 1 },
+        { reps: 10, rir: 1 },
+      ],
+      { reps: 12 }
+    );
+    const engine = new RPECalibrationEngine();
+    logs.forEach(l => engine.addSetLog(l));
+    const result = engine.addSetLog(amrapLog)!;
+
+    expect(result.bias).toBeGreaterThanOrEqual(3);
+    expect(getBiasLevel(result.bias)).toBe('sandbagging');
+    expect(engine.analyzeOverallBias().sandbaggingDetected).toBe(true);
+  });
+
+  it('accounts for at least one set of decay beyond the prediction source set (off-by-one)', () => {
+    // Single prior set immediately before the AMRAP: its RIR report embeds
+    // fatigue up TO that set, not the cost of performing it — the adjusted
+    // prediction must sit below the naive one.
+    const { logs, amrapLog } = buildSameSessionScenario(
+      [{ reps: 8, rir: 1 }],
+      { reps: 8 }
+    );
+    const engine = new RPECalibrationEngine();
+    logs.forEach(l => engine.addSetLog(l));
+    const result = engine.addSetLog(amrapLog)!;
+
+    expect(result.rawPredictedMaxReps).toBeCloseTo(9, 1);
+    expect(result.predictedMaxReps).toBeLessThanOrEqual(8);
+  });
+
+  it('applies no decay when the AMRAP is as fresh as its comparison sets', () => {
+    // Cross-session comparison sets early in their own session vs an AMRAP
+    // performed as the first set of its session: nothing to decay.
+    const engine = new RPECalibrationEngine();
+    const weekAgo = new Date('2026-07-01T10:00:00Z');
+    engine.addSetLog(
+      createMockSetLog({
+        weight: 100,
+        actualReps: 10,
+        reportedRIR: 2,
+        wasAMRAP: false,
+        timestamp: weekAgo,
+      })
+    );
+    const result = engine.addSetLog(
+      createMockSetLog({
+        weight: 100,
+        actualReps: 12,
+        reportedRIR: 0,
+        wasAMRAP: true,
+        timestamp: new Date(weekAgo.getTime() + 7 * 24 * 60 * 60 * 1000),
+      })
+    )!;
+
+    expect(result.predictedMaxReps).toBe(12);
+    expect(result.rawPredictedMaxReps).toBe(12);
+    expect(result.bias).toBe(0);
+  });
+
+  it('uses enhanced-mode recovery constants for the adjusted expectation', () => {
+    const scenario = () =>
+      buildSameSessionScenario(
+        [
+          { reps: 9, rir: 1 },
+          { reps: 8, rir: 2 },
+          { reps: 8, rir: 1 },
+        ],
+        { reps: 6 }
+      );
+
+    const run = (enhancedAthleteMode: boolean) => {
+      const { logs, amrapLog } = scenario();
+      const engine = new RPECalibrationEngine([], [], { enhancedAthleteMode });
+      logs.forEach(l => engine.addSetLog(l));
+      return engine.addSetLog(amrapLog)!;
+    };
+
+    const natural = run(false);
+    const enhanced = run(true);
+
+    // Enhanced athletes recover faster between sets -> less expected decay
+    // -> higher adjusted expectation -> slightly more negative bias here.
+    expect(enhanced.predictedMaxReps).toBeGreaterThan(natural.predictedMaxReps);
+    expect(enhanced.bias).toBeLessThan(natural.bias);
+    // Raw (naive) prediction is mode-independent
+    expect(enhanced.rawPredictedMaxReps).toBe(natural.rawPredictedMaxReps);
+
+    // The prediction core reads the same shared constant as sandbagging
+    // detection: per-step decay scales by exactly 1/ENHANCED_RECOVERY_MULTIPLIER.
+    const { logs, amrapLog } = scenario();
+    const naturalPred = computeFatigueAdjustedPrediction(amrapLog, logs, logs, false);
+    const enhancedPred = computeFatigueAdjustedPrediction(amrapLog, logs, logs, true);
+    const naturalDecay = naturalPred.rawPredictedMaxReps - naturalPred.fatigueAdjustedMaxReps;
+    const enhancedDecay = enhancedPred.rawPredictedMaxReps - enhancedPred.fatigueAdjustedMaxReps;
+    expect(enhancedDecay).toBeCloseTo(naturalDecay / ENHANCED_RECOVERY_MULTIPLIER, 5);
+  });
+});
+
+// ============================================
+// CALIBRATION RECORD VERSIONING TESTS
+// ============================================
+
+describe('calibration record versioning', () => {
+  it('excludes legacy naive-method records from the rolling bias average', () => {
+    const engine = new RPECalibrationEngine([], [
+      // Legacy record (no method field): naive bias polluted by fatigue
+      createMockCalibrationResult({
+        exerciseName: 'Squat',
+        bias: -3,
+        confidenceLevel: 'high',
+        method: undefined,
+      }),
+      // Current-method record
+      createMockCalibrationResult({
+        exerciseName: 'Bench Press',
+        bias: 0,
+        confidenceLevel: 'high',
+      }),
+    ]);
+
+    const analysis = engine.analyzeOverallBias();
+    expect(analysis.overallBias).toBe(0);
+    expect(analysis.overreachingDetected).toBe(false);
+    expect(analysis.calibratedExercises).toBe(1);
+  });
+
+  it('reports needsMoreData when only legacy records exist', () => {
+    const engine = new RPECalibrationEngine([], [
+      createMockCalibrationResult({ bias: -3, confidenceLevel: 'high', method: undefined }),
+    ]);
+
+    const analysis = engine.analyzeOverallBias();
+    expect(analysis.needsMoreData).toBe(true);
+    expect(analysis.overallBias).toBe(0);
+    expect(analysis.recommendation).toContain('older method');
+  });
+
+  it('does not adjust RIR prescriptions from legacy-method records', () => {
+    const engine = new RPECalibrationEngine([], [
+      createMockCalibrationResult({ bias: 3, confidenceLevel: 'high', method: undefined }),
+    ]);
+    expect(engine.getAdjustedRIR('Bench Press', 2).hasAdjustment).toBe(false);
+  });
+
+  it('stamps new calibrations with the current method', () => {
+    const engine = new RPECalibrationEngine();
+    const result = engine.addSetLog(createMockSetLog({ wasAMRAP: true }))!;
+    expect(result.method).toBe(CURRENT_CALIBRATION_METHOD);
+  });
+});
+
+// ============================================
+// CONFIDENCE-GATED VERDICT TESTS
+// ============================================
+
+describe('getCalibrationVerdict', () => {
+  it('renders a neutral "Calibrating" verdict at low confidence, even for a large bias', () => {
+    const verdict = getCalibrationVerdict({ bias: -3, confidenceLevel: 'low', dataPoints: 2 });
+    expect(verdict.level).toBe('calibrating');
+    expect(verdict.severity).toBe('neutral');
+    expect(verdict.badgeLabel).toBe('Calibrating…');
+    expect(verdict.badgeVariant).toBe('default');
+    expect(verdict.color).toBe('gray');
+    expect(verdict.message).toContain('need 1 more AMRAP set');
+    expect(verdict.message).not.toContain('closer to failure');
+  });
+
+  it('renders identical bias as neutral at 2 points but strong at 7 points', () => {
+    const low = getCalibrationVerdict({ bias: -3, confidenceLevel: 'low', dataPoints: 2 });
+    const high = getCalibrationVerdict({ bias: -3, confidenceLevel: 'high', dataPoints: 7 });
+
+    expect(low.severity).toBe('neutral');
+    expect(low.color).toBe('gray');
+    expect(high.severity).toBe('strong');
+    expect(high.color).toBe('red');
+    expect(high.badgeLabel).toBe('Pushing Too Hard');
+  });
+
+  it('hedges at medium confidence', () => {
+    const verdict = getCalibrationVerdict({ bias: 2, confidenceLevel: 'medium', dataPoints: 4 });
+    expect(verdict.severity).toBe('tentative');
+    expect(verdict.badgeLabel).toBe('Possibly Sandbagging');
+    expect(verdict.message).toContain('Early pattern');
+  });
+
+  it('treats adjusted bias within +/-1 rep as well calibrated', () => {
+    for (const bias of [1, -1, 0.9, -0.9, 0]) {
+      const verdict = getCalibrationVerdict({ bias, confidenceLevel: 'high', dataPoints: 6 });
+      expect(verdict.level).toBe('accurate');
+      expect(verdict.badgeLabel).toBe('Well Calibrated');
+      expect(verdict.color).toBe('green');
+    }
+  });
+
+  it('reserves "closer to failure" language for high confidence with bias <= -2', () => {
+    const mildHigh = getCalibrationVerdict({ bias: -1.7, confidenceLevel: 'high', dataPoints: 6 });
+    expect(mildHigh.message).not.toContain('closer to failure');
+
+    const severeMedium = getCalibrationVerdict({ bias: -3, confidenceLevel: 'medium', dataPoints: 4 });
+    expect(severeMedium.message).not.toContain('closer to failure');
+
+    const severeHigh = getCalibrationVerdict({ bias: -2, confidenceLevel: 'high', dataPoints: 6 });
+    expect(severeHigh.message).toContain('closer to failure');
+  });
+
+  it('raises the sandbagging threshold in enhanced athlete mode', () => {
+    const natural = getCalibrationVerdict({ bias: 1.6, confidenceLevel: 'high', dataPoints: 6 });
+    const enhanced = getCalibrationVerdict({ bias: 1.6, confidenceLevel: 'high', dataPoints: 6 }, true);
+    expect(natural.level).toBe('sandbagging');
+    expect(enhanced.level).toBe('accurate');
+  });
+
+  it('does not adjust RIR when bias sits inside the well-calibrated dead zone', () => {
+    const engine = new RPECalibrationEngine([], [
+      createMockCalibrationResult({ bias: 1, confidenceLevel: 'high' }),
+    ]);
+    expect(engine.getAdjustedRIR('Bench Press', 2).hasAdjustment).toBe(false);
   });
 });
 
