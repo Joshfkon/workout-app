@@ -2,7 +2,7 @@
 // WORKOUT SESSION ORIGIN
 //
 // Every session-creation path records how the session was started (the
-// 20260707000001_workout_session_origin migration). Inserts go through
+// 20260707000004_workout_session_origin migration). Inserts go through
 // insertWorkoutSessions so the app keeps working before that migration is
 // applied: when Postgres/PostgREST reports the origin column as missing, the
 // insert retries without it (same ship-before-migrate pattern as
