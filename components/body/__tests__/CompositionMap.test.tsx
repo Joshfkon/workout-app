@@ -103,8 +103,21 @@ describe('CompositionMap', () => {
     renderMap();
     expect(screen.getByText(/FMI \+ FFMI = BMI/)).toBeInTheDocument();
     expect(screen.getByText(/↑ muscle gained · ← fat lost · ↖ recomp/)).toBeInTheDocument();
-    // Honesty note: the trail is context, never extended past the last scan.
+    // Honesty note: with no weigh-ins past the last scan, the map ends there.
     expect(screen.getByText(/never extended past your last scan/)).toBeInTheDocument();
+  });
+
+  it('explains the estimate tail when weigh-ins exist past the last scan', () => {
+    renderMap({
+      trend: [
+        ...bulkTrend,
+        { ...scan('2026-06-20', 65.2, 20.3, 88.5), kind: 'estimated' as const },
+      ],
+    });
+    expect(
+      screen.getByText(/dashed tail past your last scan is where your weigh-ins suggest/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/never extended past your last scan/)).not.toBeInTheDocument();
   });
 
   it('lists the p-ratio for each scan pair with phase-aware framing', () => {
@@ -304,6 +317,8 @@ describe('CompositionMap decorations (direction cues)', () => {
     domain,
     scanPoints: fiveScans,
     trailPoints: [],
+    estimateTail: [],
+    estimateLabel: null,
     targetPoint: null,
     targetLabelLines: null,
     vectorLabel: null,
@@ -487,6 +502,28 @@ describe('CompositionMap decorations (direction cues)', () => {
     renderDecorations();
     const labels = screen.getAllByTestId('map-month-label');
     expect(labels.map((l) => l.textContent)).toEqual(['Jun 15', 'Sep 20', 'Jan 10']);
+  });
+
+  it('draws the post-scan estimate tail as dashed geometry with its own label', () => {
+    renderDecorations({
+      estimateTail: [point('2026-06-20', 7.9, 23.6), point('2026-07-05', 8.0, 23.4)],
+      estimateLabel: 'Est. · Jul 5',
+    });
+    const tail = screen.getByTestId('map-estimate-tail');
+    // Dashed + faint: an estimate, never mistakable for the scan path.
+    expect(tail.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(screen.getByTestId('map-estimate-marker')).toBeInTheDocument();
+    const label = screen.getByTestId('map-estimate-label');
+    expect(label).toHaveTextContent('Est. · Jul 5');
+    expect(screen.getByTestId('map-estimate-label-pill')).toBeInTheDocument();
+    // The scan path itself is unchanged — no extra arrowheads from the tail.
+    expect(screen.getAllByTestId('map-arrowhead')).toHaveLength(4);
+  });
+
+  it('omits the estimate tail when no weigh-ins exist past the last scan', () => {
+    renderDecorations();
+    expect(screen.queryByTestId('map-estimate-tail')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-estimate-marker')).not.toBeInTheDocument();
   });
 
   it('drops intermediate labels on dense maps (tap-only)', () => {
