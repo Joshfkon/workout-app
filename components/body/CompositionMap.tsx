@@ -238,6 +238,13 @@ export interface DecorationsData {
   domain: MapDomain;
   scanPoints: CompositionPoint[];
   trailPoints: CompositionPoint[];
+  /** Weigh-in-driven estimate AFTER the last scan ("where you are now").
+   * Drawn as a dashed tail + hollow marker, visually distinct from scan
+   * data — an estimate, never a scan point. Empty when no weigh-ins exist
+   * past the last scan. */
+  estimateTail: CompositionPoint[];
+  /** "Est. · Jul 5" on the tail's endpoint; null when no tail. */
+  estimateLabel: string | null;
   targetPoint: CompositionCoords | null;
   /** Goal block lines, e.g. ["GOAL", "FFMI 21.0", "BF 13%", "FMI 3.6"];
    * null hides the goal label. */
@@ -277,6 +284,8 @@ export function buildDecorations(data: DecorationsData) {
       domain,
       scanPoints,
       trailPoints,
+      estimateTail,
+      estimateLabel,
       targetPoint,
       targetLabelLines,
       vectorLabel,
@@ -321,6 +330,9 @@ export function buildDecorations(data: DecorationsData) {
       })),
       ...scanPoints.slice(1).map((p, i) => toSegment(px(scanPoints[i]), px(p))),
       ...trailPoints.slice(1).map((p, i) => toSegment(px(trailPoints[i]), px(p))),
+      ...estimateTail.map((p, i) =>
+        toSegment(px(i === 0 ? scanPoints[scanPoints.length - 1] : estimateTail[i - 1]), px(p))
+      ),
     ];
     const avoidPoints: AvoidPoint[] = scanPoints.map((p, i) => ({
       ...px(p),
@@ -393,6 +405,50 @@ export function buildDecorations(data: DecorationsData) {
             strokeOpacity={0.18}
           />
         )}
+
+        {/* "Where you are now": the weigh-in-driven estimate past the last
+            scan. Dashed + hollow so it can never be mistaken for scan data
+            — it's a projection awaiting the next scan to confirm it. */}
+        {estimateTail.length > 0 && (() => {
+          const pts = [nowPx, ...estimateTail.map(px)];
+          const end = pts[pts.length - 1];
+          return (
+            <g>
+              <polyline
+                data-testid="map-estimate-tail"
+                points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="none"
+                stroke={TRAIL_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+                strokeOpacity={0.5}
+              />
+              <circle
+                data-testid="map-estimate-marker"
+                cx={end.x}
+                cy={end.y}
+                r={4}
+                fill="#111827"
+                stroke={TRAIL_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="2 2"
+              />
+              {estimateLabel && (
+                <MapLabel
+                  placement={placeLabel(end, plot, estimateLabel, {
+                    ...avoidOptions,
+                    fontSize: 8,
+                  })}
+                  lines={[estimateLabel]}
+                  fill="#a5b4fc"
+                  fontSize={8}
+                  pill
+                  testid="map-estimate-label"
+                />
+              )}
+            </g>
+          );
+        })()}
 
         {/* Target marker: rendered whenever a target composition is set —
             NOT gated on the goal vector, so a degenerate/suppressed vector
@@ -621,6 +677,27 @@ export function CompositionMap({
     );
   }, [trend, scanPoints, heightCm]);
 
+  // "Where you are now": estimated points AFTER the last scan, driven by
+  // weigh-ins. Rendered as a clearly-marked dashed tail — the scan path and
+  // its Latest marker stay strictly scan-driven.
+  const estimateTail = useMemo(() => {
+    if (scanPoints.length < 2) return [];
+    const last = scanPoints[scanPoints.length - 1].date;
+    return buildCompositionPath(
+      trend
+        .filter((p) => p.kind === 'estimated' && p.date > last)
+        .map((p) => ({
+          date: p.date,
+          leanMassKg: p.leanMassKg,
+          fatMassKg: p.fatMassKg,
+          weightKg: p.weightKg,
+          boneMassKg: p.boneMassKg,
+          bodyFatPercent: p.bodyFatPercent,
+        })),
+      heightCm
+    );
+  }, [trend, scanPoints, heightCm]);
+
   const targetPoint = useMemo(
     () => (target ? normalizeTargetPoint(target, heightCm) : null),
     [target, heightCm]
@@ -646,8 +723,8 @@ export function CompositionMap({
   );
 
   const domain = useMemo(
-    () => computeMapDomain([...scanPoints, ...trailPoints], targetPoint),
-    [scanPoints, trailPoints, targetPoint]
+    () => computeMapDomain([...scanPoints, ...trailPoints, ...estimateTail], targetPoint),
+    [scanPoints, trailPoints, estimateTail, targetPoint]
   );
 
   if (scanPoints.length < 2) {
@@ -740,6 +817,11 @@ export function CompositionMap({
                 scanPoints,
                 trailPoints,
                 targetPoint,
+                estimateTail,
+                estimateLabel:
+                  estimateTail.length > 0
+                    ? `Est. · ${formatDateShort(estimateTail[estimateTail.length - 1].date)}`
+                    : null,
                 targetLabelLines,
                 vectorLabel,
                 showGoalVector,
@@ -825,8 +907,10 @@ export function CompositionMap({
       <p className="text-[11px] text-surface-500 mt-1">
         FMI + FFMI = BMI — this map decomposes BMI into fat (x) and fat-free
         (y) parts; diagonals are constant BMI. Scan points are the signal;
-        the faint trail is the day-to-day estimate, shown for context only
-        and never extended past your last scan.
+        the faint trail is the day-to-day estimate, shown for context only.
+        {estimateTail.length > 0
+          ? ' The dashed tail past your last scan is where your weigh-ins suggest you are now — an estimate until the next scan confirms it.'
+          : ' The map is never extended past your last scan.'}
       </p>
 
       {/* No target yet: the goal vector needs an anchor. Deep-link lands
