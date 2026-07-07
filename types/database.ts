@@ -207,6 +207,7 @@ export interface Database {
           session_notes: string | null;
           completion_percent: number;
           auto_discarded_at: string | null;
+          origin: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };
         Insert: {
           id?: string;
@@ -222,6 +223,7 @@ export interface Database {
           session_notes?: string | null;
           completion_percent?: number;
           auto_discarded_at?: string | null;
+          origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };
         Update: {
           id?: string;
@@ -237,6 +239,7 @@ export interface Database {
           session_notes?: string | null;
           completion_percent?: number;
           auto_discarded_at?: string | null;
+          origin?: 'scheduled' | 'empty' | 'ai_suggested' | 'repeat' | null;
         };
         Relationships: [];
       };

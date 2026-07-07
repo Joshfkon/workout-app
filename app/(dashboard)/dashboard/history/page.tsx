@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { formatWeight, convertWeight, convertWeightForDisplay, inputWeightToKg, estimateE1RM, getLocalDateString } from '@/lib/utils';
-import { quickWeightEstimate } from '@/services/weightEstimationEngine';
+import { createRepeatSession } from '@/lib/training/repeatWorkout';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import HistoryCalendar from './_components/HistoryCalendar';
 import nextDynamic from 'next/dynamic';
@@ -399,94 +399,20 @@ function HistoryPageContent() {
         return;
       }
 
-      // Fetch user profile for weight estimation
-      const { data: userData } = await supabase
-        .from('users')
-        .select('height_cm, weight_kg, body_fat_percentage, experience_level')
-        .eq('id', user.id)
-        .single();
-
-      // Default values if user data is missing
-      const userWeightKg = userData?.weight_kg || 70;
-      const heightCm = userData?.height_cm || 170;
-      const bodyFatPercent = userData?.body_fat_percentage || 20;
-      const experience = (userData?.experience_level as 'novice' | 'intermediate' | 'advanced') || 'intermediate';
-
-      // Create a new workout session
-      const { data: session, error: sessionError } = await supabase
-        .from('workout_sessions')
-        .insert({
-          user_id: user.id,
-          state: 'planned',
-          planned_date: getLocalDateString(),
-          completion_percent: 0,
-        })
-        .select()
-        .single();
-
-      if (sessionError || !session) {
-        throw sessionError || new Error('Failed to create workout session');
-      }
-
-      // Create exercise blocks based on the historical workout
-      const exerciseBlocks = workout.exercises.map((exercise, index) => {
-        // Calculate average reps from the workout
-        const avgReps = exercise.sets.length > 0
-          ? Math.round(exercise.sets.reduce((sum, set) => sum + set.reps, 0) / exercise.sets.length)
-          : 10;
-
-        // Calculate rep range, ensuring min <= max
-        const repRangeMin = Math.max(avgReps - 2, 5);
-        const repRangeMax = Math.max(avgReps + 2, repRangeMin);
-        const targetReps = { min: repRangeMin, max: repRangeMax };
-        const targetRir = 2;
-
-        // Calculate E1RM from the previous workout's best set for this exercise
-        const bestSet = exercise.sets.reduce((best, set) => {
-          const e1rm = estimateE1RM(set.weight_kg, set.reps);
-          const bestE1rm = best ? estimateE1RM(best.weight_kg, best.reps) : 0;
-          return e1rm > bestE1rm ? set : best;
-        }, null as SetDetail | null);
-        const knownE1RM = bestSet ? estimateE1RM(bestSet.weight_kg, bestSet.reps) : undefined;
-
-        // Use weight estimation service to get recommended weight
-        const weightEstimate = quickWeightEstimate(
-          exercise.name,
-          targetReps,
-          targetRir,
-          userWeightKg,
-          heightCm,
-          bodyFatPercent,
-          experience,
-          undefined, // regionalData
-          'kg',
-          knownE1RM
-        );
-
-        return {
-          workout_session_id: session.id,
-          exercise_id: exercise.exerciseId,
-          order: index + 1,
-          target_sets: Math.max(exercise.sets.length, 3), // At least 3 sets
-          target_rep_range: [repRangeMin, repRangeMax],
-          target_rir: targetRir,
-          target_weight_kg: weightEstimate.recommendedWeight,
-          target_rest_seconds: 120, // Default 2 minutes
-          suggestion_reason: 'Repeated from previous workout',
-          warmup_protocol: { sets: [] },
-        };
-      });
-
-      const { error: blocksError } = await supabase
-        .from('exercise_blocks')
-        .insert(exerciseBlocks);
-
-      if (blocksError) {
-        throw blocksError;
-      }
+      // Shared clone path (also used by the Train tab's repeat launcher):
+      // copies the exercise list, re-estimates weights from previous E1RMs.
+      const { sessionId } = await createRepeatSession(
+        supabase,
+        user.id,
+        workout.exercises.map((exercise) => ({
+          exerciseId: exercise.exerciseId,
+          name: exercise.name,
+          sets: exercise.sets.map((set) => ({ weight_kg: set.weight_kg, reps: set.reps })),
+        }))
+      );
 
       // Navigate to the new workout
-      router.push(`/dashboard/workout/${session.id}`);
+      router.push(`/dashboard/workout/${sessionId}`);
     } catch (err) {
       console.error('Failed to repeat workout:', err);
       alert('Failed to repeat workout. Please try again.');

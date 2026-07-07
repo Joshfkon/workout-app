@@ -34,8 +34,12 @@ export interface AdhocClaimMatch {
   nameMatches: number;
 }
 
-/** Muscle-group coverage required to call it the same session. */
-const MUSCLE_COVERAGE_THRESHOLD = 0.6;
+/**
+ * Muscle-group coverage required to call it the same session. The product
+ * spec for freestyle workouts prompts on >= 50% overlap with the pending
+ * scheduled session's target muscles.
+ */
+const MUSCLE_COVERAGE_THRESHOLD = 0.5;
 
 /**
  * Compare at the legacy muscle-group level so taxonomy detail differences
@@ -53,7 +57,7 @@ function normalizeName(name: string): string {
  * Does this ad-hoc workout look like the given planned session?
  *
  * Match when EITHER signal is strong:
- * - muscle coverage: the workout hit >= 60% of the planned session's muscle
+ * - muscle coverage: the workout hit >= 50% of the planned session's muscle
  *   groups (a Push day logged with different exercise selections still counts);
  * - exercise names: at least two planned exercises (or all of them, for a
  *   one-exercise session) were performed by exact name — the user clearly ran

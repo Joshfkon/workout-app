@@ -12,13 +12,18 @@
  *      full-width Start CTA; rest days get "Train anyway" + "Preview
  *      tomorrow" (a read-only sheet of the next session's exercises from
  *      program_data). No active mesocycle prompts to plan one.
- *   4. Week stats: sets this week · completed/planned sessions · volume
+ *   4. Start options — ALWAYS visible, with or without a plan, so the user
+ *      can start training from here no matter what state the app is in:
+ *      empty workout (add exercises as you go), AI-suggested workout
+ *      (shared SuggestedWorkoutSheet), repeat a previous workout (clones a
+ *      recent session's exercise list, not its logged weights).
+ *   5. Week stats: sets this week · completed/planned sessions · volume
  *      status line (links to /dashboard/volume).
- *   5. Recovery: overall % + ready count, per-muscle bars for recovering
+ *   6. Recovery: overall % + ready count, per-muscle bars for recovering
  *      muscles with time remaining, expandable past the first three.
- *   6. Progression: compact summary (tracked vs building-history muscle
+ *   7. Progression: compact summary (tracked vs building-history muscle
  *      groups) linking to /dashboard/analytics.
- *   7. Recent workouts: day name · top muscles, date · sets · duration.
+ *   8. Recent workouts: day name · top muscles, date · sets · duration.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -28,6 +33,10 @@ import {
   IconChevronRight,
   IconHistory,
   IconListDetails,
+  IconLoader2,
+  IconPlus,
+  IconRepeat,
+  IconSparkles,
   IconTemplate,
   IconTrendingUp,
 } from '@tabler/icons-react';
@@ -44,17 +53,24 @@ import {
   type ExerciseOverride,
 } from '@/services/mesocycleHelpers';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import {
+  createRepeatSession,
+  type RepeatableExercise,
+} from '@/lib/training/repeatWorkout';
+import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleRecovery';
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import { useMuscleProgression } from '@/hooks/useMuscleProgression';
 import {
+  QuickLogRow,
   SectionLabel,
   UnfinishedWorkoutBanner,
   formatRelativeDay,
 } from '../log/_components/LogPageSections';
 import { BottomSheet } from '@/components/workout/BottomSheet';
+import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import {
   STANDARD_MUSCLE_DISPLAY_NAMES,
@@ -95,6 +111,8 @@ interface RecentWorkout {
   setCount: number;
   /** null when started_at is missing (can't compute a duration). */
   durationMin: number | null;
+  /** Exercise list for the "Repeat previous workout" clone path. */
+  exercises: RepeatableExercise[];
 }
 
 interface InProgressBlockRow {
@@ -108,9 +126,16 @@ interface RecentSessionRow {
   started_at: string | null;
   exercise_blocks:
     | {
+        exercise_id: string;
+        order: number | null;
         suggestion_reason: string | null;
-        exercises: { primary_muscle: string | null } | { primary_muscle: string | null }[] | null;
-        set_logs: { is_warmup: boolean | null }[] | null;
+        exercises:
+          | { name: string | null; primary_muscle: string | null }
+          | { name: string | null; primary_muscle: string | null }[]
+          | null;
+        set_logs:
+          | { is_warmup: boolean | null; weight_kg: number | null; reps: number | null }[]
+          | null;
       }[]
     | null;
 }
@@ -198,6 +223,10 @@ export default function TrainPage() {
   const [mesoCompletedCount, setMesoCompletedCount] = useState<number | null>(null);
   const [lastCycleDone, setLastCycleDone] = useState<Date | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [isStartingEmpty, setIsStartingEmpty] = useState(false);
+  const [showAiSheet, setShowAiSheet] = useState(false);
+  const [showRepeatSheet, setShowRepeatSheet] = useState(false);
+  const [repeatingId, setRepeatingId] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [isDiscarding, setIsDiscarding] = useState(false);
@@ -237,12 +266,12 @@ export default function TrainPage() {
           supabase
             .from('workout_sessions')
             .select(
-              'id, completed_at, started_at, exercise_blocks(suggestion_reason, exercises(primary_muscle), set_logs(is_warmup))'
+              'id, completed_at, started_at, exercise_blocks(exercise_id, order, suggestion_reason, exercises(name, primary_muscle), set_logs(is_warmup, weight_kg, reps))'
             )
             .eq('user_id', user.id)
             .eq('state', 'completed')
             .order('completed_at', { ascending: false })
-            .limit(3),
+            .limit(5),
           supabase
             .from('workout_sessions')
             .select('id', { count: 'exact', head: true })
@@ -281,12 +310,28 @@ export default function TrainPage() {
             const durationMin = row.started_at
               ? Math.round((completedAt.getTime() - new Date(row.started_at).getTime()) / 60000)
               : null;
+            // The clone list for "Repeat previous workout": exercise ids +
+            // working sets (weights feed E1RM re-estimation, not the targets).
+            const exercises: RepeatableExercise[] = [...blocks]
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              .map((b) => {
+                const exercise = Array.isArray(b.exercises) ? b.exercises[0] : b.exercises;
+                return {
+                  exerciseId: b.exercise_id,
+                  name: exercise?.name ?? '',
+                  sets: (b.set_logs ?? [])
+                    .filter((l) => !l.is_warmup)
+                    .map((l) => ({ weight_kg: l.weight_kg ?? 0, reps: l.reps ?? 0 })),
+                };
+              })
+              .filter((e) => e.exerciseId && e.name);
             return {
               id: row.id,
               completedAt,
               title: deriveWorkoutTitle(blocks),
               setCount,
               durationMin: durationMin != null && durationMin > 0 ? durationMin : null,
+              exercises,
             };
           })
         );
@@ -446,6 +491,57 @@ export default function TrainPage() {
       console.error('Failed to start workout:', err);
       setError('Failed to start workout. Please try again.');
       setIsStarting(false);
+    }
+  };
+
+  // Empty workout: create/reuse today's ad-hoc session (no exercise blocks)
+  // and open the workout page — exercises get added there via the picker.
+  // Same path as the Log page's blank workout, so repeat taps reuse the
+  // session and never litter empties.
+  const handleStartEmpty = async () => {
+    if (isStartingEmpty) return;
+    setIsStartingEmpty(true);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      const { sessionId } = await getOrCreateTodaySession(supabase, user.id);
+      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
+    } catch (err) {
+      console.error('Failed to start empty workout:', err);
+      setError('Failed to start workout. Please try again.');
+      setIsStartingEmpty(false);
+    }
+  };
+
+  // Repeat a previous workout: clone its exercise list (not its logged
+  // weights) into a fresh session via the shared helper the History page's
+  // repeat button uses.
+  const handleRepeatWorkout = async (workout: RecentWorkout) => {
+    if (repeatingId) return;
+    if (workout.exercises.length === 0) {
+      setError('This workout has no exercises to repeat.');
+      setShowRepeatSheet(false);
+      return;
+    }
+    setRepeatingId(workout.id);
+    setError(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      const { sessionId } = await createRepeatSession(supabase, user.id, workout.exercises);
+      router.push(`/dashboard/workout/${sessionId}`);
+    } catch (err) {
+      console.error('Failed to repeat workout:', err);
+      setError('Failed to repeat workout. Please try again.');
+      setRepeatingId(null);
+      setShowRepeatSheet(false);
     }
   };
 
@@ -658,6 +754,55 @@ export default function TrainPage() {
         )}
       </div>
 
+      {/* Start options — always available, with or without a plan, so no
+          app state can ever block starting a workout */}
+      <div className="space-y-2">
+        <SectionLabel>Start a workout</SectionLabel>
+
+        <QuickLogRow
+          icon={
+            <span className="w-10 h-10 rounded-xl bg-primary-500/15 flex items-center justify-center flex-shrink-0">
+              {isStartingEmpty ? (
+                <IconLoader2 size={22} className="text-primary-400 animate-spin" aria-hidden="true" />
+              ) : (
+                <IconPlus size={22} className="text-primary-400" aria-hidden="true" />
+              )}
+            </span>
+          }
+          title="Start empty workout"
+          subtitle={isStartingEmpty ? 'Starting...' : 'Add exercises as you go'}
+          onTap={handleStartEmpty}
+          disabled={isStartingEmpty}
+        />
+
+        <QuickLogRow
+          icon={
+            <span className="w-10 h-10 rounded-xl bg-accent-500/15 flex items-center justify-center flex-shrink-0">
+              <IconSparkles size={22} className="text-accent-400" aria-hidden="true" />
+            </span>
+          }
+          title="AI-suggested workout"
+          subtitle="Built from recovery and weekly volume"
+          onTap={() => setShowAiSheet(true)}
+        />
+
+        <QuickLogRow
+          icon={
+            <span className="w-10 h-10 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
+              <IconRepeat size={22} className="text-surface-200" aria-hidden="true" />
+            </span>
+          }
+          title="Repeat previous workout"
+          subtitle={
+            recentWorkouts.length > 0
+              ? 'Same exercises, fresh targets'
+              : 'Available once you complete a workout'
+          }
+          onTap={() => setShowRepeatSheet(true)}
+          disabled={recentWorkouts.length === 0}
+        />
+      </div>
+
       {/* Week stats: sets · sessions · volume status */}
       <Link
         href="/dashboard/volume"
@@ -810,7 +955,7 @@ export default function TrainPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {recentWorkouts.map((workout) => (
+            {recentWorkouts.slice(0, 3).map((workout) => (
               <Link
                 key={workout.id}
                 href="/dashboard/history"
@@ -911,6 +1056,82 @@ export default function TrainPage() {
               Close
             </button>
           </div>
+        </div>
+      </BottomSheet>
+
+      {/* AI suggested workout (shared with /dashboard/log) — mounts and
+          fetches on first open; nothing is created until Start */}
+      {showAiSheet && (
+        <SuggestedWorkoutSheet isOpen onClose={() => setShowAiSheet(false)} />
+      )}
+
+      {/* Repeat previous workout: pick a recent session to clone its
+          exercise list (weights are re-estimated, not copied) */}
+      <BottomSheet
+        isOpen={showRepeatSheet}
+        onClose={() => {
+          if (!repeatingId) setShowRepeatSheet(false);
+        }}
+        title="Repeat a workout"
+      >
+        <div className="space-y-3">
+          <p className="text-[13px] text-surface-400">
+            Same exercises as a previous session — targets and weights are
+            re-estimated from your recent performance.
+          </p>
+          <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
+            {recentWorkouts.map((workout) => (
+              <button
+                key={workout.id}
+                onClick={() => handleRepeatWorkout(workout)}
+                disabled={repeatingId !== null}
+                className="w-full flex items-center gap-2 px-3 py-2.5 border-b border-surface-800/50 last:border-b-0 text-left hover:bg-surface-800/50 transition-colors disabled:opacity-60"
+              >
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[13px] text-surface-200 truncate">
+                    {workout.title}
+                  </span>
+                  <span className="block text-[11px] text-surface-500 mt-0.5">
+                    {workout.completedAt.toLocaleDateString('en-US', {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                    {' · '}
+                    {workout.exercises.length}{' '}
+                    {workout.exercises.length === 1 ? 'exercise' : 'exercises'}
+                    {' · '}
+                    {workout.setCount} {workout.setCount === 1 ? 'set' : 'sets'}
+                  </span>
+                </span>
+                {repeatingId === workout.id ? (
+                  <IconLoader2
+                    size={16}
+                    className="text-primary-400 animate-spin flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <IconChevronRight
+                    size={16}
+                    className="text-surface-500 flex-shrink-0"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            ))}
+            {recentWorkouts.length === 0 && (
+              <p className="p-4 text-center text-xs text-surface-500">
+                No completed workouts yet.
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => setShowRepeatSheet(false)}
+            disabled={repeatingId !== null}
+            className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
+          >
+            Cancel
+          </button>
         </div>
       </BottomSheet>
 

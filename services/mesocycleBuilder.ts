@@ -43,6 +43,10 @@ import {
   toLegacyMuscleGroup,
 } from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
+import { isMuscleExcludedByInjury } from './shared/injuryExclusion';
+
+// Re-export: the shared injury exclusion applied by every workout generator.
+export { isMuscleExcludedByInjury } from './shared/injuryExclusion';
 
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
 const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
@@ -1012,7 +1016,7 @@ export function selectExercises(
   let candidates = exerciseDb.filter(e =>
     muscleMatchesGroup(e.primaryMuscle, muscle) &&
     profile.availableEquipment.includes(e.equipment) &&
-    !profile.injuryHistory.includes(muscle)  // Be cautious with injured areas
+    !isMuscleExcludedByInjury(muscle, profile.injuryHistory)  // Be cautious with injured areas
   );
   
   // Filter by difficulty - but always allow S-tier and A-tier exercises regardless of difficulty

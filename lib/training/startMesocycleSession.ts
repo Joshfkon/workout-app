@@ -50,6 +50,7 @@ import {
   type WeeklyAdjustmentPlan,
 } from '@/lib/training/weeklyRollover';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { quickWeightEstimate } from '@/services/weightEstimationEngine';
 import { toLegacyMuscleGroup } from '@/types/schema';
 import type {
@@ -384,19 +385,19 @@ export async function startMesocycleWorkoutSession(
     }
     sessionId = claimedShellId;
   } else {
-    const { data: session, error: sessionError } = await supabase
-      .from('workout_sessions')
-      .insert({
+    const { data: sessions, error: sessionError } = await insertWorkoutSessions(supabase, [
+      {
         user_id: user.id,
         mesocycle_id: mesocycle.id,
         planned_date: today,
         state: 'in_progress',
         started_at: new Date().toISOString(),
         completion_percent: 0,
-      })
-      .select()
-      .single();
+        origin: 'scheduled' as const,
+      },
+    ]);
 
+    const session = sessions?.[0];
     if (sessionError || !session) throw sessionError || new Error('Failed to create session');
     sessionId = session.id;
   }

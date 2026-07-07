@@ -83,6 +83,18 @@ describe('matchAdhocToPlannedSession', () => {
     expect(result.muscleCoverage).toBe(1);
   });
 
+  it('matches at exactly 50% muscle coverage (spec boundary)', () => {
+    // 1 of the 2 planned muscle groups trained → 0.5 coverage, prompt-worthy.
+    const planned = [
+      { exerciseName: 'Bench', primaryMuscle: 'chest' },
+      { exerciseName: 'OHP', primaryMuscle: 'shoulders' },
+    ];
+    const logged = [{ name: 'Incline Dumbbell Press', primaryMuscle: 'chest' }];
+    const result = matchAdhocToPlannedSession(logged, planned);
+    expect(result.muscleCoverage).toBe(0.5);
+    expect(result.isMatch).toBe(true);
+  });
+
   it('is not fooled by extra logged exercises (coverage is of the PLAN)', () => {
     // A long full-body workout that happens to include chest work should
     // still match a Push day only if it covers the planned muscles.

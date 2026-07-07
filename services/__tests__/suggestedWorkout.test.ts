@@ -364,3 +364,237 @@ describe('empty-data fallback', () => {
     expect(plan.focus).toBe('No exercises available to suggest.');
   });
 });
+
+// ============================================================
+// Guardrails: MRV cap, light session, injuries, joint stress,
+// equipment, set/rep/RIR targets, determinism
+// ============================================================
+
+describe('MRV cap', () => {
+  it('caps a pick to the muscle&apos;s remaining weekly MRV headroom', () => {
+    const plan = build({
+      muscles: [
+        // deficit 4 (below MAV target) but only 2 sets of MRV headroom left
+        makeMuscle('biceps', { weeklySets: 8, targetSets: 12, mrvSets: 10 }),
+      ],
+      exercises: [
+        makeExercise({ id: 'curl', primaryMuscle: 'biceps', mechanic: 'isolation' }),
+        makeExercise({ id: 'hammer', primaryMuscle: 'biceps', mechanic: 'isolation' }),
+      ],
+    });
+
+    const totalSets = plan.exercises.reduce((sum, p) => sum + p.sets, 0);
+    expect(totalSets).toBeLessThanOrEqual(2); // 10 MRV - 8 done
+    expect(plan.exercises.length).toBeGreaterThan(0);
+  });
+
+  it('never lets the sum of suggested sets push a muscle past MRV across picks', () => {
+    const plan = build({
+      muscles: [makeMuscle('lats', { weeklySets: 10, targetSets: 18, mrvSets: 15 })],
+      exercises: [
+        makeExercise({ id: 'pulldown', primaryMuscle: 'lats' }),
+        makeExercise({ id: 'row', primaryMuscle: 'lats' }),
+        makeExercise({ id: 'pullover', primaryMuscle: 'lats', mechanic: 'isolation' }),
+      ],
+    });
+
+    const totalSets = plan.exercises.reduce((sum, p) => sum + p.sets, 0);
+    expect(totalSets).toBeLessThanOrEqual(5); // 15 MRV - 10 done
+  });
+
+  it('emits a light technique session when every under-target muscle is out of headroom', () => {
+    const plan = build({
+      muscles: [
+        makeMuscle('biceps', { weeklySets: 9, targetSets: 10, mrvSets: 10 }), // headroom 1
+        makeMuscle('triceps', { weeklySets: 11, targetSets: 12, mrvSets: 12 }), // headroom 1
+      ],
+      exercises: [
+        makeExercise({ id: 'curl', primaryMuscle: 'biceps', mechanic: 'isolation' }),
+        makeExercise({ id: 'pushdown', primaryMuscle: 'triceps', mechanic: 'isolation' }),
+      ],
+    });
+
+    expect(plan.isLightSession).toBe(true);
+    expect(plan.focus.toLowerCase()).toContain('light');
+    plan.exercises.forEach((p) => {
+      expect(p.sets).toBeLessThanOrEqual(1); // capped by 1 set of headroom
+      expect(p.targetRir).toBeGreaterThanOrEqual(3); // technique work, far from failure
+    });
+  });
+
+  it('says so even when there is zero headroom anywhere', () => {
+    const plan = build({
+      muscles: [makeMuscle('biceps', { weeklySets: 10, targetSets: 12, mrvSets: 10 })],
+      exercises: [makeExercise({ id: 'curl', primaryMuscle: 'biceps', mechanic: 'isolation' })],
+    });
+
+    expect(plan.isLightSession).toBe(true);
+    expect(plan.exercises).toHaveLength(0);
+    expect(plan.focus.toLowerCase()).toContain('mrv');
+  });
+});
+
+describe('injury exclusion (mesocycle generator rule)', () => {
+  it('never suggests a muscle whose legacy group is injury-flagged', () => {
+    const plan = build({
+      muscles: [
+        makeMuscle('lateral_delts', { weeklySets: 0, targetSets: 12 }),
+        makeMuscle('biceps', { weeklySets: 2, targetSets: 8 }),
+      ],
+      exercises: [
+        makeExercise({ id: 'raise', primaryMuscle: 'lateral_delts', mechanic: 'isolation' }),
+        makeExercise({ id: 'curl', primaryMuscle: 'biceps', mechanic: 'isolation' }),
+      ],
+      injuredMuscles: ['shoulders'],
+    });
+
+    expect(plan.exercises.length).toBeGreaterThan(0);
+    expect(plan.exercises.every((p) => p.muscle === 'biceps')).toBe(true);
+  });
+
+  it('keeps injured muscles out of the full-body fallback too', () => {
+    const plan = build({
+      muscles: [],
+      exercises: fullBodyLibrary(),
+      injuredMuscles: ['quads'],
+    });
+
+    expect(plan.exercises.length).toBeGreaterThan(0);
+    expect(plan.exercises.some((p) => p.muscle === 'quads')).toBe(false);
+  });
+});
+
+describe('joint-stress RIR floor', () => {
+  it('floors a heavy barbell compound at RIR 2 even when the library default is lower', () => {
+    const plan = build({
+      muscles: [makeMuscle('chest_upper', { weeklySets: 0, targetSets: 10 })],
+      exercises: [
+        makeExercise({
+          id: 'bench',
+          name: 'Barbell Bench Press',
+          primaryMuscle: 'chest_upper',
+          defaultRir: 0,
+        }),
+      ],
+      maxExercises: 1,
+    });
+
+    expect(plan.exercises[0].targetRir).toBeGreaterThanOrEqual(2);
+  });
+
+  it('leaves machine work free to go near failure', () => {
+    const plan = build({
+      muscles: [makeMuscle('chest_upper', { weeklySets: 0, targetSets: 10 })],
+      exercises: [
+        makeExercise({
+          id: 'machine-press',
+          name: 'Machine Chest Press',
+          primaryMuscle: 'chest_upper',
+          defaultRir: 0,
+        }),
+      ],
+      maxExercises: 1,
+    });
+
+    expect(plan.exercises[0].targetRir).toBe(0);
+  });
+});
+
+describe('equipment filter', () => {
+  it('skips exercises that need unavailable equipment', () => {
+    const plan = build({
+      muscles: [makeMuscle('biceps', { weeklySets: 0, targetSets: 10 })],
+      exercises: [
+        makeExercise({
+          id: 'bb-curl',
+          name: 'Barbell Curl',
+          primaryMuscle: 'biceps',
+          tier: 'S',
+          mechanic: 'isolation',
+        }),
+        makeExercise({
+          id: 'cable-curl',
+          name: 'Cable Curl',
+          primaryMuscle: 'biceps',
+          tier: 'B',
+          mechanic: 'isolation',
+        }),
+      ],
+      unavailableEquipmentIds: ['barbell'],
+      maxExercises: 1,
+    });
+
+    expect(plan.exercises).toHaveLength(1);
+    expect(plan.exercises[0].exerciseId).toBe('cable-curl');
+  });
+});
+
+describe('set/rep/RIR targets', () => {
+  it('every pick carries sets, a rep range, and a target RIR', () => {
+    const plan = build({
+      muscles: [makeMuscle('lats', { weeklySets: 0, targetSets: 12 })],
+      exercises: [makeExercise({ id: 'pulldown', primaryMuscle: 'lats' })],
+    });
+
+    plan.exercises.forEach((p) => {
+      expect(p.sets).toBeGreaterThanOrEqual(2);
+      expect(p.repRange[0]).toBeLessThanOrEqual(p.repRange[1]);
+      expect(p.targetRir).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  it('scales set targets down for short sessions', () => {
+    const short = build({
+      muscles: [makeMuscle('lats', { weeklySets: 0, targetSets: 12 })],
+      exercises: [makeExercise({ id: 'pulldown', primaryMuscle: 'lats' })],
+      sessionMinutes: 30,
+      maxExercises: 1,
+    });
+    const long = build({
+      muscles: [makeMuscle('lats', { weeklySets: 0, targetSets: 12 })],
+      exercises: [makeExercise({ id: 'pulldown', primaryMuscle: 'lats' })],
+      sessionMinutes: 90,
+      maxExercises: 1,
+    });
+
+    expect(short.exercises[0].sets).toBeLessThan(long.exercises[0].sets);
+  });
+
+  it('uses the library rep range and default RIR when present', () => {
+    const plan = build({
+      muscles: [makeMuscle('lats', { weeklySets: 0, targetSets: 12 })],
+      exercises: [
+        makeExercise({
+          id: 'pulldown',
+          name: 'Lat Pulldown',
+          primaryMuscle: 'lats',
+          defaultRepRange: [8, 12],
+          defaultRir: 1,
+        }),
+      ],
+      maxExercises: 1,
+    });
+
+    expect(plan.exercises[0].repRange).toEqual([8, 12]);
+    expect(plan.exercises[0].targetRir).toBe(1); // pulldown is a safe pattern, no floor bump
+  });
+});
+
+describe('determinism', () => {
+  it('produces an identical plan for identical inputs', () => {
+    const input: BuildSuggestedWorkoutInput = {
+      muscles: [
+        makeMuscle('chest_upper', { weeklySets: 3, targetSets: 12, mrvSets: 18 }),
+        makeMuscle('lats', { weeklySets: 5, targetSets: 14, mrvSets: 20 }),
+        makeMuscle('biceps', { weeklySets: 1, targetSets: 10, mrvSets: 14 }),
+      ],
+      exercises: fullBodyLibrary(),
+      recentExerciseIds: ['row'],
+      sessionMinutes: 45,
+    };
+
+    const a = buildSuggestedWorkout(input);
+    const b = buildSuggestedWorkout(input);
+    expect(a).toEqual(b);
+  });
+});

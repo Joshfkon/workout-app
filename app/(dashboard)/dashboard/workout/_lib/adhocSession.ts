@@ -1,5 +1,10 @@
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
+import {
+  insertWorkoutSessions,
+  updateSessionOrigin,
+  type SessionOrigin,
+} from '@/lib/training/sessionOrigin';
 
 type UntypedSupabase = ReturnType<typeof createUntypedClient>;
 
@@ -12,12 +17,18 @@ type UntypedSupabase = ReturnType<typeof createUntypedClient>;
  * progress; the Continue card points at it too). Mesocycle sessions are never
  * touched here.
  *
+ * `origin` records which launcher created the session ('empty' blank workout,
+ * 'ai_suggested', 'repeat'). A wiped-and-reused session is effectively fresh,
+ * so its origin is overwritten too; a session with logged sets keeps the
+ * origin it was started with.
+ *
  * Session creation must only ever happen behind an explicit user tap — never
  * as a page-load side effect (P0-1 in the UX audit: a GET that inserts rows).
  */
 export async function getOrCreateTodaySession(
   supabase: UntypedSupabase,
-  userId: string
+  userId: string,
+  origin: SessionOrigin = 'empty'
 ): Promise<{ sessionId: string; isNewSession: boolean }> {
   const today = getLocalDateString();
 
@@ -51,24 +62,28 @@ export async function getOrCreateTodaySession(
         .update({ state: 'in_progress', started_at: new Date().toISOString() })
         .eq('id', existing.id);
     }
-    // After a wipe the session is effectively fresh (warmups, order restart).
+    if (!hasLoggedSets) {
+      // After a wipe the session is effectively fresh (warmups, order
+      // restart) — it now belongs to whichever launcher reused it.
+      await updateSessionOrigin(supabase, existing.id, origin);
+    }
     return { sessionId: existing.id, isNewSession: !hasLoggedSets };
   }
 
-  const { data: newSession, error: createError } = await supabase
-    .from('workout_sessions')
-    .insert({
+  const { data: newSessions, error: createError } = await insertWorkoutSessions(supabase, [
+    {
       user_id: userId,
       planned_date: today,
       state: 'in_progress',
       started_at: new Date().toISOString(),
       completion_percent: 0,
-    })
-    .select('id')
-    .single();
+      origin,
+    },
+  ]);
 
+  const newSession = newSessions?.[0];
   if (createError || !newSession) {
-    throw createError ?? new Error('Failed to create session');
+    throw (createError as Error | null) ?? new Error('Failed to create session');
   }
   return { sessionId: newSession.id, isNewSession: true };
 }

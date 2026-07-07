@@ -103,7 +103,9 @@ function makeResponder(overrides: {
     if (query.table === 'users') return { data: null };
     if (query.table === 'exercise_blocks') return { count: overrides.blockCount ?? 0 };
     if (query.table === 'workout_sessions') {
-      if (query.method === 'insert') return { data: { id: 'new-session' } };
+      // The origin-aware insert path inserts an array and selects without
+      // .single(), so the response is an array of created rows.
+      if (query.method === 'insert') return { data: [{ id: 'new-session' }] };
       if (query.method === 'update') {
         return { data: overrides.claimedRows ?? [{ id: query.filters['id'] as string }], error: null };
       }
@@ -209,8 +211,11 @@ describe('startMesocycleWorkoutSession — today\'s existing session handling', 
 
     const insert = queries.find((q) => q.table === 'workout_sessions' && q.method === 'insert');
     expect(insert).toBeDefined();
-    expect((insert!.payload as { state: string }).state).toBe('in_progress');
-    expect((insert!.payload as { mesocycle_id: string }).mesocycle_id).toBe('meso-1');
+    const [row] = insert!.payload as { state: string; mesocycle_id: string; origin: string }[];
+    expect(row.state).toBe('in_progress');
+    expect(row.mesocycle_id).toBe('meso-1');
+    // Sessions record how they were started; the mesocycle path is 'scheduled'.
+    expect(row.origin).toBe('scheduled');
   });
 });
 
