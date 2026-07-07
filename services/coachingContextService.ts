@@ -26,6 +26,13 @@ export function formatCoachingContext(context: CoachingContext): string {
   if (context.user.experience) {
     formatted += `**Experience Level:** ${context.user.experience}\n`;
   }
+  if (context.user.enhancedAthleteMode) {
+    formatted +=
+      `**Enhanced Athlete Mode:** on — recovery capacity is elevated, so volume ` +
+      `ceilings are raised (~35-40% above natural MRV). Joint-stress and injury ` +
+      `limits remain at natural-athlete values: tendons and ligaments adapt ` +
+      `slower than muscle regardless of enhancement.\n`;
+  }
   formatted += `\n`;
 
   // Phase info

@@ -177,7 +177,17 @@ export interface User {
   
   /** Experience level affects default volume landmarks and progression rates */
   experience: Experience;
-  
+
+  /**
+   * Enhanced Athlete Mode — a physiological profile fact (like bodyweight),
+   * not a UI preference. PEDs raise muscular recovery capacity, so volume
+   * landmarks scale up (see ENHANCED_SCALING) and fatigue decays faster.
+   * Joint-stress/injury safety limits deliberately do NOT read this flag:
+   * tendons and ligaments adapt slower than muscle regardless of enhancement.
+   * Persisted in users.enhanced_athlete_mode. Defaults to false.
+   */
+  enhancedAthleteMode?: boolean;
+
   preferences: UserPreferences;
   
   /** 
@@ -230,6 +240,43 @@ export interface VolumeLandmarks {
   
   /** Maximum Recoverable Volume - upper limit before excessive fatigue */
   mrv: number;
+}
+
+// ============ ENHANCED ATHLETE VOLUME SCALING ============
+
+/**
+ * Per-landmark multipliers applied when Enhanced Athlete Mode is on.
+ *
+ * Enhanced recovery raises the volume *ceiling* far more than the *floor*:
+ * the minimum stimulus to maintain muscle barely changes (+10%), while the
+ * maximum recoverable workload rises substantially (+37.5%). This replaces
+ * the old flat +40% bump, which overstated MEV and understated nothing.
+ *
+ * Joint-stress / injury-driven limits must NOT use these multipliers —
+ * PEDs accelerate muscular recovery, not tendon/ligament adaptation.
+ */
+export const ENHANCED_SCALING = {
+  mev: 1.10,
+  mav: 1.25,
+  mrv: 1.375,
+} as const;
+
+/**
+ * Central landmark derivation for Enhanced Athlete Mode. ALL code paths that
+ * consume MEV/MAV/MRV for an enhanced athlete must go through this function —
+ * never sprinkle the multipliers at call sites. Returns the input unchanged
+ * when the mode is off. Set counts round to the nearest whole set.
+ */
+export function scaleLandmarksForEnhanced(
+  landmarks: VolumeLandmarks,
+  enhancedAthleteMode: boolean | undefined
+): VolumeLandmarks {
+  if (!enhancedAthleteMode) return landmarks;
+  return {
+    mev: Math.round(landmarks.mev * ENHANCED_SCALING.mev),
+    mav: Math.round(landmarks.mav * ENHANCED_SCALING.mav),
+    mrv: Math.round(landmarks.mrv * ENHANCED_SCALING.mrv),
+  };
 }
 
 // ============ PER-MUSCLE SESSION FEEDBACK (auto-regulation) ============
@@ -1021,9 +1068,16 @@ export interface ExtendedUserProfile {
   
   /** Height in cm (for FFMI calculations) */
   heightCm: number | null;
-  
+
   /** Latest DEXA scan data */
   latestDexa: DexaScan | null;
+
+  /**
+   * Enhanced Athlete Mode (see User.enhancedAthleteMode). Scales volume
+   * landmarks and recovery constants during program generation; never
+   * scales joint-stress or injury-driven safety limits.
+   */
+  enhancedAthleteMode?: boolean;
 }
 
 /**

@@ -54,6 +54,8 @@ interface Mesocycle {
   session_duration_minutes: number | null;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
+  /** Enhanced Athlete Mode at (re)generation time (null for legacy rows). */
+  generated_with_enhanced_mode?: boolean | null;
 }
 
 /**
@@ -252,6 +254,11 @@ export default function MesocyclePage() {
 
       const daysChanged = !areSameWorkoutDays(normalizedPreferredDays, currentPreferredDays);
 
+      // Keep the plan's generation-time mode on a duration/day edit — the
+      // enhanced toggle has its own explicit mid-meso flow.
+      const mesoEnhancedMode =
+        mesocycle.generated_with_enhanced_mode ?? (userData?.enhanced_athlete_mode === true);
+
       // Build extended user profile
       const extendedProfile: ExtendedUserProfile = {
         age: userData?.age || 30,
@@ -264,6 +271,7 @@ export default function MesocyclePage() {
         injuryHistory: (userData?.injury_history as MuscleGroup[]) || [],
         heightCm: userData?.height_cm || null,
         latestDexa: latestDexa,
+        enhancedAthleteMode: mesoEnhancedMode,
       };
 
       // Analyze regional data for lagging areas (if available)
@@ -370,6 +378,7 @@ export default function MesocyclePage() {
           volume_per_muscle: newProgram?.volumePerMuscle || null,
           periodization_model: newProgram?.periodization?.model || 'linear',
           recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
+          generated_with_enhanced_mode: mesoEnhancedMode,
         })
         .eq('id', mesocycleId);
 

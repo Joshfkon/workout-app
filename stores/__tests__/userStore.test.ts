@@ -2,7 +2,11 @@
  * Tests for User Store (Zustand)
  */
 import { useUserStore } from '../userStore';
-import { DEFAULT_USER_PREFERENCES, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import {
+  DEFAULT_USER_PREFERENCES,
+  DEFAULT_VOLUME_LANDMARKS,
+  scaleLandmarksForEnhanced,
+} from '@/types/schema';
 import type { User, UserPreferences, VolumeLandmarks, Experience } from '@/types/schema';
 
 // Helper to create a mock user
@@ -268,6 +272,39 @@ describe('userStore', () => {
       const landmarks = useUserStore.getState().getVolumeLandmarks('unknown_muscle');
       // Should return fallback since the muscle doesn't exist in any defaults
       expect(landmarks).toEqual({ mev: 6, mav: 12, mrv: 18 });
+    });
+
+    it('applies differentiated enhanced scaling when enhancedAthleteMode is on', () => {
+      const mockUser = createMockUser({ enhancedAthleteMode: true });
+      useUserStore.getState().setUser(mockUser);
+
+      const base = DEFAULT_VOLUME_LANDMARKS.intermediate.chest_upper;
+      const landmarks = useUserStore.getState().getVolumeLandmarks('chest_upper');
+      expect(landmarks).toEqual(scaleLandmarksForEnhanced(base, true));
+      // Differentiated, not flat: ceiling rises more than floor
+      expect(landmarks.mrv / base.mrv).toBeGreaterThan(landmarks.mev / base.mev);
+    });
+  });
+
+  describe('enhancedAthleteMode persistence round-trip', () => {
+    it('survives updateUser and is included in the persisted partialize slice', () => {
+      const mockUser = createMockUser();
+      useUserStore.getState().setUser(mockUser);
+      expect(useUserStore.getState().user?.enhancedAthleteMode).toBeUndefined();
+
+      useUserStore.getState().updateUser({ enhancedAthleteMode: true });
+      expect(useUserStore.getState().user?.enhancedAthleteMode).toBe(true);
+
+      // The persist middleware stores whatever partialize returns; verify the
+      // flag rides along with the user object (same mechanism as goal, etc.).
+      const persistOptions = useUserStore.persist.getOptions();
+      const partialized = persistOptions.partialize!(useUserStore.getState()) as {
+        user: User | null;
+      };
+      expect(partialized.user?.enhancedAthleteMode).toBe(true);
+
+      useUserStore.getState().updateUser({ enhancedAthleteMode: false });
+      expect(useUserStore.getState().user?.enhancedAthleteMode).toBe(false);
     });
   });
 

@@ -28,6 +28,13 @@ import type {
 export type PerformanceTrend = 'improving' | 'flat' | 'declining';
 export type SetAdjustmentAction = 'add' | 'hold' | 'remove';
 
+/**
+ * Sets added per green-light week for enhanced athletes (vs. 1 for natural).
+ * Matches the ~1.375x MRV scaling: with a proportionally higher ceiling, the
+ * per-week ramp must steepen for the lifter to reach it before deload.
+ */
+export const ENHANCED_WEEKLY_SET_INCREMENT = 2;
+
 /** The slice of session_muscle_feedback the engine needs (one row per session). */
 export interface MuscleWeekFeedback {
   sorenessBefore: SorenessRating | null;
@@ -46,6 +53,14 @@ export interface WeeklySetAdjustmentInput {
   performanceTrend: PerformanceTrend;
   weekInMeso: number;
   isDeloadWeek: boolean;
+  /**
+   * Enhanced Athlete Mode: the MRV ceiling is ~37.5% higher (see
+   * ENHANCED_SCALING — callers pass already-scaled landmarks), so the weekly
+   * set-addition rate rises proportionally (ENHANCED_WEEKLY_SET_INCREMENT).
+   * Otherwise the lifter would never approach the raised ceiling before the
+   * deload. Remove/hold logic is unchanged — recovery debt still wins.
+   */
+  enhancedAthleteMode?: boolean;
 }
 
 export interface WeeklySetAdjustment {
@@ -173,13 +188,19 @@ export function recommendWeeklySetAdjustment(
       reason: 'Above optimal volume and pump is modest — extra sets need to earn their place',
     };
   }
+  // Enhanced athletes ramp faster toward their (higher) MRV, but never past it.
+  const increment = input.enhancedAthleteMode
+    ? Math.min(ENHANCED_WEEKLY_SET_INCREMENT, landmarks.mrv - currentWeeklySets)
+    : 1;
   return {
     action: 'add',
-    delta: 1,
+    delta: increment,
     reason:
       currentWeeklySets < landmarks.mev
         ? 'Below minimum effective volume and recovering well — building up'
-        : 'Recovering well and handling the workload — adding a set',
+        : increment > 1
+          ? `Recovering well and handling the workload — adding ${increment} sets (enhanced recovery)`
+          : 'Recovering well and handling the workload — adding a set',
   };
 }
 

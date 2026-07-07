@@ -9,6 +9,17 @@
  */
 
 import type { RepsInTank } from '@/types/schema';
+import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+/** Overall bias (reps) at or above which sandbagging is flagged (natural athlete). */
+export const SANDBAGGING_BIAS_THRESHOLD = 2;
+
+/** Per-exercise bias (reps) at or above which the display level reads 'sandbagging'. */
+export const SANDBAGGING_DISPLAY_THRESHOLD = 1.5;
 
 // ============================================
 // TYPES
@@ -93,12 +104,15 @@ export class RPECalibrationEngine {
   private setHistory: CalibrationSetLog[] = [];
   private calibrationResults: Map<string, CalibrationResult> = new Map();
   private readonly maxHistorySize = 500;
+  private readonly enhancedAthleteMode: boolean;
 
   constructor(
     initialHistory: CalibrationSetLog[] = [],
-    initialCalibrations: CalibrationResult[] = []
+    initialCalibrations: CalibrationResult[] = [],
+    options: { enhancedAthleteMode?: boolean } = {}
   ) {
     this.setHistory = initialHistory.slice(-this.maxHistorySize);
+    this.enhancedAthleteMode = options.enhancedAthleteMode === true;
     for (const cal of initialCalibrations) {
       this.calibrationResults.set(cal.exerciseName.toLowerCase(), cal);
     }
@@ -219,7 +233,14 @@ export class RPECalibrationEngine {
       exerciseSpecificBias.set(cal.exerciseName, cal.bias);
     }
 
-    const sandbaggingDetected = overallBias >= 2;
+    // AMRAP predictions come from prior sets performed under accumulated
+    // weekly fatigue. Enhanced athletes rebound from that fatigue faster
+    // (ENHANCED_RECOVERY_MULTIPLIER), so a fresh AMRAP legitimately beats
+    // those predictions by more — the sandbagging threshold scales up
+    // accordingly, or genuinely-recovered sessions get flagged.
+    const sandbagThreshold =
+      SANDBAGGING_BIAS_THRESHOLD * (this.enhancedAthleteMode ? ENHANCED_RECOVERY_MULTIPLIER : 1);
+    const sandbaggingDetected = overallBias >= sandbagThreshold;
     const overreachingDetected = overallBias <= -2;
 
     const recommendation = getOverallRecommendation(overallBias);
@@ -415,10 +436,18 @@ function getOverallRecommendation(overallBias: number): string {
 }
 
 /**
- * Get bias level category for display
+ * Get bias level category for display.
+ * Pass enhancedAthleteMode so the sandbagging threshold uses the enhanced
+ * recovery constants — enhanced athletes legitimately beat fatigued-week
+ * predictions by more (see analyzeOverallBias).
  */
-export function getBiasLevel(bias: number): 'sandbagging' | 'accurate' | 'overreaching' {
-  if (bias >= 1.5) return 'sandbagging';
+export function getBiasLevel(
+  bias: number,
+  enhancedAthleteMode?: boolean
+): 'sandbagging' | 'accurate' | 'overreaching' {
+  const sandbagThreshold =
+    SANDBAGGING_DISPLAY_THRESHOLD * (enhancedAthleteMode ? ENHANCED_RECOVERY_MULTIPLIER : 1);
+  if (bias >= sandbagThreshold) return 'sandbagging';
   if (bias <= -1.5) return 'overreaching';
   return 'accurate';
 }
@@ -426,8 +455,8 @@ export function getBiasLevel(bias: number): 'sandbagging' | 'accurate' | 'overre
 /**
  * Get color for bias display
  */
-export function getBiasColor(bias: number): 'green' | 'yellow' | 'red' {
-  const level = getBiasLevel(bias);
+export function getBiasColor(bias: number, enhancedAthleteMode?: boolean): 'green' | 'yellow' | 'red' {
+  const level = getBiasLevel(bias, enhancedAthleteMode);
   switch (level) {
     case 'accurate':
       return 'green';

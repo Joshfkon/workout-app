@@ -24,6 +24,7 @@ export interface Database {
           experience: 'novice' | 'intermediate' | 'advanced';
           preferences: Json;
           volume_landmarks: Json;
+          enhanced_athlete_mode: boolean;
         };
         Insert: {
           id: string;
@@ -33,6 +34,7 @@ export interface Database {
           experience?: 'novice' | 'intermediate' | 'advanced';
           preferences?: Json;
           volume_landmarks?: Json;
+          enhanced_athlete_mode?: boolean;
         };
         Update: {
           id?: string;
@@ -42,6 +44,7 @@ export interface Database {
           experience?: 'novice' | 'intermediate' | 'advanced';
           preferences?: Json;
           volume_landmarks?: Json;
+          enhanced_athlete_mode?: boolean;
         };
         Relationships: [];
       };
@@ -144,6 +147,7 @@ export interface Database {
           session_duration_minutes: number | null;
           deload_recommended_at: string | null;
           deload_reasons: Json | null;
+          generated_with_enhanced_mode: boolean | null;
           created_at: string;
           started_at: string | null;
           completed_at: string | null;
@@ -162,6 +166,7 @@ export interface Database {
           session_duration_minutes?: number | null;
           deload_recommended_at?: string | null;
           deload_reasons?: Json | null;
+          generated_with_enhanced_mode?: boolean | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;
@@ -180,6 +185,7 @@ export interface Database {
           session_duration_minutes?: number | null;
           deload_recommended_at?: string | null;
           deload_reasons?: Json | null;
+          generated_with_enhanced_mode?: boolean | null;
           created_at?: string;
           started_at?: string | null;
           completed_at?: string | null;

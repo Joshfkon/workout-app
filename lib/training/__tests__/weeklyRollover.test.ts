@@ -8,7 +8,7 @@ import {
   type RolloverSession,
 } from '../weeklyRollover';
 import type { MuscleWeekFeedback, PerformanceTrend } from '@/services/weeklyProgressionEngine';
-import { DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import { DEFAULT_VOLUME_LANDMARKS, scaleLandmarksForEnhanced } from '@/types/schema';
 import type { StandardMuscleGroup, VolumeLandmarks } from '@/types/schema';
 
 function landmarks(overrides: Partial<Record<StandardMuscleGroup, VolumeLandmarks>> = {}) {
@@ -99,6 +99,27 @@ describe('resolveVolumeLandmarks', () => {
     });
     expect(resolved.quads).toEqual({ mev: 9, mav: 15, mrv: 21 });
     expect(resolved.lats).toEqual(DEFAULT_VOLUME_LANDMARKS.intermediate.lats);
+  });
+
+  it('applies enhanced scaling AFTER the custom overlay (stored values stay natural)', () => {
+    const resolved = resolveVolumeLandmarks(
+      'intermediate',
+      { quads: { mev: 8, mav: 16, mrv: 24 } },
+      true
+    );
+    expect(resolved.quads).toEqual(
+      scaleLandmarksForEnhanced({ mev: 8, mav: 16, mrv: 24 }, true)
+    );
+    // Non-custom muscles scale off the experience defaults
+    expect(resolved.lats).toEqual(
+      scaleLandmarksForEnhanced(DEFAULT_VOLUME_LANDMARKS.intermediate.lats, true)
+    );
+  });
+
+  it('leaves landmarks untouched when enhanced mode is off', () => {
+    expect(resolveVolumeLandmarks('intermediate', null, false)).toEqual(
+      DEFAULT_VOLUME_LANDMARKS.intermediate
+    );
   });
 });
 
@@ -222,5 +243,30 @@ describe('planWeeklySetAdjustments', () => {
     );
     expect(plan.summary.some((s) => s.muscle === 'calves')).toBe(false);
     expect(plan.byExercise.size).toBe(0);
+  });
+
+  it('adds two sets per green-light week in enhanced mode (capped at MRV)', () => {
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        feedbackByMuscle: new Map([['quads', [goodFeedback()]]]),
+        enhancedAthleteMode: true,
+      })
+    );
+    const adjustment = plan.byExercise.get(exerciseKey(1, 0));
+    expect(adjustment).toMatchObject({ muscle: 'quads', action: 'add', delta: 2, adjustedSets: 5 });
+    expect(adjustment?.label).toMatch(/^\+2 sets Quads — /);
+  });
+
+  it('keeps single-set removals in enhanced mode (recovery debt is not scaled)', () => {
+    const plan = planWeeklySetAdjustments(
+      makeInput({
+        feedbackByMuscle: new Map<StandardMuscleGroup, MuscleWeekFeedback[]>([
+          ['quads', [{ sorenessBefore: 3, pump: 1, workload: 1 }]],
+        ]),
+        enhancedAthleteMode: true,
+      })
+    );
+    const adjustment = plan.byExercise.get(exerciseKey(1, 0));
+    expect(adjustment).toMatchObject({ action: 'remove', delta: -1 });
   });
 });

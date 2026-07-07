@@ -313,7 +313,7 @@ export default function LogPage() {
           .limit(1),
         supabase
           .from('mesocycles')
-          .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides')
+          .select('id, name, current_week, total_weeks, deload_week, split_type, days_per_week, preferred_workout_days, program_data, exercise_overrides, generated_with_enhanced_mode')
           .eq('user_id', user.id)
           .eq('state', 'active')
           .order('created_at', { ascending: false })

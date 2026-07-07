@@ -312,9 +312,19 @@ export function useAdaptiveVolume(): UseAdaptiveVolumeResult {
         };
         setVolumeProfile(profile);
       } else {
-        // Create initial profile based on user's experience level
+        // Create initial profile based on user's experience level, seeded
+        // with the canonical Enhanced Athlete Mode flag from the users row.
         const trainingAge = (userExperience || 'intermediate') as 'novice' | 'intermediate' | 'advanced';
-        const initialProfile = createInitialVolumeProfile(userId!, trainingAge, false);
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('enhanced_athlete_mode')
+          .eq('id', userId!)
+          .single();
+        const initialProfile = createInitialVolumeProfile(
+          userId!,
+          trainingAge,
+          userRow?.enhanced_athlete_mode === true
+        );
         setVolumeProfile(initialProfile);
 
         // Optionally save to database

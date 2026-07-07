@@ -29,8 +29,27 @@ export const EQUIPMENT_FATIGUE_MULTIPLIER: Record<Equipment, number> = {
 // RECOVERY
 // ============================================
 
-/** Base fatigue points recovered per day of rest */
+/** Base fatigue points recovered per day of rest (natural athlete) */
 export const FATIGUE_RECOVERY_RATE = 3;
+
+/**
+ * Enhanced Athlete Mode recovery multiplier: fatigue dissipates ~22.5%
+ * faster between sessions (tuning range ~1.20-1.25). Applies to recovery
+ * time-constants ONLY — fatigue accumulation per set is unchanged, and
+ * joint-stress / injury-driven limits never read this (tendons and
+ * ligaments do not share the accelerated recovery).
+ *
+ * Sandbagging / RPE-calibration detection must also use this constant when
+ * the mode is on, otherwise genuinely-recovered sessions read as sandbagging.
+ */
+export const ENHANCED_RECOVERY_MULTIPLIER = 1.225;
+
+/** Per-day fatigue recovery rate for the athlete's recovery profile. */
+export function effectiveFatigueRecoveryRate(enhancedAthleteMode?: boolean): number {
+  return enhancedAthleteMode
+    ? FATIGUE_RECOVERY_RATE * ENHANCED_RECOVERY_MULTIPLIER
+    : FATIGUE_RECOVERY_RATE;
+}
 
 // ============================================
 // READINESS ASSESSMENT

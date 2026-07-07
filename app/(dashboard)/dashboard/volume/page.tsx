@@ -3,12 +3,12 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
-import { Toggle } from '@/components/ui/Toggle';
 import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
-import { BASELINE_VOLUME_RECOMMENDATIONS, setEnhancedStatus } from '@/src/lib/training/adaptive-volume';
+import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
+import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { MUSCLE_GROUPS } from '@/types/schema';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
@@ -135,7 +135,7 @@ export default function VolumeProfilePage() {
     fatigueAlerts,
     latestAnalysis,
     isLoading,
-    updateProfile,
+    refreshProfile,
   } = useAdaptiveVolume();
 
   const { user } = useUserStore();
@@ -291,34 +291,12 @@ export default function VolumeProfilePage() {
         </div>
       </Card>
 
-      {/* Enhanced Mode Toggle */}
-      <Card className="p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="font-medium text-surface-200">Enhanced Athlete Mode</h4>
-            <p className="text-sm text-surface-500">
-              PEDs significantly increase recovery capacity
-            </p>
-          </div>
-          <Toggle
-            checked={volumeProfile?.isEnhanced ?? false}
-            onChange={(checked) => {
-              if (!volumeProfile) return;
-              const updated = setEnhancedStatus(volumeProfile, checked);
-              updateProfile({
-                isEnhanced: updated.isEnhanced,
-                muscleTolerance: updated.muscleTolerance,
-              });
-            }}
-            disabled={!volumeProfile}
-          />
-        </div>
-        {volumeProfile?.isEnhanced && (
-          <p className="mt-2 text-xs text-primary-400">
-            Volume baselines increased by 40% for enhanced recovery
-          </p>
-        )}
-      </Card>
+      {/* Enhanced Mode Toggle — same persisted profile field as Settings.
+          persistEnhancedAthleteMode syncs this page's volume profile too;
+          refresh so the rescaled MEV/MRV estimates show immediately. */}
+      <div className="mb-6">
+        <EnhancedAthleteModeCard onChanged={() => refreshProfile()} />
+      </div>
 
       {/* Compare to Research */}
       <CompareToResearchCard />

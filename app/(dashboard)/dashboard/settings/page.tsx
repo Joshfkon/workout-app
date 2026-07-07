@@ -18,6 +18,7 @@ import { redeemPromoCode } from '@/lib/actions/promoCodes';
 import { deleteAccount } from '@/lib/actions/account';
 import { updateTrainingPhase, type TrainingPhase } from '@/lib/actions/phase';
 import { GymEquipmentSettings } from '@/components/settings/GymEquipmentSettings';
+import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
@@ -585,6 +586,10 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Enhanced Athlete Mode — physiological profile fact; persists on
+          toggle (not on Save) and prompts if a mesocycle is in progress */}
+      <EnhancedAthleteModeCard />
 
       {/* Save button for Profile tab */}
       <div className="flex justify-end">

@@ -51,7 +51,7 @@ export const SYSTEMIC_FATIGUE_BY_PATTERN: Record<MovementPattern | 'isolation' |
 };
 
 // Import and re-export the shared equipment fatigue multiplier
-import { EQUIPMENT_FATIGUE_MULTIPLIER } from '@/services/shared/fatigueConstants';
+import { EQUIPMENT_FATIGUE_MULTIPLIER, ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 export const EQUIPMENT_FATIGUE_MODIFIER = EQUIPMENT_FATIGUE_MULTIPLIER;
 
 /**
@@ -436,14 +436,14 @@ export class WeeklyFatigueTracker {
   private calculateRecoveryRate(muscle: string): number {
     // Base recovery: clear ~30 fatigue points per day
     let rate = 30;
-    
+
     // Adjust by age
     if (this.profile.age >= 45) rate *= 0.85;
     if (this.profile.age >= 55) rate *= 0.75;
-    
+
     // Adjust by sleep
     rate *= 0.7 + (this.profile.sleepQuality / 5) * 0.6;
-    
+
     // Fiber type affects recovery
     // Use type assertion since muscle may be any muscle group format
     const fiberType = (MUSCLE_FIBER_PROFILE as Record<string, string>)[muscle] ?? 'mixed';
@@ -452,7 +452,14 @@ export class WeeklyFatigueTracker {
     } else if (fiberType === 'slow') {
       rate *= 1.1;  // Slow-twitch recovers faster
     }
-    
+
+    // Enhanced athletes clear muscular fatigue faster between sessions.
+    // This affects the recovery time-constant only — session fatigue costs
+    // and the joint-stress-driven limits elsewhere are untouched.
+    if (this.profile.enhancedAthleteMode) {
+      rate *= ENHANCED_RECOVERY_MULTIPLIER;
+    }
+
     return rate;
   }
   

@@ -533,6 +533,9 @@ export default function WorkoutPage() {
   const [sanityCheckResult, setSanityCheckResult] = useState<SanityCheckResult | null>(null);
   const [calibrationResult, setCalibrationResult] = useState<CalibrationResult | null>(null);
   const [calibrationEngine, setCalibrationEngine] = useState(() => new RPECalibrationEngine());
+  // Enhanced Athlete Mode (users.enhanced_athlete_mode): raises the sandbagging
+  // threshold and drives the connective-tissue cap note on exercise cards.
+  const [enhancedAthleteModeActive, setEnhancedAthleteModeActive] = useState(false);
   const calibrationEngineRef = useRef<RPECalibrationEngine>(calibrationEngine);
   const [amrapSuggestion, setAmrapSuggestion] = useState<{
     exerciseName: string;
@@ -1294,6 +1297,16 @@ export default function WorkoutPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Enhanced athletes need a higher sandbagging threshold (recovered
+        // sessions legitimately beat fatigued-week predictions by more).
+        const { data: userRow } = await supabase
+          .from('users')
+          .select('enhanced_athlete_mode')
+          .eq('id', user.id)
+          .single();
+        const enhancedAthleteMode = userRow?.enhanced_athlete_mode === true;
+        setEnhancedAthleteModeActive(enhancedAthleteMode);
+
         // Load set logs from the last 4 weeks for calibration
         const fourWeeksAgo = new Date();
         fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
@@ -1368,7 +1381,7 @@ export default function WorkoutPage() {
 
         // Process sets in chronological order to build up calibration results
         // The engine needs to process sets sequentially so AMRAPs can compare to previous sets
-        const engine = new RPECalibrationEngine([], []);
+        const engine = new RPECalibrationEngine([], [], { enhancedAthleteMode });
         
         // Sort logs by timestamp to process chronologically
         const sortedLogs = [...calibrationLogs].sort((a, b) => 
@@ -4546,10 +4559,11 @@ export default function WorkoutPage() {
                     <div className="space-y-3">
                     <ExerciseCard
                     exercise={block.exercise}
-                    block={addingExtraSet === block.id 
+                    block={addingExtraSet === block.id
                       ? { ...block, targetSets: block.targetSets + 1 }  // Add one more set when adding extra
                       : block
                     }
+                    enhancedAthleteMode={enhancedAthleteModeActive}
                     sets={blockSets}
                     onSetComplete={async (data) => {
                       const setId = await handleSetComplete(data);

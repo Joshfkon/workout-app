@@ -38,6 +38,7 @@ import {
   STANDARD_MUSCLE_GROUPS,
   isStandardMuscle,
   legacyToStandardMuscles,
+  scaleLandmarksForEnhanced,
 } from '@/types/schema';
 import type {
   Experience,
@@ -68,7 +69,8 @@ export interface RolloverSession {
 export interface BlockSetAdjustment {
   muscle: StandardMuscleGroup;
   action: 'add' | 'remove';
-  delta: 1 | -1;
+  /** Signed set change (+1, +2 for enhanced athletes, or -1). */
+  delta: number;
   /** Sets to prescribe for the affected exercise after the delta (>= 1). */
   adjustedSets: number;
   /** Suggestion-reason suffix, e.g. "+1 set Upper Chest — recovering well…". */
@@ -103,6 +105,8 @@ export interface PlanWeeklySetAdjustmentsInput {
   landmarksByMuscle: Record<StandardMuscleGroup, VolumeLandmarks>;
   weekInMeso: number;
   isDeloadWeek: boolean;
+  /** Enhanced Athlete Mode: steeper weekly set ramp (see weeklyProgressionEngine). */
+  enhancedAthleteMode?: boolean;
 }
 
 // ============================================================
@@ -145,32 +149,44 @@ export function computeWeeklySetsByMuscle(
 
 /**
  * Effective landmarks: experience-level defaults overlaid with any per-user
- * custom landmarks (users.volume_landmarks JSONB, keyed by standard muscle).
+ * custom landmarks (users.volume_landmarks JSONB, keyed by standard muscle),
+ * then run through the central Enhanced Athlete Mode scaling. Stored custom
+ * landmarks are always natural-athlete values — scaling happens here, at
+ * derivation time, so toggling the mode never mutates stored numbers.
  */
 export function resolveVolumeLandmarks(
   experience: Experience,
-  customLandmarks?: Record<string, unknown> | null
+  customLandmarks?: Record<string, unknown> | null,
+  enhancedAthleteMode?: boolean
 ): Record<StandardMuscleGroup, VolumeLandmarks> {
   const defaults = DEFAULT_VOLUME_LANDMARKS[experience];
-  if (!customLandmarks || typeof customLandmarks !== 'object') return defaults;
 
   const merged: Record<StandardMuscleGroup, VolumeLandmarks> = { ...defaults };
-  for (const [muscle, value] of Object.entries(customLandmarks)) {
-    if (!isStandardMuscle(muscle) || value === null || typeof value !== 'object') continue;
-    const v = value as Partial<VolumeLandmarks>;
-    if (typeof v.mev === 'number' && typeof v.mav === 'number' && typeof v.mrv === 'number') {
-      merged[muscle] = { mev: v.mev, mav: v.mav, mrv: v.mrv };
+  if (customLandmarks && typeof customLandmarks === 'object') {
+    for (const [muscle, value] of Object.entries(customLandmarks)) {
+      if (!isStandardMuscle(muscle) || value === null || typeof value !== 'object') continue;
+      const v = value as Partial<VolumeLandmarks>;
+      if (typeof v.mev === 'number' && typeof v.mav === 'number' && typeof v.mrv === 'number') {
+        merged[muscle] = { mev: v.mev, mav: v.mav, mrv: v.mrv };
+      }
     }
   }
-  return merged;
+
+  if (!enhancedAthleteMode) return merged;
+  const scaled = {} as Record<StandardMuscleGroup, VolumeLandmarks>;
+  for (const muscle of STANDARD_MUSCLE_GROUPS) {
+    scaled[muscle] = scaleLandmarksForEnhanced(merged[muscle], true);
+  }
+  return scaled;
 }
 
 function adjustmentLabel(muscle: StandardMuscleGroup, delta: number, reason: string): string {
   // Engine "remove" reasons start with "Removing a set — "; strip the
   // action prefix since the label already carries the signed delta.
-  const cleaned = reason.replace(/^(Adding|Removing) a set — /i, '');
-  const sign = delta > 0 ? '+1' : '-1';
-  return `${sign} set ${STANDARD_MUSCLE_DISPLAY_NAMES[muscle]} — ${cleaned}`;
+  const cleaned = reason.replace(/^(Adding|Removing) (a set|\d+ sets) — /i, '');
+  const sign = delta > 0 ? `+${delta}` : `${delta}`;
+  const noun = Math.abs(delta) === 1 ? 'set' : 'sets';
+  return `${sign} ${noun} ${STANDARD_MUSCLE_DISPLAY_NAMES[muscle]} — ${cleaned}`;
 }
 
 /**
@@ -210,6 +226,7 @@ export function planWeeklySetAdjustments(
       performanceTrend: trendByMuscle.get(muscle) ?? 'flat',
       weekInMeso: input.weekInMeso,
       isDeloadWeek: input.isDeloadWeek,
+      enhancedAthleteMode: input.enhancedAthleteMode,
     });
 
     summary.push({
@@ -220,7 +237,7 @@ export function planWeeklySetAdjustments(
     });
 
     if (recommendation.delta === 0) continue;
-    const delta: 1 | -1 = recommendation.delta > 0 ? 1 : -1;
+    const delta = recommendation.delta > 0 ? recommendation.delta : -1;
 
     // Walk the week's exercises from the end, looking for the last one that
     // targets this muscle as primary (and, for removals, still has >1 set).
@@ -241,7 +258,7 @@ export function planWeeklySetAdjustments(
 
     byExercise.set(target.key, {
       muscle,
-      action: delta === 1 ? 'add' : 'remove',
+      action: delta > 0 ? 'add' : 'remove',
       delta,
       adjustedSets: Math.max(1, target.sets + delta),
       label: adjustmentLabel(muscle, delta, recommendation.reason),
