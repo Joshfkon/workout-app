@@ -175,6 +175,7 @@ interface UserProfile {
   goal: Goal;
   experience: Experience;
   targetBodyFatPercent: number | null;
+  targetWeightKg: number | null;
 }
 
 /** Raw inputs for the muscle-group progression card (services/progressionInsights) */
@@ -518,7 +519,7 @@ function AnalyticsPageContent() {
           // User profile
           supabase
             .from('users')
-            .select('height_cm, goal, experience, target_body_fat_percent, sex')
+            .select('height_cm, goal, experience, target_body_fat_percent, target_weight_kg, sex')
             .eq('id', user.id)
             .single(),
           // DEXA scans
@@ -552,6 +553,7 @@ function AnalyticsPageContent() {
             goal: profile.goal || 'maintenance',
             experience: profile.experience || 'intermediate',
             targetBodyFatPercent: profile.target_body_fat_percent,
+            targetWeightKg: profile.target_weight_kg,
           });
           setSex(profile.sex || 'male');
         }
@@ -1437,7 +1439,15 @@ function AnalyticsPageContent() {
               targetBodyFatPercent: activeTarget.targetBodyFatPercent ?? null,
               targetFfmi: activeTarget.targetFfmi ?? null,
             }
-          : null
+          : userProfile?.targetBodyFatPercent
+            ? {
+                // Fallback: profile-level targets (users table). A named
+                // composition target wins when one is active.
+                targetWeightKg: userProfile.targetWeightKg ?? null,
+                targetBodyFatPercent: userProfile.targetBodyFatPercent,
+                targetFfmi: null,
+              }
+            : null
       }
       phaseStartDate={activeTarget?.createdAt ?? null}
       initialMetric={

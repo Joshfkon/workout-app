@@ -30,10 +30,36 @@ import {
   CompositionMap,
   buildDecorations,
   formatMonthYear,
+  NOW_LABEL_COLOR,
+  LABEL_PILL_COLOR,
   type DecorationsData,
 } from '@/components/body/CompositionMap';
+import {
+  labelBox,
+  estimateTextWidth,
+  rectIntersectsSegment,
+  rectIntersectsCircle,
+  type PxPoint,
+} from '@/components/body/compositionMapGeometry';
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
-import type { CompositionPoint } from '@/services/compositionSpace';
+import {
+  visibleIsoBmiSegments,
+  COMPOSITION_MAP_FFMI_THRESHOLDS,
+  type CompositionPoint,
+} from '@/services/compositionSpace';
+
+/** WCAG 2.x contrast ratio between two hex colors. */
+function contrastRatio(hexA: string, hexB: string): number {
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [hi, lo] = [luminance(hexA), luminance(hexB)].sort((a, b) => b - a);
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 const scan = (
   date: string,
@@ -102,10 +128,34 @@ describe('CompositionMap', () => {
     expect(screen.getByText(/p-ratio suppressed/)).toBeInTheDocument();
   });
 
-  it('labels sub-noise-floor deltas instead of interpreting them', () => {
-    // Δweight 4 kg but Δlean only 0.5 kg (< 1.5 lb floor).
+  it('resolves a one-sided delta as "essentially all fat" instead of blanket noise', () => {
+    // Δweight 4 kg but Δlean only 0.5 kg (< 1.5 lb floor): the fat side is
+    // clear, so the segment is attributable — not measurement noise.
     renderMap({
       trend: [scan('2026-01-05', 60, 15, 78), scan('2026-06-01', 60.5, 18.5, 82)],
+    });
+    expect(screen.getByText(/essentially all fat/)).toBeInTheDocument();
+    expect(screen.queryByText(/within measurement noise/)).not.toBeInTheDocument();
+  });
+
+  it('shows "essentially all fat" for the Dec→Mar −7.5 lb cut with flat lean', () => {
+    renderMap({
+      phase: 'cut',
+      trend: [scan('2025-12-03', 63, 17, 83.4), scan('2026-03-15', 62.8, 13.8, 80)],
+    });
+    expect(screen.getByText(/essentially all fat/)).toBeInTheDocument();
+  });
+
+  it('shows "essentially all lean" when only the fat side is flat', () => {
+    renderMap({
+      trend: [scan('2026-01-05', 60, 15, 78), scan('2026-06-01', 63.5, 15.2, 81.7)],
+    });
+    expect(screen.getByText(/essentially all lean/)).toBeInTheDocument();
+  });
+
+  it('keeps the blanket noise label when both components are inside the floors', () => {
+    renderMap({
+      trend: [scan('2026-01-05', 60, 15, 78), scan('2026-06-01', 60.5, 15.5, 79.5)],
     });
     expect(screen.getByText(/within measurement noise/)).toBeInTheDocument();
   });
@@ -221,6 +271,16 @@ describe('CompositionMap decorations (direction cues)', () => {
     point('2026-06-02', 7.8, 23.8),
   ];
 
+  // A daily-estimate scribble wandering near the early path — the kind of
+  // geometry labels used to land on.
+  const trail = [
+    point('2025-03-20', 3.05, 17.1),
+    point('2025-04-10', 3.25, 17.25),
+    point('2025-05-01', 3.15, 17.45),
+    point('2025-05-20', 3.4, 17.6),
+    point('2025-06-10', 3.48, 17.75),
+  ];
+
   const baseData: DecorationsData = {
     domain,
     scanPoints: fiveScans,
@@ -257,13 +317,13 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(transform).toContain('translate(115, 251)');
   });
 
-  it('labels the endpoints and flips them away from edges (start top-right, now bottom-left)', () => {
+  it('labels the endpoints, flipped away from edges and the path', () => {
     renderDecorations();
     const start = screen.getByTestId('map-start-label');
     expect(start).toHaveTextContent("Start · Mar '25");
-    // Start point at px(100, 265): label right-above.
+    // Start point at px(100, 265): label sits to the right, dodging the
+    // outgoing path segment that runs up-right from the point.
     expect(Number(start.getAttribute('x'))).toBeGreaterThan(100);
-    expect(Number(start.getAttribute('y'))).toBeLessThan(265);
     expect(start.getAttribute('text-anchor')).toBe('start');
 
     const now = screen.getByTestId('map-now-label');
@@ -272,6 +332,96 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(Number(now.getAttribute('x'))).toBeLessThan(388);
     expect(Number(now.getAttribute('y'))).toBeGreaterThan(27);
     expect(now.getAttribute('text-anchor')).toBe('end');
+  });
+
+  it('renders the Start/Now labels full-contrast on background pills', () => {
+    renderDecorations();
+    expect(screen.getByTestId('map-start-label-pill')).toBeInTheDocument();
+    expect(screen.getByTestId('map-now-label-pill')).toBeInTheDocument();
+    // The Now label keeps its full-contrast fill — never a faded variant.
+    expect(screen.getByTestId('map-now-label').getAttribute('fill')).toBe(NOW_LABEL_COLOR);
+    const pill = screen.getByTestId('map-now-label-pill');
+    expect(pill.getAttribute('fill')).toBe(LABEL_PILL_COLOR);
+    // WCAG contrast of the label color over its pill ≥ 4.5:1.
+    expect(contrastRatio(NOW_LABEL_COLOR, LABEL_PILL_COLOR)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps every label clear of chart geometry, or backs it with a pill', () => {
+    renderDecorations({
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabel: 'Target · FFMI 22.5 / BF 22%',
+      progressLabel: '62% of the way',
+      showGoalVector: true,
+      trailPoints: trail,
+    });
+
+    // Reconstruct the geometry the decorations drew, in pixels.
+    const segments: Array<{ a: PxPoint; b: PxPoint }> = [];
+    for (let i = 1; i < fiveScans.length; i++) {
+      segments.push({
+        a: { x: xScale(fiveScans[i - 1].fmi), y: yScale(fiveScans[i - 1].ffmi) },
+        b: { x: xScale(fiveScans[i].fmi), y: yScale(fiveScans[i].ffmi) },
+      });
+    }
+    for (let i = 1; i < trail.length; i++) {
+      segments.push({
+        a: { x: xScale(trail[i - 1].fmi), y: yScale(trail[i - 1].ffmi) },
+        b: { x: xScale(trail[i].fmi), y: yScale(trail[i].ffmi) },
+      });
+    }
+    for (const seg of visibleIsoBmiSegments(domain)) {
+      segments.push({
+        a: { x: xScale(seg.x1), y: yScale(seg.y1) },
+        b: { x: xScale(seg.x2), y: yScale(seg.y2) },
+      });
+    }
+    for (const t of COMPOSITION_MAP_FFMI_THRESHOLDS.filter(
+      (v) => v > domain.y[0] && v < domain.y[1]
+    )) {
+      segments.push({
+        a: { x: xScale(domain.x[0]), y: yScale(t) },
+        b: { x: xScale(domain.x[1]), y: yScale(t) },
+      });
+    }
+    const circles = fiveScans.map((p, i) => ({
+      x: xScale(p.fmi),
+      y: yScale(p.ffmi),
+      r: i === fiveScans.length - 1 ? 9 : i === 0 ? 4.5 : 4,
+    }));
+
+    const labels = [
+      'map-start-label',
+      'map-now-label',
+      'map-target-label',
+      ...screen.getAllByTestId('map-month-label').map(() => 'map-month-label'),
+    ];
+    const elements = [
+      screen.getByTestId('map-start-label'),
+      screen.getByTestId('map-now-label'),
+      screen.getByTestId('map-target-label'),
+      ...screen.getAllByTestId('map-month-label'),
+    ];
+    expect(labels.length).toBeGreaterThanOrEqual(6); // 3 named + 3 months
+
+    for (const el of elements) {
+      const testid = el.getAttribute('data-testid')!;
+      const hasPill = el.parentElement?.querySelector(`[data-testid="${testid}-pill"]`);
+      if (hasPill) continue; // pill guarantees legibility wherever it sits
+      const fontSize = Number(el.getAttribute('font-size') ?? 9);
+      const box = labelBox(
+        Number(el.getAttribute('x')),
+        Number(el.getAttribute('y')),
+        (el.getAttribute('text-anchor') ?? 'start') as 'start' | 'middle' | 'end',
+        estimateTextWidth(el.textContent ?? '', fontSize),
+        fontSize + 2
+      );
+      for (const seg of segments) {
+        expect(rectIntersectsSegment(box, seg.a, seg.b)).toBe(false);
+      }
+      for (const c of circles) {
+        expect(rectIntersectsCircle(box, c, c.r)).toBe(false);
+      }
+    }
   });
 
   it('draws the dashed goal vector from the latest point with target + progress labels', () => {

@@ -1,8 +1,9 @@
 /**
  * compositionMapGeometry — pixel-space direction cues for the Composition
- * Map: arrowhead placement/rotation along travel direction, and label
- * placement that stays inside the plot and flips to the other side of the
- * point instead of colliding with reference lines or axis text.
+ * Map: arrowhead placement/rotation along travel direction, rect-vs-geometry
+ * intersection tests, and 8-candidate label placement that dodges the path,
+ * trail, points, and reference lines — falling back to `clear: false` (the
+ * caller adds a background pill) instead of fading or dropping the label.
  */
 
 import {
@@ -10,6 +11,9 @@ import {
   pointToSegmentDistance,
   placeLabel,
   estimateTextWidth,
+  labelBox,
+  rectIntersectsSegment,
+  rectIntersectsCircle,
   type PlotRect,
 } from '@/components/body/compositionMapGeometry';
 
@@ -47,11 +51,49 @@ describe('pointToSegmentDistance', () => {
   });
 });
 
+describe('rectIntersectsSegment', () => {
+  const rect = labelBox(100, 100, 'start', 50, 11); // x [100,150], y [89,100]
+
+  it('detects a segment crossing straight through', () => {
+    expect(rectIntersectsSegment(rect, { x: 90, y: 95 }, { x: 160, y: 95 })).toBe(true);
+  });
+
+  it('detects a diagonal cutting a corner', () => {
+    expect(rectIntersectsSegment(rect, { x: 95, y: 85 }, { x: 110, y: 105 })).toBe(true);
+  });
+
+  it('detects an endpoint inside the rect', () => {
+    expect(rectIntersectsSegment(rect, { x: 120, y: 95 }, { x: 300, y: 300 })).toBe(true);
+  });
+
+  it('rejects a segment passing cleanly by', () => {
+    expect(rectIntersectsSegment(rect, { x: 0, y: 200 }, { x: 400, y: 200 })).toBe(false);
+    expect(rectIntersectsSegment(rect, { x: 160, y: 0 }, { x: 160, y: 300 })).toBe(false);
+    // Diagonal near, but not touching, the corner.
+    expect(rectIntersectsSegment(rect, { x: 40, y: 84 }, { x: 98, y: 26 })).toBe(false);
+  });
+});
+
+describe('rectIntersectsCircle', () => {
+  const rect = labelBox(100, 100, 'start', 50, 11);
+
+  it('detects overlap via the nearest rect point', () => {
+    expect(rectIntersectsCircle(rect, { x: 95, y: 95 }, 6)).toBe(true); // left edge
+    expect(rectIntersectsCircle(rect, { x: 125, y: 95 }, 3)).toBe(true); // inside
+  });
+
+  it('rejects a circle clear of the rect', () => {
+    expect(rectIntersectsCircle(rect, { x: 95, y: 95 }, 4)).toBe(false);
+    expect(rectIntersectsCircle(rect, { x: 200, y: 200 }, 20)).toBe(false);
+  });
+});
+
 describe('placeLabel', () => {
   it('prefers right-above the point when nothing is in the way', () => {
     const placement = placeLabel({ x: 100, y: 265 }, PLOT, "Start · Mar '25");
     expect(placement.side).toBe('right-above');
     expect(placement.anchor).toBe('start');
+    expect(placement.clear).toBe(true);
     expect(placement.x).toBeGreaterThan(100);
     expect(placement.y).toBeLessThan(265);
   });
@@ -59,6 +101,7 @@ describe('placeLabel', () => {
   it('flips to the left of the point near the right plot edge', () => {
     const placement = placeLabel({ x: 395, y: 150 }, PLOT, 'Now · Jun 2');
     expect(placement.anchor).toBe('end');
+    expect(placement.clear).toBe(true);
     expect(placement.x).toBeLessThan(395);
   });
 
@@ -68,19 +111,45 @@ describe('placeLabel', () => {
     expect(placement.y).toBeGreaterThan(27);
   });
 
-  it('flips off a reference line running under the preferred spot', () => {
+  it('dodges a path segment running under the preferred spot', () => {
     const point = { x: 100, y: 265 };
-    // Horizontal line right where the right-above label would sit.
+    // Horizontal segment right where the right-above label would sit.
     const placement = placeLabel(point, PLOT, 'Start', {
-      avoidLines: [{ x1: PLOT.left, y1: 252, x2: PLOT.right, y2: 252 }],
+      avoidSegments: [{ x1: PLOT.left, y1: 252, x2: PLOT.right, y2: 252 }],
     });
     expect(placement.side).not.toBe('right-above');
+    expect(placement.clear).toBe(true);
+  });
+
+  it('dodges point markers, not just lines', () => {
+    const point = { x: 100, y: 265 };
+    // A big marker sitting right-above forces the label elsewhere.
+    const placement = placeLabel(point, PLOT, 'May', {
+      avoidPoints: [{ x: 125, y: 252, r: 9 }],
+    });
+    expect(placement.side).not.toBe('right-above');
+    expect(placement.clear).toBe(true);
+  });
+
+  it('reports clear: false when every candidate collides (caller adds a pill)', () => {
+    const point = { x: 200, y: 150 };
+    // Dense hatch of segments over the whole neighborhood.
+    const avoidSegments = Array.from({ length: 40 }, (_, i) => ({
+      x1: 120,
+      y1: 100 + i * 3,
+      x2: 280,
+      y2: 100 + i * 3,
+    }));
+    const placement = placeLabel(point, PLOT, 'Dec', { avoidSegments });
+    expect(placement.clear).toBe(false);
+    expect(Number.isFinite(placement.x)).toBe(true);
+    expect(placement.anchor).toMatch(/start|middle|end/);
   });
 
   it('always returns a placement, even when every candidate is cramped', () => {
     const tiny: PlotRect = { left: 0, right: 30, top: 0, bottom: 20 };
     const placement = placeLabel({ x: 15, y: 10 }, tiny, 'A long label that fits nowhere');
-    expect(placement.anchor).toMatch(/start|end/);
+    expect(placement.clear).toBe(false);
     expect(Number.isFinite(placement.x)).toBe(true);
   });
 

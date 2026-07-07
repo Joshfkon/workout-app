@@ -33,7 +33,10 @@ import {
 import {
   arrowAt,
   placeLabel,
+  estimateTextWidth,
   type AvoidLine,
+  type AvoidPoint,
+  type LabelPlacement,
   type PlotRect,
 } from '@/components/body/compositionMapGeometry';
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
@@ -75,6 +78,73 @@ const SCAN_COLOR = '#22d3ee';
 const TRAIL_COLOR = '#818cf8';
 const TARGET_COLOR = '#f59e0b';
 
+/** Full-contrast Now label — never de-emphasized, whatever it lands on. */
+export const NOW_LABEL_COLOR = '#f3f4f6';
+export const START_LABEL_COLOR = '#d1d5db';
+/** Pill behind key labels: chart background tone, slightly translucent so
+ * geometry reads through around (not under) the text. */
+export const LABEL_PILL_COLOR = '#111827';
+export const LABEL_PILL_OPACITY = 0.88;
+
+/**
+ * Chart label with an optional background pill. The pill guarantees
+ * legibility over any geometry the label lands on — used always for the
+ * Start/Now/Target labels, and as the fallback for intermediate labels
+ * whose 8 placement candidates all collided.
+ */
+function MapLabel({
+  placement,
+  text,
+  fill,
+  fontSize = 9,
+  fontWeight,
+  pill,
+  testid,
+}: {
+  placement: LabelPlacement;
+  text: string;
+  fill: string;
+  fontSize?: number;
+  fontWeight?: number;
+  pill: boolean;
+  testid: string;
+}) {
+  const width = estimateTextWidth(text, fontSize);
+  const boxX =
+    placement.anchor === 'start'
+      ? placement.x
+      : placement.anchor === 'end'
+        ? placement.x - width
+        : placement.x - width / 2;
+  return (
+    <g>
+      {pill && (
+        <rect
+          data-testid={`${testid}-pill`}
+          x={boxX - 4}
+          y={placement.y - fontSize - 3}
+          width={width + 8}
+          height={fontSize + 6}
+          rx={3}
+          fill={LABEL_PILL_COLOR}
+          fillOpacity={LABEL_PILL_OPACITY}
+        />
+      )}
+      <text
+        data-testid={testid}
+        x={placement.x}
+        y={placement.y}
+        textAnchor={placement.anchor}
+        fill={fill}
+        fontSize={fontSize}
+        fontWeight={fontWeight}
+      >
+        {text}
+      </text>
+    </g>
+  );
+}
+
 function formatDateShort(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
     month: 'short',
@@ -100,10 +170,20 @@ function formatDeltaWeight(deltaKg: number, units: 'lb' | 'kg'): string {
   return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)} ${units}`;
 }
 
-/** "Mar 3 → Jul 1: +2.2 lb, 68% lean" fraction part, phase-framed. */
+/**
+ * "Mar 3 → Jul 1: +2.2 lb, 68% lean" fraction part, phase-framed.
+ *
+ * Noise gating is per-component: the blanket "within measurement noise"
+ * only applies when BOTH the lean and fat deltas sit inside DEXA
+ * repeatability. One flat component with a clear weight change is itself
+ * the finding — a −7.5 lb loss with lean unchanged is "essentially all
+ * fat", not noise.
+ */
 function fractionText(pair: ScanPairPRatio): string {
   if (pair.suppressed) return 'Δ weight under 3 lb — p-ratio suppressed';
   if (pair.withinNoise) return 'within measurement noise';
+  if (pair.leanWithinNoise) return 'essentially all fat';
+  if (pair.fatWithinNoise) return 'essentially all lean';
   if (pair.deltaWeightKg > 0) {
     return `${Math.round((pair.leanFraction ?? 0) * 100)}% of gain was lean`;
   }
@@ -217,25 +297,37 @@ export function buildDecorations(data: DecorationsData) {
     const visibleThresholds = COMPOSITION_MAP_FFMI_THRESHOLDS.filter(
       (t) => t > domain.y[0] && t < domain.y[1]
     );
-    const avoidLines: AvoidLine[] = [
-      ...isoSegments.map((seg) => ({
-        x1: xScale(seg.x1),
-        y1: yScale(seg.y1),
-        x2: xScale(seg.x2),
-        y2: yScale(seg.y2),
-      })),
+    const toSegment = (a: { x: number; y: number }, b: { x: number; y: number }): AvoidLine => ({
+      x1: a.x,
+      y1: a.y,
+      x2: b.x,
+      y2: b.y,
+    });
+    // Labels avoid ALL chart geometry, not just reference lines: the scan
+    // path, the estimate trail, and the point markers themselves.
+    const avoidSegments: AvoidLine[] = [
+      ...isoSegments.map((seg) =>
+        toSegment({ x: xScale(seg.x1), y: yScale(seg.y1) }, { x: xScale(seg.x2), y: yScale(seg.y2) })
+      ),
       ...visibleThresholds.map((t) => ({
         x1: plot.left,
         y1: yScale(t),
         x2: plot.right,
         y2: yScale(t),
       })),
+      ...scanPoints.slice(1).map((p, i) => toSegment(px(scanPoints[i]), px(p))),
+      ...trailPoints.slice(1).map((p, i) => toSegment(px(trailPoints[i]), px(p))),
     ];
+    const avoidPoints: AvoidPoint[] = scanPoints.map((p, i) => ({
+      ...px(p),
+      r: i === scanPoints.length - 1 ? 9 : i === 0 ? 4.5 : 4,
+    }));
+    const avoidOptions = { avoidSegments, avoidPoints };
 
     const startPx = px(scanPoints[0]);
     const nowPx = px(scanPoints[scanPoints.length - 1]);
-    const startPlacement = placeLabel(startPx, plot, startLabel, { avoidLines });
-    const nowPlacement = placeLabel(nowPx, plot, nowLabel, { avoidLines });
+    const startPlacement = placeLabel(startPx, plot, startLabel, avoidOptions);
+    const nowPlacement = placeLabel(nowPx, plot, nowLabel, avoidOptions);
 
     return (
       <g>
@@ -303,9 +395,6 @@ export function buildDecorations(data: DecorationsData) {
             never hides where the target sits. */}
         {targetPoint && (() => {
           const targetPx = px(targetPoint);
-          const targetPlacement = targetLabel
-            ? placeLabel(targetPx, plot, targetLabel, { avoidLines })
-            : null;
           return (
             <g>
               <circle
@@ -318,17 +407,14 @@ export function buildDecorations(data: DecorationsData) {
                 strokeWidth={2}
               />
               <circle cx={targetPx.x} cy={targetPx.y} r={1.5} fill={TARGET_COLOR} />
-              {targetPlacement && (
-                <text
-                  data-testid="map-target-label"
-                  x={targetPlacement.x}
-                  y={targetPlacement.y}
-                  textAnchor={targetPlacement.anchor}
+              {targetLabel && (
+                <MapLabel
+                  placement={placeLabel(targetPx, plot, targetLabel, avoidOptions)}
+                  text={targetLabel}
                   fill={TARGET_COLOR}
-                  fontSize={9}
-                >
-                  {targetLabel}
-                </text>
+                  pill
+                  testid="map-target-label"
+                />
               )}
             </g>
           );
@@ -418,52 +504,48 @@ export function buildDecorations(data: DecorationsData) {
         })}
 
         {/* Intermediate scan month labels — only when the map is sparse
-            enough to stay legible (≤5 scans); tap covers the rest. */}
+            enough to stay legible (≤5 scans); tap covers the rest. Labels
+            dodge the path/trail/points; a background pill is the fallback
+            when all 8 candidate spots collide. */}
         {showIntermediateLabels &&
           scanPoints.slice(1, -1).map((p) => {
-            const placement = placeLabel(px(p), plot, formatMonth(p.date), {
-              avoidLines,
+            const text = formatMonth(p.date);
+            const placement = placeLabel(px(p), plot, text, {
+              ...avoidOptions,
               fontSize: 8,
             });
             return (
-              <text
+              <MapLabel
                 key={`mid-${p.date}`}
-                data-testid="map-month-label"
-                x={placement.x}
-                y={placement.y}
-                textAnchor={placement.anchor}
+                placement={placement}
+                text={text}
                 fill="#9ca3af"
                 fontSize={8}
-                opacity={0.75}
-              >
-                {formatMonth(p.date)}
-              </text>
+                pill={!placement.clear}
+                testid="map-month-label"
+              />
             );
           })}
 
-        {/* Labeled endpoints: where the journey starts and where it is now. */}
-        <text
-          data-testid="map-start-label"
-          x={startPlacement.x}
-          y={startPlacement.y}
-          textAnchor={startPlacement.anchor}
-          fill="#9ca3af"
-          fontSize={9}
+        {/* Labeled endpoints: where the journey starts and where it is now.
+            Both always sit on a background pill — the Now label especially
+            must stay full-contrast over the trail or any other geometry. */}
+        <MapLabel
+          placement={startPlacement}
+          text={startLabel}
+          fill={START_LABEL_COLOR}
           fontWeight={500}
-        >
-          {startLabel}
-        </text>
-        <text
-          data-testid="map-now-label"
-          x={nowPlacement.x}
-          y={nowPlacement.y}
-          textAnchor={nowPlacement.anchor}
-          fill="#f3f4f6"
-          fontSize={9}
+          pill
+          testid="map-start-label"
+        />
+        <MapLabel
+          placement={nowPlacement}
+          text={nowLabel}
+          fill={NOW_LABEL_COLOR}
           fontWeight={600}
-        >
-          {nowLabel}
-        </text>
+          pill
+          testid="map-now-label"
+        />
       </g>
     );
   };

@@ -290,29 +290,65 @@ describe('computeScanPairPRatios', () => {
     expect(pairs[0].fatFraction).toBeCloseTo(0.32, 2);
   });
 
-  it('labels a small lean delta as within measurement noise', () => {
+  it('flags a flat lean component without blanket-suppressing the segment', () => {
     const pairs = computeScanPairPRatios(
       [
         { date: '2026-01-05', leanMassKg: 60, fatMassKg: 15, weightKg: 78, bodyFatPercent: 19.0 },
-        // Big enough Δweight, but Δlean 0.5 kg < 1.5 lb floor.
+        // Big Δweight, Δlean 0.5 kg < 1.5 lb floor, fat clearly up: the
+        // change is attributable (essentially all fat), NOT noise.
         { date: '2026-06-01', leanMassKg: 60.5, fatMassKg: 18.5, weightKg: 82, bodyFatPercent: 22.5 },
       ],
       180
     );
     expect(Math.abs(pairs[0].deltaLeanKg)).toBeLessThan(NOISE_FLOOR_LEAN_KG);
-    expect(pairs[0].suppressed).toBe(false);
-    expect(pairs[0].withinNoise).toBe(true);
+    expect(pairs[0].leanWithinNoise).toBe(true);
+    expect(pairs[0].fatWithinNoise).toBe(false);
+    expect(pairs[0].withinNoise).toBe(false);
   });
 
-  it('labels a sub-1% BF delta as within measurement noise', () => {
+  it('flags a flat fat component symmetrically (essentially all lean)', () => {
     const pairs = computeScanPairPRatios(
       [
         { date: '2026-01-05', leanMassKg: 60, fatMassKg: 15, weightKg: 78, bodyFatPercent: 19.2 },
-        { date: '2026-06-01', leanMassKg: 63, fatMassKg: 16, weightKg: 82, bodyFatPercent: 19.9 },
+        { date: '2026-06-01', leanMassKg: 63.5, fatMassKg: 15.2, weightKg: 81.7, bodyFatPercent: 18.6 },
       ],
       180
     );
+    expect(pairs[0].leanWithinNoise).toBe(false);
+    expect(pairs[0].fatWithinNoise).toBe(true);
+    expect(pairs[0].withinNoise).toBe(false);
+  });
+
+  it('blankets as noise only when BOTH components are inside the floors', () => {
+    const pairs = computeScanPairPRatios(
+      [
+        { date: '2026-01-05', leanMassKg: 60, fatMassKg: 15, weightKg: 78, bodyFatPercent: 19.2 },
+        // Δweight 1.5 kg (just over 3 lb, not suppressed) but lean and fat
+        // each moved < 1.5 lb — the split is unresolvable.
+        { date: '2026-06-01', leanMassKg: 60.5, fatMassKg: 15.5, weightKg: 79.5, bodyFatPercent: 19.5 },
+      ],
+      180
+    );
+    expect(pairs[0].suppressed).toBe(false);
+    expect(pairs[0].leanWithinNoise).toBe(true);
+    expect(pairs[0].fatWithinNoise).toBe(true);
     expect(pairs[0].withinNoise).toBe(true);
+  });
+
+  it('resolves the Dec→Mar −7.5 lb cut with flat lean as attributable fat loss', () => {
+    // The live-feedback case: "Dec 3 → Mar 15, −7.5 lb" must not read as
+    // blanket measurement noise when the loss was essentially all fat.
+    const pairs = computeScanPairPRatios(
+      [
+        { date: '2025-12-03', leanMassKg: 63, fatMassKg: 17, weightKg: 83.4, bodyFatPercent: 20.4 },
+        { date: '2026-03-15', leanMassKg: 62.8, fatMassKg: 13.8, weightKg: 80, bodyFatPercent: 17.3 },
+      ],
+      180
+    );
+    expect(pairs[0].deltaWeightKg).toBeCloseTo(-3.4, 2); // ≈ −7.5 lb
+    expect(pairs[0].leanWithinNoise).toBe(true);
+    expect(pairs[0].withinNoise).toBe(false);
+    expect(pairs[0].fatFraction).toBeCloseTo(0.94, 2);
   });
 
   it('normalizes lean deltas across mixed scan conventions (no false lean loss)', () => {
