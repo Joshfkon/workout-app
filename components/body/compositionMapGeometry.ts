@@ -166,6 +166,10 @@ export interface PlaceLabelOptions {
   fontSize?: number;
   /** Padding added around the label box before intersection tests. */
   clearance?: number;
+  /** Number of text lines in the label block (default 1). The placement's
+   * y is the FIRST line's baseline; further lines stack downward, and
+   * above-the-point candidates shift up so the whole block clears it. */
+  lineCount?: number;
 }
 
 /** Rough text width for the chart's small labels (no canvas in SSR/jsdom). */
@@ -209,15 +213,22 @@ export function placeLabel(
   const clearance = options.clearance ?? 3;
   const avoidSegments = options.avoidSegments ?? [];
   const avoidPoints = options.avoidPoints ?? [];
+  const lineCount = Math.max(1, options.lineCount ?? 1);
+  const lineHeight = fontSize + 2;
   const width = estimateTextWidth(text, fontSize);
-  const height = fontSize + 2;
+  const height = lineHeight * lineCount;
 
   let best: { candidate: Candidate; score: number } | null = null;
 
   for (const candidate of CANDIDATES) {
     const tx = point.x + candidate.dx;
-    const ty = point.y + candidate.dy;
-    const box = labelBox(tx, ty, candidate.anchor, width, height);
+    // Above-the-point spots lift by the extra lines so the block, not just
+    // the first line, clears the point.
+    const ty =
+      point.y +
+      (candidate.dy < 0 ? candidate.dy - (lineCount - 1) * lineHeight : candidate.dy);
+    // Box spans from the first line's top to the last line's baseline.
+    const box = labelBox(tx, ty + (lineCount - 1) * lineHeight, candidate.anchor, width, height);
     const inflated: LabelBox = {
       x0: box.x0 - clearance,
       x1: box.x1 + clearance,
@@ -253,7 +264,9 @@ export function placeLabel(
   const fallback = best?.candidate ?? CANDIDATES[0];
   return {
     x: point.x + fallback.dx,
-    y: point.y + fallback.dy,
+    y:
+      point.y +
+      (fallback.dy < 0 ? fallback.dy - (lineCount - 1) * lineHeight : fallback.dy),
     anchor: fallback.anchor,
     side: fallback.side,
     clear: false,

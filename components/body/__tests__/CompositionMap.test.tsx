@@ -238,6 +238,22 @@ describe('CompositionMap', () => {
     renderMap({ target: { targetWeightKg: 98, targetBodyFatPercent: 25.5 } });
     expect(screen.queryByText(/Set a target/)).not.toBeInTheDocument();
   });
+
+  it('summarizes Latest vs Goal in the footer, with the implied goal weight', () => {
+    renderMap({ target: { targetWeightKg: 98, targetBodyFatPercent: 25.5 } });
+    const footer = screen.getByTestId('map-summary-footer');
+    expect(footer).toHaveTextContent(/Latest \(/);
+    expect(footer).toHaveTextContent('Goal');
+    // Implied weight = (FMI* + FFMI*) · h² — the exact weight the goal
+    // point sits at (a BF%+weight target round-trips to itself).
+    expect(footer).toHaveTextContent(/Implied weight ~98\.0 kg/);
+    expect(footer).toHaveTextContent(/BF 25\.5%/);
+  });
+
+  it('footer nudges toward Goals when no target exists', () => {
+    renderMap({ target: null });
+    expect(screen.getByTestId('map-summary-footer')).toHaveTextContent(/No target set/);
+  });
 });
 
 describe('CompositionMap decorations (direction cues)', () => {
@@ -286,11 +302,11 @@ describe('CompositionMap decorations (direction cues)', () => {
     scanPoints: fiveScans,
     trailPoints: [],
     targetPoint: null,
-    targetLabel: null,
-    progressLabel: null,
+    targetLabelLines: null,
+    vectorLabel: null,
     showGoalVector: false,
     startLabel: "Start · Mar '25",
-    nowLabel: 'Now · Jun 2',
+    nowLabel: 'Latest · Jun 2',
     showIntermediateLabels: true,
   };
 
@@ -327,7 +343,7 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(start.getAttribute('text-anchor')).toBe('start');
 
     const now = screen.getByTestId('map-now-label');
-    expect(now).toHaveTextContent('Now · Jun 2');
+    expect(now).toHaveTextContent('Latest · Jun 2');
     // Now point at px(388, 27), top-right corner: label flips left-below.
     expect(Number(now.getAttribute('x'))).toBeLessThan(388);
     expect(Number(now.getAttribute('y'))).toBeGreaterThan(27);
@@ -349,8 +365,8 @@ describe('CompositionMap decorations (direction cues)', () => {
   it('keeps every label clear of chart geometry, or backs it with a pill', () => {
     renderDecorations({
       targetPoint: { fmi: 6.5, ffmi: 22.5 },
-      targetLabel: 'Target · FFMI 22.5 / BF 22%',
-      progressLabel: '62% of the way',
+      targetLabelLines: ['GOAL', 'FFMI 22.5', 'BF 22%', 'FMI 6.5'],
+      vectorLabel: 'Goal vector · 62%',
       showGoalVector: true,
       trailPoints: trail,
     });
@@ -427,16 +443,22 @@ describe('CompositionMap decorations (direction cues)', () => {
   it('draws the dashed goal vector from the latest point with target + progress labels', () => {
     renderDecorations({
       targetPoint: { fmi: 6.5, ffmi: 22.5 },
-      targetLabel: 'Target · FFMI 22.5 / BF 22%',
-      progressLabel: '62% of the way',
+      targetLabelLines: ['GOAL', 'FFMI 22.5', 'BF 22%', 'FMI 6.5'],
+      vectorLabel: 'Goal vector · 62%',
       showGoalVector: true,
     });
     expect(screen.getByTestId('map-target')).toBeInTheDocument();
     expect(screen.getByTestId('map-goal-arrowhead')).toBeInTheDocument();
-    expect(screen.getByTestId('map-target-label')).toHaveTextContent(
-      'Target · FFMI 22.5 / BF 22%'
-    );
-    expect(screen.getByTestId('map-progress-label')).toHaveTextContent('62% of the way');
+    const goalLabel = screen.getByTestId('map-target-label');
+    expect(goalLabel).toHaveTextContent('GOAL');
+    expect(goalLabel).toHaveTextContent('FFMI 22.5');
+    expect(goalLabel).toHaveTextContent('BF 22%');
+    expect(goalLabel).toHaveTextContent('FMI 6.5');
+    expect(screen.getByTestId('map-target-label-pill')).toBeInTheDocument();
+    const vector = screen.getByTestId('map-vector-label');
+    expect(vector).toHaveTextContent('Goal vector · 62%');
+    // Caption rides the line: rotated about the vector midpoint.
+    expect(vector.getAttribute('transform')).toContain('rotate(');
   });
 
   it('keeps the target marker visible even when the vector is suppressed', () => {
@@ -444,12 +466,12 @@ describe('CompositionMap decorations (direction cues)', () => {
     renderDecorations({
       showGoalVector: false,
       targetPoint: { fmi: 6.5, ffmi: 22.5 },
-      targetLabel: 'Target · FFMI 22.5 / BF 22%',
+      targetLabelLines: ['GOAL', 'FFMI 22.5', 'BF 22%', 'FMI 6.5'],
     });
     expect(screen.getByTestId('map-target')).toBeInTheDocument();
-    expect(screen.getByTestId('map-target-label')).toHaveTextContent('Target ·');
+    expect(screen.getByTestId('map-target-label')).toHaveTextContent('GOAL');
     expect(screen.queryByTestId('map-goal-arrowhead')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('map-progress-label')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-vector-label')).not.toBeInTheDocument();
   });
 
   it('omits target artifacts entirely when no target is set', () => {
@@ -461,7 +483,7 @@ describe('CompositionMap decorations (direction cues)', () => {
   it('shows month labels on intermediate points when sparse (≤5 scans)', () => {
     renderDecorations();
     const labels = screen.getAllByTestId('map-month-label');
-    expect(labels.map((l) => l.textContent)).toEqual(['Jun', 'Sep', 'Jan']);
+    expect(labels.map((l) => l.textContent)).toEqual(['Jun 15', 'Sep 20', 'Jan 10']);
   });
 
   it('drops intermediate labels on dense maps (tap-only)', () => {
