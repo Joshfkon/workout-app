@@ -23,7 +23,7 @@
  */
 
 import { computeFFM, leanMassIncludesBone } from '@/services/bodyCompEngine';
-import type { Goal } from '@/types/schema';
+import type { Goal, Experience } from '@/types/schema';
 
 // ============================================================
 // Constants
@@ -464,6 +464,164 @@ export function classifyPartitioning(
     if (pair.fatFraction < 0.5) return 'poor';
     return null;
   }
+  return null;
+}
+
+// ============================================================
+// Athletic zone (default destination context)
+// ============================================================
+
+/**
+ * A composition zone bounded by two constant-BF% rays and two horizontal
+ * FFMI lines. Constant-BF% lines are rays from the origin: for a fixed BF
+ * fraction b, fmi = (ffmi · b)/(1 − b), i.e. ffmi/fmi has slope (1 − b)/b.
+ */
+export interface AthleticZone {
+  bfLowPercent: number;
+  bfHighPercent: number;
+  ffmiLow: number;
+  ffmiHigh: number;
+}
+
+/** Typical athletic range — a destination, not a grade. */
+export const ATHLETIC_ZONE_MALE: AthleticZone = {
+  bfLowPercent: 10,
+  bfHighPercent: 15,
+  ffmiLow: 20,
+  ffmiHigh: 22,
+};
+
+export const ATHLETIC_ZONE_FEMALE: AthleticZone = {
+  bfLowPercent: 18,
+  bfHighPercent: 25,
+  ffmiLow: 16,
+  ffmiHigh: 18,
+};
+
+export function athleticZoneForSex(sex: 'male' | 'female'): AthleticZone {
+  return sex === 'female' ? ATHLETIC_ZONE_FEMALE : ATHLETIC_ZONE_MALE;
+}
+
+/** FMI on the constant-BF% ray at a given FFMI. */
+export function fmiAtBf(ffmi: number, bfPercent: number): number {
+  return Math.round(((ffmi * bfPercent) / (100 - bfPercent)) * 100) / 100;
+}
+
+/**
+ * Zone polygon vertices in (FMI, FFMI), counterclockwise from the
+ * low-BF/low-FFMI corner. The left/right edges follow the BF rays, so the
+ * polygon is a trapezoid, not a rectangle.
+ */
+export function athleticZonePolygon(zone: AthleticZone): CompositionCoords[] {
+  return [
+    { fmi: fmiAtBf(zone.ffmiLow, zone.bfLowPercent), ffmi: zone.ffmiLow },
+    { fmi: fmiAtBf(zone.ffmiLow, zone.bfHighPercent), ffmi: zone.ffmiLow },
+    { fmi: fmiAtBf(zone.ffmiHigh, zone.bfHighPercent), ffmi: zone.ffmiHigh },
+    { fmi: fmiAtBf(zone.ffmiHigh, zone.bfLowPercent), ffmi: zone.ffmiHigh },
+  ];
+}
+
+/** Does the zone's bounding box overlap the viewport at all? */
+export function zoneOverlapsDomain(zone: AthleticZone, domain: MapDomain): boolean {
+  const poly = athleticZonePolygon(zone);
+  const minF = Math.min(...poly.map((p) => p.fmi));
+  const maxF = Math.max(...poly.map((p) => p.fmi));
+  return (
+    maxF >= domain.x[0] &&
+    minF <= domain.x[1] &&
+    zone.ffmiHigh >= domain.y[0] &&
+    zone.ffmiLow <= domain.y[1]
+  );
+}
+
+/** Compass arrow from the viewport center toward the zone centroid — for
+ * the "target zone ↖" edge indicator when the zone is off-viewport. */
+export function zoneDirectionArrow(zone: AthleticZone, domain: MapDomain): string {
+  const poly = athleticZonePolygon(zone);
+  const cx = poly.reduce((s, p) => s + p.fmi, 0) / poly.length;
+  const cy = poly.reduce((s, p) => s + p.ffmi, 0) / poly.length;
+  const dx = cx - (domain.x[0] + domain.x[1]) / 2;
+  const dy = cy - (domain.y[0] + domain.y[1]) / 2;
+  // Octant by angle; y up in data space.
+  const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+  const arrows: Record<number, string> = {
+    0: '→',
+    1: '↗',
+    2: '↑',
+    3: '↖',
+    4: '←',
+    [-4]: '←',
+    [-3]: '↙',
+    [-2]: '↓',
+    [-1]: '↘',
+  };
+  return arrows[octant] ?? '→';
+}
+
+// ============================================================
+// Suggested target (next milestone, not the final zone)
+// ============================================================
+
+/** Conservative first-bulk FFMI gain; halves as training age climbs.
+ * Suggested gains must not overpromise. */
+export const SUGGESTED_BULK_FFMI_GAIN: Record<Experience, number> = {
+  novice: 1.5,
+  intermediate: 1.0,
+  advanced: 0.5,
+};
+
+/** BF ceiling for a bulk milestone: current + this, hard-capped below. */
+export const SUGGESTED_BULK_BF_GAIN_PERCENT = 4;
+export const SUGGESTED_BULK_BF_CAP_PERCENT = 24;
+
+/** Expected small lean cost of a sensible cut. */
+export const SUGGESTED_CUT_FFMI_LOSS = 0.2;
+
+/** Cut milestone BF% by profile (mid of the typical 12–15 / 20–23 bands). */
+export const SUGGESTED_CUT_BF_PERCENT: Record<'male' | 'female', number> = {
+  male: 13,
+  female: 21,
+};
+
+export interface SuggestedTargetInput {
+  /** Latest scan's position. */
+  current: CompositionCoords;
+  phase: Goal | null;
+  experience?: Experience | null;
+  sex: 'male' | 'female';
+}
+
+/**
+ * Next-waypoint suggestion from current stats and phase. Null for
+ * maintenance/unknown phases (the athletic zone carries the long-term
+ * context) and for cuts already at/below the milestone BF%.
+ */
+export function computeSuggestedTarget(
+  input: SuggestedTargetInput
+): { ffmi: number; bodyFatPercent: number; fmi: number } | null {
+  const { current, phase, experience, sex } = input;
+  const total = current.fmi + current.ffmi;
+  if (total <= 0) return null;
+  const currentBf = (current.fmi / total) * 100;
+
+  if (phase === 'bulk') {
+    const gain = SUGGESTED_BULK_FFMI_GAIN[experience ?? 'intermediate'];
+    const ffmi = Math.round((current.ffmi + gain) * 10) / 10;
+    const bf =
+      Math.round(
+        Math.min(currentBf + SUGGESTED_BULK_BF_GAIN_PERCENT, SUGGESTED_BULK_BF_CAP_PERCENT) * 10
+      ) / 10;
+    return { ffmi, bodyFatPercent: bf, fmi: fmiAtBf(ffmi, bf) };
+  }
+
+  if (phase === 'cut') {
+    const bf = SUGGESTED_CUT_BF_PERCENT[sex];
+    // Already at/below the milestone: no meaningful cut waypoint.
+    if (currentBf <= bf + 0.5) return null;
+    const ffmi = Math.round((current.ffmi - SUGGESTED_CUT_FFMI_LOSS) * 10) / 10;
+    return { ffmi, bodyFatPercent: bf, fmi: fmiAtBf(ffmi, bf) };
+  }
+
   return null;
 }
 

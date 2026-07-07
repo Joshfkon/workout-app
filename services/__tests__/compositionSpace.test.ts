@@ -22,6 +22,14 @@ import {
   getBodyCompLayout,
   computeMapDomain,
   computeCompositionForecast,
+  computeSuggestedTarget,
+  athleticZonePolygon,
+  zoneOverlapsDomain,
+  zoneDirectionArrow,
+  fmiAtBf,
+  ATHLETIC_ZONE_MALE,
+  ATHLETIC_ZONE_FEMALE,
+  SUGGESTED_BULK_BF_CAP_PERCENT,
   FORECAST_HORIZON_WEEKS,
   FORECAST_NOISE_RADIUS,
   isoBmiSegment,
@@ -427,6 +435,89 @@ describe('classifyPartitioning', () => {
   it('gives no verdict when the weight moved against the phase', () => {
     // Weight LOSS during a bulk has no lean-fraction-of-gain framing.
     expect(classifyPartitioning(cutPair, 'bulk', 3)).toBeNull();
+  });
+});
+
+// ============ athletic zone & suggested target ============
+
+describe('athleticZonePolygon', () => {
+  it('places vertices on the constant-BF% rays (male profile)', () => {
+    const poly = athleticZonePolygon(ATHLETIC_ZONE_MALE);
+    expect(poly).toHaveLength(4);
+    expect(poly[0]).toEqual({ fmi: fmiAtBf(20, 10), ffmi: 20 });
+    expect(poly[2]).toEqual({ fmi: fmiAtBf(22, 15), ffmi: 22 });
+    // BF-ray slope: ffmi/fmi = (1 − bf)/bf. Low-BF edge (10%) → slope 9;
+    // high-BF edge (15%) → slope 85/15.
+    expect(poly[0].ffmi / poly[0].fmi).toBeCloseTo(90 / 10, 1);
+    expect(poly[3].ffmi / poly[3].fmi).toBeCloseTo(90 / 10, 1);
+    expect(poly[1].ffmi / poly[1].fmi).toBeCloseTo(85 / 15, 1);
+    expect(poly[2].ffmi / poly[2].fmi).toBeCloseTo(85 / 15, 1);
+  });
+
+  it('places vertices on the constant-BF% rays (female profile)', () => {
+    const poly = athleticZonePolygon(ATHLETIC_ZONE_FEMALE);
+    expect(poly[0].ffmi / poly[0].fmi).toBeCloseTo(82 / 18, 1);
+    expect(poly[1].ffmi / poly[1].fmi).toBeCloseTo(75 / 25, 1);
+    expect(poly.map((p) => p.ffmi)).toEqual([16, 16, 18, 18]);
+  });
+});
+
+describe('zoneOverlapsDomain / zoneDirectionArrow', () => {
+  it('detects overlap with the viewport', () => {
+    expect(
+      zoneOverlapsDomain(ATHLETIC_ZONE_MALE, { x: [2, 8], y: [16, 24] })
+    ).toBe(true);
+    // Viewport entirely fatter and less muscular than the zone.
+    expect(
+      zoneOverlapsDomain(ATHLETIC_ZONE_MALE, { x: [5, 9], y: [15, 19] })
+    ).toBe(false);
+  });
+
+  it('points from the viewport center toward the zone (leaner + more muscle = ↖)', () => {
+    expect(zoneDirectionArrow(ATHLETIC_ZONE_MALE, { x: [5, 9], y: [15, 19] })).toBe('↖');
+  });
+});
+
+describe('computeSuggestedTarget', () => {
+  // Live-feedback seed: FFMI 16.9 at 19% BF → fmi = 16.9·19/81.
+  const current = { fmi: fmiAtBf(16.9, 19), ffmi: 16.9 };
+
+  it('suggests a conservative first-bulk milestone (novice: +1.5 FFMI, BF ≤ 24%)', () => {
+    const s = computeSuggestedTarget({ current, phase: 'bulk', experience: 'novice', sex: 'male' })!;
+    expect(s.ffmi).toBeGreaterThanOrEqual(18);
+    expect(s.ffmi).toBeLessThanOrEqual(18.4);
+    expect(s.bodyFatPercent).toBeLessThanOrEqual(SUGGESTED_BULK_BF_CAP_PERCENT);
+    expect(s.bodyFatPercent).toBeCloseTo(23, 1); // current 19 + 4
+    // The point sits on its own BF ray.
+    expect(s.fmi).toBeCloseTo(fmiAtBf(s.ffmi, s.bodyFatPercent), 1);
+  });
+
+  it('scales the bulk milestone down with training age', () => {
+    const novice = computeSuggestedTarget({ current, phase: 'bulk', experience: 'novice', sex: 'male' })!;
+    const advanced = computeSuggestedTarget({ current, phase: 'bulk', experience: 'advanced', sex: 'male' })!;
+    expect(advanced.ffmi).toBeLessThan(novice.ffmi);
+    expect(advanced.ffmi).toBeCloseTo(17.4, 1);
+  });
+
+  it('caps the bulk BF ceiling at 24%', () => {
+    const fat = { fmi: fmiAtBf(18, 22), ffmi: 18 }; // 22% BF now
+    const s = computeSuggestedTarget({ current: fat, phase: 'bulk', experience: 'novice', sex: 'male' })!;
+    expect(s.bodyFatPercent).toBe(SUGGESTED_BULK_BF_CAP_PERCENT);
+  });
+
+  it('suggests a lower-BF milestone for a cut (small expected lean cost)', () => {
+    const s = computeSuggestedTarget({ current, phase: 'cut', sex: 'male' })!;
+    expect(s.bodyFatPercent).toBe(13);
+    expect(s.ffmi).toBeCloseTo(16.7, 1);
+  });
+
+  it('offers no cut milestone when already at/below the target BF', () => {
+    const lean = { fmi: fmiAtBf(20, 12), ffmi: 20 };
+    expect(computeSuggestedTarget({ current: lean, phase: 'cut', sex: 'male' })).toBeNull();
+  });
+
+  it('offers no suggestion for maintenance (the zone carries the context)', () => {
+    expect(computeSuggestedTarget({ current, phase: 'maintenance', sex: 'male' })).toBeNull();
   });
 });
 

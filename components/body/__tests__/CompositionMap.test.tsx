@@ -10,8 +10,13 @@
  * services/__tests__/compositionSpace.test.ts.
  */
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+// CompositionMap uses next/navigation's router for the suggestion Edit flow.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+}));
 
 jest.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => (
@@ -44,6 +49,8 @@ import {
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
 import {
   visibleIsoBmiSegments,
+  athleticZonePolygon,
+  ATHLETIC_ZONE_MALE,
   COMPOSITION_MAP_FFMI_THRESHOLDS,
   type CompositionPoint,
 } from '@/services/compositionSpace';
@@ -297,6 +304,46 @@ describe('CompositionMap', () => {
     renderMap({ target: null });
     expect(screen.getByTestId('map-summary-footer')).toHaveTextContent(/No target set/);
   });
+
+  it('explains the zone and suggestion when no target is set — without judging', () => {
+    renderMap({ target: null });
+    expect(screen.getByText(/Green zone = typical athletic range/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Tap the suggested dot to set it as your target/)
+    ).toBeInTheDocument();
+    // The manual path stays available.
+    expect(screen.getByRole('link', { name: 'Set a target' })).toBeInTheDocument();
+  });
+
+  it('offers Fit data / Fit all viewport modes', () => {
+    renderMap();
+    expect(screen.getByRole('button', { name: 'Fit data' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fit all' })).toBeInTheDocument();
+  });
+
+  it('sets the suggestion as the target in one tap', async () => {
+    const user = userEvent.setup();
+    const onSetTarget = jest.fn();
+    renderMap({ onSetTarget, defaultSuggestionOpen: true, experience: 'novice' });
+
+    const card = screen.getByTestId('map-suggestion-card');
+    expect(card).toHaveTextContent(/Suggested next milestone/);
+    await user.click(screen.getByRole('button', { name: 'Set as target' }));
+    // Last scan: FFMI 20.99 at 22.7% BF → novice bulk: +1.5 FFMI, BF capped 24.
+    expect(onSetTarget).toHaveBeenCalledWith({
+      targetFfmi: 22.5,
+      targetBodyFatPercent: 24,
+    });
+  });
+
+  it('drops the suggestion entirely once a target exists', () => {
+    renderMap({
+      target: { targetWeightKg: 98, targetBodyFatPercent: 25.5 },
+      defaultSuggestionOpen: true,
+    });
+    expect(screen.queryByTestId('map-suggestion-card')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tap the suggested dot/)).not.toBeInTheDocument();
+  });
 });
 
 describe('CompositionMap decorations (direction cues)', () => {
@@ -347,6 +394,8 @@ describe('CompositionMap decorations (direction cues)', () => {
     estimateTail: [],
     estimateLabel: null,
     forecast: null,
+    zone: null,
+    suggestion: null,
     targetPoint: null,
     targetLabelLines: null,
     vectorLabel: null,
@@ -576,6 +625,67 @@ describe('CompositionMap decorations (direction cues)', () => {
     renderDecorations();
     expect(screen.queryByTestId('map-forecast-cone')).not.toBeInTheDocument();
     expect(screen.queryByTestId('map-forecast-path')).not.toBeInTheDocument();
+  });
+
+  it('renders the athletic zone clipped, labeled, and behind everything else', () => {
+    const { container } = renderDecorations({
+      zone: {
+        polygon: athleticZonePolygon(ATHLETIC_ZONE_MALE),
+        overlapsViewport: true,
+        dimmed: false,
+        directionArrow: '↖',
+      },
+    });
+    const zoneEl = screen.getByTestId('map-athletic-zone');
+    expect(zoneEl.getAttribute('clip-path')).toContain('map-zone-clip');
+    expect(Number(zoneEl.getAttribute('fill-opacity'))).toBeCloseTo(0.08, 5);
+    expect(screen.getByTestId('map-zone-label')).toHaveTextContent('athletic zone');
+    // Drawn first: the zone lives inside the root group's first child.
+    const root = container.querySelector('svg > g');
+    expect(root?.firstElementChild?.contains(zoneEl)).toBe(true);
+    expect(screen.queryByTestId('map-zone-indicator')).not.toBeInTheDocument();
+  });
+
+  it('dims the zone to minimum opacity once a target exists', () => {
+    renderDecorations({
+      zone: {
+        polygon: athleticZonePolygon(ATHLETIC_ZONE_MALE),
+        overlapsViewport: true,
+        dimmed: true,
+        directionArrow: '↖',
+      },
+    });
+    expect(
+      Number(screen.getByTestId('map-athletic-zone').getAttribute('fill-opacity'))
+    ).toBeCloseTo(0.04, 5);
+  });
+
+  it('shows a clickable edge indicator instead of the zone when off-viewport', () => {
+    const onZoneIndicatorClick = jest.fn();
+    renderDecorations({
+      zone: {
+        polygon: athleticZonePolygon(ATHLETIC_ZONE_MALE),
+        overlapsViewport: false,
+        dimmed: false,
+        directionArrow: '↖',
+      },
+      onZoneIndicatorClick,
+    });
+    expect(screen.queryByTestId('map-athletic-zone')).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-zone-indicator-label')).toHaveTextContent('target zone ↖');
+    fireEvent.click(screen.getByTestId('map-zone-indicator'));
+    expect(onZoneIndicatorClick).toHaveBeenCalled();
+  });
+
+  it('renders the suggestion as a tappable hollow dot with a label', () => {
+    const onSuggestionClick = jest.fn();
+    renderDecorations({
+      suggestion: { fmi: 5.5, ffmi: 18.4 },
+      onSuggestionClick,
+    });
+    expect(screen.getByTestId('map-suggestion-label')).toHaveTextContent('Suggested');
+    fireEvent.click(screen.getByTestId('map-suggestion'));
+    expect(onSuggestionClick).toHaveBeenCalled();
   });
 
   it('drops intermediate labels on dense maps (tap-only)', () => {

@@ -49,7 +49,7 @@ import {
 import { CompositionMap } from '@/components/body/CompositionMap';
 import type { WeightHistoryEntry } from '@/hooks/useBodyCompTrend';
 import { kgToLbs } from '@/lib/utils';
-import type { Goal } from '@/types/schema';
+import type { Goal, Experience } from '@/types/schema';
 
 interface BodyHubTrendsProps {
   units: 'lb' | 'kg';
@@ -66,6 +66,12 @@ interface BodyHubTrendsProps {
   target?: CompositionTargetInput | null;
   /** Current phase start (e.g. active target's createdAt). */
   phaseStartDate?: string | null;
+  /** Profile sex — athletic zone + cut-milestone BF% on the map. */
+  sex?: 'male' | 'female';
+  /** Training age — scales the map's suggested bulk milestone. */
+  experience?: Experience | null;
+  /** Persist a suggested milestone as the active target. */
+  onSetTarget?: (target: { targetFfmi: number; targetBodyFatPercent: number }) => void | Promise<void>;
   /** Deep links can open a specific view (e.g. 'map' from the Home card). */
   initialMetric?: CompMetric;
 }
@@ -100,6 +106,9 @@ export function BodyHubTrends({
   phase = null,
   target = null,
   phaseStartDate = null,
+  sex = 'male',
+  experience = null,
+  onSetTarget,
   initialMetric,
 }: BodyHubTrendsProps) {
   const [metric, setMetric] = useState<CompMetric>(initialMetric ?? 'bodyFat');
@@ -252,6 +261,9 @@ export function BodyHubTrends({
               phase={phase}
               target={target}
               phaseStartDate={phaseStartDate}
+              sex={sex}
+              experience={experience}
+              onSetTarget={onSetTarget}
             />
           ) : (
             <>

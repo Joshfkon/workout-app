@@ -20,6 +20,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -50,6 +51,11 @@ import {
   visibleIsoBmiSegments,
   computeMapDomain,
   computeCompositionForecast,
+  computeSuggestedTarget,
+  athleticZoneForSex,
+  athleticZonePolygon,
+  zoneOverlapsDomain,
+  zoneDirectionArrow,
   FORECAST_NOISE_RADIUS,
   COMPOSITION_MAP_FFMI_THRESHOLDS,
   type ForecastPathPoint,
@@ -61,7 +67,7 @@ import {
   type MapDomain,
 } from '@/services/compositionSpace';
 import { kgToLbs } from '@/lib/utils';
-import type { Goal } from '@/types/schema';
+import type { Goal, Experience } from '@/types/schema';
 
 interface CompositionMapProps {
   /** Anchored trend from useBodyCompTrend (dexa points + daily estimates). */
@@ -75,6 +81,14 @@ interface CompositionMapProps {
   /** Start of the current phase (e.g. active target's createdAt); enables
    * the phase / all-time start toggle for the progress scalar. */
   phaseStartDate: string | null;
+  /** Profile sex — picks the athletic zone and cut-milestone BF%. */
+  sex?: 'male' | 'female';
+  /** Training age — scales the suggested bulk milestone. */
+  experience?: Experience | null;
+  /** Persist a suggested milestone as the active target (one-tap set). */
+  onSetTarget?: (target: { targetFfmi: number; targetBodyFatPercent: number }) => void | Promise<void>;
+  /** Test hook: render the suggestion card open. */
+  defaultSuggestionOpen?: boolean;
 }
 
 const SCAN_COLOR = '#22d3ee';
@@ -252,6 +266,22 @@ export interface DecorationsData {
    * central path inside a widening translucent uncertainty cone. Null when
    * the trend is flat or there aren't enough scans. */
   forecast: { anchor: CompositionCoords; path: ForecastPathPoint[] } | null;
+  /** Athletic zone context: soft green trapezoid behind everything. When it
+   * misses the viewport, an edge indicator points toward it instead of
+   * stretching the view. Dimmed once an explicit target exists. */
+  zone: {
+    polygon: CompositionCoords[];
+    overlapsViewport: boolean;
+    dimmed: boolean;
+    directionArrow: string;
+  } | null;
+  /** Suggested next-milestone target (hollow dot); null once a target is
+   * set or when no phase-appropriate suggestion exists. */
+  suggestion: CompositionCoords | null;
+  /** Tap on the suggestion dot (reveals the set-as-target card). */
+  onSuggestionClick?: () => void;
+  /** Tap on the off-viewport zone indicator (switches to Fit-all). */
+  onZoneIndicatorClick?: () => void;
   targetPoint: CompositionCoords | null;
   /** Goal block lines, e.g. ["GOAL", "FFMI 21.0", "BF 13%", "FMI 3.6"];
    * null hides the goal label. */
@@ -294,6 +324,10 @@ export function buildDecorations(data: DecorationsData) {
       estimateTail,
       estimateLabel,
       forecast,
+      zone,
+      suggestion,
+      onSuggestionClick,
+      onZoneIndicatorClick,
       targetPoint,
       targetLabelLines,
       vectorLabel,
@@ -347,10 +381,13 @@ export function buildDecorations(data: DecorationsData) {
           )
         : []),
     ];
-    const avoidPoints: AvoidPoint[] = scanPoints.map((p, i) => ({
-      ...px(p),
-      r: i === scanPoints.length - 1 ? 9 : i === 0 ? 4.5 : 4,
-    }));
+    const avoidPoints: AvoidPoint[] = [
+      ...scanPoints.map((p, i) => ({
+        ...px(p),
+        r: i === scanPoints.length - 1 ? 9 : i === 0 ? 4.5 : 4,
+      })),
+      ...(suggestion ? [{ ...px(suggestion), r: 6 }] : []),
+    ];
     const avoidOptions = { avoidSegments, avoidPoints };
 
     const startPx = px(scanPoints[0]);
@@ -360,6 +397,53 @@ export function buildDecorations(data: DecorationsData) {
 
     return (
       <g>
+        {/* Athletic zone: soft green context region, clipped to the plot,
+            drawn FIRST so every other mark sits above it. A destination,
+            not a grade. */}
+        {zone && zone.overlapsViewport && (
+          <g>
+            <defs>
+              <clipPath id="map-zone-clip">
+                <rect
+                  x={plot.left}
+                  y={plot.top}
+                  width={plot.right - plot.left}
+                  height={plot.bottom - plot.top}
+                />
+              </clipPath>
+            </defs>
+            <polygon
+              data-testid="map-athletic-zone"
+              clipPath="url(#map-zone-clip)"
+              points={zone.polygon.map((p) => `${px(p).x},${px(p).y}`).join(' ')}
+              fill={GOAL_COLOR}
+              fillOpacity={zone.dimmed ? 0.04 : 0.08}
+              stroke={GOAL_COLOR}
+              strokeOpacity={zone.dimmed ? 0.12 : 0.2}
+            />
+            {(() => {
+              const centroid = {
+                fmi: zone.polygon.reduce((s, p) => s + p.fmi, 0) / zone.polygon.length,
+                ffmi: zone.polygon.reduce((s, p) => s + p.ffmi, 0) / zone.polygon.length,
+              };
+              const placement = placeLabel(px(centroid), plot, 'athletic zone', {
+                ...avoidOptions,
+                fontSize: 8,
+              });
+              return (
+                <MapLabel
+                  placement={placement}
+                  lines={['athletic zone']}
+                  fill={GOAL_COLOR}
+                  fontSize={8}
+                  pill={!placement.clear}
+                  testid="map-zone-label"
+                />
+              );
+            })()}
+          </g>
+        )}
+
         {/* Iso-BMI diagonals: fmi + ffmi = const — lightly styled. */}
         {isoSegments.map((seg) => (
           <g key={`iso-${seg.bmi}`}>
@@ -694,6 +778,69 @@ export function buildDecorations(data: DecorationsData) {
           pill
           testid="map-now-label"
         />
+
+        {/* Suggested next milestone: hollow green dot, tap to reveal the
+            set-as-target card below the chart. */}
+        {suggestion && (() => {
+          const sPx = px(suggestion);
+          const placement = placeLabel(sPx, plot, 'Suggested', {
+            ...avoidOptions,
+            fontSize: 8,
+          });
+          return (
+            <g
+              onClick={onSuggestionClick}
+              style={{ cursor: 'pointer' }}
+              data-testid="map-suggestion"
+            >
+              <circle
+                cx={sPx.x}
+                cy={sPx.y}
+                r={5.5}
+                fill="#111827"
+                stroke={GOAL_COLOR}
+                strokeWidth={2}
+              />
+              <MapLabel
+                placement={placement}
+                lines={['Suggested']}
+                fill={GOAL_COLOR}
+                fontSize={8}
+                pill={!placement.clear}
+                testid="map-suggestion-label"
+              />
+            </g>
+          );
+        })()}
+
+        {/* Off-viewport zone: edge indicator instead of stretching the
+            view. Tapping it fits everything. */}
+        {zone && !zone.overlapsViewport && (() => {
+          const centroid = {
+            fmi: zone.polygon.reduce((s, p) => s + p.fmi, 0) / zone.polygon.length,
+            ffmi: zone.polygon.reduce((s, p) => s + p.ffmi, 0) / zone.polygon.length,
+          };
+          const raw = px(centroid);
+          const x = Math.max(plot.left + 48, Math.min(plot.right - 48, raw.x));
+          const y = Math.max(plot.top + 14, Math.min(plot.bottom - 8, raw.y));
+          const text = `target zone ${zone.directionArrow}`;
+          return (
+            <g
+              onClick={onZoneIndicatorClick}
+              style={{ cursor: 'pointer' }}
+              data-testid="map-zone-indicator"
+            >
+              <MapLabel
+                placement={{ x, y, anchor: 'middle', side: 'edge', clear: false }}
+                lines={[text]}
+                fill={GOAL_COLOR}
+                fontSize={9}
+                pill
+                testid="map-zone-indicator-label"
+              />
+            </g>
+          );
+        })()}
       </g>
     );
   };
@@ -706,10 +853,18 @@ export function CompositionMap({
   phase,
   target,
   phaseStartDate,
+  sex = 'male',
+  experience = null,
+  onSetTarget,
+  defaultSuggestionOpen = false,
 }: CompositionMapProps) {
   const [startMode, setStartMode] = useState<'phase' | 'all-time'>(
     phaseStartDate ? 'phase' : 'all-time'
   );
+  // 'recent' fits the data (default); 'all' also fits the athletic zone.
+  const [viewMode, setViewMode] = useState<'recent' | 'all'>('recent');
+  const [suggestionOpen, setSuggestionOpen] = useState(defaultSuggestionOpen);
+  const router = useRouter();
 
   const scanObservations = useMemo<CompositionObservation[]>(
     () =>
@@ -807,21 +962,38 @@ export function CompositionMap({
     [scanObservations, heightCm]
   );
 
+  // Athletic zone + suggested next milestone (only while no target is set).
+  const zone = useMemo(() => athleticZoneForSex(sex), [sex]);
+  const zonePolygon = useMemo(() => athleticZonePolygon(zone), [zone]);
+  const suggestion = useMemo(() => {
+    if (targetPoint || scanPoints.length === 0) return null;
+    return computeSuggestedTarget({
+      current: scanPoints[scanPoints.length - 1],
+      phase,
+      experience,
+      sex,
+    });
+  }, [targetPoint, scanPoints, phase, experience, sex]);
+
   const domain = useMemo(() => {
     // The viewport must hold the forecast cone's widest extent too.
-    const coneExtremes: CompositionCoords[] = [];
+    const extras: CompositionCoords[] = [];
     if (forecast && forecast.path.length > 0) {
       const end = forecast.path[forecast.path.length - 1];
-      coneExtremes.push(
+      extras.push(
         { fmi: end.fmi - end.radius, ffmi: end.ffmi - end.radius },
         { fmi: end.fmi + end.radius, ffmi: end.ffmi + end.radius }
       );
     }
+    // The suggestion is a nearby waypoint — always in view. The zone only
+    // stretches the viewport in Fit-all; Fit-recent gets an edge indicator.
+    if (suggestion) extras.push(suggestion);
+    if (viewMode === 'all') extras.push(...zonePolygon);
     return computeMapDomain(
-      [...scanPoints, ...trailPoints, ...estimateTail, ...coneExtremes],
+      [...scanPoints, ...trailPoints, ...estimateTail, ...extras],
       targetPoint
     );
-  }, [scanPoints, trailPoints, estimateTail, forecast, targetPoint]);
+  }, [scanPoints, trailPoints, estimateTail, forecast, targetPoint, suggestion, viewMode, zonePolygon]);
 
   if (scanPoints.length < 2) {
     return (
@@ -867,6 +1039,30 @@ export function CompositionMap({
 
   return (
     <div>
+      {/* Viewport: fit the data (default) or everything incl. the zone. */}
+      <div className="flex justify-end mb-1">
+        <div className="inline-flex bg-surface-800 rounded-lg p-0.5">
+          {(
+            [
+              { value: 'recent', label: 'Fit data' },
+              { value: 'all', label: 'Fit all' },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setViewMode(option.value)}
+              className={`px-2 py-0.5 text-[11px] font-medium rounded transition-all ${
+                viewMode === option.value
+                  ? 'bg-surface-600 text-surface-100'
+                  : 'text-surface-400 hover:text-surface-200'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
@@ -919,6 +1115,15 @@ export function CompositionMap({
                     ? `Est. · ${formatDateShort(estimateTail[estimateTail.length - 1].date)}`
                     : null,
                 forecast: forecast ? { anchor: forecast.anchor, path: forecast.path } : null,
+                zone: {
+                  polygon: zonePolygon,
+                  overlapsViewport: zoneOverlapsDomain(zone, domain),
+                  dimmed: !!targetPoint,
+                  directionArrow: zoneDirectionArrow(zone, domain),
+                },
+                suggestion,
+                onSuggestionClick: () => setSuggestionOpen((open) => !open),
+                onZoneIndicatorClick: () => setViewMode('all'),
                 targetLabelLines,
                 vectorLabel,
                 showGoalVector,
@@ -1014,10 +1219,12 @@ export function CompositionMap({
           ` The dotted cone extrapolates your recent scan trend ${forecast.path.length} weeks ahead — uncertainty widens the further out you look.`}
       </p>
 
-      {/* No target yet: the goal vector needs an anchor. Deep-link lands
-          on the Goals tab scrolled to the target editor. */}
+      {/* No target yet: zone + suggestion carry the destination until one
+          is set. The zone is a destination, not a grade. */}
       {!targetPoint && (
         <p className="text-[11px] text-surface-500 mt-2">
+          Green zone = typical athletic range.
+          {suggestion && ' Tap the suggested dot to set it as your target.'}{' '}
           <Link
             href="/dashboard/analytics?tab=goals&section=body-targets"
             className="text-primary-400 hover:text-primary-300 font-medium"
@@ -1026,6 +1233,54 @@ export function CompositionMap({
           </Link>{' '}
           to see your goal vector on the map.
         </p>
+      )}
+
+      {/* Suggested-milestone card (revealed by tapping the hollow dot). */}
+      {suggestion && suggestionOpen && (
+        <div
+          className="mt-2 p-3 rounded-lg bg-surface-800/60 border border-surface-700"
+          data-testid="map-suggestion-card"
+        >
+          <p className="text-xs text-surface-200">
+            Suggested next milestone:{' '}
+            <span className="font-medium text-success-400">
+              FFMI {suggestion.ffmi.toFixed(1)} · BF {suggestion.bodyFatPercent.toFixed(0)}%
+            </span>
+          </p>
+          <p className="text-[11px] text-surface-500 mt-0.5">
+            A conservative waypoint for your current {phase ?? 'training'} phase — not the
+            final destination.
+          </p>
+          <div className="flex gap-2 mt-2">
+            <button
+              type="button"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-success-500/20 text-success-300 hover:bg-success-500/30 transition-colors"
+              onClick={async () => {
+                await onSetTarget?.({
+                  targetFfmi: suggestion.ffmi,
+                  targetBodyFatPercent: suggestion.bodyFatPercent,
+                });
+                setSuggestionOpen(false);
+              }}
+            >
+              Set as target
+            </button>
+            <button
+              type="button"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-surface-700 text-surface-300 hover:bg-surface-600 transition-colors"
+              onClick={async () => {
+                // Save first so the goals editor opens pre-filled with it.
+                await onSetTarget?.({
+                  targetFfmi: suggestion.ffmi,
+                  targetBodyFatPercent: suggestion.bodyFatPercent,
+                });
+                router.push('/dashboard/analytics?tab=goals&section=body-targets');
+              }}
+            >
+              Edit
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Goal-vector progress scalar */}
