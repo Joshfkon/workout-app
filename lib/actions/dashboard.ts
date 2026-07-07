@@ -1,7 +1,10 @@
 'use server';
 
 import { createUntypedServerClient } from '@/lib/supabase/server';
-import { getLocalDateString } from '@/lib/utils';
+import { getLocalDateString, inputWeightToKg } from '@/lib/utils';
+import { buildAnchoredBodyCompTrend } from '@/services/bodyCompAnchor';
+import { analyzeBodyCompTrend, computeFFMI } from '@/services/bodyCompEngine';
+import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
 import {
   computeWeeklyMuscleVolume,
@@ -49,6 +52,23 @@ export interface WeightData {
   todaysWeight: { weight: number; unit: string } | null;
   weightHistory: { date: string; weight: number; unit: string }[];
   preferredUnit: 'lb' | 'kg';
+}
+
+/**
+ * Compact body-composition glance for the Home card. Null until the user has
+ * ≥2 DEXA scans and a profile height (getBodyCompLayout's home-card gate) —
+ * a single scan can't show a trend, and FFMI needs height.
+ */
+export interface BodyCompGlance {
+  scanCount: number;
+  /** Latest ANCHORED BF% / raw FFMI — the last point of the same anchored
+   * series the Body Composition Trend chart and FFMI gauge read, not the raw
+   * latest scan (which goes stale as weigh-ins accumulate after it). */
+  bodyFatPercent: number;
+  ffmi: number;
+  /** Monthly change rates across the scan history (trend arrows). */
+  bodyFatRatePerMonth: number;
+  ffmiRatePerMonth: number;
 }
 
 /**
@@ -215,6 +235,75 @@ export async function fetchWeightData(userId: string): Promise<WeightData> {
       unit: w.unit || preferredUnit,
     })),
     preferredUnit,
+  };
+}
+
+/**
+ * Body-comp glance for the Home card: latest anchored BF% + FFMI with
+ * monthly trend rates. Null below 2 scans or without a profile height.
+ */
+export async function fetchBodyCompGlance(userId: string): Promise<BodyCompGlance | null> {
+  const supabase = await createUntypedServerClient();
+  const yearAgo = new Date();
+  yearAgo.setDate(yearAgo.getDate() - 365);
+
+  const [scansRes, weightsRes, profileRes] = await Promise.all([
+    supabase
+      .from('dexa_scans')
+      .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg, bone_mass_kg')
+      .eq('user_id', userId)
+      .order('scan_date', { ascending: true }),
+    supabase
+      .from('weight_log')
+      .select('logged_at, weight, unit')
+      .eq('user_id', userId)
+      .gte('logged_at', getLocalDateString(yearAgo))
+      .order('logged_at', { ascending: true }),
+    supabase.from('users').select('height_cm').eq('id', userId).single(),
+  ]);
+
+  const scans = scansRes.data ?? [];
+  const heightCm = profileRes.data?.height_cm ? Number(profileRes.data.height_cm) : null;
+  if (!getBodyCompLayout(scans.length).showHomeCard || !heightCm) return null;
+
+  // Same anchored series the Body tab charts read (bodyCompAnchor), so the
+  // card and the module it deep-links to can never disagree.
+  const trend = buildAnchoredBodyCompTrend(
+    (weightsRes.data ?? []).map((row: any) => ({
+      date: row.logged_at,
+      weightKg: inputWeightToKg(Number(row.weight), (row.unit ?? 'lb') as 'lb' | 'kg'),
+    })),
+    scans.map((scan: any) => ({
+      date: scan.scan_date,
+      bodyFatPercent: Number(scan.body_fat_percent),
+      leanMassKg: Number(scan.lean_mass_kg),
+      fatMassKg: Number(scan.fat_mass_kg),
+      weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
+      boneMassKg: scan.bone_mass_kg != null ? Number(scan.bone_mass_kg) : null,
+    }))
+  );
+  if (trend.length === 0) return null;
+  const latest = trend[trend.length - 1];
+
+  const rates = analyzeBodyCompTrend(
+    scans.map(
+      (scan: any) =>
+        ({
+          scanDate: scan.scan_date,
+          bodyFatPercent: Number(scan.body_fat_percent),
+          leanMassKg: Number(scan.lean_mass_kg),
+          fatMassKg: Number(scan.fat_mass_kg),
+        }) as any
+    ),
+    heightCm
+  );
+
+  return {
+    scanCount: scans.length,
+    bodyFatPercent: latest.bodyFatPercent,
+    ffmi: computeFFMI(latest.leanMassKg, latest.boneMassKg, heightCm).ffmi,
+    bodyFatRatePerMonth: rates?.bodyFatChangeRate ?? 0,
+    ffmiRatePerMonth: rates?.ffmiChangeRate ?? 0,
   };
 }
 

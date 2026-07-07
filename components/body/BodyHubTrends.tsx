@@ -21,7 +21,7 @@
  * clearly-labeled secondary readout, never silently substituted.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -41,8 +41,15 @@ import {
   type AnchoredTrendPoint,
 } from '@/services/bodyCompAnchor';
 import { computeFFMI } from '@/services/bodyCompEngine';
+import {
+  BODY_COMP_TREND_SECTION_ID,
+  MIN_SCANS_FOR_COMPOSITION_MAP,
+  type CompositionTargetInput,
+} from '@/services/compositionSpace';
+import { CompositionMap } from '@/components/body/CompositionMap';
 import type { WeightHistoryEntry } from '@/hooks/useBodyCompTrend';
 import { kgToLbs } from '@/lib/utils';
+import type { Goal } from '@/types/schema';
 
 interface BodyHubTrendsProps {
   units: 'lb' | 'kg';
@@ -53,9 +60,17 @@ interface BodyHubTrendsProps {
   /** Raw weigh-ins for the weight chart. */
   weightHistory: WeightHistoryEntry[];
   isLoading: boolean;
+  /** Training phase for the Composition Map's p-ratio framing. */
+  phase?: Goal | null;
+  /** Active composition target for the map's goal vector. */
+  target?: CompositionTargetInput | null;
+  /** Current phase start (e.g. active target's createdAt). */
+  phaseStartDate?: string | null;
+  /** Deep links can open a specific view (e.g. 'map' from the Home card). */
+  initialMetric?: CompMetric;
 }
 
-type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi';
+export type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi' | 'map';
 
 interface ChartRow {
   ts: number;
@@ -82,22 +97,53 @@ export function BodyHubTrends({
   trend,
   weightHistory,
   isLoading,
+  phase = null,
+  target = null,
+  phaseStartDate = null,
+  initialMetric,
 }: BodyHubTrendsProps) {
-  const [metric, setMetric] = useState<CompMetric>('bodyFat');
+  const [metric, setMetric] = useState<CompMetric>(initialMetric ?? 'bodyFat');
 
-  // Which metric options exist: FFMI needs a profile height.
+  const dexaCount = useMemo(
+    () => trend.filter((p) => p.kind === 'dexa').length,
+    [trend]
+  );
+
+  // Which metric options exist: FFMI and the Composition Map need a profile
+  // height; the map additionally needs ≥2 scans to have a path to draw.
   const metricOptions = useMemo(() => {
     const options: { value: CompMetric; label: string }[] = [
       { value: 'bodyFat', label: 'BF %' },
       { value: 'leanMass', label: 'Lean mass' },
     ];
     if (heightCm) options.push({ value: 'ffmi', label: 'FFMI' });
+    if (heightCm && dexaCount >= MIN_SCANS_FOR_COMPOSITION_MAP) {
+      options.push({ value: 'map', label: 'Map' });
+    }
     return options;
-  }, [heightCm]);
+  }, [heightCm, dexaCount]);
+
+  // A deep link may ask for a view that isn't available (no height / <2
+  // scans) — fall back rather than rendering an orphaned state.
+  const activeMetric = metricOptions.some((o) => o.value === metric)
+    ? metric
+    : 'bodyFat';
+
+  // Deep-linked view (e.g. ?section= → 'map'): the option it targets only
+  // exists after the trend data loads, so apply it once it becomes valid —
+  // and never again, so it can't stomp a manual toggle later.
+  const appliedInitialMetric = useRef(false);
+  useEffect(() => {
+    if (appliedInitialMetric.current || !initialMetric) return;
+    if (metricOptions.some((o) => o.value === initialMetric)) {
+      appliedInitialMetric.current = true;
+      setMetric(initialMetric);
+    }
+  }, [initialMetric, metricOptions]);
 
   const { rows, gapCount } = useMemo(() => {
     const valueOf = (point: AnchoredTrendPoint): number | null => {
-      switch (metric) {
+      switch (activeMetric) {
         case 'bodyFat':
           return point.bodyFatPercent;
         case 'leanMass':
@@ -109,6 +155,9 @@ export function BodyHubTrends({
           return heightCm
             ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
             : null;
+        case 'map':
+          // The map renders its own component; no time-series rows needed.
+          return null;
       }
     };
 
@@ -139,7 +188,7 @@ export function BodyHubTrends({
       rows: [...dataRows, ...breakers].sort((a, b) => a.ts - b.ts),
       gapCount: gaps.length,
     };
-  }, [trend, metric, units, heightCm]);
+  }, [trend, activeMetric, units, heightCm]);
 
   // Latest FFMI for the labeled normalized readout under the chart.
   const latestFfmi = useMemo(() => {
@@ -148,7 +197,7 @@ export function BodyHubTrends({
     return computeFFMI(last.leanMassKg, last.boneMassKg, heightCm);
   }, [trend, heightCm]);
 
-  const unitSuffix = metric === 'bodyFat' ? '%' : metric === 'leanMass' ? ` ${units}` : '';
+  const unitSuffix = activeMetric === 'bodyFat' ? '%' : activeMetric === 'leanMass' ? ` ${units}` : '';
 
   const formatTick = (ts: number) =>
     new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -160,11 +209,15 @@ export function BodyHubTrends({
         <WeightGraph weightHistory={weightHistory} preferredUnit={units} />
       )}
 
-      {/* BF% / lean mass / FFMI anchored trend */}
+      {/* BF% / lean mass / FFMI anchored trend + Composition Map.
+          The id anchors ?section= deep links (e.g. from the Home card). */}
+      <div id={BODY_COMP_TREND_SECTION_ID} className="scroll-mt-4">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
-            <CardTitle>Body Composition Trend</CardTitle>
+            <CardTitle>
+              {activeMetric === 'map' ? 'Composition Map' : 'Body Composition Trend'}
+            </CardTitle>
             <div className="inline-flex bg-surface-800 rounded-lg p-1">
               {metricOptions.map((option) => (
                 <button
@@ -172,7 +225,7 @@ export function BodyHubTrends({
                   type="button"
                   onClick={() => setMetric(option.value)}
                   className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-                    metric === option.value
+                    activeMetric === option.value
                       ? 'bg-primary-500 text-white shadow-sm'
                       : 'text-surface-400 hover:text-surface-200'
                   }`}
@@ -191,6 +244,15 @@ export function BodyHubTrends({
               Log a DEXA scan to unlock the composition trend — bodyweight
               alone can&apos;t estimate body fat.
             </p>
+          ) : activeMetric === 'map' && heightCm ? (
+            <CompositionMap
+              trend={trend}
+              heightCm={heightCm}
+              units={units}
+              phase={phase}
+              target={target}
+              phaseStartDate={phaseStartDate}
+            />
           ) : (
             <>
               <div className="h-56">
@@ -212,7 +274,7 @@ export function BodyHubTrends({
                       stroke="#9ca3af"
                       fontSize={11}
                       domain={
-                        metric === 'ffmi'
+                        activeMetric === 'ffmi'
                           ? [
                               (dataMin: number) => Math.floor(Math.min(dataMin - 0.3, 17.5)),
                               (dataMax: number) => Math.ceil(Math.max(dataMax + 0.3, 25.2)),
@@ -242,7 +304,7 @@ export function BodyHubTrends({
                       }
                     />
                     {/* FFMI thresholds — same values as the gauge's scale. */}
-                    {metric === 'ffmi' &&
+                    {activeMetric === 'ffmi' &&
                       FFMI_THRESHOLDS.map((threshold) => (
                         <ReferenceLine
                           key={threshold.value}
@@ -320,7 +382,7 @@ export function BodyHubTrends({
                 )}
                 .
               </p>
-              {metric === 'ffmi' && latestFfmi && (
+              {activeMetric === 'ffmi' && latestFfmi && (
                 <p className="text-[11px] text-surface-500 mt-1">
                   Chart shows raw FFMI (fat-free mass / height m²) · latest{' '}
                   {latestFfmi.ffmi} · height-normalized:{' '}
@@ -333,6 +395,7 @@ export function BodyHubTrends({
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
