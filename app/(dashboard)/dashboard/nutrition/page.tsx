@@ -207,10 +207,10 @@ function NutritionPageContent() {
   );
 
   // Follow URL changes (back/forward, deep links from the home Weight tile).
+  // No/invalid param means the default tab — a base-route navigation (e.g.
+  // the Eat nav item) must reset a previously deep-linked tab.
   useEffect(() => {
-    const fromUrl = parseNutritionTabParam(searchParams.get('tab'));
-    if (fromUrl) setActiveTab(fromUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setActiveTab(parseNutritionTabParam(searchParams.get('tab')) ?? 'log');
   }, [searchParams]);
 
   const handleTabChange = (tab: NutritionTab) => {

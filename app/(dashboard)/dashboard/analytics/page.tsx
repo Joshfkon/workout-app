@@ -369,10 +369,10 @@ function AnalyticsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
 
   // Follow URL changes (back/forward, in-app deep links to another tab).
+  // No/invalid param means the default tab — a base-route navigation (e.g.
+  // the Progress nav item) must reset a previously deep-linked tab.
   useEffect(() => {
-    const fromUrl = parseTabParam(searchParams.get('tab'));
-    if (fromUrl) setActiveTab(fromUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'body-composition');
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
