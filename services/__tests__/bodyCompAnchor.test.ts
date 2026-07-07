@@ -275,6 +275,32 @@ describe('buildAnchoredBodyCompTrend', () => {
     }
   });
 
+  it('drops logged bone for calculated-entry scans whose lean already contains it', () => {
+    // Calculated-mode entry: lean = weight − fat (85 = 68 + 17), so the lean
+    // is already fat-free mass; the logged 3 kg BMC must NOT be added again
+    // (nor leak into interpolation for other points).
+    const calculatedScan: ScanAnchor = {
+      date: '2026-06-01',
+      bodyFatPercent: 20,
+      leanMassKg: 68,
+      fatMassKg: 17,
+      weightKg: 85,
+      boneMassKg: 3,
+    };
+    const trend = buildAnchoredBodyCompTrend(
+      [{ date: '2026-06-08', weightKg: 85 }],
+      [calculatedScan]
+    );
+
+    expect(trend.find((p) => p.kind === 'dexa')!.boneMassKg).toBeNull();
+    expect(trend.find((p) => p.date === '2026-06-08')!.boneMassKg).toBeNull();
+
+    // A genuine DEXA report (lean + fat + bone ≈ weight) keeps its bone.
+    const genuineScan: ScanAnchor = { ...calculatedScan, leanMassKg: 65, weightKg: 85 };
+    const genuine = buildAnchoredBodyCompTrend([], [genuineScan]);
+    expect(genuine[0].boneMassKg).toBe(3);
+  });
+
   it('gauge value equals the last point of the FFMI trend series', () => {
     // The Analytics gauge reads FFMI from the trend's last point through the
     // same computeFFMI the chart uses; projecting forward from scan B

@@ -7,6 +7,7 @@ import {
   calculateFFMI,
   computeFFM,
   computeFFMI,
+  leanMassIncludesBone,
   getNaturalFFMILimit,
   getFFMILabel,
   analyzeBodyCompTrend,
@@ -169,6 +170,38 @@ describe('computeFFMI', () => {
     expect(computeFFMI(60, 3, 180).ffmi).toBeGreaterThan(
       computeFFMI(60, null, 180).ffmi
     );
+  });
+});
+
+describe('leanMassIncludesBone', () => {
+  it('detects calculated-entry scans (lean = weight − fat, bone inside lean)', () => {
+    // Calculated mode stores lean 68 + fat 17 = weight 85 exactly.
+    expect(
+      leanMassIncludesBone({ leanMassKg: 68, fatMassKg: 17, weightKg: 85 })
+    ).toBe(true);
+  });
+
+  it('keeps the DEXA convention for genuine reports (lean + fat + bone ≈ weight)', () => {
+    // Real DEXA: 64 lean + 16 fat + 3 bone = 83 total → 3 kg gap, well past
+    // the 1 kg tolerance.
+    expect(
+      leanMassIncludesBone({ leanMassKg: 64, fatMassKg: 16, weightKg: 83 })
+    ).toBe(false);
+  });
+
+  it('assumes the DEXA convention when no total weight was recorded', () => {
+    expect(
+      leanMassIncludesBone({ leanMassKg: 68, fatMassKg: 17, weightKg: null })
+    ).toBe(false);
+    expect(leanMassIncludesBone({ leanMassKg: 68, fatMassKg: 17 })).toBe(false);
+  });
+
+  it('tolerates sub-kilogram rounding drift in calculated entries', () => {
+    // lean + fat lands 0.4 kg under the recorded total after rounding —
+    // still no room for a real (2+ kg) bone mass, so it's bone-in-lean.
+    expect(
+      leanMassIncludesBone({ leanMassKg: 67.8, fatMassKg: 16.8, weightKg: 85 })
+    ).toBe(true);
   });
 });
 

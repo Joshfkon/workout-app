@@ -13,6 +13,7 @@ import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import {
   computeFFMI,
+  leanMassIncludesBone,
   analyzeBodyCompTrend,
   generateCoachingRecommendations,
   getFFMILabel,
@@ -1357,7 +1358,13 @@ function AnalyticsPageContent() {
     ? latestTrendPoint
       ? computeFFMI(latestTrendPoint.leanMassKg, latestTrendPoint.boneMassKg, userProfile.heightCm)
       : latestScan
-        ? computeFFMI(latestScan.leanMassKg, latestScan.boneMassKg, userProfile.heightCm)
+        ? computeFFMI(
+            latestScan.leanMassKg,
+            // Calculated-entry scans store lean = weight − fat (bone already
+            // inside) — adding BMC would double-count it.
+            leanMassIncludesBone(latestScan) ? null : latestScan.boneMassKg,
+            userProfile.heightCm
+          )
         : null
     : null;
   const trend = userProfile?.heightCm

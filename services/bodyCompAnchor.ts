@@ -21,6 +21,8 @@
  * Pure functions only: NO database calls.
  */
 
+import { leanMassIncludesBone } from '@/services/bodyCompEngine';
+
 // ============================================================
 // Types
 // ============================================================
@@ -228,12 +230,20 @@ export function buildAnchoredBodyCompTrend(
     weightKg,
   }));
 
+  // Bone a scan can contribute to the FFM series: its logged BMC, unless the
+  // scan's lean already contains bone (calculated-entry shape: lean = weight
+  // − fat) — adding BMC on top of such a lean would double-count it in FFMI.
+  const contributableBone = (s: ScanAnchor): number | null =>
+    s.boneMassKg != null && s.boneMassKg > 0 && !leanMassIncludesBone(s)
+      ? s.boneMassKg
+      : null;
+
   // BMC per day for FFMI: linearly interpolated between scans that logged
   // bone mass (BMC is nearly constant), held flat beyond their range, null
   // when no scan logged bone at all.
   const boneScans = sortedScans
-    .filter((s) => s.boneMassKg != null && s.boneMassKg > 0)
-    .map((s) => ({ day: dayNumber(s.date), value: s.boneMassKg as number }));
+    .map((s) => ({ day: dayNumber(s.date), value: contributableBone(s) }))
+    .filter((s): s is { day: number; value: number } => s.value != null);
   const boneAt = (day: number): number | null => {
     if (boneScans.length === 0) return null;
     if (day <= boneScans[0].day) return round2(boneScans[0].value);
@@ -261,9 +271,12 @@ export function buildAnchoredBodyCompTrend(
       leanMassKg: round1(scan.leanMassKg),
       fatMassKg: round1(scan.fatMassKg),
       weightKg: round1(scanWeight(scan)),
-      boneMassKg:
-        scan.boneMassKg != null && scan.boneMassKg > 0
-          ? round2(scan.boneMassKg)
+      // A bone-in-lean scan gets NO bone here (its lean is already fat-free
+      // mass); interpolation only fills scans that merely didn't log bone.
+      boneMassKg: leanMassIncludesBone(scan)
+        ? null
+        : contributableBone(scan) != null
+          ? round2(contributableBone(scan) as number)
           : boneAt(dayNumber(scan.date)),
       kind: 'dexa',
     });
