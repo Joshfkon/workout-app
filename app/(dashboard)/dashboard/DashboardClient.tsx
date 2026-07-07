@@ -23,6 +23,7 @@ import {
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
 import { computeLiftTrends, LIFT_TREND_WINDOW_DAYS, type LiftTrendsSummary } from './_lib/liftTrends';
+import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { computeWeightRate } from './_lib/weightRate';
 import { computeWeekSessions } from './_lib/weekSessions';
 import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
@@ -200,6 +201,8 @@ interface DashboardInitialData {
   muscleVolume?: MuscleVolumeStats[];
   /** Lift trend summary for the "Lifts" glance tile. */
   liftTrends?: LiftTrendsSummary | null;
+  /** Body-comp glance tile (≥2 DEXA scans + height); null hides the tile. */
+  bodyCompGlance?: BodyCompGlance | null;
 }
 
 interface DashboardClientProps {
@@ -1439,6 +1442,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         weightUnit={weightUnit}
         weightHistory={weightHistory}
         weightRate={weightRate}
+        bodyComp={initialData?.bodyCompGlance ?? null}
         onLogWeight={() => setActiveModal('weight')}
       />
 

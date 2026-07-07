@@ -19,6 +19,7 @@ jest.mock('recharts', () => ({
   ),
   ComposedChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   LineChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  ScatterChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Line: () => null,
   Scatter: () => null,
   XAxis: () => null,
@@ -30,6 +31,7 @@ jest.mock('recharts', () => ({
   Area: () => null,
   AreaChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Legend: () => null,
+  Customized: () => null,
 }));
 
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
@@ -113,5 +115,67 @@ describe('BodyHubTrends', () => {
     expect(
       screen.getByText(/bone mass not logged — FFMI uses lean mass only/)
     ).toBeInTheDocument();
+  });
+});
+
+describe('BodyHubTrends — Composition Map', () => {
+  // Two DEXA anchors ≥ the map's scan gate; the estimated point between
+  // them must not count toward it.
+  const twoScanTrend: AnchoredTrendPoint[] = [
+    trendPoint({ date: '2026-05-01', kind: 'dexa' }),
+    trendPoint({ date: '2026-05-20', kind: 'estimated' }),
+    trendPoint({ date: '2026-06-10', kind: 'dexa', leanMassKg: 66, fatMassKg: 15, weightKg: 84 }),
+  ];
+
+  it('offers the Map toggle only with a height AND ≥2 DEXA scans', () => {
+    const { rerender } = renderTrends({ trend: twoScanTrend });
+    expect(screen.getByRole('button', { name: 'Map' })).toBeInTheDocument();
+
+    // One scan (plus estimates): no map.
+    rerender(
+      <BodyHubTrends
+        units="kg"
+        heightCm={180}
+        trend={[twoScanTrend[0], twoScanTrend[1]]}
+        weightHistory={[]}
+        isLoading={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Map' })).not.toBeInTheDocument();
+
+    // No height: no map either.
+    rerender(
+      <BodyHubTrends
+        units="kg"
+        heightCm={null}
+        trend={twoScanTrend}
+        weightHistory={[]}
+        isLoading={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Map' })).not.toBeInTheDocument();
+  });
+
+  it('switches to the Composition Map view on toggle', async () => {
+    const user = userEvent.setup();
+    renderTrends({ trend: twoScanTrend });
+
+    await user.click(screen.getByRole('button', { name: 'Map' }));
+    expect(screen.getByText('Composition Map')).toBeInTheDocument();
+    // Decomposition caption + direction legend from the map itself.
+    expect(screen.getByText(/FMI \+ FFMI = BMI/)).toBeInTheDocument();
+    expect(screen.getByText(/↑ muscle gained · ← fat lost · ↖ recomp/)).toBeInTheDocument();
+  });
+
+  it('opens the map directly when deep-linked via initialMetric', () => {
+    renderTrends({ trend: twoScanTrend, initialMetric: 'map' });
+    expect(screen.getByText('Composition Map')).toBeInTheDocument();
+  });
+
+  it('falls back gracefully when a map deep link is not satisfiable', () => {
+    renderTrends({ trend: [twoScanTrend[0]], initialMetric: 'map' });
+    // <2 scans: the map option doesn't exist — the default view renders.
+    expect(screen.getByText('Body Composition Trend')).toBeInTheDocument();
+    expect(screen.queryByText(/↑ muscle gained/)).not.toBeInTheDocument();
   });
 });

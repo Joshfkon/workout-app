@@ -1,8 +1,10 @@
 'use client';
 
 import { getDisplayWeight } from '@/lib/weightUtils';
-import { IconApple, IconTrendingUp, IconChartBar, IconScale } from '@tabler/icons-react';
+import { IconApple, IconTrendingUp, IconChartBar, IconScale, IconGauge } from '@tabler/icons-react';
 import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
+import type { BodyCompGlance } from '@/lib/actions/dashboard';
+import { BODY_COMP_TREND_SECTION_ID } from '@/services/compositionSpace';
 import { MetricTile } from './MetricTile';
 import { intakePaceLabel } from './intakePace';
 
@@ -42,8 +44,29 @@ interface MetricTileGridProps {
   /** Recent weight history for the sparkline (any unit; converted for display). */
   weightHistory: { date: string; weight: number; unit: string }[];
   weightRate: GlanceWeightRate | null;
+  /** Latest anchored BF% + FFMI (≥2 DEXA scans); null hides the tile. */
+  bodyComp?: BodyCompGlance | null;
   /** Opens the weight-log modal ("+ log" on the Weight tile). */
   onLogWeight: () => void;
+}
+
+/**
+ * Trend arrow for the Body comp tile. Direction is the HONEST direction of
+ * change; color grades it (rising FFMI good, rising BF% flagged, flat
+ * neutral). `threshold` is the per-month dead zone.
+ */
+function bodyCompArrow(
+  ratePerMonth: number,
+  threshold: number,
+  risingIsGood: boolean
+): { icon: string; color: string } {
+  if (ratePerMonth > threshold) {
+    return { icon: '↑', color: risingIsGood ? 'text-success-400' : 'text-warning-400' };
+  }
+  if (ratePerMonth < -threshold) {
+    return { icon: '↓', color: risingIsGood ? 'text-danger-400' : 'text-success-400' };
+  }
+  return { icon: '→', color: 'text-surface-400' };
 }
 
 /** Tiny trend line for the Weight tile (last ~30 days, display unit). */
@@ -82,12 +105,14 @@ export function MetricTileGrid({
   weightUnit,
   weightHistory,
   weightRate,
+  bodyComp = null,
   onLogWeight,
 }: MetricTileGridProps) {
   // Show the tile when anything was classified OR lifts are accruing history
   // (a brand-new program should read "rebuilding", not vanish).
   const showLifts = !!liftTrends && (liftTrends.lifts.length > 0 || liftTrends.insufficientData > 0);
-  const hasAnyTile = volume !== null || !!nutritionTargets || !!latestWeight || showLifts;
+  const hasAnyTile =
+    volume !== null || !!nutritionTargets || !!latestWeight || showLifts || !!bodyComp;
   // Confident lifts drive the headline; low-confidence lifts (window spans a
   // program switch) are "rebuilding" and shouldn't read as stagnation.
   const confidentLifts = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
@@ -241,6 +266,40 @@ export function MetricTileGrid({
               )}
             </div>
           )}
+        </MetricTile>
+      )}
+      {bodyComp && (
+        <MetricTile
+          icon={IconGauge}
+          label="Body comp"
+          // Lands on the Body Composition Trend module with the Composition
+          // Map open (?section= scroll target + initial view).
+          href={`/dashboard/analytics?tab=body&section=${BODY_COMP_TREND_SECTION_ID}`}
+        >
+          {(() => {
+            const bfArrow = bodyCompArrow(bodyComp.bodyFatRatePerMonth, 0.1, false);
+            const ffmiArrow = bodyCompArrow(bodyComp.ffmiRatePerMonth, 0.05, true);
+            return (
+              <>
+                <div className="text-xl font-semibold text-surface-100">
+                  {bodyComp.bodyFatPercent.toFixed(1)}
+                  <span className="text-sm text-surface-500 font-normal">% BF</span>
+                  <span className={`text-sm ml-1 ${bfArrow.color}`} aria-hidden="true">
+                    {bfArrow.icon}
+                  </span>
+                </div>
+                <div className="text-sm text-surface-300 mt-1.5">
+                  FFMI {bodyComp.ffmi.toFixed(1)}
+                  <span className={`ml-1 ${ffmiArrow.color}`} aria-hidden="true">
+                    {ffmiArrow.icon}
+                  </span>
+                </div>
+                <div className="text-[11px] text-surface-500 mt-1.5">
+                  DEXA-anchored · {bodyComp.scanCount} scans
+                </div>
+              </>
+            );
+          })()}
         </MetricTile>
       )}
     </div>

@@ -21,6 +21,10 @@ import {
 } from '@/services/bodyCompEngine';
 import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
 import {
+  getBodyCompLayout,
+  BODY_COMP_TREND_SECTION_ID,
+} from '@/services/compositionSpace';
+import {
   type StrengthProfile,
   type CalibrationResult,
   type BodyComposition,
@@ -1409,6 +1413,41 @@ function AnalyticsPageContent() {
     }
   };
 
+  // Prominence gating for the Body tab + Home card (0/1 scans keep the
+  // existing layout with a subtle prompt; ≥2 promote the trend module).
+  const bodyCompLayout = getBodyCompLayout(scans.length);
+
+  // Weight trend + DEXA-anchored BF%/lean-mass/FFMI trend + Composition Map.
+  // Extracted so the prominence logic can move it above/below the nudges
+  // without duplicating props. The map's goal vector reads the active
+  // composition target; its start defaults to the first scan of the current
+  // phase (target creation date) with an all-time toggle.
+  const bodyTrendModule = (
+    <BodyHubTrends
+      units={units}
+      heightCm={userProfile?.heightCm ?? null}
+      trend={bodyCompTrend}
+      weightHistory={bodyWeightHistory}
+      isLoading={isBodyTrendLoading}
+      phase={userProfile?.goal ?? null}
+      target={
+        activeTarget
+          ? {
+              targetWeightKg: activeTarget.targetWeightKg ?? null,
+              targetBodyFatPercent: activeTarget.targetBodyFatPercent ?? null,
+              targetFfmi: activeTarget.targetFfmi ?? null,
+            }
+          : null
+      }
+      phaseStartDate={activeTarget?.createdAt ?? null}
+      initialMetric={
+        sectionParam === BODY_COMP_TREND_SECTION_ID && bodyCompLayout.showCompositionMap
+          ? 'map'
+          : undefined
+      }
+    />
+  );
+
   const tabs = [
     { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
     { id: 'goals' as TabType, label: 'Goals', icon: '🎯' },
@@ -1474,29 +1513,41 @@ function AnalyticsPageContent() {
       {/* Tab Content */}
       {activeTab === 'body-composition' && (
         <div className="space-y-6">
-          {/* Body hub front door: one Log button for weight / tape / DEXA,
-              plus the staleness + DEXA-due nudges */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-semibold text-surface-100">Body</h2>
-              <Button size="sm" onClick={() => setLogSegment('weight')}>
-                + Log
-              </Button>
-            </div>
-            <BodyHubNudges
-              onLog={(segment) => setLogSegment(segment)}
-              refreshKey={bodyRefreshKey}
-            />
+          {/* Body hub front door: one Log button for weight / tape / DEXA */}
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-surface-100">Body</h2>
+            <Button size="sm" onClick={() => setLogSegment('weight')}>
+              + Log
+            </Button>
           </div>
 
-          {/* Weight trend + DEXA-anchored BF%/lean-mass/FFMI trend */}
-          <BodyHubTrends
-            units={units}
-            heightCm={userProfile?.heightCm ?? null}
-            trend={bodyCompTrend}
-            weightHistory={bodyWeightHistory}
-            isLoading={isBodyTrendLoading}
+          {/* Prominence (getBodyCompLayout): with ≥2 DEXA scans the trend
+              module (incl. the Composition Map) leads the tab; below that
+              the existing order stands plus a subtle log-a-scan prompt. */}
+          {bodyCompLayout.trendFirst && bodyTrendModule}
+
+          {/* Staleness + DEXA-due nudges */}
+          <BodyHubNudges
+            onLog={(segment) => setLogSegment(segment)}
+            refreshKey={bodyRefreshKey}
           />
+
+          {!bodyCompLayout.trendFirst && bodyTrendModule}
+
+          {bodyCompLayout.showScanPrompt && (
+            <p className="text-xs text-surface-500 text-center">
+              {scans.length === 0
+                ? 'Log a DEXA scan to unlock composition trends and the Composition Map.'
+                : 'One more DEXA scan unlocks the Composition Map and scan-to-scan analysis.'}{' '}
+              <button
+                type="button"
+                onClick={() => setLogSegment('dexa')}
+                className="text-primary-400 hover:text-primary-300 font-medium"
+              >
+                Log scan
+              </button>
+            </p>
+          )}
 
           {/* Per-site tape trends */}
           <MeasurementTrendCard
