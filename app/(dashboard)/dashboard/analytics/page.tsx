@@ -50,9 +50,17 @@ import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } fr
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
 import { getMuscleGroupProgression } from '@/services/progressionInsights';
 import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
+import { BodyHubTrends } from '@/components/body/BodyHubTrends';
+import { BodyHubNudges } from '@/components/body/BodyHubNudges';
+import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
+import type { BodyLogSegment } from '@/components/body/LogBodyDataSheet';
 // Dynamic imports for heavy chart components - only loaded when needed
 const FFMIGauge = dynamic(() => import('@/components/analytics/FFMIGauge').then(m => m.FFMIGauge), { ssr: false });
 const GoalsTab = dynamic(() => import('@/components/analytics/GoalsTab').then(m => m.GoalsTab), { ssr: false });
+const LogBodyDataSheet = dynamic(
+  () => import('@/components/body/LogBodyDataSheet').then(m => m.LogBodyDataSheet),
+  { ssr: false }
+);
 
 // Body composition chart
 const BodyCompChart = dynamic(
@@ -342,10 +350,23 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   );
 }
 
+/**
+ * Initial tab from the ?tab= query param (e.g. the Home Weight tile links to
+ * ?tab=body). Read imperatively instead of useSearchParams so this client
+ * page doesn't need a Suspense boundary just for a one-shot read.
+ */
+function initialTabFromQuery(): TabType {
+  if (typeof window === 'undefined') return 'body-composition';
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  if (tab === 'body' || tab === 'body-composition') return 'body-composition';
+  if (tab === 'goals' || tab === 'strength' || tab === 'volume' || tab === 'wellness') return tab;
+  return 'body-composition';
+}
+
 export default function AnalyticsPage() {
   const router = useRouter();
   const { preferences } = useUserPreferences();
-  const [activeTab, setActiveTab] = useState<TabType>('body-composition');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTabFromQuery);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '60d' | '6m' | '1y' | 'all'>('30d');
 
@@ -354,6 +375,10 @@ export default function AnalyticsPage() {
   const [progressPhotos, setProgressPhotos] = useState<ProgressPhoto[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+
+  // Body hub: unified log sheet + refresh signal for the hub widgets
+  const [logSegment, setLogSegment] = useState<BodyLogSegment | null>(null);
+  const [bodyRefreshKey, setBodyRefreshKey] = useState(0);
 
   // Goals tab state
   const [activeMesocycle, setActiveMesocycle] = useState<Mesocycle | null>(null);
@@ -1240,8 +1265,39 @@ export default function AnalyticsPage() {
     return <FullPageLoading text="Loading your analytics..." type="heartbeat" />;
   }
 
+  // After the unified sheet saves: refresh the hub widgets, and for a DEXA
+  // save also refresh this page's own scan-driven sections (quick stats,
+  // FFMI, recommendations) without re-running the whole page fetch.
+  const handleBodyDataSaved = async (detail: { kind: BodyLogSegment }) => {
+    setBodyRefreshKey((k) => k + 1);
+    if (detail.kind !== 'dexa' || !userId) return;
+    const supabase = createUntypedClient();
+    const { data } = await supabase
+      .from('dexa_scans')
+      .select('*')
+      .eq('user_id', userId)
+      .order('scan_date', { ascending: false });
+    if (data) {
+      setScans(
+        data.map((scan: any) => ({
+          id: scan.id,
+          userId: scan.user_id,
+          scanDate: scan.scan_date,
+          weightKg: scan.weight_kg,
+          leanMassKg: scan.lean_mass_kg,
+          fatMassKg: scan.fat_mass_kg,
+          bodyFatPercent: scan.body_fat_percent,
+          boneMassKg: scan.bone_mass_kg,
+          regionalData: scan.regional_data,
+          notes: scan.notes,
+          createdAt: scan.created_at,
+        }))
+      );
+    }
+  };
+
   const tabs = [
-    { id: 'body-composition' as TabType, label: 'Body Composition', icon: '📊' },
+    { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
     { id: 'goals' as TabType, label: 'Goals', icon: '🎯' },
     { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
     { id: 'volume' as TabType, label: 'Volume & Trends', icon: '📈' },
@@ -1305,6 +1361,30 @@ export default function AnalyticsPage() {
       {/* Tab Content */}
       {activeTab === 'body-composition' && (
         <div className="space-y-6">
+          {/* Body hub front door: one Log button for weight / tape / DEXA,
+              plus the staleness + DEXA-due nudges */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-semibold text-surface-100">Body</h2>
+              <Button size="sm" onClick={() => setLogSegment('weight')}>
+                + Log
+              </Button>
+            </div>
+            <BodyHubNudges
+              onLog={(segment) => setLogSegment(segment)}
+              refreshKey={bodyRefreshKey}
+            />
+          </div>
+
+          {/* Weight trend + DEXA-anchored BF%/lean-mass trend */}
+          <BodyHubTrends units={units} refreshKey={bodyRefreshKey} />
+
+          {/* Per-site tape trends */}
+          <MeasurementTrendCard
+            tapeUnit={units === 'lb' ? 'in' : 'cm'}
+            refreshKey={bodyRefreshKey}
+          />
+
           {/* Muscle Priorities Display - Show at top of body comp tab */}
           {userId ? (
             <MusclePrioritiesDisplay userId={userId} />
@@ -2649,6 +2729,18 @@ export default function AnalyticsPage() {
             </Card>
           </div>
         </div>
+      )}
+
+      {/* Unified "Log body data" sheet (weight / measurements / DEXA) —
+          the same sheet the Home Weight tile opens */}
+      {logSegment && (
+        <LogBodyDataSheet
+          isOpen
+          onClose={() => setLogSegment(null)}
+          initialSegment={logSegment}
+          preferredUnit={units}
+          onSaved={handleBodyDataSaved}
+        />
       )}
     </div>
   );

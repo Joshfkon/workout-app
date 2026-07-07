@@ -195,10 +195,17 @@ export function MetricTileGrid({
         <MetricTile
           icon={IconScale}
           label="Weight"
+          // Tile body opens the Body hub; "+ log" opens the log sheet without
+          // navigating (hence the stopPropagation/preventDefault).
+          href="/dashboard/analytics?tab=body"
           action={
             <button
               type="button"
-              onClick={onLogWeight}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onLogWeight();
+              }}
               className="text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
             >
               + log

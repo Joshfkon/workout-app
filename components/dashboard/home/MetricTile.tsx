@@ -9,7 +9,12 @@ interface MetricTileProps {
   label: string;
   /** When set, the tile becomes a tap-through link to the detail page. */
   href?: string;
-  /** Header-right action (e.g. the Weight tile's "+ log" button). Not combinable with href. */
+  /**
+   * Header-right action (e.g. the Weight tile's "+ log" button). Combinable
+   * with href: the action sits on top of the link, so give it an onClick
+   * that stops propagation and prevents default (see MetricTileGrid's
+   * Weight tile) or the tap will also navigate.
+   */
   action?: ReactNode;
   /** 'warning' draws attention with an amber border (e.g. volume below MEV). */
   accent?: 'warning';
