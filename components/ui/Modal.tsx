@@ -3,6 +3,7 @@
 import { useEffect, useRef, memo, useCallback, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 export interface ModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ export const Modal = memo(function Modal({
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const { inset: keyboardInset, scrollContainerRef } =
+    useKeyboardInset<HTMLDivElement>(isOpen);
 
   // Close on escape key and prevent body scroll
   useEffect(() => {
@@ -109,15 +112,25 @@ export const Modal = memo(function Modal({
       ref={overlayRef}
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      style={{
+        // Re-center the modal in the space above the on-screen keyboard.
+        // Safe-area stays additive with the keyboard inset, never replaced.
+        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
+      }}
     >
       <div
         ref={contentRef}
         onClick={handleContentClick}
         onTouchStart={handleTouchStart}
         className={cn(
-          'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in flex flex-col max-h-[calc(100vh-2rem)]',
+          'w-full bg-surface-900 border border-surface-800 rounded-xl shadow-xl animate-scale-in flex flex-col',
           sizes[size]
         )}
+        style={{
+          // Cap the box to the space the keyboard leaves so lower fields
+          // stay reachable by scrolling the content area.
+          maxHeight: `calc(100vh - 2rem - ${keyboardInset}px)`,
+        }}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? 'modal-title' : undefined}
@@ -163,8 +176,10 @@ export const Modal = memo(function Modal({
           </div>
         )}
 
-        {/* Content - scrollable area */}
-        <div 
+        {/* Content - scrollable area; focused fields are scrolled into view
+            above the keyboard via useKeyboardInset */}
+        <div
+          ref={scrollContainerRef}
           className="p-4 overflow-y-auto overscroll-contain flex-1 min-h-0"
           onTouchStart={handleTouchStart}
           onClick={handleContentClick}

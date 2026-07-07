@@ -19,6 +19,7 @@ import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 // Equipment mapping from equipmentFilter service
 const EQUIPMENT_MAPPING: Record<string, string[]> = {
@@ -239,6 +240,8 @@ function NewWorkoutContent() {
   
   // Custom exercise modal state
   const [showCustomExerciseModal, setShowCustomExerciseModal] = useState(false);
+  const { inset: customExerciseKbInset, scrollContainerRef: customExerciseModalRef } =
+    useKeyboardInset<HTMLDivElement>(showCustomExerciseModal);
   const [customExerciseForm, setCustomExerciseForm] = useState<CustomExerciseForm>({
     name: '',
     muscle: '',
@@ -2260,8 +2263,18 @@ function NewWorkoutContent() {
 
       {/* Custom Exercise Modal */}
       {showCustomExerciseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${customExerciseKbInset}px)`,
+          }}
+        >
+          <div
+            ref={customExerciseModalRef}
+            className="bg-surface-900 border border-surface-700 rounded-xl p-6 max-w-md w-full mx-4 shadow-xl overflow-y-auto"
+            style={{ maxHeight: `calc(100vh - 2rem - ${customExerciseKbInset}px)` }}
+          >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-surface-100">Add Custom Exercise</h3>
               <button

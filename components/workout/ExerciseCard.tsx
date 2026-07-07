@@ -23,6 +23,7 @@ import { SegmentedControl } from './SegmentedControl';
 import { SetLoggerRow } from './SetLoggerRow';
 import { SuggestionBanner } from './SuggestionBanner';
 import { BottomSheet } from './BottomSheet';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 const MUSCLE_GROUPS = ['chest', 'back', 'shoulders', 'traps', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'abs'];
 
@@ -288,6 +289,8 @@ export const ExerciseCard = memo(function ExerciseCard({
   const [showExerciseMenu, setShowExerciseMenu] = useState(false);
   const [showRpeGuide, setShowRpeGuide] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const { inset: swapKeyboardInset, scrollContainerRef: swapSheetRef } =
+    useKeyboardInset<HTMLDivElement>(showSwapModal);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [swapTab, setSwapTab] = useState<'similar' | 'browse'>('similar');
   const [swapSearch, setSwapSearch] = useState('');
@@ -2270,8 +2273,16 @@ export const ExerciseCard = memo(function ExerciseCard({
       {showSwapModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowSwapModal(false)}>
           <div className="absolute inset-0 bg-black/70" />
-          <div 
-            className="relative w-full max-w-lg max-h-[85vh] bg-surface-900 rounded-t-2xl sm:rounded-xl shadow-2xl border border-surface-700 overflow-hidden flex flex-col"
+          <div
+            ref={swapSheetRef}
+            className="relative w-full max-w-lg bg-surface-900 rounded-t-2xl sm:rounded-xl shadow-2xl border border-surface-700 overflow-hidden flex flex-col"
+            style={{
+              // Keep the sheet (and its search field) above the on-screen
+              // keyboard; safe-area stays additive with the keyboard inset.
+              marginBottom: swapKeyboardInset > 0 ? swapKeyboardInset : undefined,
+              maxHeight: `min(85vh, calc(100vh - ${swapKeyboardInset}px))`,
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
