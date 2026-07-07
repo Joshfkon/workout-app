@@ -20,6 +20,7 @@ import {
 import { WorkoutDaySelector } from '@/components/mesocycle';
 import { getLocalDateString } from '@/lib/utils';
 import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
+import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import type { MuscleGroup, WorkoutDay, ExtendedUserProfile, DexaRegionalData, Goal as SchemaGoal, Experience, Rating, Equipment, DexaScan, FullProgramRecommendation } from '@/types/schema';
 
 const WEEKDAY_NAMES: WorkoutDay[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -355,13 +356,12 @@ export default function MesocyclePage() {
               planned_date: plannedDate,
               state: 'planned',
               completion_percent: 0,
+              origin: 'scheduled' as const,
             });
           }
 
           if (newSessions.length > 0) {
-            const { error: insertError } = await supabase
-              .from('workout_sessions')
-              .insert(newSessions);
+            const { error: insertError } = await insertWorkoutSessions(supabase, newSessions);
             if (insertError) throw insertError;
           }
         }

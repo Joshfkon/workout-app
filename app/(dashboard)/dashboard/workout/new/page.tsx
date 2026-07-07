@@ -11,6 +11,7 @@ import { useMuscleRecovery, type MuscleRecoveryStatus } from '@/hooks/useMuscleR
 import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
 import { getLocalDateString } from '@/lib/utils';
+import { insertWorkoutSessions } from '@/lib/training/sessionOrigin';
 import { getUserExercisePreferences } from '@/lib/data/exercisePreferencesService';
 import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerciseVarietyService';
 import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
@@ -1452,19 +1453,25 @@ function NewWorkoutContent() {
       
       const userGoal: Goal = (userProfile?.goal as Goal) || 'maintain';
 
-      // Create workout session
-      const { data: session, error: sessionError } = await supabase
-        .from('workout_sessions')
-        .insert({
-          user_id: user.id,
-          state: 'planned',
-          planned_date: getLocalDateString(),
-          completion_percent: 0,
-        })
-        .select()
-        .single();
+      // Create workout session (a manually-built session is user-authored,
+      // same origin bucket as a blank workout)
+      const { data: createdSessions, error: sessionError } = await insertWorkoutSessions(
+        supabase,
+        [
+          {
+            user_id: user.id,
+            state: 'planned',
+            planned_date: getLocalDateString(),
+            completion_percent: 0,
+            origin: 'empty' as const,
+          },
+        ]
+      );
 
-      if (sessionError || !session) throw sessionError || new Error('Failed to create session');
+      const session = createdSessions?.[0];
+      if (sessionError || !session) {
+        throw (sessionError as Error | null) || new Error('Failed to create session');
+      }
 
       // Track which muscle groups have had warmups
       const warmedUpMuscles = new Set<string>();

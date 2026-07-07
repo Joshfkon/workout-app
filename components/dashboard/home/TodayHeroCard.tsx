@@ -55,6 +55,26 @@ interface TodayHeroCardProps {
   coachLine?: string | null;
 }
 
+/**
+ * Quiet "More options" link under the hero CTA → the Train tab, the permanent
+ * home for every workout start (empty / AI-suggested / repeat). Rendered
+ * OUTSIDE the card because the workout hero states wrap the whole card in a
+ * Link (nested anchors are invalid HTML). Deliberately not a button — the
+ * hero keeps its single Start CTA.
+ */
+function MoreOptionsLink() {
+  return (
+    <div className="mt-1.5 text-center">
+      <Link
+        href="/dashboard/train"
+        className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
+      >
+        More options
+      </Link>
+    </div>
+  );
+}
+
 /** Divider + sparkles coach line rendered below the hero CTA. */
 function CoachLine({ text }: { text: string }) {
   return (
@@ -125,52 +145,58 @@ export function TodayHeroCard({
           // exercises · 0/0 sets" would read as an empty workout.
           'Exercises are planned when you start');
     return (
-      <Link href={`/dashboard/workout/${workout.id}`} className="block">
-        <div
-          className={`rounded-2xl p-5 border transition-colors ${
-            inProgress
-              ? 'bg-warning-500/10 border-warning-500/20 hover:bg-warning-500/15'
-              : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
-          }`}
-        >
-          <HeroShell
-            eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
-            eyebrowClass={inProgress ? 'text-warning-400' : 'text-primary-400'}
-            title={title}
-            meta={meta}
-            cta={
-              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
-                {inProgress ? 'Continue workout' : 'Start workout'}
-              </div>
-            }
+      <div>
+        <Link href={`/dashboard/workout/${workout.id}`} className="block">
+          <div
+            className={`rounded-2xl p-5 border transition-colors ${
+              inProgress
+                ? 'bg-warning-500/10 border-warning-500/20 hover:bg-warning-500/15'
+                : 'bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15'
+            }`}
           >
-            {coachLine && <CoachLine text={coachLine} />}
-          </HeroShell>
-        </div>
-      </Link>
+            <HeroShell
+              eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
+              eyebrowClass={inProgress ? 'text-warning-400' : 'text-primary-400'}
+              title={title}
+              meta={meta}
+              cta={
+                <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
+                  {inProgress ? 'Continue workout' : 'Start workout'}
+                </div>
+              }
+            >
+              {coachLine && <CoachLine text={coachLine} />}
+            </HeroShell>
+          </div>
+        </Link>
+        <MoreOptionsLink />
+      </div>
     );
   }
 
   // Plan exists but today's session hasn't been generated yet.
   if (!workout && scheduled) {
     return (
-      <Link href="/dashboard/mesocycle" className="block">
-        <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15 transition-colors">
-          <HeroShell
-            eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
-            eyebrowClass="text-primary-400"
-            title={scheduled.dayName}
-            meta={workoutMeta ?? null}
-            cta={
-              <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
-                Start workout
-              </div>
-            }
-          >
-            {coachLine && <CoachLine text={coachLine} />}
-          </HeroShell>
-        </div>
-      </Link>
+      <div>
+        <Link href="/dashboard/mesocycle" className="block">
+          <div className="rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20 hover:bg-primary-500/15 transition-colors">
+            <HeroShell
+              eyebrow={`Next up${eyebrowContext ? ` · ${eyebrowContext}` : ''}`}
+              eyebrowClass="text-primary-400"
+              title={scheduled.dayName}
+              meta={workoutMeta ?? null}
+              cta={
+                <div className="w-full py-3 rounded-xl text-center text-[15px] font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600">
+                  Start workout
+                </div>
+              }
+            >
+              {coachLine && <CoachLine text={coachLine} />}
+            </HeroShell>
+          </div>
+        </Link>
+        <MoreOptionsLink />
+      </div>
     );
   }
 
@@ -226,32 +252,35 @@ export function TodayHeroCard({
 
   if (!hasPlan) {
     return (
-      <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
-        <FirstTimeHint
-          id="dashboard-mesocycle-intro"
-          title="What's a Mesocycle?"
-          description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
-          position="top"
-        />
-        <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
-          Next up
+      <div>
+        <div className="relative rounded-2xl p-5 border bg-primary-500/10 border-primary-500/20">
+          <FirstTimeHint
+            id="dashboard-mesocycle-intro"
+            title="What's a Mesocycle?"
+            description="A mesocycle is a training block (usually 4-8 weeks) where you progressively challenge your muscles, then take a recovery week. This structured approach is proven to build more muscle than random workouts!"
+            position="top"
+          />
+          <div className="text-[11px] font-semibold tracking-widest uppercase mb-1.5 text-primary-400">
+            Next up
+          </div>
+          <div className="text-2xl font-bold text-surface-100">No training plan yet</div>
+          <p className="text-[13px] text-surface-400 mt-1 mb-4">
+            Plan a mesocycle for smart progression and volume tracking, or jump straight into a workout.
+          </p>
+          <div className="flex gap-2">
+            <Link href="/dashboard/mesocycle/new" className="flex-1">
+              <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
+                Plan a mesocycle
+              </span>
+            </Link>
+            <Link href="/dashboard/workout/quick" className="flex-1">
+              <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
+                Quick workout
+              </span>
+            </Link>
+          </div>
         </div>
-        <div className="text-2xl font-bold text-surface-100">No training plan yet</div>
-        <p className="text-[13px] text-surface-400 mt-1 mb-4">
-          Plan a mesocycle for smart progression and volume tracking, or jump straight into a workout.
-        </p>
-        <div className="flex gap-2">
-          <Link href="/dashboard/mesocycle/new" className="flex-1">
-            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-white bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-colors">
-              Plan a mesocycle
-            </span>
-          </Link>
-          <Link href="/dashboard/workout/quick" className="flex-1">
-            <span className="block w-full py-3 rounded-xl text-center text-sm font-semibold text-surface-200 bg-surface-800 hover:bg-surface-700 transition-colors">
-              Quick workout
-            </span>
-          </Link>
-        </div>
+        <MoreOptionsLink />
       </div>
     );
   }

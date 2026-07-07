@@ -158,6 +158,50 @@ describe('TodayHeroCard — next-up recommendation', () => {
     expect(screen.queryByText('Log dinner')).not.toBeInTheDocument();
   });
 
+  it('shows a quiet "More options" link to the Train tab under the Start hero', () => {
+    render(
+      <TodayHeroCard
+        workout={baseWorkout}
+        scheduled={null}
+        hasPlan
+        mesocycleName="Block 1"
+      />
+    );
+
+    const link = screen.getByRole('link', { name: 'More options' });
+    expect(link).toHaveAttribute('href', '/dashboard/train');
+  });
+
+  it('shows the "More options" link in the no-plan state too', () => {
+    render(
+      <TodayHeroCard
+        workout={null}
+        scheduled={null}
+        hasPlan={false}
+        mesocycleName={null}
+      />
+    );
+
+    expect(screen.getByRole('link', { name: 'More options' })).toHaveAttribute(
+      'href',
+      '/dashboard/train'
+    );
+  });
+
+  it('does not add the link to the meal or done heroes', () => {
+    render(
+      <TodayHeroCard
+        workout={{ ...baseWorkout, state: 'completed', completedSets: 15 }}
+        scheduled={null}
+        hasPlan
+        mesocycleName="Arnold"
+        meal={meal}
+      />
+    );
+
+    expect(screen.queryByRole('link', { name: 'More options' })).not.toBeInTheDocument();
+  });
+
   it('falls back to the done state when the workout is complete and no meal is suggested', () => {
     render(
       <TodayHeroCard

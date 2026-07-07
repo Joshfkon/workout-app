@@ -63,7 +63,7 @@ import {
 } from './fatigueBudgetEngine';
 import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
 
-import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup } from './mesocycleBuilder';
+import { calculateRecoveryFactors, buildPeriodizationPlan, calculateVolumeDistribution as calculateVolumeDistributionWithLagging, generateWarmup, isMuscleExcludedByInjury } from './mesocycleBuilder';
 import { getExercisesSync, type Exercise as ServiceExercise } from './exerciseService';
 
 // NOTE: generateWarmup imported from mesocycleBuilder.ts
@@ -198,7 +198,7 @@ function selectExercisesWithFatigue(
     (e) =>
       muscleMatchesGroup(e.primaryMuscle, muscle) &&
       profile.availableEquipment.includes(e.equipment) &&
-      !profile.injuryHistory.includes(muscle)
+      !isMuscleExcludedByInjury(muscle, profile.injuryHistory)
   );
 
   // Filter by gym equipment preferences (machine-level filtering)

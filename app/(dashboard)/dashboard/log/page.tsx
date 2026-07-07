@@ -20,9 +20,10 @@
  *      nutrition targets, and steps from wearable daily activity data
  *      (tile hidden when there's no activity row for today).
  *
- * The AI suggested workout sheet builds a plan from muscle recovery +
- * weekly volume (services/suggestedWorkout, pure), previews it, and only
- * writes the session/blocks when the user taps Start.
+ * The AI suggested workout flow lives in the shared SuggestedWorkoutSheet
+ * (also launched from the Train tab): plan from muscle recovery + weekly
+ * volume (services/suggestedWorkout, pure), previewed, and only written
+ * when the user taps Start.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -34,16 +35,9 @@ import {
   IconLoader2,
   IconPlus,
   IconSalad,
-  IconX,
 } from '@tabler/icons-react';
 import { createUntypedClient } from '@/lib/supabase/client';
 import { getLocalDateString } from '@/lib/utils';
-import { generateWarmupProtocol } from '@/services/progressionEngine';
-import { quickWeightEstimate } from '@/services/weightEstimationEngine';
-import {
-  buildSuggestedWorkout,
-  type SuggestedWorkoutPlan,
-} from '@/services/suggestedWorkout';
 import {
   startMesocycleWorkoutSession,
   getWorkoutForDay,
@@ -54,9 +48,7 @@ import { sessionIndexFromCompleted } from '@/lib/training/mesocycleProgress';
 import { getOrCreateTodaySession } from '../workout/_lib/adhocSession';
 import { cancelWorkoutSession } from '../workout/[id]/_lib/cancelWorkout';
 import { useWorkoutStore } from '@/stores/workoutStore';
-import { useMuscleRecovery } from '@/hooks/useMuscleRecovery';
-import { useWeeklyVolume } from '@/hooks/useWeeklyVolume';
-import { BottomSheet } from '@/components/workout/BottomSheet';
+import { SuggestedWorkoutSheet } from '@/components/workout/SuggestedWorkoutSheet';
 import { Modal } from '@/components/ui/Modal';
 import { getSessionFromProgramData, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import {
@@ -68,14 +60,7 @@ import {
   formatRelativeDay,
   type TodaySoFar,
 } from './_components/LogPageSections';
-import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
-import type {
-  Experience,
-  FullProgramRecommendation,
-  MuscleGroup,
-  WarmupSet,
-  WorkoutDay,
-} from '@/types/schema';
+import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
 
 // Lazy-load the check-in flow so it only ships when the user opens it
 // (same pattern as the home dashboard's quick-log modals).
@@ -85,16 +70,6 @@ const DailyCheckIn = dynamic(
 );
 
 type UserGoal = 'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance';
-
-interface LogExercise {
-  id: string;
-  name: string;
-  primary_muscle: string | null;
-  mechanic: 'compound' | 'isolation' | null;
-  default_rep_range: [number, number] | null;
-  default_rir: number | null;
-  hypertrophy_tier: string | null;
-}
 
 interface InProgressSummary {
   id: string;
@@ -133,115 +108,8 @@ interface HeroPlanInfo {
   lastDone: Date | null;
 }
 
-type UntypedSupabase = ReturnType<typeof createUntypedClient>;
-
 // getOrCreateTodaySession moved to ../workout/_lib/adhocSession so the
 // quick-workout confirm screen shares the exact create/reuse semantics.
-
-/** The users-table fields quickWeightEstimate needs. */
-interface EstimationProfile {
-  weight_kg: number | null;
-  height_cm: number | null;
-  body_fat_percent: number | null;
-  experience: string | null;
-}
-
-async function fetchEstimationProfile(
-  supabase: UntypedSupabase,
-  userId: string
-): Promise<EstimationProfile | null> {
-  const { data } = await supabase
-    .from('users')
-    .select('weight_kg, height_cm, body_fat_percent, experience')
-    .eq('id', userId)
-    .single();
-  return (data as EstimationProfile | null) ?? null;
-}
-
-/** Suggested working weight via the same helper the mesocycle start path uses (kg in, kg out). */
-function estimateWeightKg(
-  profile: EstimationProfile | null,
-  exerciseName: string,
-  repRange: [number, number],
-  targetRir: number
-): number {
-  if (!profile?.weight_kg || !profile?.height_cm) return 0;
-
-  const weightRec = quickWeightEstimate(
-    exerciseName,
-    { min: repRange[0], max: repRange[1] },
-    targetRir,
-    profile.weight_kg,
-    profile.height_cm,
-    profile.body_fat_percent || 20,
-    (profile.experience || 'intermediate') as Experience
-  );
-  if (weightRec.confidence === 'find_working_weight') return 0;
-  return weightRec.recommendedWeight || 0;
-}
-
-/** Rep range / RIR / rest defaults shared by the blank + AI create paths. */
-function blockDefaults(exercise: LogExercise): {
-  isCompound: boolean;
-  repRange: [number, number];
-  targetRir: number;
-} {
-  const isCompound = exercise.mechanic === 'compound';
-  const repRange = (exercise.default_rep_range && exercise.default_rep_range.length >= 2
-    ? [exercise.default_rep_range[0], exercise.default_rep_range[1]]
-    : isCompound
-      ? [6, 10]
-      : [10, 15]) as [number, number];
-  return { isCompound, repRange, targetRir: exercise.default_rir ?? 2 };
-}
-
-/** Warmup protocol for the session's first exercise (same shape everywhere). */
-function warmupForFirstExercise(
-  exercise: LogExercise,
-  isCompound: boolean,
-  repRange: [number, number],
-  targetRir: number,
-  workingWeightKg: number
-): WarmupSet[] {
-  return generateWarmupProtocol({
-    workingWeight: workingWeightKg > 0 ? workingWeightKg : 60,
-    exercise: {
-      id: exercise.id,
-      name: exercise.name,
-      primaryMuscle: (exercise.primary_muscle || 'chest') as MuscleGroup,
-      secondaryMuscles: [],
-      mechanic: isCompound ? 'compound' : 'isolation',
-      defaultRepRange: repRange,
-      defaultRir: targetRir,
-      minWeightIncrementKg: 2.5,
-      formCues: [],
-      commonMistakes: [],
-      equipmentRequired: [],
-      setupNote: '',
-      movementPattern: isCompound ? 'compound' : 'isolation',
-    },
-    isFirstExercise: true,
-  });
-}
-
-/** Duration choices for the AI suggested workout ("How much time do you have?"). */
-const AI_DURATION_CHOICES = [20, 30, 45, 60, 75, 90];
-
-/** Exercise budget for the session length (compound ≈ 12 min, isolation ≈ 8 min incl. rest). */
-function maxExercisesForDuration(minutes: number): number {
-  if (minutes <= 20) return 2;
-  if (minutes <= 30) return 3;
-  if (minutes <= 45) return 4;
-  if (minutes <= 60) return 5;
-  if (minutes <= 75) return 6;
-  return 7;
-}
-
-/** Per-exercise set target scaled to session length (full sets at 60+ min, never below 2). */
-function plannedSetsFor(mechanic: 'compound' | 'isolation' | null, minutes: number): number {
-  const base = mechanic === 'compound' ? 4 : 3;
-  return Math.max(2, Math.round(base * Math.min(1, minutes / 60)));
-}
 
 export default function LogPage() {
   const router = useRouter();
@@ -254,9 +122,6 @@ export default function LogPage() {
   const [heroInfo, setHeroInfo] = useState<HeroPlanInfo | null>(null);
   const [todaySoFar, setTodaySoFar] = useState<TodaySoFar | null>(null);
   const [programDayName, setProgramDayName] = useState<string | null>(null);
-  const [exercises, setExercises] = useState<LogExercise[]>([]);
-  const [usageCounts, setUsageCounts] = useState<Map<string, number>>(new Map());
-  const [lastDone, setLastDone] = useState<Map<string, Date>>(new Map());
   const [isStartingMeso, setIsStartingMeso] = useState(false);
   const [isStartingBlank, setIsStartingBlank] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -270,14 +135,8 @@ export default function LogPage() {
   const [userGoal, setUserGoal] = useState<UserGoal | undefined>(undefined);
   const [showCheckIn, setShowCheckIn] = useState(false);
 
-  // AI suggested workout
-  const { recoveryStatus, isLoading: recoveryLoading } = useMuscleRecovery();
-  const { volumeData, isLoading: volumeLoading } = useWeeklyVolume();
-  const [aiRequested, setAiRequested] = useState(false);
-  const [aiPlan, setAiPlan] = useState<SuggestedWorkoutPlan | null>(null);
-  const [aiDuration, setAiDuration] = useState(45);
+  // AI suggested workout (shared sheet — mounts and fetches on first open)
   const [showAiSheet, setShowAiSheet] = useState(false);
-  const [isStartingAi, setIsStartingAi] = useState(false);
 
   useEffect(() => {
     fetchAll();
@@ -290,14 +149,9 @@ export default function LogPage() {
       if (!user) return;
 
       const today = getLocalDateString();
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-
       const [
         inProgressRes,
         mesoRes,
-        exercisesRes,
-        usageRes,
         checkInRes,
         goalRes,
         foodRes,
@@ -318,15 +172,6 @@ export default function LogPage() {
           .eq('state', 'active')
           .order('created_at', { ascending: false })
           .limit(1),
-        supabase
-          .from('exercises')
-          .select('id, name, primary_muscle, mechanic, default_rep_range, default_rir, hypertrophy_tier')
-          .order('name'),
-        supabase
-          .from('exercise_blocks')
-          .select('exercise_id, workout_sessions!inner(user_id, started_at)')
-          .eq('workout_sessions.user_id', user.id)
-          .gte('workout_sessions.started_at', ninetyDaysAgo.toISOString()),
         supabase
           .from('daily_check_ins')
           .select('id')
@@ -384,28 +229,6 @@ export default function LogPage() {
         const dayOfWeek = new Date().getDay() || 7;
         tw = getWorkoutForDay(meso.split_type, dayOfWeek, meso.days_per_week, meso.preferred_workout_days);
         setTodayWorkout(tw);
-      }
-
-      if (exercisesRes.data) {
-        setExercises(exercisesRes.data as LogExercise[]);
-      }
-
-      if (usageRes.data) {
-        const counts = new Map<string, number>();
-        const recent = new Map<string, Date>();
-        (usageRes.data as { exercise_id: string; workout_sessions: { started_at: string } }[]).forEach(
-          (block) => {
-            const id = block.exercise_id;
-            counts.set(id, (counts.get(id) || 0) + 1);
-            const sessionDate = new Date(block.workout_sessions.started_at);
-            const currentLast = recent.get(id);
-            if (!currentLast || sessionDate > currentLast) {
-              recent.set(id, sessionDate);
-            }
-          }
-        );
-        setUsageCounts(counts);
-        setLastDone(recent);
       }
 
       // "Today so far" strip. food_log rows can be missing entirely (nothing
@@ -577,135 +400,13 @@ export default function LogPage() {
     setShowDiscardConfirm(false);
   };
 
-  // AI suggestion: the sheet asks "How much time do you have?" first; picking
-  // a duration sets aiRequested and the plan is computed here (once
-  // recovery/volume/exercise data is in), sized to fit the time. NOTHING is
-  // written until Start.
-  useEffect(() => {
-    if (!aiRequested || recoveryLoading || volumeLoading || isLoading) return;
-
-    const volumeByMuscle = new Map(volumeData.map((v) => [v.muscleGroup, v]));
-    const plan = buildSuggestedWorkout({
-      muscles: recoveryStatus.map((r) => ({
-        muscle: r.muscle,
-        recoveryStatus: r.isReady ? 'ready' : r.recoveryPercent < 50 ? 'sore' : 'recovering',
-        weeklySets: volumeByMuscle.get(r.muscle)?.totalSets ?? 0,
-        targetSets: volumeByMuscle.get(r.muscle)?.landmarks.mav ?? 10,
-      })),
-      exercises: exercises.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        primaryMuscle: ex.primary_muscle,
-        tier: ex.hypertrophy_tier,
-        mechanic: ex.mechanic,
-      })),
-      recentExerciseIds: Array.from(lastDone.entries())
-        .sort(
-          (a, b) =>
-            b[1].getTime() - a[1].getTime() ||
-            (usageCounts.get(b[0]) ?? 0) - (usageCounts.get(a[0]) ?? 0)
-        )
-        .map(([id]) => id),
-      maxExercises: maxExercisesForDuration(aiDuration),
-    });
-
-    setAiRequested(false);
-    if (plan.exercises.length === 0) {
-      setError('Could not build a suggestion — try a blank workout instead.');
-      setShowAiSheet(false);
-      return;
-    }
-    setAiPlan(plan);
-  }, [aiRequested, recoveryLoading, volumeLoading, isLoading, recoveryStatus, volumeData, exercises, lastDone, usageCounts, aiDuration]);
-
-  const handleRemoveAiPick = (exerciseId: string) => {
-    setAiPlan((plan) =>
-      plan
-        ? { ...plan, exercises: plan.exercises.filter((p) => p.exerciseId !== exerciseId) }
-        : plan
-    );
-  };
-
-  // Materialize the previewed AI plan: same session + block creation path as
-  // the blank workout (lazy create, quickWeightEstimate, warmups on the
-  // session's first exercise).
-  const handleStartAiWorkout = async () => {
-    if (!aiPlan || aiPlan.exercises.length === 0 || isStartingAi) return;
-    setIsStartingAi(true);
-    setError(null);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      const { sessionId, isNewSession } = await getOrCreateTodaySession(supabase, user.id);
-
-      let order = 1;
-      if (!isNewSession) {
-        const { data: maxOrderResult } = await supabase
-          .from('exercise_blocks')
-          .select('order')
-          .eq('workout_session_id', sessionId)
-          .order('order', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        order = (maxOrderResult?.order || 0) + 1;
-      }
-
-      const profile = await fetchEstimationProfile(supabase, user.id);
-      const exerciseById = new Map(exercises.map((ex) => [ex.id, ex]));
-      const blocks = [];
-      for (const pick of aiPlan.exercises) {
-        const exercise = exerciseById.get(pick.exerciseId);
-        if (!exercise) continue;
-
-        const { isCompound, repRange, targetRir } = blockDefaults(exercise);
-        const suggestedWeight = estimateWeightKg(profile, exercise.name, repRange, targetRir);
-
-        let warmupSets: WarmupSet[] = [];
-        if (isNewSession && blocks.length === 0) {
-          warmupSets = warmupForFirstExercise(exercise, isCompound, repRange, targetRir, suggestedWeight);
-        }
-
-        blocks.push({
-          workout_session_id: sessionId,
-          exercise_id: exercise.id,
-          order: order++,
-          target_sets: plannedSetsFor(exercise.mechanic, aiDuration),
-          target_rep_range: repRange,
-          target_rir: targetRir,
-          target_weight_kg: suggestedWeight,
-          target_rest_seconds: isCompound ? 180 : 90,
-          suggestion_reason: pick.reason,
-          warmup_protocol: { sets: warmupSets },
-        });
-      }
-
-      if (blocks.length === 0) throw new Error('No exercises to start');
-
-      const { error: blocksError } = await supabase.from('exercise_blocks').insert(blocks);
-      if (blocksError) throw blocksError;
-
-      router.push(`/dashboard/workout/${sessionId}?fromCreate=true`);
-    } catch (err) {
-      console.error('Failed to start suggested workout:', err);
-      setError('Failed to start workout. Please try again.');
-      setIsStartingAi(false);
-    }
-  };
-
   const dateLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
   });
 
-  const openAiSheet = () => {
-    setAiPlan(null);
-    setShowAiSheet(true);
-  };
+  const openAiSheet = () => setShowAiSheet(true);
 
   const startedAtLabel = inProgress?.startedAt
     ? new Date(inProgress.startedAt).toLocaleTimeString('en-US', {
@@ -857,109 +558,11 @@ export default function LogPage() {
         </div>
       )}
 
-      {/* AI suggested workout: time question first, then the plan preview;
-          nothing is created until Start */}
-      <BottomSheet
-        isOpen={showAiSheet}
-        onClose={() => setShowAiSheet(false)}
-        title={aiPlan ? 'Suggested workout' : 'How much time do you have?'}
-      >
-        {!aiPlan && (
-          <div className="space-y-3">
-            <p className="text-[13px] text-surface-400">
-              We&apos;ll size the workout to fit your time.
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {AI_DURATION_CHOICES.map((mins) => (
-                <button
-                  key={mins}
-                  onClick={() => {
-                    setAiDuration(mins);
-                    setAiRequested(true);
-                  }}
-                  disabled={aiRequested}
-                  className={`p-3 rounded-xl text-center border-2 transition-colors disabled:opacity-60 ${
-                    aiRequested && aiDuration === mins
-                      ? 'bg-primary-500/20 border-primary-500 text-primary-400'
-                      : 'bg-surface-800 border-transparent text-surface-200 hover:bg-surface-700'
-                  }`}
-                >
-                  <span className="block text-[15px] font-semibold">{mins}</span>
-                  <span className="block text-[11px] text-surface-500">min</span>
-                </button>
-              ))}
-            </div>
-            {aiRequested && (
-              <p className="flex items-center gap-2 text-[13px] text-surface-400">
-                <IconLoader2 size={14} className="animate-spin" aria-hidden="true" />
-                Building suggestion...
-              </p>
-            )}
-          </div>
-        )}
-        {aiPlan && (
-          <div className="space-y-3">
-            <p className="text-[13px] text-surface-300">{aiPlan.focus}</p>
-            <p className="text-[11px] text-surface-500">Sized for ~{aiDuration} minutes.</p>
-
-            <div className="rounded-xl border border-surface-800 bg-surface-950/40 overflow-hidden">
-              {aiPlan.exercises.map((pick) => {
-                const exercise = exercises.find((ex) => ex.id === pick.exerciseId);
-                if (!exercise) return null;
-                const setsPlanned = plannedSetsFor(exercise.mechanic, aiDuration);
-                return (
-                  <div
-                    key={pick.exerciseId}
-                    className="flex items-center gap-2 px-3 py-2.5 border-b border-surface-800/50 last:border-b-0"
-                  >
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[13px] text-surface-200 truncate">
-                        {exercise.name}
-                      </span>
-                      <span className="block text-[11px] text-surface-500">
-                        {STANDARD_MUSCLE_DISPLAY_NAMES[pick.muscle] ?? pick.muscle} · {setsPlanned}{' '}
-                        sets
-                      </span>
-                      <span className="block text-[11px] text-surface-500">{pick.reason}</span>
-                    </span>
-                    <button
-                      onClick={() => handleRemoveAiPick(pick.exerciseId)}
-                      className="p-1.5 rounded-lg text-surface-500 hover:text-surface-300 hover:bg-surface-800 transition-colors flex-shrink-0"
-                      aria-label={`Remove ${exercise.name}`}
-                    >
-                      <IconX size={16} aria-hidden="true" />
-                    </button>
-                  </div>
-                );
-              })}
-              {aiPlan.exercises.length === 0 && (
-                <p className="p-4 text-center text-xs text-surface-500">
-                  All exercises removed — cancel and try again.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <button
-                onClick={handleStartAiWorkout}
-                disabled={isStartingAi || aiPlan.exercises.length === 0}
-                className="w-full py-2.5 rounded-lg bg-primary-500 text-white text-[13px] font-medium hover:bg-primary-600 transition-colors disabled:opacity-60"
-              >
-                {isStartingAi
-                  ? 'Starting...'
-                  : `Start workout (${aiPlan.exercises.length} ${aiPlan.exercises.length === 1 ? 'exercise' : 'exercises'})`}
-              </button>
-              <button
-                onClick={() => setShowAiSheet(false)}
-                disabled={isStartingAi}
-                className="w-full py-2 rounded-lg text-[13px] text-surface-400 hover:text-surface-200 transition-colors disabled:opacity-60"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </BottomSheet>
+      {/* AI suggested workout (shared with the Train tab): time question
+          first, then the plan preview; nothing is created until Start */}
+      {showAiSheet && (
+        <SuggestedWorkoutSheet isOpen onClose={() => setShowAiSheet(false)} />
+      )}
 
       {/* Discard confirmation for the unfinished-workout banner's X */}
       {showDiscardConfirm && inProgress && (
