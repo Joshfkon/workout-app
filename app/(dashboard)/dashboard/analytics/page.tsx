@@ -1767,24 +1767,49 @@ function AnalyticsPageContent() {
       )}
 
       {activeTab === 'goals' && (
-        <GoalsTab
-          activeMesocycle={activeMesocycle}
-          activeTarget={activeTarget}
-          currentBodyComp={{
-            weightKg: latestScan?.weightKg ?? null,
-            bodyFatPercent: latestScan?.bodyFatPercent ?? null,
-            ffmi: ffmiResult?.ffmi ?? null,
-            leanMassKg: latestScan?.leanMassKg ?? null,
-          }}
-          currentMeasurements={currentMeasurements}
-          weightHistory={weightHistory}
-          proportionsAnalysis={proportionsAnalysis}
-          heightCm={userProfile?.heightCm ?? null}
-          displayUnit={units === 'kg' ? 'cm' : 'in'}
-          weightUnit={units === 'kg' ? 'kg' : 'lb'}
-          onEditGoals={() => router.push('/dashboard/body-composition?tab=targets')}
-          onCreateMesocycle={() => router.push('/dashboard/mesocycle/new')}
-        />
+        <div className="space-y-6">
+          {/* The target EDITOR (weight / BF% / FFMI — what the Composition
+              Map's goal vector reads). Lives here on Goals, id-anchored so
+              the map's "Set a target" prompt deep-links straight to it. */}
+          {userId && (
+            <div id="body-targets" className="scroll-mt-4">
+              <BodyTargets
+                userId={userId}
+                unit={units === 'lb' ? 'in' : 'cm'}
+                weightUnit={units}
+                currentWeightKg={latestScan?.weightKg}
+                currentBodyFatPercent={latestScan?.bodyFatPercent}
+                currentFfmi={ffmiResult?.ffmi}
+                currentMeasurements={currentMeasurements}
+              />
+            </div>
+          )}
+          <GoalsTab
+            activeMesocycle={activeMesocycle}
+            activeTarget={activeTarget}
+            currentBodyComp={{
+              weightKg: latestScan?.weightKg ?? null,
+              bodyFatPercent: latestScan?.bodyFatPercent ?? null,
+              ffmi: ffmiResult?.ffmi ?? null,
+              leanMassKg: latestScan?.leanMassKg ?? null,
+            }}
+            currentMeasurements={currentMeasurements}
+            weightHistory={weightHistory}
+            proportionsAnalysis={proportionsAnalysis}
+            heightCm={userProfile?.heightCm ?? null}
+            displayUnit={units === 'kg' ? 'cm' : 'in'}
+            weightUnit={units === 'kg' ? 'kg' : 'lb'}
+            onEditGoals={() =>
+              // The editor is on this same tab — scroll to it instead of the
+              // old /dashboard/body-composition?tab=targets route, which
+              // redirects to Analytics and drops the param (dead end).
+              document
+                .getElementById('body-targets')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+            onCreateMesocycle={() => router.push('/dashboard/mesocycle/new')}
+          />
+        </div>
       )}
 
       {activeTab === 'strength' && (
@@ -2371,16 +2396,8 @@ function AnalyticsPageContent() {
                     <CardioTracker userId={userId} />
                   </CardContent>
                 </Card>
-                <BodyTargets
-                  userId={userId}
-                  unit={units === 'lb' ? 'in' : 'cm'}
-                  weightUnit={units}
-                  currentWeightKg={
-                    weightHistory.length > 0
-                      ? weightHistory[weightHistory.length - 1].weightKg
-                      : undefined
-                  }
-                />
+                {/* BodyTargets (the goal editor) moved to the Goals tab —
+                    it was unfindable here under Wellness daily tracking. */}
               </div>
             </div>
           )}

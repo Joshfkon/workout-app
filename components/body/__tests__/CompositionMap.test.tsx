@@ -227,10 +227,13 @@ describe('CompositionMap', () => {
     expect(screen.getByText(/DEXA precision is ~±1–2% BF/)).toBeInTheDocument();
   });
 
-  it('prompts to set a target (linking to goals) when none is set', () => {
+  it('prompts to set a target, deep-linking to the target editor on Goals', () => {
     renderMap({ target: null });
     const link = screen.getByRole('link', { name: 'Set a target' });
-    expect(link).toHaveAttribute('href', '/dashboard/analytics?tab=goals');
+    expect(link).toHaveAttribute(
+      'href',
+      '/dashboard/analytics?tab=goals&section=body-targets'
+    );
     expect(screen.getByText(/to see your goal vector/)).toBeInTheDocument();
   });
 
