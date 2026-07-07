@@ -1,9 +1,12 @@
 import {
   buildAnchoredBodyCompTrend,
+  findLowConfidenceGaps,
   rescaleSegment,
+  LOW_CONFIDENCE_GAP_DAYS,
   type ScanAnchor,
   type WeightPoint,
 } from '@/services/bodyCompAnchor';
+import { computeFFMI } from '@/services/bodyCompEngine';
 
 // ============================================================
 // rescaleSegment — the core "estimated segment fitted to both
@@ -209,6 +212,114 @@ describe('buildAnchoredBodyCompTrend', () => {
     expect(proj!.bodyFatPercent).toBeCloseTo(19.5, 1);
   });
 
+  it('interpolates bone mass linearly between scans and clamps beyond the ends', () => {
+    const withBoneA: ScanAnchor = { ...scanA, boneMassKg: 3.0 };
+    const withBoneB: ScanAnchor = { ...scanB, boneMassKg: 3.2 };
+    const weights: WeightPoint[] = [
+      { date: '2026-05-22', weightKg: 79 }, // before first scan
+      { date: '2026-06-11', weightKg: 80 }, // exact midpoint of the 20-day span
+      { date: '2026-07-01', weightKg: 81 }, // after last scan
+    ];
+    const trend = buildAnchoredBodyCompTrend(weights, [withBoneA, withBoneB]);
+
+    const at = (date: string) => trend.find((p) => p.date === date)!;
+    expect(at(scanA.date).boneMassKg).toBe(3.0); // scan's own logged value
+    expect(at(scanB.date).boneMassKg).toBe(3.2);
+    expect(at('2026-06-11').boneMassKg).toBeCloseTo(3.1, 2); // midpoint
+    expect(at('2026-05-22').boneMassKg).toBe(3.0); // clamped before first
+    expect(at('2026-07-01').boneMassKg).toBe(3.2); // clamped after last
+  });
+
+  it('reports null bone mass when no scan logged it, and fills a bone-less scan from neighbors', () => {
+    const noBone = buildAnchoredBodyCompTrend(
+      [{ date: '2026-06-11', weightKg: 80 }],
+      [scanA, scanB]
+    );
+    expect(noBone.every((p) => p.boneMassKg === null)).toBe(true);
+
+    // A scan without bone between two scans with bone gets the interpolated
+    // BMC (it's nearly constant), not null.
+    const scanMid: ScanAnchor = {
+      date: '2026-06-11',
+      bodyFatPercent: 19,
+      leanMassKg: 65,
+      fatMassKg: 15,
+    };
+    const mixed = buildAnchoredBodyCompTrend(
+      [],
+      [{ ...scanA, boneMassKg: 3.0 }, scanMid, { ...scanB, boneMassKg: 3.2 }]
+    );
+    const mid = mixed.find((p) => p.date === scanMid.date)!;
+    expect(mid.boneMassKg).toBeCloseTo(3.1, 2);
+  });
+
+  it('FFMI computed from trend anchors matches FFMI computed directly from each scan', () => {
+    // The FFMI series must pass exactly through FFMI at every DEXA point —
+    // anchor points carry the scans' exact lean + bone, so the shared
+    // computeFFMI yields identical results from either source.
+    const heightCm = 179;
+    const withBoneA: ScanAnchor = { ...scanA, boneMassKg: 3.0 };
+    const withBoneB: ScanAnchor = { ...scanB, boneMassKg: 3.2 };
+    const weights: WeightPoint[] = [
+      { date: '2026-06-06', weightKg: 80.2 },
+      { date: '2026-06-16', weightKg: 80.5 },
+    ];
+    const trend = buildAnchoredBodyCompTrend(weights, [withBoneA, withBoneB]);
+
+    for (const scan of [withBoneA, withBoneB]) {
+      const anchor = trend.find((p) => p.date === scan.date)!;
+      expect(anchor.kind).toBe('dexa');
+      expect(
+        computeFFMI(anchor.leanMassKg, anchor.boneMassKg, heightCm)
+      ).toEqual(computeFFMI(scan.leanMassKg, scan.boneMassKg, heightCm));
+    }
+  });
+
+  it('drops logged bone for calculated-entry scans whose lean already contains it', () => {
+    // Calculated-mode entry: lean = weight − fat (85 = 68 + 17), so the lean
+    // is already fat-free mass; the logged 3 kg BMC must NOT be added again
+    // (nor leak into interpolation for other points).
+    const calculatedScan: ScanAnchor = {
+      date: '2026-06-01',
+      bodyFatPercent: 20,
+      leanMassKg: 68,
+      fatMassKg: 17,
+      weightKg: 85,
+      boneMassKg: 3,
+    };
+    const trend = buildAnchoredBodyCompTrend(
+      [{ date: '2026-06-08', weightKg: 85 }],
+      [calculatedScan]
+    );
+
+    expect(trend.find((p) => p.kind === 'dexa')!.boneMassKg).toBeNull();
+    expect(trend.find((p) => p.date === '2026-06-08')!.boneMassKg).toBeNull();
+
+    // A genuine DEXA report (lean + fat + bone ≈ weight) keeps its bone.
+    const genuineScan: ScanAnchor = { ...calculatedScan, leanMassKg: 65, weightKg: 85 };
+    const genuine = buildAnchoredBodyCompTrend([], [genuineScan]);
+    expect(genuine[0].boneMassKg).toBe(3);
+  });
+
+  it('gauge value equals the last point of the FFMI trend series', () => {
+    // The Analytics gauge reads FFMI from the trend's last point through the
+    // same computeFFMI the chart uses; projecting forward from scan B
+    // (weight 80 → 82, pRatio 0.5) the last point is lean 67, bone 3.2.
+    const heightCm = 179;
+    const withBoneB: ScanAnchor = { ...scanB, boneMassKg: 3.2 };
+    const trend = buildAnchoredBodyCompTrend(
+      [{ date: '2026-07-01', weightKg: 82 }],
+      [{ ...scanA, boneMassKg: 3.0 }, withBoneB],
+      { pRatio: 0.5 }
+    );
+
+    const last = trend[trend.length - 1];
+    expect(last.date).toBe('2026-07-01');
+    const gaugeValue = computeFFMI(last.leanMassKg, last.boneMassKg, heightCm);
+    // (67 + 3.2) / 1.79² = 70.2 / 3.2041 = 21.91 → 21.9
+    expect(gaugeValue.ffmi).toBeCloseTo(21.9, 1);
+  });
+
   it('prefers the scan over a same-day weight entry and stays deterministic', () => {
     const weights: WeightPoint[] = [
       { date: scanB.date, weightKg: 99 }, // conflicting same-day weigh-in
@@ -225,5 +336,60 @@ describe('buildAnchoredBodyCompTrend', () => {
     // Output sorted by date.
     const dates = a.map((p) => p.date);
     expect([...dates].sort()).toEqual(dates);
+  });
+});
+
+// ============================================================
+// findLowConfidenceGaps — low-confidence spans for the trend chart
+// ============================================================
+
+describe('findLowConfidenceGaps', () => {
+  it('finds no gaps in a densely-supported series', () => {
+    const dates = ['2026-06-01', '2026-06-05', '2026-06-12', '2026-06-15'];
+    expect(findLowConfidenceGaps(dates)).toEqual([]);
+  });
+
+  it('flags a months-long void between weigh-ins as a single gap', () => {
+    // Dense December cluster, then nothing from Mar 1 to Jul 6 — the classic
+    // "4 months rendered as wide as 2 weeks" case the time axis fix targets.
+    const dates = [
+      '2025-12-15',
+      '2025-12-22',
+      '2025-12-28',
+      '2026-03-01',
+      '2026-07-06',
+    ];
+    const gaps = findLowConfidenceGaps(dates);
+
+    expect(gaps).toHaveLength(2);
+    expect(gaps[0]).toMatchObject({
+      fromIndex: 2,
+      toIndex: 3,
+      fromDate: '2025-12-28',
+      toDate: '2026-03-01',
+      gapDays: 63,
+    });
+    expect(gaps[1]).toMatchObject({
+      fromDate: '2026-03-01',
+      toDate: '2026-07-06',
+      gapDays: 127,
+    });
+  });
+
+  it('treats exactly the threshold as supported, one day past it as a gap', () => {
+    expect(LOW_CONFIDENCE_GAP_DAYS).toBe(14);
+    expect(findLowConfidenceGaps(['2026-06-01', '2026-06-15'])).toEqual([]); // 14 days
+    expect(findLowConfidenceGaps(['2026-06-01', '2026-06-16'])).toHaveLength(1); // 15 days
+  });
+
+  it('respects a custom threshold', () => {
+    const dates = ['2026-06-01', '2026-06-08'];
+    expect(findLowConfidenceGaps(dates, 6)).toHaveLength(1);
+    expect(findLowConfidenceGaps(dates, 7)).toEqual([]);
+  });
+
+  it('handles empty and single-point series', () => {
+    expect(findLowConfidenceGaps([])).toEqual([]);
+    expect(findLowConfidenceGaps(['2026-06-01'])).toEqual([]);
   });
 });

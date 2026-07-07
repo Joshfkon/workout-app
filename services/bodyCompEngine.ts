@@ -17,8 +17,63 @@ import type {
 // ============ FFMI CALCULATIONS ============
 
 /**
- * Calculate FFMI (Fat-Free Mass Index) from lean mass and height
- * FFMI = lean mass (kg) / height (m)²
+ * Fat-free mass in kg.
+ *
+ * FFM DEFINITION: DEXA "lean mass" excludes bone mineral content (BMC), but
+ * true fat-free mass = lean + BMC. When the scan logged bone mass we include
+ * it; when it's absent we fall back to lean-only (slightly understating FFMI
+ * by ~0.8-1.0 for most adults). Every FFMI surface in the app — the Analytics
+ * gauge and the Body Composition Trend series — MUST go through computeFFMI
+ * below so they share this exact definition.
+ */
+export function computeFFM(leanMassKg: number, boneMassKg?: number | null): number {
+  return leanMassKg + (boneMassKg != null && boneMassKg > 0 ? boneMassKg : 0);
+}
+
+/**
+ * Whether a scan's stored lean mass already CONTAINS bone.
+ *
+ * A real DEXA report's lean excludes bone (lean + fat + bone ≈ total weight),
+ * but scans entered through the add-scan form's "calculated" mode store
+ * lean = weight × (1 − BF%) = weight − fat, which spans everything that isn't
+ * fat — bone included. Passing such a lean to computeFFM together with a
+ * logged bone mass would double-count the bone.
+ *
+ * Detect the shape instead of the entry path: when lean + fat reaches the
+ * recorded total (within 1 kg — adult BMC runs ~2-4.5 kg, so a genuine
+ * bone-exclusive lean leaves a gap well above that), there is no room left
+ * for bone outside lean. Callers must pass boneMassKg = null to computeFFM
+ * for these records. Without a recorded total we assume the DEXA convention
+ * (lean excludes bone).
+ */
+export function leanMassIncludesBone(scan: {
+  leanMassKg: number;
+  fatMassKg: number;
+  weightKg?: number | null;
+}): boolean {
+  if (scan.weightKg == null || scan.weightKg <= 0) return false;
+  return scan.leanMassKg + scan.fatMassKg >= scan.weightKg - 1.0;
+}
+
+/**
+ * Single source of truth for FFMI from a body-composition observation.
+ * Used by both the Analytics FFMI gauge and the trend chart's FFMI series —
+ * do not compute FFMI anywhere else from lean/bone directly.
+ *
+ * All inputs are canonical units (kg / cm); do lb→kg and in→cm conversion at
+ * the edges (lib/utils) before calling.
+ */
+export function computeFFMI(
+  leanMassKg: number,
+  boneMassKg: number | null | undefined,
+  heightCm: number
+): FFMIResult {
+  return calculateFFMI(computeFFM(leanMassKg, boneMassKg), heightCm);
+}
+
+/**
+ * Calculate FFMI (Fat-Free Mass Index) from fat-free mass and height
+ * FFMI = FFM (kg) / height (m)²
  * Normalized FFMI = FFMI + 6.1 × (1.8 - height in m)
  */
 export function calculateFFMI(leanMassKg: number, heightCm: number): FFMIResult {

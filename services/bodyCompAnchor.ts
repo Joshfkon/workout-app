@@ -21,6 +21,8 @@
  * Pure functions only: NO database calls.
  */
 
+import { leanMassIncludesBone } from '@/services/bodyCompEngine';
+
 // ============================================================
 // Types
 // ============================================================
@@ -45,6 +47,12 @@ export interface ScanAnchor {
    * lean + fat when absent.
    */
   weightKg?: number;
+  /**
+   * Bone mineral content in kg when the scan logged it. Feeds the trend's
+   * per-day FFM (= lean + BMC) for FFMI; BMC is nearly constant so it is
+   * linearly interpolated between scans and held flat beyond the ends.
+   */
+  boneMassKg?: number | null;
 }
 
 export interface AnchoredTrendPoint {
@@ -53,6 +61,12 @@ export interface AnchoredTrendPoint {
   leanMassKg: number;
   fatMassKg: number;
   weightKg: number;
+  /**
+   * Interpolated bone mineral content (kg), or null when no scan logged bone
+   * mass. Consumers computing FFMI pass this straight to
+   * bodyCompEngine.computeFFMI so lean-only vs lean+BMC stays one decision.
+   */
+  boneMassKg: number | null;
   /** 'dexa' = authoritative anchor (render as a distinct marker). */
   kind: 'dexa' | 'estimated';
 }
@@ -79,6 +93,10 @@ function dayNumber(date: string): number {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
 }
 
 interface BasePoint {
@@ -212,6 +230,37 @@ export function buildAnchoredBodyCompTrend(
     weightKg,
   }));
 
+  // Bone a scan can contribute to the FFM series: its logged BMC, unless the
+  // scan's lean already contains bone (calculated-entry shape: lean = weight
+  // − fat) — adding BMC on top of such a lean would double-count it in FFMI.
+  const contributableBone = (s: ScanAnchor): number | null =>
+    s.boneMassKg != null && s.boneMassKg > 0 && !leanMassIncludesBone(s)
+      ? s.boneMassKg
+      : null;
+
+  // BMC per day for FFMI: linearly interpolated between scans that logged
+  // bone mass (BMC is nearly constant), held flat beyond their range, null
+  // when no scan logged bone at all.
+  const boneScans = sortedScans
+    .map((s) => ({ day: dayNumber(s.date), value: contributableBone(s) }))
+    .filter((s): s is { day: number; value: number } => s.value != null);
+  const boneAt = (day: number): number | null => {
+    if (boneScans.length === 0) return null;
+    if (day <= boneScans[0].day) return round2(boneScans[0].value);
+    const last = boneScans[boneScans.length - 1];
+    if (day >= last.day) return round2(last.value);
+    for (let i = 1; i < boneScans.length; i++) {
+      if (boneScans[i].day >= day) {
+        const lo = boneScans[i - 1];
+        const hi = boneScans[i];
+        if (hi.day === lo.day) return round2(lo.value);
+        const t = (day - lo.day) / (hi.day - lo.day);
+        return round2(lo.value + t * (hi.value - lo.value));
+      }
+    }
+    return round2(last.value);
+  };
+
   const result: AnchoredTrendPoint[] = [];
 
   // Scan anchors themselves — exact values, distinct kind.
@@ -222,6 +271,13 @@ export function buildAnchoredBodyCompTrend(
       leanMassKg: round1(scan.leanMassKg),
       fatMassKg: round1(scan.fatMassKg),
       weightKg: round1(scanWeight(scan)),
+      // A bone-in-lean scan gets NO bone here (its lean is already fat-free
+      // mass); interpolation only fills scans that merely didn't log bone.
+      boneMassKg: leanMassIncludesBone(scan)
+        ? null
+        : contributableBone(scan) != null
+          ? round2(contributableBone(scan) as number)
+          : boneAt(dayNumber(scan.date)),
       kind: 'dexa',
     });
   }
@@ -304,6 +360,7 @@ export function buildAnchoredBodyCompTrend(
         leanMassKg: round1(lean),
         fatMassKg: round1(fat),
         weightKg: round1(p.weightKg),
+        boneMassKg: boneAt(p.day),
         kind: 'estimated',
       });
     });
@@ -318,7 +375,54 @@ export function buildAnchoredBodyCompTrend(
       leanMassKg: round1(p.leanEst),
       fatMassKg: round1(p.fatEst),
       weightKg: round1(p.weightKg),
+      boneMassKg: boneAt(p.day),
       kind: 'estimated',
     };
   }
+}
+
+// ============================================================
+// Low-confidence gaps
+// ============================================================
+
+/**
+ * A trend point spacing beyond this many days means the estimate line is
+ * interpolating with no underlying weigh-ins — render it as low-confidence
+ * (dashed / reduced opacity) rather than indistinguishable from
+ * densely-supported estimates.
+ */
+export const LOW_CONFIDENCE_GAP_DAYS = 14;
+
+export interface TrendGap {
+  /** Index of the last supported point before the gap. */
+  fromIndex: number;
+  /** Index of the first supported point after the gap. */
+  toIndex: number;
+  fromDate: string;
+  toDate: string;
+  gapDays: number;
+}
+
+/**
+ * Find gaps between consecutive trend points longer than `maxGapDays`.
+ * `dates` must be sorted ascending (as buildAnchoredBodyCompTrend returns).
+ */
+export function findLowConfidenceGaps(
+  dates: string[],
+  maxGapDays: number = LOW_CONFIDENCE_GAP_DAYS
+): TrendGap[] {
+  const gaps: TrendGap[] = [];
+  for (let i = 1; i < dates.length; i++) {
+    const gapDays = dayNumber(dates[i]) - dayNumber(dates[i - 1]);
+    if (gapDays > maxGapDays) {
+      gaps.push({
+        fromIndex: i - 1,
+        toIndex: i,
+        fromDate: dates[i - 1],
+        toDate: dates[i],
+        gapDays,
+      });
+    }
+  }
+  return gaps;
 }
