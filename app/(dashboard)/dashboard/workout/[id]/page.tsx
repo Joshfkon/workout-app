@@ -3769,9 +3769,12 @@ export default function WorkoutPage() {
   // session had no mesocycle_id yet. Optimistic like the finish itself: the
   // link is queued durably and synced in the background, so the tap never
   // hangs on the network.
-  const handleConfirmClaim = () => {
+  const handleConfirmClaim = async () => {
     if (claimCandidate && session) {
-      void confirmClaimOptimistic({
+      // Resolves once the claim is queued durably in IndexedDB (a few ms) —
+      // the network sync stays in the background. Awaiting it closes the
+      // kill-window between accepting the tap and persisting the claim.
+      await confirmClaimOptimistic({
         supabase: createUntypedClient(),
         sessionId,
         session,

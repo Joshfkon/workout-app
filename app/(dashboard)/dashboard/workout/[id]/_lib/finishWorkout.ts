@@ -289,7 +289,9 @@ export interface ClaimFlowDeps {
 
 /**
  * Optimistic "Count it": queue the mesocycle link locally and sync in the
- * background — the caller closes the prompt and navigates immediately.
+ * background. Resolves once the claim is durably queued (a few ms, no
+ * network) — callers should await it before navigating so a tab/app kill
+ * right after the tap cannot lose the claim; the network sync never blocks.
  * Ordering with the completion update doesn't matter (disjoint columns on
  * the same row), but the meso post-processing only runs once BOTH the
  * completion and the claim are confirmed synced, since it counts completed
