@@ -31,7 +31,7 @@ import {
   getLocalDateString,
 } from '@/lib/utils';
 
-interface Measurements {
+export interface Measurements {
   neck?: number;
   shoulders?: number;
   chest?: number;
@@ -62,7 +62,9 @@ interface BodyMeasurementsProps {
   showImbalanceAnalysis?: boolean;
 }
 
-const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: string; instructions: string }[] = [
+// Exported: the canonical tape-site list (the same sites the ratio analytics
+// consume) — reused by the unified "Log body data" sheet.
+export const MEASUREMENT_FIELDS: { key: keyof Measurements; label: string; group: string; instructions: string }[] = [
   { key: 'neck', label: 'Neck', group: 'Upper Body', instructions: 'Measure around the middle of your neck, just below the Adam\'s apple. Keep the tape level and snug but not tight.' },
   { key: 'shoulders', label: 'Shoulders', group: 'Upper Body', instructions: 'Measure around your shoulders at the widest point, typically across the deltoids. Keep your arms relaxed at your sides.' },
   { key: 'chest', label: 'Chest', group: 'Upper Body', instructions: 'Measure around the fullest part of your chest, usually at nipple level. Keep the tape level and breathe normally.' },

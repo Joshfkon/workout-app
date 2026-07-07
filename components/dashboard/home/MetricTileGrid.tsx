@@ -215,7 +215,9 @@ export function MetricTileGrid({
         <MetricTile
           icon={IconScale}
           label="Weight"
-          href="/dashboard/nutrition?tab=weight"
+          // Tile body opens the Body hub (Progress → Body); "+ log" opens
+          // the unified log sheet (MetricTile keeps it from navigating).
+          href="/dashboard/analytics?tab=body"
           action={
             <button
               type="button"

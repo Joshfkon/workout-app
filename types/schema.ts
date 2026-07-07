@@ -223,6 +223,22 @@ export interface UserPreferences {
    * Default: false
    */
   skipPreWorkoutCheckIn?: boolean;
+
+  /**
+   * Body hub: staleness-nudge interval for tape measurements, in weeks.
+   * 0 turns the nudge off. Unset = the default (4). The nudge never shows
+   * for users who have no tape entries at all.
+   */
+  measurementNudgeWeeks?: number;
+
+  /**
+   * Body hub: "DEXA due" reminder interval in weeks. Unset/null = off
+   * (the default). The hub suggests 12 weeks once the user has >= 2 scans.
+   */
+  dexaReminderWeeks?: number | null;
+
+  /** Body hub: the user said "no thanks" to the DEXA reminder suggestion. */
+  dexaReminderDeclined?: boolean;
 }
 
 /**
@@ -1938,6 +1954,8 @@ export interface DexaRegionalData {
   android: { fat_g: number };
   /** Gynoid region (hips/thighs) - fat only */
   gynoid: { fat_g: number };
+  /** Visceral adipose tissue, when the report includes it - fat only */
+  vat?: { fat_g: number };
 }
 
 /**
@@ -1997,6 +2015,15 @@ export interface DexaScan {
 
   /** Bone mineral content in kg (optional) */
   boneMassKg: number | null;
+
+  /** Bone mineral density in g/cm2 (optional) */
+  boneDensityGCm2?: number | null;
+
+  /** Where the scan was performed (free text, optional) */
+  facility?: string | null;
+
+  /** Scanner make/model (free text, optional) */
+  machine?: string | null;
 
   /** Regional body composition data (optional) */
   regionalData: DexaRegionalData | null;

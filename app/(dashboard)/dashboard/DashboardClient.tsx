@@ -51,8 +51,8 @@ const QuickFoodLogger = dynamic(
   { ssr: false, loading: () => <CardSkeleton /> }
 );
 
-const WeightLogModal = dynamic(
-  () => import('@/components/nutrition/WeightLogModal').then(mod => ({ default: mod.WeightLogModal })),
+const LogBodyDataSheet = dynamic(
+  () => import('@/components/body/LogBodyDataSheet').then(mod => ({ default: mod.LogBodyDataSheet })),
   { ssr: false }
 );
 
@@ -1295,59 +1295,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     }
   };
 
-  // Save handler for the shared WeightLogModal (weight in the preferred display
-  // unit, date from the modal's date picker). Throws on failure so the modal
-  // shows its inline error state.
-  const handleSaveWeight = async (weight: number, date: string, notes?: string) => {
-    const supabase = createUntypedClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Not signed in');
-
-    // First try to update an existing entry for the chosen date
-    const { data: existing } = await supabase
-      .from('weight_log')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('logged_at', date)
-      .maybeSingle();
-
-    let error;
-    if (existing) {
-      // Update existing entry - try with unit first, fall back without
-      let result = await supabase.from('weight_log').update({
-        weight,
-        unit: weightUnit,
-        notes,
-      }).eq('id', existing.id);
-
-      // If unit column doesn't exist, try without it
-      if (result.error?.message?.includes('column "unit"')) {
-        result = await supabase.from('weight_log').update({ weight, notes }).eq('id', existing.id);
-      }
-      error = result.error;
-    } else {
-      // Insert new entry - try with unit first, fall back without
-      let result = await supabase.from('weight_log').insert({
-        user_id: user.id,
-        logged_at: date,
-        weight,
-        unit: weightUnit,
-        notes,
-      });
-
-      // If unit column doesn't exist, try without it
-      if (result.error?.message?.includes('column "unit"')) {
-        result = await supabase.from('weight_log').insert({
-          user_id: user.id,
-          logged_at: date,
-          weight,
-          notes,
-        });
-      }
-      error = result.error;
-    }
-
-    if (error) throw error;
+  // The unified "Log body data" sheet writes weight_log itself (via
+  // lib/body/bodyLog — the same update-or-insert semantics this component
+  // used to inline); this handler only syncs the dashboard's local state and
+  // caches after a successful weight save.
+  const handleBodyDataSaved = (detail: {
+    kind: 'weight' | 'measurements' | 'dexa';
+    date: string;
+    weight?: number;
+  }) => {
+    if (detail.kind !== 'weight' || detail.weight == null) return;
+    const { date, weight } = detail;
 
     const entry = { date, weight, unit: weightUnit };
     if (date === getLocalDateString()) {
@@ -1506,11 +1464,11 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
 
       {/* Quick-log modals (content lazy-loads on first open) */}
       {activeModal === 'weight' && (
-        <WeightLogModal
+        <LogBodyDataSheet
           isOpen
           onClose={() => setActiveModal(null)}
-          onSave={handleSaveWeight}
           preferredUnit={weightUnit}
+          onSaved={handleBodyDataSaved}
         />
       )}
 
