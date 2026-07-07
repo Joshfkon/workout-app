@@ -27,6 +27,7 @@ import { useState } from 'react';
 import { IconAdjustments, IconCheck, IconPlus, IconX } from '@tabler/icons-react';
 import type { AvailableExercise, GymLocation } from '../_lib/types';
 import { formatMuscleName } from '@/lib/utils';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 // Normalize exercise search terms for better matching
 // Handles variations like "situps" vs "sit up" vs "sit-up"
@@ -147,6 +148,8 @@ export function AddExercisePicker({
 }: AddExercisePickerProps) {
   // Local UI state: the sort + location controls are collapsed by default.
   const [showAdjustments, setShowAdjustments] = useState(false);
+  // Only mounted while open, so the keyboard listeners can always be on.
+  const { inset: keyboardInset, scrollContainerRef } = useKeyboardInset<HTMLDivElement>(true);
 
   const isSearching = exerciseSearch.trim().length > 0;
 
@@ -524,8 +527,18 @@ export function AddExercisePicker({
         onClick={onClose}
       />
 
-      {/* Modal - positioned at top on mobile to avoid keyboard overlap */}
-      <div className="relative w-full max-w-lg max-h-[85vh] sm:max-h-[80vh] bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col">
+      {/* Modal - positioned at top on mobile to avoid keyboard overlap; the
+          keyboard inset caps its height so the list never extends behind the
+          keyboard */}
+      <div
+        ref={scrollContainerRef}
+        className="relative w-full max-w-lg bg-surface-900 rounded-b-2xl sm:rounded-2xl border border-surface-800 overflow-hidden flex flex-col max-h-[85vh] sm:max-h-[80vh]"
+        style={
+          keyboardInset > 0
+            ? { maxHeight: `min(85vh, calc(100vh - env(safe-area-inset-top, 0px) - ${keyboardInset}px))` }
+            : undefined
+        }
+      >
         {/* Header */}
         <div className="p-4 border-b border-surface-800 flex items-center justify-between flex-shrink-0">
           <button

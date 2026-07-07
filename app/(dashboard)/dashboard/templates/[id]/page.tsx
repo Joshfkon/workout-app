@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation } fr
 import { createUntypedClient } from '@/lib/supabase/client';
 import type { WorkoutTemplate, WorkoutTemplateExercise, WorkoutFolder } from '@/types/templates';
 import Link from 'next/link';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface Exercise {
   id: string;
@@ -40,6 +41,12 @@ export default function TemplateDetailPage() {
 
   // Edit exercise states
   const [editingExercise, setEditingExercise] = useState<WorkoutTemplateExercise | null>(null);
+
+  // Keyboard-aware insets for the two input-bearing modals
+  const { inset: addExerciseKbInset, scrollContainerRef: addExerciseModalRef } =
+    useKeyboardInset<HTMLDivElement>(showAddExercise);
+  const { inset: editExerciseKbInset, scrollContainerRef: editExerciseModalRef } =
+    useKeyboardInset<HTMLDivElement>(!!editingExercise);
   
   // Collapse/expand state
   const [collapsedExercises, setCollapsedExercises] = useState<Set<string>>(new Set());
@@ -589,8 +596,18 @@ export default function TemplateDetailPage() {
 
       {/* Add Exercise Modal */}
       {showAddExercise && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${addExerciseKbInset}px)`,
+          }}
+        >
+          <div
+            ref={addExerciseModalRef}
+            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-lg flex flex-col"
+            style={{ maxHeight: `min(80vh, calc(100vh - 2rem - ${addExerciseKbInset}px))` }}
+          >
             <div className="p-4 border-b border-surface-700">
               <h2 className="text-lg font-semibold text-surface-100">Add Exercise</h2>
               <input
@@ -633,8 +650,18 @@ export default function TemplateDetailPage() {
 
       {/* Edit Exercise Modal */}
       {editingExercise && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${editExerciseKbInset}px)`,
+          }}
+        >
+          <div
+            ref={editExerciseModalRef}
+            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md overflow-y-auto"
+            style={{ maxHeight: `calc(100vh - 2rem - ${editExerciseKbInset}px)` }}
+          >
             <div className="p-4 border-b border-surface-700">
               <h2 className="text-lg font-semibold text-surface-100">
                 Edit {editingExercise.exercise_name}

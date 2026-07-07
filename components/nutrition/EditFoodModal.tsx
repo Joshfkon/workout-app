@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button, Input } from '@/components/ui';
 import type { FoodLogEntry } from '@/types/nutrition';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 export interface EditFoodUpdates {
   servings: number;
@@ -57,6 +58,8 @@ export function EditFoodModal({
   onDelete,
   entry,
 }: EditFoodModalProps) {
+  const { inset: keyboardInset, scrollContainerRef } =
+    useKeyboardInset<HTMLDivElement>(isOpen);
   const [servings, setServings] = useState('1');
   const [inputMode, setInputMode] = useState<InputMode>('servings');
   const [weightValue, setWeightValue] = useState('');
@@ -200,8 +203,18 @@ export function EditFoodModal({
   const quickPortions = [0.25, 0.5, 0.75, 1, 1.5, 2];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-surface-900 border border-surface-700 rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      style={{
+        // Re-center above the on-screen keyboard; safe-area stays additive.
+        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
+      }}
+    >
+      <div
+        ref={scrollContainerRef}
+        className="bg-surface-900 border border-surface-700 rounded-xl max-w-md w-full overflow-y-auto shadow-xl"
+        style={{ maxHeight: `min(90vh, calc(100vh - 2rem - ${keyboardInset}px))` }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-surface-800">
           <h2 className="text-lg font-semibold text-surface-100">Edit Food</h2>
