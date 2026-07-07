@@ -19,6 +19,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -29,6 +30,12 @@ import {
   Tooltip,
   Customized,
 } from 'recharts';
+import {
+  arrowAt,
+  placeLabel,
+  type AvoidLine,
+  type PlotRect,
+} from '@/components/body/compositionMapGeometry';
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
 import {
   buildCompositionPath,
@@ -73,6 +80,19 @@ function formatDateShort(date: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+/** "Mar '25" for the Start endpoint label. */
+export function formatMonthYear(date: string): string {
+  const d = new Date(`${date}T00:00:00`);
+  return `${d.toLocaleDateString('en-US', { month: 'short' })} '${String(
+    d.getFullYear() % 100
+  ).padStart(2, '0')}`;
+}
+
+/** "Apr" for intermediate scan labels (≤5 scans only). */
+function formatMonth(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short' });
 }
 
 function formatDeltaWeight(deltaKg: number, units: 'lb' | 'kg'): string {
@@ -131,22 +151,35 @@ function MapTooltip({
   );
 }
 
-interface DecorationsData {
+export interface DecorationsData {
   domain: MapDomain;
   scanPoints: CompositionPoint[];
   trailPoints: CompositionPoint[];
-  startPoint: CompositionCoords | null;
   targetPoint: CompositionCoords | null;
+  /** "Target · FFMI 21.0 / BF 15%" — null hides the target marker label. */
+  targetLabel: string | null;
+  /** "42% of the way" along the goal vector; null hides it. */
+  progressLabel: string | null;
   showGoalVector: boolean;
+  /** "Start · Mar '25" on the first scan. */
+  startLabel: string;
+  /** "Now · Jun 2" on the latest scan. */
+  nowLabel: string;
+  /** Month labels on intermediate scans (only when ≤5 scans total). */
+  showIntermediateLabels: boolean;
 }
 
 /**
  * Everything drawn under the scan points: iso-BMI diagonals, FFMI threshold
- * lines, the faint estimate trail, the gradient scan path, and the goal
- * vector. Rendered via Recharts <Customized> so we can use raw SVG with the
- * chart's own scales.
+ * lines, the faint estimate trail, the gradient scan path with per-segment
+ * arrowheads (travel direction), the Start/Now endpoint labels, and the
+ * goal vector (latest → target). Rendered via Recharts <Customized> so we
+ * can use raw SVG with the chart's own scales.
+ *
+ * Exported for tests: render the returned component inside an <svg> with
+ * fake xAxisMap/yAxisMap scales.
  */
-function buildDecorations(data: DecorationsData) {
+export function buildDecorations(data: DecorationsData) {
   // Recharts passes its internal chart state (axis maps with scales) to
   // Customized components; there's no public type for it.
   return function Decorations(props: Record<string, unknown>) {
@@ -156,9 +189,53 @@ function buildDecorations(data: DecorationsData) {
     const yScale = yMap?.[Object.keys(yMap)[0]]?.scale;
     if (!xScale || !yScale) return null;
 
-    const { domain, scanPoints, trailPoints, startPoint, targetPoint, showGoalVector } = data;
+    const {
+      domain,
+      scanPoints,
+      trailPoints,
+      targetPoint,
+      targetLabel,
+      progressLabel,
+      showGoalVector,
+      startLabel,
+      nowLabel,
+      showIntermediateLabels,
+    } = data;
     const [x0, x1] = domain.x;
     const isoSegments = visibleIsoBmiSegments(domain);
+    const px = (p: { fmi: number; ffmi: number }) => ({ x: xScale(p.fmi), y: yScale(p.ffmi) });
+
+    // Plot rectangle + reference lines in pixels, for label collision
+    // avoidance (labels must not sit on the BMI diagonals or FFMI lines,
+    // nor leave the plot into the axis text).
+    const plot: PlotRect = {
+      left: Math.min(xScale(x0), xScale(x1)),
+      right: Math.max(xScale(x0), xScale(x1)),
+      top: Math.min(yScale(domain.y[0]), yScale(domain.y[1])),
+      bottom: Math.max(yScale(domain.y[0]), yScale(domain.y[1])),
+    };
+    const visibleThresholds = COMPOSITION_MAP_FFMI_THRESHOLDS.filter(
+      (t) => t > domain.y[0] && t < domain.y[1]
+    );
+    const avoidLines: AvoidLine[] = [
+      ...isoSegments.map((seg) => ({
+        x1: xScale(seg.x1),
+        y1: yScale(seg.y1),
+        x2: xScale(seg.x2),
+        y2: yScale(seg.y2),
+      })),
+      ...visibleThresholds.map((t) => ({
+        x1: plot.left,
+        y1: yScale(t),
+        x2: plot.right,
+        y2: yScale(t),
+      })),
+    ];
+
+    const startPx = px(scanPoints[0]);
+    const nowPx = px(scanPoints[scanPoints.length - 1]);
+    const startPlacement = placeLabel(startPx, plot, startLabel, { avoidLines });
+    const nowPlacement = placeLabel(nowPx, plot, nowLabel, { avoidLines });
 
     return (
       <g>
@@ -187,9 +264,7 @@ function buildDecorations(data: DecorationsData) {
         ))}
 
         {/* FFMI reference thresholds — same values as the trend chart. */}
-        {COMPOSITION_MAP_FFMI_THRESHOLDS.filter(
-          (t) => t > domain.y[0] && t < domain.y[1]
-        ).map((threshold) => (
+        {visibleThresholds.map((threshold) => (
           <g key={`ffmi-${threshold}`}>
             <line
               x1={xScale(x0)}
@@ -223,55 +298,162 @@ function buildDecorations(data: DecorationsData) {
           />
         )}
 
-        {/* Goal vector: start → target, dashed, with a diamond at the target. */}
-        {showGoalVector && startPoint && targetPoint && (
-          <g>
-            <line
-              x1={xScale(startPoint.fmi)}
-              y1={yScale(startPoint.ffmi)}
-              x2={xScale(targetPoint.fmi)}
-              y2={yScale(targetPoint.ffmi)}
-              stroke={TARGET_COLOR}
-              strokeWidth={1.5}
-              strokeDasharray="6 4"
-              strokeOpacity={0.55}
-            />
-            <path
-              d={`M ${xScale(targetPoint.fmi)} ${yScale(targetPoint.ffmi) - 6}
-                  L ${xScale(targetPoint.fmi) + 6} ${yScale(targetPoint.ffmi)}
-                  L ${xScale(targetPoint.fmi)} ${yScale(targetPoint.ffmi) + 6}
-                  L ${xScale(targetPoint.fmi) - 6} ${yScale(targetPoint.ffmi)} Z`}
-              fill={TARGET_COLOR}
-              fillOpacity={0.9}
-            />
-            <text
-              x={xScale(targetPoint.fmi) + 9}
-              y={yScale(targetPoint.ffmi) + 3}
-              fill={TARGET_COLOR}
-              fontSize={9}
-            >
-              target
-            </text>
-          </g>
-        )}
+        {/* Goal vector: latest scan → target, dashed, arrowhead at the
+            target end, ring marker, and the progress scalar along the line. */}
+        {showGoalVector && targetPoint && (() => {
+          const targetPx = px(targetPoint);
+          const arrow = arrowAt(nowPx, targetPx);
+          // Arrowhead just short of the target ring, on the line.
+          const len = Math.hypot(targetPx.x - nowPx.x, targetPx.y - nowPx.y);
+          const ux = len > 0 ? (targetPx.x - nowPx.x) / len : 0;
+          const uy = len > 0 ? (targetPx.y - nowPx.y) / len : 0;
+          const tipX = targetPx.x - ux * 12;
+          const tipY = targetPx.y - uy * 12;
+          const targetPlacement = targetLabel
+            ? placeLabel(targetPx, plot, targetLabel, { avoidLines })
+            : null;
+          return (
+            <g>
+              <line
+                x1={nowPx.x}
+                y1={nowPx.y}
+                x2={targetPx.x}
+                y2={targetPx.y}
+                stroke={TARGET_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+                strokeOpacity={0.55}
+              />
+              {arrow && (
+                <path
+                  data-testid="map-goal-arrowhead"
+                  d="M 5 0 L -3.5 -3 L -3.5 3 Z"
+                  transform={`translate(${tipX}, ${tipY}) rotate(${arrow.angleDeg})`}
+                  fill={TARGET_COLOR}
+                  fillOpacity={0.85}
+                />
+              )}
+              {/* Ring marker at the target composition. */}
+              <circle
+                data-testid="map-target"
+                cx={targetPx.x}
+                cy={targetPx.y}
+                r={6}
+                fill="none"
+                stroke={TARGET_COLOR}
+                strokeWidth={2}
+              />
+              <circle cx={targetPx.x} cy={targetPx.y} r={1.5} fill={TARGET_COLOR} />
+              {targetPlacement && (
+                <text
+                  data-testid="map-target-label"
+                  x={targetPlacement.x}
+                  y={targetPlacement.y}
+                  textAnchor={targetPlacement.anchor}
+                  fill={TARGET_COLOR}
+                  fontSize={9}
+                >
+                  {targetLabel}
+                </text>
+              )}
+              {/* Progress scalar anchored to the vector it measures. */}
+              {progressLabel && arrow && (
+                <text
+                  data-testid="map-progress-label"
+                  x={arrow.x - uy * 10}
+                  y={arrow.y + ux * 10 + 3}
+                  textAnchor="middle"
+                  fill={TARGET_COLOR}
+                  fontSize={9}
+                  opacity={0.9}
+                >
+                  {progressLabel}
+                </text>
+              )}
+            </g>
+          );
+        })()}
 
-        {/* Scan path: connected in date order, old → recent gradient. */}
+        {/* Scan path: connected in date order, old → recent gradient, with
+            a small arrowhead at each segment midpoint showing travel
+            direction. Filled triangles (not strokes) so they stay visible
+            at mobile stroke widths. */}
         {scanPoints.slice(1).map((p, i) => {
           const prev = scanPoints[i];
           const t = scanPoints.length > 2 ? (i + 1) / (scanPoints.length - 1) : 1;
+          const opacity = 0.3 + 0.65 * t;
+          const arrow = arrowAt(px(prev), px(p));
           return (
-            <line
-              key={`seg-${p.date}`}
-              x1={xScale(prev.fmi)}
-              y1={yScale(prev.ffmi)}
-              x2={xScale(p.fmi)}
-              y2={yScale(p.ffmi)}
-              stroke={SCAN_COLOR}
-              strokeWidth={2}
-              strokeOpacity={0.3 + 0.65 * t}
-            />
+            <g key={`seg-${p.date}`}>
+              <line
+                x1={px(prev).x}
+                y1={px(prev).y}
+                x2={px(p).x}
+                y2={px(p).y}
+                stroke={SCAN_COLOR}
+                strokeWidth={2}
+                strokeOpacity={opacity}
+              />
+              {arrow && (
+                <path
+                  data-testid="map-arrowhead"
+                  d="M 4.5 0 L -3 -2.8 L -3 2.8 Z"
+                  transform={`translate(${arrow.x}, ${arrow.y}) rotate(${arrow.angleDeg})`}
+                  fill={SCAN_COLOR}
+                  fillOpacity={opacity}
+                />
+              )}
+            </g>
           );
         })}
+
+        {/* Intermediate scan month labels — only when the map is sparse
+            enough to stay legible (≤5 scans); tap covers the rest. */}
+        {showIntermediateLabels &&
+          scanPoints.slice(1, -1).map((p) => {
+            const placement = placeLabel(px(p), plot, formatMonth(p.date), {
+              avoidLines,
+              fontSize: 8,
+            });
+            return (
+              <text
+                key={`mid-${p.date}`}
+                data-testid="map-month-label"
+                x={placement.x}
+                y={placement.y}
+                textAnchor={placement.anchor}
+                fill="#9ca3af"
+                fontSize={8}
+                opacity={0.75}
+              >
+                {formatMonth(p.date)}
+              </text>
+            );
+          })}
+
+        {/* Labeled endpoints: where the journey starts and where it is now. */}
+        <text
+          data-testid="map-start-label"
+          x={startPlacement.x}
+          y={startPlacement.y}
+          textAnchor={startPlacement.anchor}
+          fill="#9ca3af"
+          fontSize={9}
+          fontWeight={500}
+        >
+          {startLabel}
+        </text>
+        <text
+          data-testid="map-now-label"
+          x={nowPlacement.x}
+          y={nowPlacement.y}
+          textAnchor={nowPlacement.anchor}
+          fill="#f3f4f6"
+          fontSize={9}
+          fontWeight={600}
+        >
+          {nowLabel}
+        </text>
       </g>
     );
   };
@@ -367,11 +549,25 @@ export function CompositionMap({
   }
 
   const lastScan = scanPoints[scanPoints.length - 1];
+  const firstScan = scanPoints[0];
   const showGoalVector = !!goalProgress && goalProgress.status !== 'degenerate';
   // No verdict language below 2 scan pairs — same confidence gating as
   // everywhere else.
   const verdictsAllowed = pRatioPairs.length >= 2;
   const visiblePairs = pRatioPairs.slice(-6);
+
+  // Direction-cue labels for the decorations layer.
+  const startLabel = `Start · ${formatMonthYear(firstScan.date)}`;
+  const nowLabel = `Now · ${formatDateShort(lastScan.date)}`;
+  const targetLabel = targetPoint
+    ? `Target · FFMI ${targetPoint.ffmi.toFixed(1)} / BF ${(
+        (targetPoint.fmi / (targetPoint.fmi + targetPoint.ffmi)) * 100
+      ).toFixed(0)}%`
+    : null;
+  const progressLabel =
+    showGoalVector && goalProgress?.displayPercent != null
+      ? `${goalProgress.displayPercent}% of the way`
+      : null;
 
   return (
     <div>
@@ -420,9 +616,13 @@ export function CompositionMap({
                 domain,
                 scanPoints,
                 trailPoints,
-                startPoint,
                 targetPoint,
+                targetLabel,
+                progressLabel,
                 showGoalVector,
+                startLabel,
+                nowLabel,
+                showIntermediateLabels: scanPoints.length > 2 && scanPoints.length <= 5,
               })}
             />
             {/* Scan points — the emphasis; tap for date + values. */}
@@ -438,17 +638,55 @@ export function CompositionMap({
                 // Recency from the payload's date (shape props aren't
                 // guaranteed to carry an index across recharts versions).
                 const idx = scanPoints.findIndex((sp) => sp.date === props.payload?.date);
+                const isFirst = idx === 0;
                 const isLast = idx === scanPoints.length - 1;
                 const t = scanPoints.length > 1 && idx >= 0 ? idx / (scanPoints.length - 1) : 1;
+                if (isFirst && !isLast) {
+                  // Start: hollow gray marker — visibly "where it began".
+                  return (
+                    <circle
+                      cx={props.cx}
+                      cy={props.cy}
+                      r={4.5}
+                      fill="#111827"
+                      stroke="#9ca3af"
+                      strokeWidth={1.5}
+                    />
+                  );
+                }
+                if (isLast) {
+                  // Now: larger marker with a ring highlight.
+                  return (
+                    <g>
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={9}
+                        fill="none"
+                        stroke={SCAN_COLOR}
+                        strokeWidth={1.5}
+                        strokeOpacity={0.35}
+                      />
+                      <circle
+                        cx={props.cx}
+                        cy={props.cy}
+                        r={6}
+                        fill={SCAN_COLOR}
+                        stroke="#f3f4f6"
+                        strokeWidth={2}
+                      />
+                    </g>
+                  );
+                }
                 return (
                   <circle
                     cx={props.cx}
                     cy={props.cy}
-                    r={isLast ? 6 : 4}
+                    r={4}
                     fill={SCAN_COLOR}
                     fillOpacity={0.35 + 0.65 * t}
-                    stroke={isLast ? '#f3f4f6' : '#0e7490'}
-                    strokeWidth={isLast ? 2 : 1}
+                    stroke="#0e7490"
+                    strokeWidth={1}
                   />
                 );
               }}
@@ -467,6 +705,19 @@ export function CompositionMap({
         the faint trail is the day-to-day estimate, shown for context only
         and never extended past your last scan.
       </p>
+
+      {/* No target yet: the goal vector needs an anchor. */}
+      {!targetPoint && (
+        <p className="text-[11px] text-surface-500 mt-2">
+          <Link
+            href="/dashboard/analytics?tab=goals"
+            className="text-primary-400 hover:text-primary-300 font-medium"
+          >
+            Set a target
+          </Link>{' '}
+          to see your goal vector on the map.
+        </p>
+      )}
 
       {/* Goal-vector progress scalar */}
       {goalProgress && goalProgress.status !== 'degenerate' && (
