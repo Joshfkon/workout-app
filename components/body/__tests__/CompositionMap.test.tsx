@@ -26,8 +26,14 @@ jest.mock('recharts', () => ({
   Customized: () => null,
 }));
 
-import { CompositionMap } from '@/components/body/CompositionMap';
+import {
+  CompositionMap,
+  buildDecorations,
+  formatMonthYear,
+  type DecorationsData,
+} from '@/components/body/CompositionMap';
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
+import type { CompositionPoint } from '@/services/compositionSpace';
 
 const scan = (
   date: string,
@@ -169,5 +175,157 @@ describe('CompositionMap', () => {
   it('states the DEXA precision caveat', () => {
     renderMap();
     expect(screen.getByText(/DEXA precision is ~±1–2% BF/)).toBeInTheDocument();
+  });
+
+  it('prompts to set a target (linking to goals) when none is set', () => {
+    renderMap({ target: null });
+    const link = screen.getByRole('link', { name: 'Set a target' });
+    expect(link).toHaveAttribute('href', '/dashboard/analytics?tab=goals');
+    expect(screen.getByText(/to see your goal vector/)).toBeInTheDocument();
+  });
+
+  it('hides the set-a-target prompt once a target exists', () => {
+    renderMap({ target: { targetWeightKg: 98, targetBodyFatPercent: 25.5 } });
+    expect(screen.queryByText(/Set a target/)).not.toBeInTheDocument();
+  });
+});
+
+describe('CompositionMap decorations (direction cues)', () => {
+  // Render the Customized layer directly with fake linear scales — the
+  // recharts mock swallows it inside the chart, but the layer itself is a
+  // plain SVG component.
+  const domain = { x: [2, 8] as [number, number], y: [16, 24] as [number, number] };
+  const xScale = (v: number) => 40 + (v - 2) * 60;
+  const yScale = (v: number) => 20 + (24 - v) * 35;
+  const axisProps = {
+    xAxisMap: { 0: { scale: xScale } },
+    yAxisMap: { 0: { scale: yScale } },
+  };
+
+  const point = (date: string, fmi: number, ffmi: number): CompositionPoint => ({
+    date,
+    fmi,
+    ffmi,
+    bmi: fmi + ffmi,
+    bodyFatPercent: (fmi / (fmi + ffmi)) * 100,
+    weightKg: 80,
+  });
+
+  // The "real 5-scan dataset": a long bulk walking up and to the right,
+  // ending near the top-right corner (forces the Now label to flip).
+  const fiveScans = [
+    point('2025-03-10', 3.0, 17.0),
+    point('2025-06-15', 3.5, 17.8),
+    point('2025-09-20', 4.2, 18.6),
+    point('2026-01-10', 5.0, 19.5),
+    point('2026-06-02', 7.8, 23.8),
+  ];
+
+  const baseData: DecorationsData = {
+    domain,
+    scanPoints: fiveScans,
+    trailPoints: [],
+    targetPoint: null,
+    targetLabel: null,
+    progressLabel: null,
+    showGoalVector: false,
+    startLabel: "Start · Mar '25",
+    nowLabel: 'Now · Jun 2',
+    showIntermediateLabels: true,
+  };
+
+  function renderDecorations(data: Partial<DecorationsData> = {}) {
+    const Decorations = buildDecorations({ ...baseData, ...data });
+    return render(
+      <svg>
+        <Decorations {...axisProps} />
+      </svg>
+    );
+  }
+
+  it('draws an arrowhead on every segment, rotated along travel direction', () => {
+    renderDecorations();
+    const arrows = screen.getAllByTestId('map-arrowhead');
+    expect(arrows).toHaveLength(4);
+    // First segment: (3.0,17.0)→(3.5,17.8) = px (100,265)→(130,237), i.e.
+    // up-and-right in SVG space → negative rotation.
+    const expectedAngle = Math.atan2(237 - 265, 130 - 100) * (180 / Math.PI);
+    const transform = arrows[0].getAttribute('transform')!;
+    const rotation = Number(transform.match(/rotate\((-?[\d.]+)\)/)?.[1]);
+    expect(rotation).toBeCloseTo(expectedAngle, 6);
+    // Midpoint placement.
+    expect(transform).toContain('translate(115, 251)');
+  });
+
+  it('labels the endpoints and flips them away from edges (start top-right, now bottom-left)', () => {
+    renderDecorations();
+    const start = screen.getByTestId('map-start-label');
+    expect(start).toHaveTextContent("Start · Mar '25");
+    // Start point at px(100, 265): label right-above.
+    expect(Number(start.getAttribute('x'))).toBeGreaterThan(100);
+    expect(Number(start.getAttribute('y'))).toBeLessThan(265);
+    expect(start.getAttribute('text-anchor')).toBe('start');
+
+    const now = screen.getByTestId('map-now-label');
+    expect(now).toHaveTextContent('Now · Jun 2');
+    // Now point at px(388, 27), top-right corner: label flips left-below.
+    expect(Number(now.getAttribute('x'))).toBeLessThan(388);
+    expect(Number(now.getAttribute('y'))).toBeGreaterThan(27);
+    expect(now.getAttribute('text-anchor')).toBe('end');
+  });
+
+  it('draws the dashed goal vector from the latest point with target + progress labels', () => {
+    renderDecorations({
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabel: 'Target · FFMI 22.5 / BF 22%',
+      progressLabel: '62% of the way',
+      showGoalVector: true,
+    });
+    expect(screen.getByTestId('map-target')).toBeInTheDocument();
+    expect(screen.getByTestId('map-goal-arrowhead')).toBeInTheDocument();
+    expect(screen.getByTestId('map-target-label')).toHaveTextContent(
+      'Target · FFMI 22.5 / BF 22%'
+    );
+    expect(screen.getByTestId('map-progress-label')).toHaveTextContent('62% of the way');
+  });
+
+  it('keeps the target marker visible even when the vector is suppressed', () => {
+    // A degenerate/suppressed goal vector must not hide WHERE the target is.
+    renderDecorations({
+      showGoalVector: false,
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabel: 'Target · FFMI 22.5 / BF 22%',
+    });
+    expect(screen.getByTestId('map-target')).toBeInTheDocument();
+    expect(screen.getByTestId('map-target-label')).toHaveTextContent('Target ·');
+    expect(screen.queryByTestId('map-goal-arrowhead')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-progress-label')).not.toBeInTheDocument();
+  });
+
+  it('omits target artifacts entirely when no target is set', () => {
+    renderDecorations({ targetPoint: null });
+    expect(screen.queryByTestId('map-target')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-goal-arrowhead')).not.toBeInTheDocument();
+  });
+
+  it('shows month labels on intermediate points when sparse (≤5 scans)', () => {
+    renderDecorations();
+    const labels = screen.getAllByTestId('map-month-label');
+    expect(labels.map((l) => l.textContent)).toEqual(['Jun', 'Sep', 'Jan']);
+  });
+
+  it('drops intermediate labels on dense maps (tap-only)', () => {
+    renderDecorations({ showIntermediateLabels: false });
+    expect(screen.queryAllByTestId('map-month-label')).toHaveLength(0);
+    // Endpoint labels stay regardless of density.
+    expect(screen.getByTestId('map-start-label')).toBeInTheDocument();
+    expect(screen.getByTestId('map-now-label')).toBeInTheDocument();
+  });
+});
+
+describe('CompositionMap endpoint label formatting', () => {
+  it("formats the start label month-year as Mar '25", () => {
+    expect(formatMonthYear('2025-03-10')).toBe("Mar '25");
+    expect(formatMonthYear('2026-06-02')).toBe("Jun '26");
   });
 });
