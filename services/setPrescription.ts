@@ -37,6 +37,13 @@ export interface SetPrescriptionContext {
   weekInMeso?: number;
   /** Total weeks in mesocycle */
   totalWeeksInMeso?: number;
+  /**
+   * Enhanced Athlete Mode. Deliberately does NOT change any safety limit in
+   * this module — it only controls whether a user-facing note is attached
+   * when a joint-stress cap binds (so the user understands why volume or
+   * intensity stays below what their raised landmarks would allow).
+   */
+  enhancedAthleteMode?: boolean;
 }
 
 /**
@@ -57,6 +64,12 @@ export interface SetPrescription {
   safetyTier: FailureSafetyTier;
   /** Whether to show calibration prompt after this set */
   showCalibrationPrompt?: boolean;
+  /**
+   * Present when Enhanced Athlete Mode is on and the joint-stress RIR floor
+   * actually constrains this prescription (effective RIR was raised above
+   * the base target). Shown inline so the cap is visible, not silent.
+   */
+  connectiveTissueNote?: string;
 }
 
 /**
@@ -88,6 +101,10 @@ export function prescribeSetType(
   baseRIR: number,
   context: SetPrescriptionContext
 ): SetPrescription {
+  // SAFETY INVARIANT: tier and RIR floor derive from the exercise alone and
+  // must never read enhancedAthleteMode. PEDs accelerate muscular recovery,
+  // not tendon/ligament adaptation, so joint-stress limits stay at
+  // natural-athlete values in enhanced mode (see exerciseSafety.ts).
   const tier = getFailureSafetyTier(exerciseName);
   const rirFloor = getRIRFloor(exerciseName);
   const isLastSet = context.setNumber === context.totalSets;
@@ -112,12 +129,28 @@ export function prescribeSetType(
   // Calculate effective RIR (never go below floor)
   const effectiveRIR = Math.max(baseRIR, rirFloor);
 
+  // Surface the cap when it binds under enhanced mode — the user's raised
+  // landmarks would otherwise suggest more intensity headroom than the
+  // joint-stress floor allows.
+  const connectiveTissueNote =
+    context.enhancedAthleteMode && effectiveRIR > baseRIR
+      ? CONNECTIVE_TISSUE_CAP_NOTE
+      : undefined;
+
   if (shouldAMRAP) {
     return createAMRAPPrescription(baseRepRange, tier, rirFloor, amrapReason);
   }
 
-  return createStandardPrescription(baseRepRange, effectiveRIR, tier, rirFloor);
+  const prescription = createStandardPrescription(baseRepRange, effectiveRIR, tier, rirFloor);
+  return connectiveTissueNote ? { ...prescription, connectiveTissueNote } : prescription;
 }
+
+/**
+ * Inline copy shown when a joint-stress cap constrains an enhanced athlete's
+ * prescription. Factual, not preachy.
+ */
+export const CONNECTIVE_TISSUE_CAP_NOTE =
+  'Capped to protect connective tissue — tendons adapt slower than muscle, regardless of enhancement.';
 
 /**
  * Create an AMRAP set prescription

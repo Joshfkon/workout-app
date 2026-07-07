@@ -294,15 +294,19 @@ export default function AdaptiveVolumeArticle() {
             <ul className="space-y-2 text-sm text-surface-400">
               <li className="flex items-start gap-2">
                 <span className="text-purple-400">{'\u2713'}</span>
-                <span>Higher baseline volume estimates (+40%)</span>
+                <span>Volume ceiling (MRV) raised ~35&ndash;40%, starting volumes ~10%</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-purple-400">{'\u2713'}</span>
-                <span>Faster upward adjustment of MRV</span>
+                <span>Faster weekly volume progression toward the raised ceiling</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-purple-400">{'\u2713'}</span>
                 <span>Recognition that &quot;normal&quot; overreaching signals may not apply</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400">{'\u2713'}</span>
+                <span>Joint-stress limits stay unchanged &mdash; tendons adapt slower than muscle, regardless of enhancement</span>
               </li>
             </ul>
             <p className="text-sm text-surface-500 mt-3">

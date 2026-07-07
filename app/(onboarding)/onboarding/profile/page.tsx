@@ -7,7 +7,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { usePWA } from '@/hooks/usePWA';
 import {
   validateUsername,
   generateUsernameSuggestions,
@@ -21,7 +20,6 @@ function ProfileSetupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
-  const { shouldShowInOnboarding } = usePWA();
 
   const [isLoading, setIsLoading] = useState(true);
   const [currentUsername, setCurrentUsername] = useState('');
@@ -195,21 +193,14 @@ function ProfileSetupContent() {
       return;
     }
 
-    // Navigate to next step
-    if (shouldShowInOnboarding()) {
-      router.push(`/onboarding/install?session=${sessionId}`);
-    } else {
-      router.push('/dashboard/log');
-    }
+    // Navigate to next step (Enhanced Athlete Mode, right after
+    // training experience)
+    router.push(`/onboarding/enhanced?session=${sessionId}`);
   };
 
   const handleSkip = async () => {
     // Navigate without updating profile
-    if (shouldShowInOnboarding()) {
-      router.push(`/onboarding/install?session=${sessionId}`);
-    } else {
-      router.push('/dashboard/log');
-    }
+    router.push(`/onboarding/enhanced?session=${sessionId}`);
   };
 
   if (isLoading) {

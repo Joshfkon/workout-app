@@ -81,6 +81,13 @@ export interface StartableMesocycle {
   days_per_week: number;
   program_data: unknown;
   exercise_overrides?: ExerciseOverride[];
+  /**
+   * Enhanced Athlete Mode at (re)generation time. In-flight weekly
+   * progression follows THIS tag, not the live profile flag — so choosing
+   * "Apply at next mesocycle" after a toggle really leaves the current meso
+   * unchanged. NULL (pre-feature mesos) falls back to the live flag.
+   */
+  generated_with_enhanced_mode?: boolean | null;
 }
 
 export interface StartMesocycleSessionInput {
@@ -312,7 +319,7 @@ export async function startMesocycleWorkoutSession(
 
   const { data: userData } = await supabase
     .from('users')
-    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks')
+    .select('height_cm, weight_kg, body_fat_percent, experience, volume_landmarks, enhanced_athlete_mode')
     .eq('id', user.id)
     .single();
 
@@ -429,16 +436,23 @@ export async function startMesocycleWorkoutSession(
   ) {
     try {
       const signals = await loadWeeklyMuscleSignals(supabase, user.id, mesocycle.id);
+      // The meso's generation-time mode governs in-flight progression; the
+      // live profile flag only applies when the meso predates the tag.
+      const enhancedAthleteMode =
+        mesocycle.generated_with_enhanced_mode ??
+        (userData?.enhanced_athlete_mode === true);
       weeklyAdjustmentPlan = planWeeklySetAdjustments({
         weekSessions,
         feedbackByMuscle: signals.feedbackByMuscle,
         trendByMuscle: signals.trendByMuscle,
         landmarksByMuscle: resolveVolumeLandmarks(
           userExperience,
-          (userData?.volume_landmarks as Record<string, unknown> | null) ?? null
+          (userData?.volume_landmarks as Record<string, unknown> | null) ?? null,
+          enhancedAthleteMode
         ),
         weekInMeso: mesocycle.current_week,
         isDeloadWeek: mesocycle.current_week === mesocycle.deload_week,
+        enhancedAthleteMode,
       });
     } catch (adjustmentError) {
       // Non-fatal: fall back to the unadjusted program.

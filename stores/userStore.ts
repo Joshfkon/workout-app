@@ -8,7 +8,11 @@ import type {
   Experience,
   StandardMuscleGroup,
 } from '@/types/schema';
-import { DEFAULT_USER_PREFERENCES, DEFAULT_VOLUME_LANDMARKS } from '@/types/schema';
+import {
+  DEFAULT_USER_PREFERENCES,
+  DEFAULT_VOLUME_LANDMARKS,
+  scaleLandmarksForEnhanced,
+} from '@/types/schema';
 
 interface UserState {
   // User data
@@ -92,11 +96,13 @@ export const useUserStore = create<UserState>()(
           return defaultLandmarks[muscle] || defaultFallback;
         }
         const userExperienceLandmarks = DEFAULT_VOLUME_LANDMARKS[user.experience] as Record<string, VolumeLandmarks>;
-        return (
+        const base =
           user.volumeLandmarks[muscle as StandardMuscleGroup] ||
           userExperienceLandmarks[muscle] ||
-          defaultFallback
-        );
+          defaultFallback;
+        // Enhanced Athlete Mode scales landmarks through the central
+        // derivation function (differentiated per landmark, not a flat bump).
+        return scaleLandmarksForEnhanced(base, user.enhancedAthleteMode);
       },
 
       getPreference: (key) => {

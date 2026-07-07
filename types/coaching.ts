@@ -72,6 +72,12 @@ export interface CoachingContext {
     trainingAge: number; // years
     goal?: string; // e.g., 'hypertrophy', 'strength', 'recomp'
     experience?: string; // e.g., 'novice', 'intermediate', 'advanced'
+    /**
+     * Enhanced Athlete Mode: the AI coach should assume raised volume
+     * ceilings (MRV ~+37.5%) but NATURAL joint-stress limits — tendons
+     * adapt slower than muscle regardless of enhancement.
+     */
+    enhancedAthleteMode?: boolean;
   };
   phase?: {
     type: PhaseType;

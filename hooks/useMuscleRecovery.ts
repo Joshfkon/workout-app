@@ -12,6 +12,7 @@ import {
   type StandardMuscleGroup
 } from '@/types/schema';
 import type { ExerciseBlockFull, SetLogRow } from '@/types/database-queries';
+import { ENHANCED_RECOVERY_MULTIPLIER } from '@/services/shared/fatigueConstants';
 
 /**
  * Recovery time recommendations in hours based on muscle group size
@@ -138,6 +139,7 @@ interface MuscleTrainingData {
  */
 export function useMuscleRecovery(): UseMuscleRecoveryResult {
   const [muscleDataMap, setMuscleDataMap] = useState<Map<string, MuscleTrainingData>>(new Map());
+  const [enhancedAthleteMode, setEnhancedAthleteMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -153,6 +155,14 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
 
     try {
       const supabase = createUntypedClient();
+
+      // Enhanced Athlete Mode shortens the recovery time-constants below.
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('enhanced_athlete_mode')
+        .eq('id', userId)
+        .single();
+      setEnhancedAthleteMode(userRow?.enhanced_athlete_mode === true);
 
       // Query completed workout sessions from the last 7 days
       // We need to find when each muscle group was last trained
@@ -276,10 +286,13 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
   // Calculate recovery status for all muscles
   const recoveryStatus = useMemo((): MuscleRecoveryStatus[] => {
     const now = new Date();
+    // Enhanced athletes dissipate muscular fatigue faster, so the recovery
+    // window shrinks by the shared recovery multiplier (~22.5% faster).
+    const recoveryTimeScale = enhancedAthleteMode ? 1 / ENHANCED_RECOVERY_MULTIPLIER : 1;
 
     return STANDARD_MUSCLE_GROUPS.map((muscle): MuscleRecoveryStatus => {
       const muscleTrainingData = muscleDataMap.get(muscle);
-      const baseHours = RECOVERY_HOURS[muscle];
+      const baseHours = RECOVERY_HOURS[muscle] * recoveryTimeScale;
       const displayName = STANDARD_MUSCLE_DISPLAY_NAMES[muscle];
 
       if (!muscleTrainingData) {
@@ -318,7 +331,7 @@ export function useMuscleRecovery(): UseMuscleRecoveryResult {
         statusText: formatTimeRemaining(hoursRemaining),
       };
     });
-  }, [muscleDataMap]);
+  }, [muscleDataMap, enhancedAthleteMode]);
 
   // Separate recovering and ready muscles
   const recoveringMuscles = useMemo(() =>

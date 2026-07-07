@@ -1050,6 +1050,13 @@ export function generateFullMesocycleWithFatigue(
   const recoveryFactors = calculateRecoveryFactors(profile);
   warnings.push(...recoveryFactors.warnings);
 
+  if (profile.enhancedAthleteMode) {
+    programNotes.push(
+      'Enhanced Athlete Mode: volume ceiling raised (MRV x1.375, MAV x1.25, MEV x1.10), ' +
+      'accumulation extended by 1 week. Joint-stress limits unchanged to protect connective tissue.'
+    );
+  }
+
   // Step 2: Create fatigue budget (reduced for shorter workouts)
   const baseFatigueBudget = createFatigueBudget(profile);
   const fatigueBudgetConfig = quickWorkoutMode 
@@ -1074,7 +1081,16 @@ export function generateFullMesocycleWithFatigue(
   programNotes.push(`Deload strategy: ${periodization.deloadStrategy}`);
 
   // Step 5: Calculate volume distribution (with extra volume for lagging areas if provided)
-  const baseVolumePerMuscle = calculateVolumeDistributionWithLagging(split, daysPerWeek, profile.experience, profile.goal, recoveryFactors, laggingAreas);
+  const baseVolumePerMuscle = calculateVolumeDistributionWithLagging(
+    split,
+    daysPerWeek,
+    profile.experience,
+    profile.goal,
+    recoveryFactors,
+    laggingAreas,
+    undefined,
+    profile.enhancedAthleteMode
+  );
   
   // Scale volume based on available time (40min = ~67% volume of 60min)
   const volumePerMuscle = Object.fromEntries(

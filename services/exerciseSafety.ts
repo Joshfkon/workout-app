@@ -71,6 +71,17 @@ const SAFE_PATTERNS = [
 // ============================================
 // CORE FUNCTIONS
 // ============================================
+//
+// SAFETY INVARIANT — Enhanced Athlete Mode:
+// Nothing in this module reads (or may ever read) enhancedAthleteMode.
+// PEDs accelerate MUSCULAR recovery; tendon and ligament adaptation runs on
+// its own, much slower timeline regardless of enhancement. The safety tiers,
+// RIR floors, and AMRAP frequency limits below exist to protect connective
+// tissue and therefore stay at natural-athlete values even when the user's
+// volume landmarks and fatigue constants are scaled up. Signatures here take
+// only the exercise, never the user profile — keep it that way so the
+// invariant is structural, not a convention. Guarded by a unit test
+// (exerciseSafety.test.ts: cap output identical with mode on/off).
 
 /**
  * Determine the failure safety tier for an exercise

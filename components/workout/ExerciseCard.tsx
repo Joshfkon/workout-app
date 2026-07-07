@@ -70,7 +70,8 @@ import {
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
 import { SafetyTierBadge } from './SafetyTierBadge';
-import { getFailureSafetyTier } from '@/services/exerciseSafety';
+import { getFailureSafetyTier, getRIRFloor } from '@/services/exerciseSafety';
+import { CONNECTIVE_TISSUE_CAP_NOTE } from '@/services/setPrescription';
 
 interface TemporaryInjury {
   area: string;
@@ -210,6 +211,10 @@ interface ExerciseCardProps {
   // instead of the block's stale planned weight. Called with null when no
   // active suggestion is shown.
   onActiveSuggestionChange?: (label: string | null) => void;
+  // Enhanced Athlete Mode: does NOT change any prescription here — only
+  // surfaces an inline note when the joint-stress RIR floor binds (the
+  // floor itself never reads this flag; see services/exerciseSafety.ts).
+  enhancedAthleteMode?: boolean;
 }
 
 /** Write status of a logged set (offline outbox, P0-2). */
@@ -263,6 +268,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   isAmrapSuggested = false,
   onPlateCalculatorOpen,
   onActiveSuggestionChange,
+  enhancedAthleteMode = false,
 }: ExerciseCardProps) {
   // Prescribed RIR: calibration-adjusted target when available, eased further
   // by the session's readiness modulation (Phase 1.3/1.5 fold-in).
@@ -1236,6 +1242,13 @@ export const ExerciseCard = memo(function ExerciseCard({
   // Only badge exercises that need caution — "Safe" is the default and just adds header noise
   const safetyTier = getFailureSafetyTier(exercise.name);
 
+  // Enhanced mode: surface (never alter) a binding joint-stress cap. The RIR
+  // floor is computed from the exercise alone; when it raises the effective
+  // target above the block's prescription, the cap is actively constraining
+  // intensity below what the enhanced landmarks would otherwise allow.
+  const connectiveTissueCapBinds =
+    enhancedAthleteMode && getRIRFloor(exercise.name) > block.targetRir;
+
   return (
     <Card
       variant={isActive ? 'elevated' : 'default'}
@@ -1409,6 +1422,14 @@ export const ExerciseCard = memo(function ExerciseCard({
             />
           )}
         </button>
+
+        {/* Enhanced mode: the joint-stress RIR floor is constraining this
+            exercise below what the raised landmarks would allow */}
+        {connectiveTissueCapBinds && (
+          <p className="mt-1.5 text-[11px] text-warning-400/90">
+            {CONNECTIVE_TISSUE_CAP_NOTE}
+          </p>
+        )}
 
         {/* Weight mode segmented control for bodyweight exercises */}
         {isBodyweightExercise && !isPureBodyweight && userBodyweightKg && (
@@ -2746,6 +2767,7 @@ export const ExerciseCard = memo(function ExerciseCard({
     prevProps.userGoal === nextProps.userGoal &&
     prevProps.isAmrapSuggested === nextProps.isAmrapSuggested &&
     prevProps.userBodyweightKg === nextProps.userBodyweightKg &&
+    prevProps.enhancedAthleteMode === nextProps.enhancedAthleteMode &&
     // Write-status (P0-2): compare only THIS card's own sets' statuses, not the
     // whole shared map by reference. setSyncStatus is one object shared by every
     // card, so a reference check would re-render all cards whenever any set's

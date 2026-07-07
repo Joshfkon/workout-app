@@ -188,6 +188,7 @@ export interface UserRow {
   height_cm?: number | null;
   weight_kg?: number | null;
   training_age_years?: number | null;
+  enhanced_athlete_mode?: boolean | null;
 }
 
 // ============ BODYWEIGHT QUERY RESULTS ============

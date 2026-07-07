@@ -4,10 +4,10 @@ import {
   setEnhancedStatus,
   BASELINE_VOLUME_RECOMMENDATIONS,
 } from '@/src/lib/training/adaptive-volume';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, ENHANCED_SCALING } from '@/types/schema';
 
 describe('setEnhancedStatus', () => {
-  it('scales MEV/MRV up by 1.4x when enabling enhanced mode', () => {
+  it('applies differentiated per-landmark scaling when enabling enhanced mode', () => {
     const profile = createInitialVolumeProfile('user-1', 'intermediate', false);
     const updated = setEnhancedStatus(profile, true);
 
@@ -15,8 +15,9 @@ describe('setEnhancedStatus', () => {
     for (const muscle of MUSCLE_GROUPS) {
       const before = profile.muscleTolerance[muscle];
       const after = updated.muscleTolerance[muscle];
-      expect(after.estimatedMEV).toBe(Math.round(before.estimatedMEV * 1.4));
-      expect(after.estimatedMRV).toBe(Math.round(before.estimatedMRV * 1.4));
+      // The ceiling rises far more than the floor — no flat 40% anywhere.
+      expect(after.estimatedMEV).toBe(Math.round(before.estimatedMEV * ENHANCED_SCALING.mev));
+      expect(after.estimatedMRV).toBe(Math.round(before.estimatedMRV * ENHANCED_SCALING.mrv));
     }
   });
 
@@ -37,8 +38,26 @@ describe('setEnhancedStatus', () => {
 
     expect(updated.isEnhanced).toBe(false);
     const baseline = BASELINE_VOLUME_RECOMMENDATIONS.chest;
-    // 1.4x then /1.4 round-trips to within rounding error of the natural baseline
+    // scale up then back down round-trips to within rounding error
     expect(updated.muscleTolerance.chest.estimatedMRV).toBeCloseTo(baseline.mrv, 0);
+    expect(updated.muscleTolerance.chest.estimatedMEV).toBeCloseTo(baseline.mev, 0);
+  });
+
+  it('on -> off -> on converges instead of compounding', () => {
+    const natural = createInitialVolumeProfile('user-1', 'intermediate', false);
+    const once = setEnhancedStatus(natural, true);
+    const cycled = setEnhancedStatus(setEnhancedStatus(once, false), true);
+
+    for (const muscle of MUSCLE_GROUPS) {
+      expect(cycled.muscleTolerance[muscle].estimatedMRV).toBeCloseTo(
+        once.muscleTolerance[muscle].estimatedMRV,
+        0
+      );
+      expect(cycled.muscleTolerance[muscle].estimatedMEV).toBeCloseTo(
+        once.muscleTolerance[muscle].estimatedMEV,
+        0
+      );
+    }
   });
 
   it('returns the profile unchanged when the status is not changing', () => {
@@ -54,5 +73,25 @@ describe('setEnhancedStatus', () => {
     const updated = setEnhancedStatus(profile, true);
     expect(updated.muscleTolerance.chest.dataPoints).toBe(5);
     expect(updated.muscleTolerance.chest.confidence).toBe('high');
+  });
+});
+
+describe('getAdjustedBaseline (enhanced scaling)', () => {
+  it('scales MEV by the floor multiplier and MRV by the ceiling multiplier', () => {
+    const natural = getAdjustedBaseline('chest', 'intermediate', false);
+    const enhanced = getAdjustedBaseline('chest', 'intermediate', true);
+
+    expect(enhanced.mev).toBe(Math.round(natural.mev * ENHANCED_SCALING.mev));
+    expect(enhanced.mrv).toBe(Math.round(natural.mrv * ENHANCED_SCALING.mrv));
+    expect(enhanced.optimal).toBe(Math.round(natural.optimal * ENHANCED_SCALING.mav));
+  });
+
+  it('raises the ceiling proportionally more than the floor', () => {
+    const natural = getAdjustedBaseline('back', 'advanced', false);
+    const enhanced = getAdjustedBaseline('back', 'advanced', true);
+
+    const mevRatio = enhanced.mev / natural.mev;
+    const mrvRatio = enhanced.mrv / natural.mrv;
+    expect(mrvRatio).toBeGreaterThan(mevRatio);
   });
 });

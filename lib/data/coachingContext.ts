@@ -287,6 +287,7 @@ export async function buildCoachingContext(): Promise<CoachingContext | null> {
       trainingAge: user.training_age_years || 1,
       goal: prefs?.coaching?.primaryGoal || user.goal || undefined,
       experience: user.experience || undefined,
+      enhancedAthleteMode: user.enhanced_athlete_mode === true,
     },
     phase: phase
       ? {

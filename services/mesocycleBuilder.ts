@@ -35,19 +35,40 @@ import type {
   FatigueBudgetConfig,
   RepRangeConfig,
 } from '@/types/schema';
-import { DEFAULT_VOLUME_LANDMARKS, muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
+import {
+  DEFAULT_VOLUME_LANDMARKS,
+  ENHANCED_SCALING,
+  muscleMatchesGroup,
+  scaleLandmarksForEnhanced,
+  toLegacyMuscleGroup,
+} from '@/types/schema';
 import { calculateFFMI, getNaturalFFMILimit } from './bodyCompEngine';
 
 /** Fallback volume landmarks for muscles missing from DEFAULT_VOLUME_LANDMARKS */
 const FALLBACK_VOLUME_LANDMARK = { mev: 4, mav: 10, mrv: 16 };
 
-/** Look up the experience-specific MRV for a muscle, with a sane fallback */
-function getMuscleMRV(experience: Experience, muscle: string): number {
-  return (
-    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup]?.mrv ??
-    FALLBACK_VOLUME_LANDMARK.mrv
-  );
+/**
+ * Look up the experience-specific MRV for a muscle, with a sane fallback.
+ * Enhanced Athlete Mode raises the ceiling through the central
+ * scaleLandmarksForEnhanced derivation (never a local multiplier).
+ */
+function getMuscleMRV(
+  experience: Experience,
+  muscle: string,
+  enhancedAthleteMode?: boolean
+): number {
+  const base =
+    DEFAULT_VOLUME_LANDMARKS[experience]?.[muscle as StandardMuscleGroup] ??
+    FALLBACK_VOLUME_LANDMARK;
+  return scaleLandmarksForEnhanced(base, enhancedAthleteMode).mrv;
 }
+
+/**
+ * Extra accumulation weeks before deload for enhanced athletes. Faster
+ * recovery sustains productive overreaching longer, so the default block
+ * runs one week longer (e.g. 4 -> 5) before the deload.
+ */
+export const ENHANCED_EXTRA_ACCUMULATION_WEEKS = 1;
 
 // Re-export from sub-engines for convenience
 export {
@@ -234,6 +255,13 @@ export function calculateRecoveryFactors(profile: ExtendedUserProfile): Recovery
     baseDeloadWeeks = 4;       // Novices need frequent deloads due to CNS inefficiency
   } else if (profile.trainingAge >= 5) {
     baseDeloadWeeks = Math.max(3, baseDeloadWeeks - 1);  // Experienced lifters need more frequent deloads
+  }
+
+  // Enhanced athletes sustain accumulation longer before needing a deload.
+  // Volume itself is NOT bumped here — landmark scaling (ENHANCED_SCALING)
+  // handles that at derivation time.
+  if (profile.enhancedAthleteMode) {
+    baseDeloadWeeks += ENHANCED_EXTRA_ACCUMULATION_WEEKS;
   }
 
   // Compound adjustments - floor at 0.65 to prevent detraining
@@ -639,8 +667,13 @@ export function buildPeriodizationPlan(
   
   const deloadFrequency = recoveryFactors.deloadFrequencyWeeks;
   const mesocycleWeeks = deloadFrequency + 1;  // Training weeks + deload
-  
-  const weeklyProgression = buildWeeklyProgression(model, deloadFrequency, profile.goal);
+
+  const weeklyProgression = buildWeeklyProgression(
+    model,
+    deloadFrequency,
+    profile.goal,
+    profile.enhancedAthleteMode
+  );
   
   // Reactive deloads for novices, proactive for everyone else
   const deloadStrategy: DeloadStrategy = profile.experience === 'novice' ? 'reactive' : 'proactive';
@@ -655,16 +688,29 @@ export function buildPeriodizationPlan(
 }
 
 /**
+ * Extra end-of-ramp volume modifier for enhanced athletes. Weekly base sets
+ * are MAV-derived (already scaled x1.25 when enhanced); ramping the final
+ * accumulation week to ~110% instead of 100% lands weekly volume in
+ * scaled-MRV territory (1.1 x 1.25 ≈ 1.375 ≈ ENHANCED_SCALING.mrv), so the
+ * lifter actually approaches the raised ceiling before deload instead of
+ * running the same shallow ramp under a higher roof.
+ */
+export const ENHANCED_VOLUME_RAMP_BONUS = 0.1;
+
+/**
  * Build week-by-week progression targets
  */
 function buildWeeklyProgression(
   model: PeriodizationModel,
   trainingWeeks: number,
-  goal: Goal
+  goal: Goal,
+  enhancedAthleteMode?: boolean
 ): WeeklyProgression[] {
-  
+
   const weeks: WeeklyProgression[] = [];
-  
+  // Enhanced athletes ramp volume proportionally faster toward the scaled MRV.
+  const rampBonus = enhancedAthleteMode ? ENHANCED_VOLUME_RAMP_BONUS : 0;
+
   switch (model) {
     case 'linear':
       // Simple linear ramp
@@ -673,13 +719,13 @@ function buildWeeklyProgression(
         weeks.push({
           week: i,
           intensityModifier: 0.85 + (progress * 0.15),  // 85% -> 100%
-          volumeModifier: 0.9 + (progress * 0.1),       // 90% -> 100%
+          volumeModifier: 0.9 + (progress * (0.1 + rampBonus)), // 90% -> 100% (110% enhanced)
           rpeTarget: { min: 6 + Math.floor(progress * 2), max: 7 + Math.floor(progress * 2) },
           focus: progress < 0.5 ? 'Technique and base building' : 'Progressive overload'
         });
       }
       break;
-      
+
     case 'daily_undulating':
       // Volume waves within weeks, overall progression across mesocycle
       for (let i = 1; i <= trainingWeeks; i++) {
@@ -687,13 +733,13 @@ function buildWeeklyProgression(
         weeks.push({
           week: i,
           intensityModifier: 0.9 + (progress * 0.1),
-          volumeModifier: 0.85 + (progress * 0.15),
+          volumeModifier: 0.85 + (progress * (0.15 + rampBonus)),
           rpeTarget: { min: 7, max: 9 },
           focus: `DUP Week ${i}: Rotate hypertrophy/strength/power daily`
         });
       }
       break;
-      
+
     case 'weekly_undulating':
       // Alternate high/low volume weeks
       for (let i = 1; i <= trainingWeeks; i++) {
@@ -702,7 +748,7 @@ function buildWeeklyProgression(
         weeks.push({
           week: i,
           intensityModifier: isHighVolume ? 0.85 + (progress * 0.1) : 0.95 + (progress * 0.05),
-          volumeModifier: isHighVolume ? 1.0 + (progress * 0.1) : 0.7,
+          volumeModifier: isHighVolume ? 1.0 + (progress * (0.1 + rampBonus)) : 0.7,
           rpeTarget: isHighVolume ? { min: 7, max: 8 } : { min: 8, max: 9 },
           focus: isHighVolume ? 'Volume accumulation' : 'Intensity/recovery'
         });
@@ -768,7 +814,8 @@ function buildWeeklyProgression(
 export function recommendVolume(
   experience: Experience,
   goal: Goal,
-  muscleGroup: string
+  muscleGroup: string,
+  enhancedAthleteMode?: boolean
 ): number {
   // Base volumes (MAV - Maximum Adaptive Volume estimates)
   const baseVolumes: Record<string, Record<Experience, number>> = {
@@ -785,6 +832,13 @@ export function recommendVolume(
   };
 
   let volume = baseVolumes[muscleGroup]?.[experience] || 12;
+
+  // These base volumes are MAV estimates, so enhanced mode applies the MAV
+  // multiplier from the central scaling table (the MRV ceiling is applied
+  // separately in calculateVolumeDistribution via getMuscleMRV).
+  if (enhancedAthleteMode) {
+    volume = Math.round(volume * ENHANCED_SCALING.mav);
+  }
 
   // Adjust for goal
   if (goal === 'cut') {
@@ -816,7 +870,8 @@ export function calculateVolumeDistribution(
   goal: Goal,
   recoveryFactors: RecoveryFactors,
   laggingAreas?: string[],  // From regional DEXA analysis
-  volumeAdjustments?: VolumeAdjustmentInput[]  // From imbalance engine or user priorities
+  volumeAdjustments?: VolumeAdjustmentInput[],  // From imbalance engine or user priorities
+  enhancedAthleteMode?: boolean
 ): Record<MuscleGroup, { sets: number; frequency: number }> {
 
   const muscles: MuscleGroup[] = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'quads', 'hamstrings', 'glutes', 'calves', 'abs'];
@@ -902,7 +957,7 @@ export function calculateVolumeDistribution(
   }
 
   muscles.forEach(muscle => {
-    let baseVolume = recommendVolume(experience, goal, muscle);
+    let baseVolume = recommendVolume(experience, goal, muscle, enhancedAthleteMode);
 
     // Apply muscle-specific multiplier
     const muscleMultiplier = muscleMultipliers.get(muscle) || 1.0;
@@ -912,7 +967,8 @@ export function calculateVolumeDistribution(
 
     // Clamp to the muscle's experience-specific MRV so week-1 volume never
     // starts above the maximum recoverable volume after all multipliers.
-    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle));
+    // (Enhanced mode raises this ceiling via central landmark scaling.)
+    adjustedVolume = Math.min(adjustedVolume, getMuscleMRV(experience, muscle, enhancedAthleteMode));
 
     const frequency = Math.round(frequencies[muscle] * recoveryFactors.frequencyMultiplier);
 
@@ -1315,7 +1371,8 @@ export function generateFullProgram(
     profile.goal,
     recoveryFactors,
     laggingAreas,
-    volumeAdjustments
+    volumeAdjustments,
+    profile.enhancedAthleteMode
   );
 
   // Add note if lagging areas are being addressed

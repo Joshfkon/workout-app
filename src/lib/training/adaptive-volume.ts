@@ -20,7 +20,7 @@ import type {
   WorkoutSession,
   Rating,
 } from '@/types/schema';
-import { MUSCLE_GROUPS } from '@/types/schema';
+import { MUSCLE_GROUPS, ENHANCED_SCALING } from '@/types/schema';
 import { estimateE1RM } from '@/lib/utils';
 
 // ============================================
@@ -262,15 +262,19 @@ export function getAdjustedBaseline(
     multiplier = 1.15; // Advanced may need more
   }
 
-  // Enhanced adjustment
-  if (isEnhanced) {
-    multiplier *= 1.4;  // Significantly higher recovery capacity
-  }
+  // Enhanced athletes: differentiated per-landmark scaling (ENHANCED_SCALING).
+  // The recoverable ceiling (MRV) rises far more than the maintenance floor
+  // (MEV) — enhanced recovery doesn't lower the minimum stimulus much, it
+  // raises how much extra work is productive. 'optimal' sits mid-range so it
+  // scales with the MAV multiplier.
+  const mevScale = isEnhanced ? ENHANCED_SCALING.mev : 1;
+  const optimalScale = isEnhanced ? ENHANCED_SCALING.mav : 1;
+  const mrvScale = isEnhanced ? ENHANCED_SCALING.mrv : 1;
 
   return {
-    mev: Math.round(base.mev * multiplier),
-    mrv: Math.round(base.mrv * multiplier),
-    optimal: Math.round(base.optimal * multiplier)
+    mev: Math.round(base.mev * multiplier * mevScale),
+    mrv: Math.round(base.mrv * multiplier * mrvScale),
+    optimal: Math.round(base.optimal * multiplier * optimalScale)
   };
 }
 
@@ -308,15 +312,13 @@ export function createInitialVolumeProfile(
 }
 
 /**
- * Enhanced athletes recover from ~40% more volume (see getAdjustedBaseline).
- */
-const ENHANCED_VOLUME_MULTIPLIER = 1.4;
-
-/**
  * Set enhanced-athlete status on an existing profile, rescaling every
  * muscle's MEV/MRV estimates so the flag change takes effect immediately
  * (baselines are otherwise only adjusted at profile creation). Learned
  * estimates are scaled rather than reset so accumulated data is preserved.
+ * Scaling is differentiated per landmark (ENHANCED_SCALING): the ceiling
+ * (MRV) moves far more than the floor (MEV). Toggling off divides by the
+ * same factors, so on→off→on round-trips instead of compounding.
  * Returns the profile unchanged if the status isn't actually changing.
  */
 export function setEnhancedStatus(
@@ -325,14 +327,15 @@ export function setEnhancedStatus(
 ): UserVolumeProfile {
   if (profile.isEnhanced === isEnhanced) return profile;
 
-  const scale = isEnhanced ? ENHANCED_VOLUME_MULTIPLIER : 1 / ENHANCED_VOLUME_MULTIPLIER;
+  const mevScale = isEnhanced ? ENHANCED_SCALING.mev : 1 / ENHANCED_SCALING.mev;
+  const mrvScale = isEnhanced ? ENHANCED_SCALING.mrv : 1 / ENHANCED_SCALING.mrv;
 
   const muscleTolerance = {} as Record<MuscleGroup, MuscleTolerance>;
   for (const [muscle, tolerance] of Object.entries(profile.muscleTolerance)) {
     muscleTolerance[muscle as MuscleGroup] = {
       ...tolerance,
-      estimatedMEV: Math.round(tolerance.estimatedMEV * scale),
-      estimatedMRV: Math.round(tolerance.estimatedMRV * scale),
+      estimatedMEV: Math.round(tolerance.estimatedMEV * mevScale),
+      estimatedMRV: Math.round(tolerance.estimatedMRV * mrvScale),
       lastUpdated: new Date(),
     };
   }

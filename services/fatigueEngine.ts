@@ -15,9 +15,9 @@ import type {
 } from '@/types/schema';
 import {
   EQUIPMENT_FATIGUE_MULTIPLIER,
-  FATIGUE_RECOVERY_RATE,
   READINESS_WEIGHTS,
   DELOAD_THRESHOLDS,
+  effectiveFatigueRecoveryRate,
 } from '@/services/shared/fatigueConstants';
 
 // ============================================
@@ -65,6 +65,12 @@ export interface ReadinessInput {
   nutritionRating: Rating | null;
   previousSessionRpe?: number;
   daysSinceLastSession?: number;
+  /**
+   * Enhanced Athlete Mode: the recovery sub-score uses the enhanced recovery
+   * constants (full rest credit after 1 day instead of 2), so a genuinely
+   * recovered next-day session isn't scored as under-recovered.
+   */
+  enhancedAthleteMode?: boolean;
 }
 
 /**
@@ -122,19 +128,22 @@ export function calculateReadinessScore(input: ReadinessInput): number {
 
   // Recovery score based on previous session and rest days
   let recoveryScore = 70;
-  
+
   // Adjust for previous session intensity
   if (previousSessionRpe >= 9) {
     recoveryScore -= 15;
   } else if (previousSessionRpe <= 6) {
     recoveryScore += 10;
   }
-  
-  // Adjust for rest days
-  if (daysSinceLastSession >= 2) {
+
+  // Adjust for rest days. Enhanced athletes dissipate fatigue faster
+  // (ENHANCED_RECOVERY_MULTIPLIER), so full rest credit arrives a day sooner
+  // and same-day training is penalized less.
+  const fullRecoveryDays = input.enhancedAthleteMode ? 1 : 2;
+  if (daysSinceLastSession >= fullRecoveryDays) {
     recoveryScore += 15;
   } else if (daysSinceLastSession === 0) {
-    recoveryScore -= 20;
+    recoveryScore -= input.enhancedAthleteMode ? 10 : 20;
   }
 
   // Calculate weighted average
@@ -262,6 +271,8 @@ export interface FatigueUpdateInput {
   currentFatigue: number;
   sessionRpe: number;
   daysSinceLastSession: number;
+  /** Enhanced Athlete Mode: fatigue dissipates faster between sessions. */
+  enhancedAthleteMode?: boolean;
 }
 
 /**
@@ -271,8 +282,9 @@ export interface FatigueUpdateInput {
 export function updateMesocycleFatigue(input: FatigueUpdateInput): number {
   const { currentFatigue, sessionRpe, daysSinceLastSession } = input;
 
-  // Recovery: subtract based on days since last session
-  const recovery = daysSinceLastSession * FATIGUE_RECOVERY_RATE;
+  // Recovery: subtract based on days since last session (accumulation is
+  // NOT reduced for enhanced athletes — only dissipation speeds up)
+  const recovery = daysSinceLastSession * effectiveFatigueRecoveryRate(input.enhancedAthleteMode);
   
   // Accumulation: add based on session RPE
   const roundedRpe = Math.round(sessionRpe);
@@ -325,7 +337,7 @@ export function updateMesocycleFatigueEnhanced(input: EnhancedFatigueUpdateInput
   const { currentFatigue, sessionRpe, daysSinceLastSession, exercises } = input;
 
   // Recovery: subtract based on days since last session
-  const recovery = daysSinceLastSession * FATIGUE_RECOVERY_RATE;
+  const recovery = daysSinceLastSession * effectiveFatigueRecoveryRate(input.enhancedAthleteMode);
 
   // Base accumulation from RPE
   const roundedRpe = Math.round(sessionRpe);
@@ -361,9 +373,10 @@ export function updateMesocycleFatigueEnhanced(input: EnhancedFatigueUpdateInput
  */
 export function calculateFatigueAfterRest(
   currentFatigue: number,
-  restDays: number
+  restDays: number,
+  enhancedAthleteMode?: boolean
 ): number {
-  const recovery = restDays * FATIGUE_RECOVERY_RATE;
+  const recovery = restDays * effectiveFatigueRecoveryRate(enhancedAthleteMode);
   return Math.max(0, currentFatigue - recovery);
 }
 
@@ -580,15 +593,18 @@ export function adjustTargetsForReadiness(
 export function forecastWeeklyFatigue(
   currentFatigue: number,
   plannedSessions: number,
-  expectedAvgRpe: number = 7.5
+  expectedAvgRpe: number = 7.5,
+  enhancedAthleteMode?: boolean
 ): {
   projectedFatigue: number;
   recommendation: string;
 } {
+  const recoveryRate = effectiveFatigueRecoveryRate(enhancedAthleteMode);
+
   // Guard against zero or negative sessions
   if (plannedSessions <= 0) {
     // No sessions = pure recovery
-    const recoveredFatigue = Math.max(0, currentFatigue - (7 * FATIGUE_RECOVERY_RATE));
+    const recoveredFatigue = Math.max(0, currentFatigue - (7 * recoveryRate));
     return {
       projectedFatigue: Math.round(recoveredFatigue),
       recommendation: 'No sessions planned - good time for recovery',
@@ -601,7 +617,7 @@ export function forecastWeeklyFatigue(
 
   for (let i = 0; i < plannedSessions; i++) {
     // Recovery between sessions
-    const recovery = (i === 0 ? 0 : daysPerSession) * FATIGUE_RECOVERY_RATE;
+    const recovery = (i === 0 ? 0 : daysPerSession) * recoveryRate;
     fatigue = Math.max(0, fatigue - recovery);
     
     // Add session fatigue

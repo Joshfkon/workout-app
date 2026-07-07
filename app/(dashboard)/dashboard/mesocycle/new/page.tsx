@@ -48,6 +48,7 @@ export default function NewMesocyclePage() {
   const [sleepQuality, setSleepQuality] = useState<Rating>(3);
   const [stressLevel, setStressLevel] = useState<Rating>(3);
   const [trainingAge, setTrainingAge] = useState<number>(1);
+  const [enhancedAthleteMode, setEnhancedAthleteMode] = useState(false);
   const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>(['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight']);
   const [injuryHistory, setInjuryHistory] = useState<MuscleGroup[]>([]);
   const [unavailableEquipmentIds, setUnavailableEquipmentIds] = useState<string[]>([]);
@@ -195,11 +196,12 @@ export default function NewMesocyclePage() {
         // Get user profile with extended fields
         const { data: profile } = await supabase
           .from('users')
-          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history')
+          .select('goal, experience, height_cm, age, sleep_quality, stress_level, training_age, available_equipment, injury_history, enhanced_athlete_mode')
           .eq('id', user.id)
           .single();
-        
+
         if (profile) {
+          setEnhancedAthleteMode(profile.enhanced_athlete_mode === true);
           setUserGoal(profile.goal || 'maintenance');
           setUserExperience(profile.experience || 'intermediate');
           setHeightCm(profile.height_cm);
@@ -268,6 +270,7 @@ export default function NewMesocyclePage() {
     trainingAge,
     heightCm,
     latestDexa,
+    enhancedAthleteMode,
   };
 
   // Calculate recovery factors for display
@@ -288,7 +291,9 @@ export default function NewMesocyclePage() {
       );
       setRecommendation(rec);
       setSplitType(rec.splitType);
-      setTotalWeeks(rec.totalWeeks);
+      // Enhanced athletes default to one extra accumulation week before
+      // deload (suggested default only — the user can still change it).
+      setTotalWeeks(Math.min(8, rec.totalWeeks + (enhancedAthleteMode ? 1 : 0)));
       
       // Generate workout templates
       const templates = generateWorkoutTemplates(
@@ -315,8 +320,8 @@ export default function NewMesocyclePage() {
       setFullProgram(program);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation, 
-      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds]);
+  }, [daysPerWeek, userGoal, userExperience, heightCm, latestDexa, useAiRecommendation,
+      userAge, sleepQuality, stressLevel, trainingAge, availableEquipment, injuryHistory, sessionDurationMinutes, unavailableEquipmentIds, enhancedAthleteMode]);
 
   // Generate default name
   useEffect(() => {
@@ -358,6 +363,7 @@ export default function NewMesocyclePage() {
         trainingAge,
         heightCm: heightCm || null,
         latestDexa: latestDexa || null,
+        enhancedAthleteMode,
       };
       const recoveryFactors = calculateRecoveryFactors(userProfile);
 
@@ -401,6 +407,9 @@ export default function NewMesocyclePage() {
           // Use the volume targets from the program actually generated (not legacy rec).
           volume_per_muscle: fullProgram?.volumePerMuscle || recommendation?.volumePerMuscle || null,
           recovery_multiplier: recoveryFactors?.volumeMultiplier || 1.0,
+          // Mode active at generation time — governs in-flight weekly
+          // progression and keeps historical volume analysis unpolluted.
+          generated_with_enhanced_mode: enhancedAthleteMode,
         })
         .select()
         .single();
