@@ -9,6 +9,7 @@ import {
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
   computeLiftTrends,
+  LIFT_TREND_WINDOW_DAYS,
   type LiftTrendsSummary,
 } from '@/app/(dashboard)/dashboard/_lib/liftTrends';
 import { computeWeekSessions } from '@/app/(dashboard)/dashboard/_lib/weekSessions';
@@ -252,9 +253,9 @@ export async function fetchCompletedWorkoutsCount(userId: string): Promise<numbe
 export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary> {
   const supabase = await createUntypedServerClient();
   const since = new Date();
-  since.setDate(since.getDate() - 84);
+  since.setDate(since.getDate() - LIFT_TREND_WINDOW_DAYS);
 
-  const [{ data: sessions }, { data: profile }] = await Promise.all([
+  const [{ data: sessions }, { data: profile }, { data: activeMesos }] = await Promise.all([
     supabase
       .from('workout_sessions')
       .select(`id, completed_at,
@@ -264,11 +265,22 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
       .gte('completed_at', since.toISOString())
       .order('completed_at', { ascending: true }),
     supabase.from('users').select('goal').eq('id', userId).single(),
+    // Active program start — trend verdicts across this boundary are
+    // low-confidence until a few sessions rebuild the history.
+    supabase
+      .from('mesocycles')
+      .select('start_date')
+      .eq('user_id', userId)
+      .or('is_active.eq.true,state.eq.active')
+      .order('created_at', { ascending: false })
+      .limit(1),
   ]);
 
   return computeLiftTrends(
     (sessions as any) || [],
-    (profile?.goal as PlateauGoal | null) ?? undefined
+    (profile?.goal as PlateauGoal | null) ?? undefined,
+    new Date(),
+    { programStartDate: activeMesos?.[0]?.start_date ?? null }
   );
 }
 

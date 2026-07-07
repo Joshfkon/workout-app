@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent, Button, LoadingAnimation, SwipeableRow, ToastContainer, useToasts } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
@@ -39,6 +40,7 @@ import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
 import { StepTracking } from '@/components/nutrition/StepTracking';
 import { getLocalDateString, formatDate } from '@/lib/utils';
 import { getDisplayWeight, prepareWeightForStorage } from '@/lib/weightUtils';
+import { computeWeightRate } from '@/app/(dashboard)/dashboard/_lib/weightRate';
 import {
   LineChart,
   Line,
@@ -62,6 +64,12 @@ import {
 } from '@tabler/icons-react';
 
 type NutritionTab = 'log' | 'weight' | 'insights';
+
+// Valid ?tab= values — deep-linkable so the home Weight tile (and anything
+// else) can land directly on a section, e.g. /dashboard/nutrition?tab=weight.
+function parseNutritionTabParam(value: string | null): NutritionTab | null {
+  return value === 'log' || value === 'weight' || value === 'insights' ? value : null;
+}
 
 const NUTRITION_TABS: { key: NutritionTab; label: string; icon: typeof IconScale }[] = [
   { key: 'log', label: 'Food Log', icon: IconToolsKitchen2 },
@@ -145,7 +153,7 @@ interface FoodLogInsert {
   nutritionix_id?: string;
 }
 
-export default function NutritionPage() {
+function NutritionPageContent() {
   // Defer date initialization to client to prevent hydration mismatches
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -191,7 +199,25 @@ export default function NutritionPage() {
   const [editingFood, setEditingFood] = useState<FoodLogEntry | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const [openMealMenu, setOpenMealMenu] = useState<MealType | null>(null);
-  const [activeTab, setActiveTab] = useState<NutritionTab>('log');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<NutritionTab>(
+    () => parseNutritionTabParam(searchParams.get('tab')) ?? 'log'
+  );
+
+  // Follow URL changes (back/forward, deep links from the home Weight tile).
+  useEffect(() => {
+    const fromUrl = parseNutritionTabParam(searchParams.get('tab'));
+    if (fromUrl) setActiveTab(fromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  const handleTabChange = (tab: NutritionTab) => {
+    setActiveTab(tab);
+    // Keep the URL linkable without stacking history entries per tap.
+    router.replace(tab === 'log' ? pathname : `${pathname}?tab=${tab}`, { scroll: false });
+  };
 
   // Notification for macro updates
   const [macroUpdateNotification, setMacroUpdateNotification] = useState<string | null>(null);
@@ -1322,6 +1348,24 @@ export default function NutritionPage() {
         }, 0) / last7Days.length
       : null;
 
+  // Weekly trend rate vs the goal-implied target — the SAME shared helper the
+  // home "Weight" glance tile uses, so the "+3.8 lb/wk · target +0.5" the
+  // user tapped is the number this tab shows.
+  const weightTrendRate = computeWeightRate(
+    weightEntries.map((e) => ({
+      date: e.logged_at,
+      weight: e.weight,
+      unit: ((e as any).unit as string | null) || weightUnit,
+    })),
+    weightUnit,
+    currentPhase ?? 'maintenance'
+  );
+  const weightRateOnTrack =
+    !weightTrendRate || weightTrendRate.target === null || weightTrendRate.target === 0
+      ? true
+      : Math.sign(weightTrendRate.perWeek) === Math.sign(weightTrendRate.target);
+  const signedRate = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}`;
+
   // Prepare weight chart data (with unit validation and conversion)
   // Sort by date ascending (oldest first) for proper graph display
   const weightChartData = [...weightEntries]
@@ -1489,7 +1533,7 @@ export default function NutritionPage() {
         {NUTRITION_TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
             className={`relative flex items-center justify-center gap-1.5 rounded-lg py-2 text-[13px] font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-surface-800 text-surface-100'
@@ -1759,6 +1803,24 @@ export default function NutritionPage() {
                     </div>
                   </div>
                 )}
+                {weightTrendRate && (
+                  <div>
+                    <div className="text-sm text-surface-400">Trend</div>
+                    <div
+                      className={`text-xl font-semibold ${
+                        weightRateOnTrack ? 'text-success-400' : 'text-warning-400'
+                      }`}
+                    >
+                      {signedRate(weightTrendRate.perWeek)} {weightUnit}/wk
+                    </div>
+                    {weightTrendRate.target !== null && (
+                      <div className="text-xs text-surface-500">
+                        target {signedRate(weightTrendRate.target)} {weightUnit}/wk (
+                        {currentPhase === 'bulk' ? 'bulk' : 'cut'})
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="md:col-span-2">
@@ -1970,5 +2032,22 @@ export default function NutritionPage() {
         entry={editingFood}
       />
     </div>
+  );
+}
+
+// useSearchParams (deep-linkable ?tab=weight from the home Weight tile)
+// requires a Suspense boundary for the static prerender pass — the fallback
+// matches the page's own loading state so nothing visibly changes.
+export default function NutritionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col items-center justify-center py-20">
+          <LoadingAnimation type="random" size="lg" />
+        </div>
+      }
+    >
+      <NutritionPageContent />
+    </Suspense>
   );
 }

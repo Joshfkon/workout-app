@@ -84,8 +84,14 @@ export function MetricTileGrid({
   weightRate,
   onLogWeight,
 }: MetricTileGridProps) {
-  const showLifts = !!liftTrends && liftTrends.lifts.length > 0;
+  // Show the tile when anything was classified OR lifts are accruing history
+  // (a brand-new program should read "rebuilding", not vanish).
+  const showLifts = !!liftTrends && (liftTrends.lifts.length > 0 || liftTrends.insufficientData > 0);
   const hasAnyTile = volume !== null || !!nutritionTargets || !!latestWeight || showLifts;
+  // Confident lifts drive the headline; low-confidence lifts (window spans a
+  // program switch) are "rebuilding" and shouldn't read as stagnation.
+  const confidentLifts = liftTrends ? liftTrends.rising + liftTrends.flat + liftTrends.down : 0;
+  const rebuildingLifts = liftTrends ? liftTrends.rebuilding + liftTrends.insufficientData : 0;
   if (!hasAnyTile) return null;
 
   // Nutrition: what's LEFT for the day (the actionable number), not consumed.
@@ -104,6 +110,9 @@ export function MetricTileGrid({
       liftParts.push(`${liftTrends.stalled.name} stalled ${liftTrends.stalled.weeks} wk${liftTrends.stalled.weeks === 1 ? '' : 's'}`);
     }
     if (liftParts.length === 0 && liftTrends.rising > 0) liftParts.push('all trending up');
+    if (rebuildingLifts > 0) {
+      liftParts.push(`${rebuildingLifts} rebuilding after program change`);
+    }
   }
 
   // Weight sparkline values in the display unit (last 30 entries).
@@ -146,25 +155,36 @@ export function MetricTileGrid({
         </MetricTile>
       )}
       {showLifts && liftTrends && (
-        <MetricTile icon={IconTrendingUp} label="Lifts" href="/dashboard/analytics">
-          <div className="text-xl font-semibold text-success-400">
-            {liftTrends.rising} rising
-            <span className="text-sm text-surface-500 font-normal"> of {liftTrends.lifts.length}</span>
-          </div>
+        <MetricTile icon={IconTrendingUp} label="Lifts" href="/dashboard/analytics?tab=strength&section=lift-trends">
+          {confidentLifts > 0 ? (
+            <div className="text-xl font-semibold text-success-400">
+              {liftTrends.rising} rising
+              <span className="text-sm text-surface-500 font-normal"> of {confidentLifts}</span>
+            </div>
+          ) : (
+            <div className="text-xl font-semibold text-surface-100">
+              Rebuilding
+              <span className="text-sm text-surface-500 font-normal"> new program</span>
+            </div>
+          )}
           <div className="flex gap-1 mt-2" aria-hidden="true">
             {liftTrends.lifts.map((lift) => (
               <div
                 key={lift.exerciseId}
-                title={`${lift.name}: ${lift.direction}`}
+                title={`${lift.name}: ${lift.lowConfidence ? 'rebuilding (low confidence)' : lift.direction}`}
                 className={`h-1.5 flex-1 rounded-full ${
-                  lift.direction === 'rising' ? 'bg-success-500' : lift.direction === 'down' ? 'bg-danger-500' : 'bg-surface-600'
+                  lift.lowConfidence
+                    ? 'bg-surface-700'
+                    : lift.direction === 'rising' ? 'bg-success-500' : lift.direction === 'down' ? 'bg-danger-500' : 'bg-surface-600'
                 }`}
               />
             ))}
           </div>
-          {liftParts.length > 0 && (
+          {confidentLifts > 0 && liftParts.length > 0 ? (
             <div className="text-[11px] text-surface-500 mt-1.5 truncate">{liftParts.join(' · ')}</div>
-          )}
+          ) : confidentLifts === 0 ? (
+            <div className="text-[11px] text-surface-500 mt-1.5 truncate">trends rebuild over 2–3 sessions</div>
+          ) : null}
         </MetricTile>
       )}
       {volume && (
@@ -195,6 +215,7 @@ export function MetricTileGrid({
         <MetricTile
           icon={IconScale}
           label="Weight"
+          href="/dashboard/nutrition?tab=weight"
           action={
             <button
               type="button"

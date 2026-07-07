@@ -7,6 +7,7 @@ import { useAdaptiveVolume } from '@/hooks/useAdaptiveVolume';
 import { useUserStore } from '@/stores';
 import { FatigueAlertList } from '@/components/workout/FatigueAlertBanner';
 import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
+import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
 import type { MuscleGroup, StandardMuscleGroup } from '@/types/schema';
@@ -219,6 +220,11 @@ export default function VolumeProfilePage() {
             : `Based on ${confidenceSummary.mesocycles} mesocycle${confidenceSummary.mesocycles > 1 ? 's' : ''} of data`}
         </p>
       </div>
+
+      {/* This week vs MEV — same data pipeline as the home "Weekly volume"
+          tile and wk-1 ramp banner, so the tapped numbers match on landing.
+          Below-MEV muscles are flagged here at the top of the page. */}
+      <WeeklyMevSummary />
 
       {/* Confidence Indicator */}
       <Card className="p-4 mb-6">
