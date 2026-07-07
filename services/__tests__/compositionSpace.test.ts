@@ -315,6 +315,23 @@ describe('computeScanPairPRatios', () => {
     expect(pairs[0].withinNoise).toBe(true);
   });
 
+  it('normalizes lean deltas across mixed scan conventions (no false lean loss)', () => {
+    const pairs = computeScanPairPRatios(
+      [
+        // Calculated-entry scan: stored lean = weight − fat (bone inside).
+        { date: '2026-01-05', leanMassKg: 65, fatMassKg: 15, weightKg: 80 },
+        // Real DEXA scan: lean excludes bone, bone logged separately.
+        { date: '2026-06-01', leanMassKg: 64.4, fatMassKg: 15.6, weightKg: 83, boneMassKg: 3 },
+      ],
+      180
+    );
+    // Raw stored lean would read −0.6 kg (a false loss — just the bone
+    // moving out of the lean column). Under the shared FFM convention the
+    // change is +2.4 kg, matching the plotted points.
+    expect(pairs[0].deltaLeanKg).toBeCloseTo(2.4, 2);
+    expect(pairs[0].leanFraction).toBeCloseTo(0.8, 2);
+  });
+
   it('produces one pair per consecutive scan couple, in date order', () => {
     const pairs = computeScanPairPRatios(
       [

@@ -337,6 +337,14 @@ export interface ScanPairPRatio {
   fromDate: string;
   toDate: string;
   deltaWeightKg: number;
+  /**
+   * Fat-free mass delta under the SAME convention as the plotted points
+   * (computeFFM + the calculated-entry bone guard). Bone is nearly constant
+   * scan-to-scan, so for same-source scans this equals the lean delta the
+   * user reads off their reports — but unlike raw stored lean it stays
+   * comparable when scan sources mix (a calculated-entry lean already
+   * contains bone; a real DEXA lean excludes it).
+   */
   deltaLeanKg: number;
   deltaFatKg: number;
   deltaBfPercent: number;
@@ -356,9 +364,18 @@ export interface ScanPairPRatio {
   withinNoise: boolean;
 }
 
-/** Lean mass for p-ratio deltas: the scan's lean as stored. (Bone is nearly
- * constant scan-to-scan, so Δlean and ΔFFM agree; using stored lean keeps
- * the number matching what the user reads on their DEXA report.) */
+/** FFM under the same convention as toCompositionPoint (bone counted unless
+ * the stored lean already contains it) — the delta between two scans must
+ * not mix a bone-inclusive lean with a bone-exclusive one. */
+function observationFFM(obs: CompositionObservation): number {
+  const boneInLean = leanMassIncludesBone({
+    leanMassKg: obs.leanMassKg,
+    fatMassKg: obs.fatMassKg,
+    weightKg: obs.weightKg,
+  });
+  return computeFFM(obs.leanMassKg, boneInLean ? null : obs.boneMassKg);
+}
+
 export function computeScanPairPRatios(
   observations: CompositionObservation[],
   heightCm: number
@@ -377,7 +394,7 @@ export function computeScanPairPRatios(
     if (!rawA || !rawB) continue;
 
     const deltaWeightKg = round2(b.weightKg - a.weightKg);
-    const deltaLeanKg = round2(rawB.leanMassKg - rawA.leanMassKg);
+    const deltaLeanKg = round2(observationFFM(rawB) - observationFFM(rawA));
     const deltaFatKg = round2(rawB.fatMassKg - rawA.fatMassKg);
     const deltaBfPercent = round1(b.bodyFatPercent - a.bodyFatPercent);
 
