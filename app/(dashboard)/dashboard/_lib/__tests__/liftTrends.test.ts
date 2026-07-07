@@ -79,6 +79,98 @@ describe('computeLiftTrends', () => {
     expect(summary.down).toBe(1);
   });
 
+  it('keeps the aggregate counts and the per-lift detail list in agreement', () => {
+    const sessions = [
+      // Bench rising over 4 sessions
+      session('b1', '2026-06-01T10:00:00Z', bench, 80, 8),
+      session('b2', '2026-06-08T10:00:00Z', bench, 82.5, 8),
+      session('b3', '2026-06-15T10:00:00Z', bench, 85, 8),
+      session('b4', '2026-06-22T10:00:00Z', bench, 87.5, 8),
+      // Squat declining over 4 sessions
+      session('q1', '2026-06-01T10:00:00Z', squat, 140, 5),
+      session('q2', '2026-06-08T10:00:00Z', squat, 135, 5),
+      session('q3', '2026-06-15T10:00:00Z', squat, 130, 5),
+      session('q4', '2026-06-22T10:00:00Z', squat, 125, 5),
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-23'));
+
+    // The tile headline (rising/flat/down/rebuilding) and the detail list are
+    // derived from the same lifts array — they can never disagree.
+    expect(summary.rising + summary.flat + summary.down + summary.rebuilding).toBe(
+      summary.lifts.length
+    );
+    expect(summary.rising).toBe(summary.lifts.filter((l) => l.direction === 'rising' && !l.lowConfidence).length);
+    expect(summary.down).toBe(summary.lifts.filter((l) => l.direction === 'down' && !l.lowConfidence).length);
+
+    // Detail fields for the destination view
+    for (const lift of summary.lifts) {
+      expect(lift.history).toHaveLength(lift.sessionCount);
+      expect(lift.currentE1RMKg).toBeCloseTo(lift.history[lift.history.length - 1].e1rmKg, 5);
+      // History is oldest-first
+      const dates = lift.history.map((h) => h.date);
+      expect([...dates].sort()).toEqual(dates);
+    }
+    expect(summary.windowDays).toBe(84);
+  });
+
+  it('flags lifts spanning a program boundary as low-confidence instead of down', () => {
+    const sessions = [
+      // Declining across the old program...
+      session('q1', '2026-06-01T10:00:00Z', squat, 140, 5),
+      session('q2', '2026-06-08T10:00:00Z', squat, 135, 5),
+      session('q3', '2026-06-15T10:00:00Z', squat, 130, 5),
+      // ...then one session since the program switch on 2026-06-20
+      session('q4', '2026-06-22T10:00:00Z', squat, 125, 5),
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-23'), {
+      programStartDate: '2026-06-20',
+    });
+
+    expect(summary.lifts).toHaveLength(1);
+    expect(summary.lifts[0].lowConfidence).toBe(true);
+    // Not counted as a confident "down" — surfaced as rebuilding instead.
+    expect(summary.down).toBe(0);
+    expect(summary.rebuilding).toBe(1);
+    // Stall verdicts across the boundary are suppressed too.
+    expect(summary.stalled).toBeNull();
+  });
+
+  it('keeps full confidence once enough sessions accrue after the boundary', () => {
+    const sessions = [
+      session('q1', '2026-05-20T10:00:00Z', squat, 140, 5),
+      // 3 sessions since the switch on 2026-05-25 — enough to trust again
+      session('q2', '2026-06-08T10:00:00Z', squat, 135, 5),
+      session('q3', '2026-06-15T10:00:00Z', squat, 130, 5),
+      session('q4', '2026-06-22T10:00:00Z', squat, 125, 5),
+    ];
+
+    const summary = computeLiftTrends(sessions, 'bulk', new Date('2026-06-23'), {
+      programStartDate: '2026-05-25',
+    });
+
+    expect(summary.lifts[0].lowConfidence).toBe(false);
+    expect(summary.down).toBe(1);
+    expect(summary.rebuilding).toBe(0);
+  });
+
+  it('counts lifts without enough sessions as insufficientData', () => {
+    const sessions = [
+      session('q1', '2026-06-01T10:00:00Z', squat, 140, 5),
+      session('q2', '2026-06-08T10:00:00Z', squat, 140, 5),
+      session('q3', '2026-06-15T10:00:00Z', squat, 140, 5),
+      // Bench only has 2 sessions — trained but not classifiable yet
+      session('b1', '2026-06-15T10:00:00Z', bench, 80, 8),
+      session('b2', '2026-06-22T10:00:00Z', bench, 85, 8),
+    ];
+
+    const summary = computeLiftTrends(sessions, undefined, new Date('2026-06-23'));
+
+    expect(summary.lifts.map((l) => l.exerciseId)).toEqual(['ex-squat']);
+    expect(summary.insufficientData).toBe(1);
+  });
+
   it('ignores bodyweight/zero-load sets instead of zeroing the trend', () => {
     const sessions = [
       session('s1', '2026-06-01T10:00:00Z', bench, 80, 8),
