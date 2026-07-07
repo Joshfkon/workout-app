@@ -1415,6 +1415,47 @@ function AnalyticsPageContent() {
     }
   };
 
+  // One-tap "Set as target" from the map's suggested milestone: persist as
+  // the active composition target (the table's trigger deactivates others)
+  // and reflect it locally so the goal vector appears without a refetch.
+  const handleSetSuggestedTarget = async (suggested: {
+    targetFfmi: number;
+    targetBodyFatPercent: number;
+  }) => {
+    if (!userId) return;
+    const supabase = createUntypedClient();
+    const { data, error } = await supabase
+      .from('body_composition_targets')
+      .insert({
+        user_id: userId,
+        name: 'Next milestone',
+        target_ffmi: suggested.targetFfmi,
+        target_body_fat_percent: suggested.targetBodyFatPercent,
+        is_active: true,
+      })
+      .select()
+      .single();
+    if (error || !data) {
+      console.error('Failed to set suggested target:', error);
+      return;
+    }
+    setActiveTarget({
+      id: data.id,
+      userId: data.user_id,
+      targetWeightKg: data.target_weight_kg,
+      targetBodyFatPercent: data.target_body_fat_percent,
+      targetFfmi: data.target_ffmi,
+      measurementTargets: {},
+      mesocycleId: data.mesocycle_id,
+      targetDate: data.target_date,
+      name: data.name,
+      notes: data.notes,
+      isActive: data.is_active,
+      createdAt: data.created_at,
+      updatedAt: data.updated_at,
+    });
+  };
+
   // Prominence gating for the Body tab + Home card (0/1 scans keep the
   // existing layout with a subtle prompt; ≥2 promote the trend module).
   const bodyCompLayout = getBodyCompLayout(scans.length);
@@ -1450,6 +1491,9 @@ function AnalyticsPageContent() {
             : null
       }
       phaseStartDate={activeTarget?.createdAt ?? null}
+      sex={sex}
+      experience={userProfile?.experience ?? null}
+      onSetTarget={handleSetSuggestedTarget}
       initialMetric={
         sectionParam === BODY_COMP_TREND_SECTION_ID && bodyCompLayout.showCompositionMap
           ? 'map'

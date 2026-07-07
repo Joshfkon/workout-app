@@ -11,6 +11,11 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+// The embedded CompositionMap uses next/navigation for its suggestion flow.
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+}));
+
 // Recharts' ES-module build doesn't resolve under Jest, and jsdom has no
 // layout anyway — stub the chart primitives; we assert on component logic.
 jest.mock('recharts', () => ({
