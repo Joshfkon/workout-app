@@ -1,29 +1,56 @@
 /**
- * setOutbox — offline write queue for set logs (P0-2 in the UX audit).
+ * setOutbox — offline write queue for workout writes (P0-2 in the UX audit).
  *
  * Sets logged while offline (or when the insert fails on a network error)
  * are persisted here and flushed to Supabase when connectivity returns.
- * Storage is IndexedDB so queued sets survive tab closes and PWA restarts;
+ * The finish-workout flow reuses the same queue for its completion update
+ * and per-muscle feedback rows, so finishing is durable and never blocks
+ * the UI on the network.
+ * Storage is IndexedDB so queued writes survive tab closes and PWA restarts;
  * a Map-based driver stands in when IndexedDB is unavailable (SSR, some
- * webviews, unit tests) — queued sets then survive only the page's life,
+ * webviews, unit tests) — queued writes then survive only the page's life,
  * which still beats dropping them.
  *
  * Dedupe strategy: set ids are generated CLIENT-side (crypto.randomUUID)
  * before the first insert attempt, and flushes insert with
  * `ignoreDuplicates` upsert semantics — so a retry after a half-failed
- * flush (row inserted, ack lost) cannot double-log a set.
+ * flush (row inserted, ack lost) cannot double-log a set. Update entries
+ * (session completion/claim) and feedback upserts are idempotent by
+ * construction, so retries after a lost ack are safe there too.
  */
 
+export type OutboxTable = 'set_logs' | 'workout_sessions' | 'session_muscle_feedback';
+
 export interface OutboxEntry {
-  /** Client-generated set_logs.id (uuid) — also the dedupe key. */
+  /**
+   * Queue key. For set_logs this is the client-generated set id (uuid),
+   * which doubles as the dedupe key; other entries use stable synthetic
+   * keys (`finish:<sessionId>`, `claim:<sessionId>`, …) so re-enqueueing
+   * replaces rather than duplicates.
+   */
   id: string;
-  /** Table the row belongs to (only set_logs today, but keep it explicit). */
-  table: 'set_logs';
-  /** Exact row payload for insert, snake_case column names. */
+  /** Table the row belongs to. Entries persisted before this field allowed multiple tables are set_logs. */
+  table: OutboxTable;
+  /** How to apply the row. Legacy persisted entries lack it — treated as 'insert'. */
+  op?: 'insert' | 'update';
+  /** For op:'update' — the primary-key value the patch applies to. */
+  matchId?: string;
+  /** Exact row payload (insert/upsert) or patch (update), snake_case column names. */
   row: Record<string, unknown>;
   enqueuedAt: number;
   attempts: number;
 }
+
+/** Upsert conflict handling per table (insert entries only). */
+const UPSERT_OPTIONS: Record<OutboxTable, { onConflict: string; ignoreDuplicates: boolean }> = {
+  // Retry after a lost ack must not double-log a set — ignore duplicates.
+  set_logs: { onConflict: 'id', ignoreDuplicates: true },
+  // Feedback rows are full-value overwrites keyed on (session, muscle);
+  // re-applying the same values is a no-op, so plain upsert is idempotent.
+  session_muscle_feedback: { onConflict: 'session_id,muscle_group', ignoreDuplicates: false },
+  // workout_sessions rows only ever go through op:'update'.
+  workout_sessions: { onConflict: 'id', ignoreDuplicates: true },
+};
 
 interface OutboxDriver {
   put(entry: OutboxEntry): Promise<void>;
@@ -109,13 +136,41 @@ export async function enqueueSetInsert(id: string, row: Record<string, unknown>)
   await getDriver().put({ id, table: 'set_logs', row, enqueuedAt: Date.now(), attempts: 0 });
 }
 
+/** Queue an upsert row for any supported table (idempotent per UPSERT_OPTIONS). */
+export async function enqueueRowUpsert(
+  entryId: string,
+  table: OutboxTable,
+  row: Record<string, unknown>
+): Promise<void> {
+  await getDriver().put({ id: entryId, table, op: 'insert', row, enqueuedAt: Date.now(), attempts: 0 });
+}
+
+/** Queue a patch to a single row (matched on its primary key). Idempotent. */
+export async function enqueueRowUpdate(
+  entryId: string,
+  table: OutboxTable,
+  matchId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  await getDriver().put({
+    id: entryId,
+    table,
+    op: 'update',
+    matchId,
+    row: patch,
+    enqueuedAt: Date.now(),
+    attempts: 0,
+  });
+}
+
 export async function listOutbox(): Promise<OutboxEntry[]> {
   const all = await getDriver().getAll();
   return all.sort((a, b) => a.enqueuedAt - b.enqueuedAt);
 }
 
-export async function outboxCount(): Promise<number> {
-  return (await getDriver().getAll()).length;
+export async function outboxCount(table?: OutboxTable): Promise<number> {
+  const all = await getDriver().getAll();
+  return table ? all.filter((e) => e.table === table).length : all.length;
 }
 
 /** Merge a patch into a queued row (edit-before-sync). True if it was queued. */
@@ -147,6 +202,12 @@ export interface OutboxSupabase {
       values: Record<string, unknown>,
       options: { onConflict: string; ignoreDuplicates: boolean }
     ): PromiseLike<{ error: { message: string; code?: string } | null }>;
+    update(values: Record<string, unknown>): {
+      eq(
+        column: string,
+        value: string
+      ): PromiseLike<{ error: { message: string; code?: string } | null }>;
+    };
   };
 }
 
@@ -165,19 +226,44 @@ export function isNetworkError(err: { message?: string; code?: string } | null |
 let flushInFlight: Promise<FlushResult> | null = null;
 
 /**
- * Push every queued set to the database. Concurrency-safe: overlapping calls
- * (online event + page mount firing together) share one in-flight flush, so
- * double-flush cannot double-insert even before the upsert dedupe kicks in.
+ * A fetch that never settles (dead radio, hung proxy) must not wedge the
+ * queue: cap every remote operation and treat the timeout as a network error
+ * (entry retained, retried on the next flush). Late server-side success is
+ * harmless — every entry kind is idempotent.
  */
-export function flushSetOutbox(supabase: OutboxSupabase): Promise<FlushResult> {
+const OP_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(op: PromiseLike<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`outbox write timed out after ${ms}ms`)),
+      ms
+    );
+    op.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
+/**
+ * Push every queued write to the database. Concurrency-safe: overlapping
+ * calls (online event + page mount firing together) share one in-flight
+ * flush, so double-flush cannot double-insert even before the upsert dedupe
+ * kicks in.
+ */
+export function flushSetOutbox(
+  supabase: OutboxSupabase,
+  opts?: { timeoutMs?: number }
+): Promise<FlushResult> {
   if (flushInFlight) return flushInFlight;
-  flushInFlight = doFlush(supabase).finally(() => {
+  flushInFlight = doFlush(supabase, opts?.timeoutMs ?? OP_TIMEOUT_MS).finally(() => {
     flushInFlight = null;
   });
   return flushInFlight;
 }
 
-async function doFlush(supabase: OutboxSupabase): Promise<FlushResult> {
+async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<FlushResult> {
   const d = getDriver();
   const entries = await listOutbox();
   const flushedIds: string[] = [];
@@ -185,11 +271,19 @@ async function doFlush(supabase: OutboxSupabase): Promise<FlushResult> {
 
   for (const entry of entries) {
     try {
-      // ignoreDuplicates upsert: a row that already landed (retry after a
-      // lost ack) is a silent no-op instead of a duplicate-key error.
-      const { error } = await supabase
-        .from(entry.table)
-        .upsert(entry.row, { onConflict: 'id', ignoreDuplicates: true });
+      // Updates patch a single row by primary key; inserts go through
+      // ignoreDuplicates/onConflict upsert so a row that already landed
+      // (retry after a lost ack) is a silent no-op instead of an error.
+      const op =
+        entry.op === 'update'
+          ? supabase
+              .from(entry.table)
+              .update(entry.row)
+              .eq('id', entry.matchId ?? (entry.row.id as string))
+          : supabase
+              .from(entry.table)
+              .upsert(entry.row, UPSERT_OPTIONS[entry.table] ?? UPSERT_OPTIONS.set_logs);
+      const { error } = await withTimeout(op, timeoutMs);
 
       if (!error) {
         await d.delete(entry.id);

@@ -143,6 +143,9 @@ export function SessionSummary({
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [showExerciseDetails, setShowExerciseDetails] = useState(true);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
+  // Guards against double-submits; navigation away happens right after
+  // onSubmit, so the "Finishing…" state is only briefly visible.
+  const [submitting, setSubmitting] = useState(false);
 
   // Calculate stats
   const workingSets = allSets.filter((s) => !s.isWarmup);
@@ -427,7 +430,8 @@ export function SessionSummary({
   };
 
   const handleSubmit = () => {
-    if (onSubmit) {
+    if (onSubmit && !submitting) {
+      setSubmitting(true);
       onSubmit({
         sessionRpe,
         pumpRating,
@@ -1147,8 +1151,8 @@ export function SessionSummary({
 
       {/* Submit - only shown when not in read-only mode */}
       {!readOnly && (
-        <Button onClick={handleSubmit} size="lg" className="w-full">
-          Save & Finish
+        <Button onClick={handleSubmit} size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Finishing…' : 'Save & Finish'}
         </Button>
       )}
     </div>
