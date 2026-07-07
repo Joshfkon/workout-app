@@ -829,11 +829,12 @@ export function CompositionMap({
         and never extended past your last scan.
       </p>
 
-      {/* No target yet: the goal vector needs an anchor. */}
+      {/* No target yet: the goal vector needs an anchor. Deep-link lands
+          on the Goals tab scrolled to the target editor. */}
       {!targetPoint && (
         <p className="text-[11px] text-surface-500 mt-2">
           <Link
-            href="/dashboard/analytics?tab=goals"
+            href="/dashboard/analytics?tab=goals&section=body-targets"
             className="text-primary-400 hover:text-primary-300 font-medium"
           >
             Set a target
@@ -977,7 +978,14 @@ export function CompositionMap({
           <div className="border-l border-surface-700 pl-3">
             <p className="text-xs font-medium text-surface-500">Goal</p>
             <p className="text-[11px] text-surface-500 mt-1">
-              No target set — add one in Goals to plot it here.
+              No target set —{' '}
+              <Link
+                href="/dashboard/analytics?tab=goals&section=body-targets"
+                className="text-primary-400 hover:text-primary-300"
+              >
+                add one in Goals
+              </Link>{' '}
+              to plot it here.
             </p>
           </div>
         )}
