@@ -468,6 +468,121 @@ export function classifyPartitioning(
 }
 
 // ============================================================
+// Trend forecast (forward extrapolation)
+// ============================================================
+
+/** How far the forecast extrapolates. */
+export const FORECAST_HORIZON_WEEKS = 12;
+
+/** Cone radius at t=0: DEXA repeatability (~±1.5 lb per component ≈
+ * 0.25 kg/m² at typical heights). */
+export const FORECAST_NOISE_RADIUS = 0.25;
+
+/** Cone growth: fraction of the traveled distance added as uncertainty per
+ * week — partitioning of future weight change is far less predictable than
+ * its size (p-ratio confidence ranges span ~±0.15–0.25). */
+export const FORECAST_SPREAD_FRACTION = 0.35;
+
+/** Below this speed (kg/m² per week) the trend is flat — a forecast would
+ * be projecting noise. */
+export const FORECAST_MIN_SPEED = 0.01;
+
+/** The central path passing within this distance of the goal counts as
+ * "reaches the goal" for the ETA readout. */
+export const FORECAST_GOAL_HIT_RADIUS = 0.35;
+
+/** ETAs beyond this are not worth stating — too much life between here
+ * and there. */
+export const FORECAST_MAX_ETA_WEEKS = 26;
+
+export interface ForecastPathPoint {
+  /** Weeks ahead of the anchor. */
+  weeks: number;
+  fmi: number;
+  ffmi: number;
+  /** Uncertainty radius (kg/m²) at this point. */
+  radius: number;
+}
+
+export interface CompositionForecast {
+  status: 'ok' | 'flat' | 'insufficient';
+  /** Weekly velocity in composition space (kg/m² per week). */
+  velocity: { fmi: number; ffmi: number };
+  /** Central extrapolated path, 1-week steps from the anchor (exclusive). */
+  path: ForecastPathPoint[];
+  /** Weeks until the central path passes within FORECAST_GOAL_HIT_RADIUS of
+   * the goal; null when there is no goal, the trend never gets that close,
+   * or it would take longer than FORECAST_MAX_ETA_WEEKS. */
+  goalEtaWeeks: number | null;
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Extrapolate the recent trend forward.
+ *
+ * Velocity comes from the LAST TWO SCANS (measured data, not the
+ * assumption-driven daily estimate); the path projects from `anchor` — the
+ * current estimated position when weigh-ins exist past the last scan, else
+ * the last scan itself. Uncertainty widens linearly: DEXA noise at t=0 plus
+ * a fraction of the traveled distance (partitioning variance dominates the
+ * further out you look). This is an "if the trend holds" statement, never a
+ * promise — render it visually distinct from measured data.
+ */
+export function computeCompositionForecast(
+  scanPoints: CompositionPoint[],
+  anchor: CompositionCoords,
+  target: CompositionCoords | null,
+  horizonWeeks: number = FORECAST_HORIZON_WEEKS
+): CompositionForecast {
+  const none = { velocity: { fmi: 0, ffmi: 0 }, path: [], goalEtaWeeks: null };
+  if (scanPoints.length < 2) return { status: 'insufficient', ...none };
+
+  const a = scanPoints[scanPoints.length - 2];
+  const b = scanPoints[scanPoints.length - 1];
+  const weeksBetween =
+    (new Date(`${b.date}T00:00:00Z`).getTime() - new Date(`${a.date}T00:00:00Z`).getTime()) /
+    WEEK_MS;
+  if (weeksBetween <= 0) return { status: 'insufficient', ...none };
+
+  const velocity = {
+    fmi: (b.fmi - a.fmi) / weeksBetween,
+    ffmi: (b.ffmi - a.ffmi) / weeksBetween,
+  };
+  const speed = Math.hypot(velocity.fmi, velocity.ffmi);
+  if (speed < FORECAST_MIN_SPEED) {
+    return { status: 'flat', velocity, path: [], goalEtaWeeks: null };
+  }
+
+  const path: ForecastPathPoint[] = [];
+  for (let t = 1; t <= horizonWeeks; t++) {
+    path.push({
+      weeks: t,
+      fmi: Math.round((anchor.fmi + velocity.fmi * t) * 100) / 100,
+      ffmi: Math.round((anchor.ffmi + velocity.ffmi * t) * 100) / 100,
+      radius: Math.round((FORECAST_NOISE_RADIUS + FORECAST_SPREAD_FRACTION * speed * t) * 100) / 100,
+    });
+  }
+
+  // ETA: closest approach of the (unbounded) central path to the goal.
+  let goalEtaWeeks: number | null = null;
+  if (target) {
+    const gx = target.fmi - anchor.fmi;
+    const gy = target.ffmi - anchor.ffmi;
+    const tStar = (gx * velocity.fmi + gy * velocity.ffmi) / (speed * speed);
+    if (tStar > 0 && tStar <= FORECAST_MAX_ETA_WEEKS) {
+      const missX = anchor.fmi + velocity.fmi * tStar - target.fmi;
+      const missY = anchor.ffmi + velocity.ffmi * tStar - target.ffmi;
+      if (Math.hypot(missX, missY) <= FORECAST_GOAL_HIT_RADIUS) {
+        goalEtaWeeks = Math.round(tStar);
+      }
+    }
+  }
+
+  return { status: 'ok', velocity, path, goalEtaWeeks };
+}
+
+// ============================================================
 // Prominence / layout gating
 // ============================================================
 

@@ -49,7 +49,10 @@ import {
   selectStartPoint,
   visibleIsoBmiSegments,
   computeMapDomain,
+  computeCompositionForecast,
+  FORECAST_NOISE_RADIUS,
   COMPOSITION_MAP_FFMI_THRESHOLDS,
+  type ForecastPathPoint,
   type CompositionObservation,
   type CompositionPoint,
   type CompositionCoords,
@@ -245,6 +248,10 @@ export interface DecorationsData {
   estimateTail: CompositionPoint[];
   /** "Est. · Jul 5" on the tail's endpoint; null when no tail. */
   estimateLabel: string | null;
+  /** Forward extrapolation of the recent scan trend, drawn as a dotted
+   * central path inside a widening translucent uncertainty cone. Null when
+   * the trend is flat or there aren't enough scans. */
+  forecast: { anchor: CompositionCoords; path: ForecastPathPoint[] } | null;
   targetPoint: CompositionCoords | null;
   /** Goal block lines, e.g. ["GOAL", "FFMI 21.0", "BF 13%", "FMI 3.6"];
    * null hides the goal label. */
@@ -286,6 +293,7 @@ export function buildDecorations(data: DecorationsData) {
       trailPoints,
       estimateTail,
       estimateLabel,
+      forecast,
       targetPoint,
       targetLabelLines,
       vectorLabel,
@@ -333,6 +341,11 @@ export function buildDecorations(data: DecorationsData) {
       ...estimateTail.map((p, i) =>
         toSegment(px(i === 0 ? scanPoints[scanPoints.length - 1] : estimateTail[i - 1]), px(p))
       ),
+      ...(forecast
+        ? forecast.path.map((p, i) =>
+            toSegment(px(i === 0 ? forecast.anchor : forecast.path[i - 1]), px(p))
+          )
+        : []),
     ];
     const avoidPoints: AvoidPoint[] = scanPoints.map((p, i) => ({
       ...px(p),
@@ -394,6 +407,67 @@ export function buildDecorations(data: DecorationsData) {
             </text>
           </g>
         ))}
+
+        {/* Trend forecast: dotted extrapolation of the recent scan trend
+            inside a widening uncertainty cone (DEXA noise + partitioning
+            variance). "If the trend holds" — drawn beneath everything so it
+            never competes with measured data. */}
+        {forecast && forecast.path.length > 0 && (() => {
+          const { anchor, path } = forecast;
+          const dirLen = Math.hypot(
+            path[0].fmi - anchor.fmi,
+            path[0].ffmi - anchor.ffmi
+          );
+          if (dirLen === 0) return null;
+          // Unit perpendicular in DATA space: the radius is honest in kg/m².
+          const pxu = (path[0].fmi - anchor.fmi) / dirLen;
+          const pyu = (path[0].ffmi - anchor.ffmi) / dirLen;
+          const perp = { fmi: -pyu, ffmi: pxu };
+          const edge = (p: { fmi: number; ffmi: number }, r: number, sign: 1 | -1) =>
+            px({ fmi: p.fmi + sign * perp.fmi * r, ffmi: p.ffmi + sign * perp.ffmi * r });
+          const left = [
+            edge(anchor, FORECAST_NOISE_RADIUS, 1),
+            ...path.map((p) => edge(p, p.radius, 1)),
+          ];
+          const right = [
+            ...path.map((p) => edge(p, p.radius, -1)).reverse(),
+            edge(anchor, FORECAST_NOISE_RADIUS, -1),
+          ];
+          const end = path[path.length - 1];
+          return (
+            <g>
+              <polygon
+                data-testid="map-forecast-cone"
+                points={[...left, ...right].map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="#94a3b8"
+                fillOpacity={0.07}
+                stroke="#94a3b8"
+                strokeOpacity={0.15}
+              />
+              <polyline
+                data-testid="map-forecast-path"
+                points={[px(anchor), ...path.map(px)].map((p) => `${p.x},${p.y}`).join(' ')}
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth={1.5}
+                strokeDasharray="1 4"
+                strokeOpacity={0.6}
+                strokeLinecap="round"
+              />
+              <MapLabel
+                placement={placeLabel(px(end), plot, `Trend · +${end.weeks} wk`, {
+                  ...avoidOptions,
+                  fontSize: 8,
+                })}
+                lines={[`Trend · +${end.weeks} wk`]}
+                fill="#94a3b8"
+                fontSize={8}
+                pill
+                testid="map-forecast-label"
+              />
+            </g>
+          );
+        })()}
 
         {/* Anchored daily estimate — faint context trail, scans-range only. */}
         {trailPoints.length >= 2 && (
@@ -703,6 +777,17 @@ export function CompositionMap({
     [target, heightCm]
   );
 
+  // Forward extrapolation: velocity from the last two SCANS, projected from
+  // the current estimated position (tail end) or the last scan. Null when
+  // flat or under-scanned — no projecting noise.
+  const forecast = useMemo(() => {
+    if (scanPoints.length < 2) return null;
+    const anchor =
+      estimateTail.length > 0 ? estimateTail[estimateTail.length - 1] : scanPoints[scanPoints.length - 1];
+    const result = computeCompositionForecast(scanPoints, anchor, targetPoint);
+    return result.status === 'ok' ? { anchor, ...result } : null;
+  }, [scanPoints, estimateTail, targetPoint]);
+
   const startPoint = useMemo(
     () => selectStartPoint(scanPoints, startMode, phaseStartDate),
     [scanPoints, startMode, phaseStartDate]
@@ -722,10 +807,21 @@ export function CompositionMap({
     [scanObservations, heightCm]
   );
 
-  const domain = useMemo(
-    () => computeMapDomain([...scanPoints, ...trailPoints, ...estimateTail], targetPoint),
-    [scanPoints, trailPoints, estimateTail, targetPoint]
-  );
+  const domain = useMemo(() => {
+    // The viewport must hold the forecast cone's widest extent too.
+    const coneExtremes: CompositionCoords[] = [];
+    if (forecast && forecast.path.length > 0) {
+      const end = forecast.path[forecast.path.length - 1];
+      coneExtremes.push(
+        { fmi: end.fmi - end.radius, ffmi: end.ffmi - end.radius },
+        { fmi: end.fmi + end.radius, ffmi: end.ffmi + end.radius }
+      );
+    }
+    return computeMapDomain(
+      [...scanPoints, ...trailPoints, ...estimateTail, ...coneExtremes],
+      targetPoint
+    );
+  }, [scanPoints, trailPoints, estimateTail, forecast, targetPoint]);
 
   if (scanPoints.length < 2) {
     return (
@@ -822,6 +918,7 @@ export function CompositionMap({
                   estimateTail.length > 0
                     ? `Est. · ${formatDateShort(estimateTail[estimateTail.length - 1].date)}`
                     : null,
+                forecast: forecast ? { anchor: forecast.anchor, path: forecast.path } : null,
                 targetLabelLines,
                 vectorLabel,
                 showGoalVector,
@@ -910,7 +1007,11 @@ export function CompositionMap({
         the faint trail is the day-to-day estimate, shown for context only.
         {estimateTail.length > 0
           ? ' The dashed tail past your last scan is where your weigh-ins suggest you are now — an estimate until the next scan confirms it.'
-          : ' The map is never extended past your last scan.'}
+          : forecast
+            ? ''
+            : ' The map is never extended past your last scan.'}
+        {forecast &&
+          ` The dotted cone extrapolates your recent scan trend ${forecast.path.length} weeks ahead — uncertainty widens the further out you look.`}
       </p>
 
       {/* No target yet: the goal vector needs an anchor. Deep-link lands
@@ -980,6 +1081,18 @@ export function CompositionMap({
             <p className="text-[11px] text-surface-400 mt-1">
               {goalProgress.offAxisNote}
             </p>
+          )}
+          {/* Trend ETA: an "if the trend holds" statement, not a promise. */}
+          {forecast && goalProgress.status !== 'target_reached' && (
+            forecast.goalEtaWeeks != null ? (
+              <p className="text-[11px] text-success-400/80 mt-1">
+                On this trend: goal in ~{forecast.goalEtaWeeks} wk.
+              </p>
+            ) : (
+              <p className="text-[11px] text-surface-500 mt-1">
+                Current trend isn&apos;t tracking through the goal point.
+              </p>
+            )
           )}
         </div>
       )}
