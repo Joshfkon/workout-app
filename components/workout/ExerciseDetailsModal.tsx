@@ -19,6 +19,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import Link from 'next/link';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface ExerciseDetailsModalProps {
   exercise: Exercise | null;
@@ -92,6 +93,8 @@ function getTierBadgeClasses(tier: string): string {
 }
 
 export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }: ExerciseDetailsModalProps) {
+  const { inset: keyboardInset, scrollContainerRef } =
+    useKeyboardInset<HTMLDivElement>(isOpen);
   const [history, setHistory] = useState<ExerciseHistoryData | null>(null);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [activeChart, setActiveChart] = useState<'e1rm' | 'volume' | 'best'>('e1rm');
@@ -497,13 +500,19 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
   if (!isOpen || !exercise) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      style={{
+        // Re-center above the on-screen keyboard; safe-area stays additive.
+        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
+      }}
       onClick={onClose}
     >
       <Card
+        ref={scrollContainerRef}
         variant="elevated"
-        className="max-w-2xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden"
+        className="max-w-2xl w-full overflow-y-auto overflow-x-hidden"
+        style={{ maxHeight: `min(90vh, calc(100vh - 2rem - ${keyboardInset}px))` }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 space-y-6">

@@ -6,6 +6,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
 import Link from 'next/link';
 import { STARTER_TEMPLATES, starterTemplateHref } from '@/lib/content/starterTemplates';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface FolderWithTemplates extends WorkoutFolder {
   templates: (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[];
@@ -46,6 +47,12 @@ export default function TemplatesPage() {
   // Menu states
   const [openFolderMenu, setOpenFolderMenu] = useState<string | null>(null);
   const [openTemplateMenu, setOpenTemplateMenu] = useState<string | null>(null);
+
+  // Keyboard-aware insets for the two input-bearing modals
+  const { inset: folderKbInset, scrollContainerRef: folderModalRef } =
+    useKeyboardInset<HTMLDivElement>(showCreateFolder || !!editingFolder);
+  const { inset: templateKbInset, scrollContainerRef: templateModalRef } =
+    useKeyboardInset<HTMLDivElement>(showCreateTemplate);
 
   const supabase = createUntypedClient();
 
@@ -450,8 +457,18 @@ export default function TemplatesPage() {
 
       {/* Create Folder Modal */}
       {(showCreateFolder || editingFolder) && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${folderKbInset}px)`,
+          }}
+        >
+          <div
+            ref={folderModalRef}
+            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md overflow-y-auto"
+            style={{ maxHeight: `calc(100vh - 2rem - ${folderKbInset}px)` }}
+          >
             <div className="p-4 border-b border-surface-700">
               <h2 className="text-lg font-semibold text-surface-100">
                 {editingFolder ? 'Edit Folder' : 'Create Folder'}
@@ -514,8 +531,18 @@ export default function TemplatesPage() {
 
       {/* Create Template Modal */}
       {showCreateTemplate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md">
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${templateKbInset}px)`,
+          }}
+        >
+          <div
+            ref={templateModalRef}
+            className="bg-surface-900 border border-surface-700 rounded-xl w-full max-w-md overflow-y-auto"
+            style={{ maxHeight: `calc(100vh - 2rem - ${templateKbInset}px)` }}
+          >
             <div className="p-4 border-b border-surface-700">
               <h2 className="text-lg font-semibold text-surface-100">Create Template</h2>
             </div>

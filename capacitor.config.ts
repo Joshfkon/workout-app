@@ -43,6 +43,13 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    Keyboard: {
+      // Let the webview resize itself when the keyboard opens (plugin
+      // default). useKeyboardInset listens to this plugin's show/hide events
+      // and only pads modals by whatever the resize didn't absorb, so it
+      // stays correct if this mode ever changes.
+      resize: 'native',
+    },
   },
 };
 

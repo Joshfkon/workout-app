@@ -14,6 +14,7 @@ import { ExerciseOptionsMenu } from '@/components/exercises/ExerciseOptionsMenu'
 import { ExerciseStatusModal } from '@/components/exercises/ExerciseStatusModal';
 import type { ExerciseVisibilityStatus, ExerciseHideReason } from '@/types/user-exercise-preferences';
 import { batchCompleteAllExercises } from '@/lib/actions/exercise-completion';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 // Dynamic import for charts - only loaded when user expands an exercise
 const ExerciseHistoryCharts = dynamic(
@@ -116,6 +117,8 @@ export default function ExercisesPage() {
 
   // Edit exercise state
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const { inset: editKbInset, scrollContainerRef: editModalRef } =
+    useKeyboardInset<HTMLDivElement>(!!editingExercise);
   const [editData, setEditData] = useState<{
     primaryMuscle: string;
     isBodyweight: boolean;
@@ -1231,8 +1234,18 @@ export default function ExercisesPage() {
 
       {/* Edit Exercise Modal */}
       {editingExercise && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <Card className="w-full max-w-md">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          style={{
+            // Re-center above the on-screen keyboard; safe-area stays additive.
+            paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${editKbInset}px)`,
+          }}
+        >
+          <Card
+            ref={editModalRef}
+            className="w-full max-w-md overflow-y-auto"
+            style={{ maxHeight: `calc(100vh - 2rem - ${editKbInset}px)` }}
+          >
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-surface-100">Edit Exercise</h3>

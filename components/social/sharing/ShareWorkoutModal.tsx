@@ -6,6 +6,7 @@ import { serializeWorkoutForSharing, extractMuscleGroups } from '@/lib/workout-s
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
 import type { ShareType, Difficulty, SharedWorkoutContent } from '@/types/social';
+import { useKeyboardInset } from '@/hooks/useKeyboardInset';
 
 interface ShareWorkoutModalProps {
   workoutSessionId: string;
@@ -15,6 +16,8 @@ interface ShareWorkoutModalProps {
 }
 
 export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess }: ShareWorkoutModalProps) {
+  const { inset: keyboardInset, scrollContainerRef } =
+    useKeyboardInset<HTMLDivElement>(isOpen);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [shareType, setShareType] = useState<ShareType>('single_workout');
@@ -113,8 +116,18 @@ export function ShareWorkoutModal({ workoutSessionId, isOpen, onClose, onSuccess
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      style={{
+        // Re-center above the on-screen keyboard; safe-area stays additive.
+        paddingBottom: `calc(1rem + env(safe-area-inset-bottom, 0px) + ${keyboardInset}px)`,
+      }}
+    >
+      <Card
+        ref={scrollContainerRef}
+        className="w-full max-w-2xl overflow-y-auto"
+        style={{ maxHeight: `min(90vh, calc(100vh - 2rem - ${keyboardInset}px))` }}
+      >
         <CardHeader>
           <CardTitle>Share Workout</CardTitle>
         </CardHeader>
