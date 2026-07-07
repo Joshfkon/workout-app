@@ -39,8 +39,8 @@ export const P_RATIO_MIN_WEIGHT_DELTA_KG = 3 * LB_TO_KG;
  * directional signal. */
 export const NOISE_FLOOR_LEAN_KG = 1.5 * LB_TO_KG;
 
-/** DEXA BF% repeatability floor: a smaller |ΔBF| is not a directional signal. */
-export const NOISE_FLOOR_BF_PERCENT = 1.0;
+/** DEXA fat-mass repeatability floor — same ~1.5 lb order as lean. */
+export const NOISE_FLOOR_FAT_KG = 1.5 * LB_TO_KG;
 
 /** |target − start| below this (kg/m² in composition space) is a degenerate
  * goal vector — the scalar is meaningless and must be hidden. */
@@ -359,8 +359,15 @@ export interface ScanPairPRatio {
   fatFraction: number | null;
   /** |Δweight| < 3 lb: p-ratio suppressed (denominator within noise). */
   suppressed: boolean;
-  /** |Δlean| < 1.5 lb or |ΔBF| < 1%: within DEXA measurement noise — label,
-   * don't draw directional conclusions. */
+  /** |Δlean(FFM)| < 1.5 lb: the LEAN side of the change is inside DEXA
+   * repeatability. With a clear weight change this is itself informative —
+   * the change was essentially all fat — not a reason to suppress. */
+  leanWithinNoise: boolean;
+  /** |Δfat| < 1.5 lb: the FAT side is inside DEXA repeatability. */
+  fatWithinNoise: boolean;
+  /** BOTH components within their floors: the composition split is
+   * unresolvable — only then does the segment get the blanket "within
+   * measurement noise" label instead of a directional statement. */
   withinNoise: boolean;
 }
 
@@ -399,9 +406,12 @@ export function computeScanPairPRatios(
     const deltaBfPercent = round1(b.bodyFatPercent - a.bodyFatPercent);
 
     const suppressed = Math.abs(deltaWeightKg) < P_RATIO_MIN_WEIGHT_DELTA_KG;
-    const withinNoise =
-      Math.abs(deltaLeanKg) < NOISE_FLOOR_LEAN_KG ||
-      Math.abs(deltaBfPercent) < NOISE_FLOOR_BF_PERCENT;
+    // Per-component gating: one side being flat while the other clearly
+    // moved is a directional finding ("essentially all fat"), not noise.
+    // Only when BOTH components sit inside the repeatability floors is the
+    // split genuinely unresolvable.
+    const leanWithinNoise = Math.abs(deltaLeanKg) < NOISE_FLOOR_LEAN_KG;
+    const fatWithinNoise = Math.abs(deltaFatKg) < NOISE_FLOOR_FAT_KG;
 
     pairs.push({
       fromDate: a.date,
@@ -413,7 +423,9 @@ export function computeScanPairPRatios(
       leanFraction: suppressed ? null : round2(deltaLeanKg / deltaWeightKg),
       fatFraction: suppressed ? null : round2(deltaFatKg / deltaWeightKg),
       suppressed,
-      withinNoise,
+      leanWithinNoise,
+      fatWithinNoise,
+      withinNoise: leanWithinNoise && fatWithinNoise,
     });
   }
   return pairs;

@@ -33,7 +33,10 @@ import {
 import {
   arrowAt,
   placeLabel,
+  estimateTextWidth,
   type AvoidLine,
+  type AvoidPoint,
+  type LabelPlacement,
   type PlotRect,
 } from '@/components/body/compositionMapGeometry';
 import type { AnchoredTrendPoint } from '@/services/bodyCompAnchor';
@@ -73,7 +76,81 @@ interface CompositionMapProps {
 
 const SCAN_COLOR = '#22d3ee';
 const TRAIL_COLOR = '#818cf8';
-const TARGET_COLOR = '#f59e0b';
+/** Goal artifacts (marker, vector, labels) — green: "where you're heading". */
+const GOAL_COLOR = '#4ade80';
+
+/** Full-contrast Now label — never de-emphasized, whatever it lands on. */
+export const NOW_LABEL_COLOR = '#f3f4f6';
+export const START_LABEL_COLOR = '#d1d5db';
+/** Pill behind key labels: chart background tone, slightly translucent so
+ * geometry reads through around (not under) the text. */
+export const LABEL_PILL_COLOR = '#111827';
+export const LABEL_PILL_OPACITY = 0.88;
+
+/**
+ * Chart label with an optional background pill. The pill guarantees
+ * legibility over any geometry the label lands on — used always for the
+ * Start/Now/Target labels, and as the fallback for intermediate labels
+ * whose 8 placement candidates all collided.
+ */
+function MapLabel({
+  placement,
+  lines,
+  fill,
+  fontSize = 9,
+  fontWeight,
+  pill,
+  testid,
+}: {
+  placement: LabelPlacement;
+  /** One entry per text line; placement.y is the first line's baseline. */
+  lines: string[];
+  fill: string;
+  fontSize?: number;
+  fontWeight?: number;
+  pill: boolean;
+  testid: string;
+}) {
+  const lineHeight = fontSize + 2;
+  const width = Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)));
+  const boxX =
+    placement.anchor === 'start'
+      ? placement.x
+      : placement.anchor === 'end'
+        ? placement.x - width
+        : placement.x - width / 2;
+  return (
+    <g>
+      {pill && (
+        <rect
+          data-testid={`${testid}-pill`}
+          x={boxX - 4}
+          y={placement.y - fontSize - 3}
+          width={width + 8}
+          height={lineHeight * lines.length + 4}
+          rx={3}
+          fill={LABEL_PILL_COLOR}
+          fillOpacity={LABEL_PILL_OPACITY}
+        />
+      )}
+      <text
+        data-testid={testid}
+        x={placement.x}
+        y={placement.y}
+        textAnchor={placement.anchor}
+        fill={fill}
+        fontSize={fontSize}
+        fontWeight={fontWeight}
+      >
+        {lines.map((line, i) => (
+          <tspan key={i} x={placement.x} dy={i === 0 ? 0 : lineHeight}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    </g>
+  );
+}
 
 function formatDateShort(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
@@ -90,20 +167,26 @@ export function formatMonthYear(date: string): string {
   ).padStart(2, '0')}`;
 }
 
-/** "Apr" for intermediate scan labels (≤5 scans only). */
-function formatMonth(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-US', { month: 'short' });
-}
 
 function formatDeltaWeight(deltaKg: number, units: 'lb' | 'kg'): string {
   const value = units === 'lb' ? kgToLbs(deltaKg) : deltaKg;
   return `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(1)} ${units}`;
 }
 
-/** "Mar 3 → Jul 1: +2.2 lb, 68% lean" fraction part, phase-framed. */
+/**
+ * "Mar 3 → Jul 1: +2.2 lb, 68% lean" fraction part, phase-framed.
+ *
+ * Noise gating is per-component: the blanket "within measurement noise"
+ * only applies when BOTH the lean and fat deltas sit inside DEXA
+ * repeatability. One flat component with a clear weight change is itself
+ * the finding — a −7.5 lb loss with lean unchanged is "essentially all
+ * fat", not noise.
+ */
 function fractionText(pair: ScanPairPRatio): string {
   if (pair.suppressed) return 'Δ weight under 3 lb — p-ratio suppressed';
   if (pair.withinNoise) return 'within measurement noise';
+  if (pair.leanWithinNoise) return 'essentially all fat';
+  if (pair.fatWithinNoise) return 'essentially all lean';
   if (pair.deltaWeightKg > 0) {
     return `${Math.round((pair.leanFraction ?? 0) * 100)}% of gain was lean`;
   }
@@ -156,16 +239,17 @@ export interface DecorationsData {
   scanPoints: CompositionPoint[];
   trailPoints: CompositionPoint[];
   targetPoint: CompositionCoords | null;
-  /** "Target · FFMI 21.0 / BF 15%" — null hides the target marker label. */
-  targetLabel: string | null;
-  /** "42% of the way" along the goal vector; null hides it. */
-  progressLabel: string | null;
+  /** Goal block lines, e.g. ["GOAL", "FFMI 21.0", "BF 13%", "FMI 3.6"];
+   * null hides the goal label. */
+  targetLabelLines: string[] | null;
+  /** Rotated caption along the dashed vector, e.g. "Goal vector · 62%". */
+  vectorLabel: string | null;
   showGoalVector: boolean;
   /** "Start · Mar '25" on the first scan. */
   startLabel: string;
-  /** "Now · Jun 2" on the latest scan. */
+  /** "Latest · Jun 2" on the latest scan. */
   nowLabel: string;
-  /** Month labels on intermediate scans (only when ≤5 scans total). */
+  /** Date labels on intermediate scans (only when ≤5 scans total). */
   showIntermediateLabels: boolean;
 }
 
@@ -194,8 +278,8 @@ export function buildDecorations(data: DecorationsData) {
       scanPoints,
       trailPoints,
       targetPoint,
-      targetLabel,
-      progressLabel,
+      targetLabelLines,
+      vectorLabel,
       showGoalVector,
       startLabel,
       nowLabel,
@@ -217,25 +301,37 @@ export function buildDecorations(data: DecorationsData) {
     const visibleThresholds = COMPOSITION_MAP_FFMI_THRESHOLDS.filter(
       (t) => t > domain.y[0] && t < domain.y[1]
     );
-    const avoidLines: AvoidLine[] = [
-      ...isoSegments.map((seg) => ({
-        x1: xScale(seg.x1),
-        y1: yScale(seg.y1),
-        x2: xScale(seg.x2),
-        y2: yScale(seg.y2),
-      })),
+    const toSegment = (a: { x: number; y: number }, b: { x: number; y: number }): AvoidLine => ({
+      x1: a.x,
+      y1: a.y,
+      x2: b.x,
+      y2: b.y,
+    });
+    // Labels avoid ALL chart geometry, not just reference lines: the scan
+    // path, the estimate trail, and the point markers themselves.
+    const avoidSegments: AvoidLine[] = [
+      ...isoSegments.map((seg) =>
+        toSegment({ x: xScale(seg.x1), y: yScale(seg.y1) }, { x: xScale(seg.x2), y: yScale(seg.y2) })
+      ),
       ...visibleThresholds.map((t) => ({
         x1: plot.left,
         y1: yScale(t),
         x2: plot.right,
         y2: yScale(t),
       })),
+      ...scanPoints.slice(1).map((p, i) => toSegment(px(scanPoints[i]), px(p))),
+      ...trailPoints.slice(1).map((p, i) => toSegment(px(trailPoints[i]), px(p))),
     ];
+    const avoidPoints: AvoidPoint[] = scanPoints.map((p, i) => ({
+      ...px(p),
+      r: i === scanPoints.length - 1 ? 9 : i === 0 ? 4.5 : 4,
+    }));
+    const avoidOptions = { avoidSegments, avoidPoints };
 
     const startPx = px(scanPoints[0]);
     const nowPx = px(scanPoints[scanPoints.length - 1]);
-    const startPlacement = placeLabel(startPx, plot, startLabel, { avoidLines });
-    const nowPlacement = placeLabel(nowPx, plot, nowLabel, { avoidLines });
+    const startPlacement = placeLabel(startPx, plot, startLabel, avoidOptions);
+    const nowPlacement = placeLabel(nowPx, plot, nowLabel, avoidOptions);
 
     return (
       <g>
@@ -303,48 +399,55 @@ export function buildDecorations(data: DecorationsData) {
             never hides where the target sits. */}
         {targetPoint && (() => {
           const targetPx = px(targetPoint);
-          const targetPlacement = targetLabel
-            ? placeLabel(targetPx, plot, targetLabel, { avoidLines })
-            : null;
+          const widest = targetLabelLines
+            ? targetLabelLines.reduce((a, b) => (a.length >= b.length ? a : b))
+            : '';
           return (
             <g>
               <circle
                 data-testid="map-target"
                 cx={targetPx.x}
                 cy={targetPx.y}
-                r={6}
+                r={8}
                 fill="none"
-                stroke={TARGET_COLOR}
+                stroke={GOAL_COLOR}
                 strokeWidth={2}
+                strokeOpacity={0.6}
               />
-              <circle cx={targetPx.x} cy={targetPx.y} r={1.5} fill={TARGET_COLOR} />
-              {targetPlacement && (
-                <text
-                  data-testid="map-target-label"
-                  x={targetPlacement.x}
-                  y={targetPlacement.y}
-                  textAnchor={targetPlacement.anchor}
-                  fill={TARGET_COLOR}
-                  fontSize={9}
-                >
-                  {targetLabel}
-                </text>
+              <circle cx={targetPx.x} cy={targetPx.y} r={4} fill={GOAL_COLOR} />
+              {targetLabelLines && (
+                <MapLabel
+                  placement={placeLabel(targetPx, plot, widest, {
+                    ...avoidOptions,
+                    lineCount: targetLabelLines.length,
+                  })}
+                  lines={targetLabelLines}
+                  fill={GOAL_COLOR}
+                  fontWeight={600}
+                  pill
+                  testid="map-target-label"
+                />
               )}
             </g>
           );
         })()}
 
-        {/* Goal vector: latest scan → target, dashed, arrowhead at the
-            target end, and the progress scalar along the line. */}
+        {/* Goal vector: latest scan → goal, dashed, arrowhead at the goal
+            end, with a caption rotated along the line. */}
         {showGoalVector && targetPoint && (() => {
           const targetPx = px(targetPoint);
           const arrow = arrowAt(nowPx, targetPx);
-          // Arrowhead just short of the target ring, on the line.
+          // Arrowhead just short of the goal marker, on the line.
           const len = Math.hypot(targetPx.x - nowPx.x, targetPx.y - nowPx.y);
           const ux = len > 0 ? (targetPx.x - nowPx.x) / len : 0;
           const uy = len > 0 ? (targetPx.y - nowPx.y) / len : 0;
-          const tipX = targetPx.x - ux * 12;
-          const tipY = targetPx.y - uy * 12;
+          const tipX = targetPx.x - ux * 14;
+          const tipY = targetPx.y - uy * 14;
+          // Keep the rotated caption readable: never upside down.
+          const textAngle =
+            arrow && (arrow.angleDeg > 90 || arrow.angleDeg < -90)
+              ? arrow.angleDeg + 180
+              : (arrow?.angleDeg ?? 0);
           return (
             <g>
               <line
@@ -352,32 +455,33 @@ export function buildDecorations(data: DecorationsData) {
                 y1={nowPx.y}
                 x2={targetPx.x}
                 y2={targetPx.y}
-                stroke={TARGET_COLOR}
+                stroke={GOAL_COLOR}
                 strokeWidth={1.5}
                 strokeDasharray="6 4"
-                strokeOpacity={0.55}
+                strokeOpacity={0.6}
               />
               {arrow && (
                 <path
                   data-testid="map-goal-arrowhead"
                   d="M 5 0 L -3.5 -3 L -3.5 3 Z"
                   transform={`translate(${tipX}, ${tipY}) rotate(${arrow.angleDeg})`}
-                  fill={TARGET_COLOR}
+                  fill={GOAL_COLOR}
                   fillOpacity={0.85}
                 />
               )}
-              {/* Progress scalar anchored to the vector it measures. */}
-              {progressLabel && arrow && (
+              {/* Caption along the vector it names, offset perpendicular. */}
+              {vectorLabel && arrow && (
                 <text
-                  data-testid="map-progress-label"
-                  x={arrow.x - uy * 10}
-                  y={arrow.y + ux * 10 + 3}
+                  data-testid="map-vector-label"
+                  x={arrow.x}
+                  y={arrow.y - 6}
                   textAnchor="middle"
-                  fill={TARGET_COLOR}
+                  fill={GOAL_COLOR}
                   fontSize={9}
                   opacity={0.9}
+                  transform={`rotate(${textAngle}, ${arrow.x}, ${arrow.y})`}
                 >
-                  {progressLabel}
+                  {vectorLabel}
                 </text>
               )}
             </g>
@@ -418,52 +522,48 @@ export function buildDecorations(data: DecorationsData) {
         })}
 
         {/* Intermediate scan month labels — only when the map is sparse
-            enough to stay legible (≤5 scans); tap covers the rest. */}
+            enough to stay legible (≤5 scans); tap covers the rest. Labels
+            dodge the path/trail/points; a background pill is the fallback
+            when all 8 candidate spots collide. */}
         {showIntermediateLabels &&
           scanPoints.slice(1, -1).map((p) => {
-            const placement = placeLabel(px(p), plot, formatMonth(p.date), {
-              avoidLines,
+            const text = formatDateShort(p.date);
+            const placement = placeLabel(px(p), plot, text, {
+              ...avoidOptions,
               fontSize: 8,
             });
             return (
-              <text
+              <MapLabel
                 key={`mid-${p.date}`}
-                data-testid="map-month-label"
-                x={placement.x}
-                y={placement.y}
-                textAnchor={placement.anchor}
+                placement={placement}
+                lines={[text]}
                 fill="#9ca3af"
                 fontSize={8}
-                opacity={0.75}
-              >
-                {formatMonth(p.date)}
-              </text>
+                pill={!placement.clear}
+                testid="map-month-label"
+              />
             );
           })}
 
-        {/* Labeled endpoints: where the journey starts and where it is now. */}
-        <text
-          data-testid="map-start-label"
-          x={startPlacement.x}
-          y={startPlacement.y}
-          textAnchor={startPlacement.anchor}
-          fill="#9ca3af"
-          fontSize={9}
+        {/* Labeled endpoints: where the journey starts and where it is now.
+            Both always sit on a background pill — the Now label especially
+            must stay full-contrast over the trail or any other geometry. */}
+        <MapLabel
+          placement={startPlacement}
+          lines={[startLabel]}
+          fill={START_LABEL_COLOR}
           fontWeight={500}
-        >
-          {startLabel}
-        </text>
-        <text
-          data-testid="map-now-label"
-          x={nowPlacement.x}
-          y={nowPlacement.y}
-          textAnchor={nowPlacement.anchor}
-          fill="#f3f4f6"
-          fontSize={9}
+          pill
+          testid="map-start-label"
+        />
+        <MapLabel
+          placement={nowPlacement}
+          lines={[nowLabel]}
+          fill={NOW_LABEL_COLOR}
           fontWeight={600}
-        >
-          {nowLabel}
-        </text>
+          pill
+          testid="map-now-label"
+        />
       </g>
     );
   };
@@ -568,16 +668,29 @@ export function CompositionMap({
 
   // Direction-cue labels for the decorations layer.
   const startLabel = `Start · ${formatMonthYear(firstScan.date)}`;
-  const nowLabel = `Now · ${formatDateShort(lastScan.date)}`;
-  const targetLabel = targetPoint
-    ? `Target · FFMI ${targetPoint.ffmi.toFixed(1)} / BF ${(
-        (targetPoint.fmi / (targetPoint.fmi + targetPoint.ffmi)) * 100
-      ).toFixed(0)}%`
+  const nowLabel = `Latest · ${formatDateShort(lastScan.date)}`;
+  const targetBfPercent = targetPoint
+    ? (targetPoint.fmi / (targetPoint.fmi + targetPoint.ffmi)) * 100
     : null;
-  const progressLabel =
-    showGoalVector && goalProgress?.displayPercent != null
-      ? `${goalProgress.displayPercent}% of the way`
-      : null;
+  const targetLabelLines = targetPoint
+    ? [
+        'GOAL',
+        `FFMI ${targetPoint.ffmi.toFixed(1)}`,
+        `BF ${targetBfPercent!.toFixed(0)}%`,
+        `FMI ${targetPoint.fmi.toFixed(1)}`,
+      ]
+    : null;
+  const vectorLabel = showGoalVector
+    ? goalProgress?.displayPercent != null
+      ? `Goal vector · ${goalProgress.displayPercent}%`
+      : 'Goal vector'
+    : null;
+  // Weight the goal point implies: (FMI + FFMI) · height². Shown in the
+  // footer so the goal reads in familiar units too.
+  const heightM2 = (heightCm / 100) ** 2;
+  const targetWeightKg = targetPoint ? (targetPoint.fmi + targetPoint.ffmi) * heightM2 : null;
+  const formatWeightDisplay = (kg: number) =>
+    units === 'lb' ? `${kgToLbs(kg).toFixed(1)} lb` : `${kg.toFixed(1)} kg`;
 
   return (
     <div>
@@ -627,8 +740,8 @@ export function CompositionMap({
                 scanPoints,
                 trailPoints,
                 targetPoint,
-                targetLabel,
-                progressLabel,
+                targetLabelLines,
+                vectorLabel,
                 showGoalVector,
                 startLabel,
                 nowLabel,
@@ -832,11 +945,43 @@ export function CompositionMap({
         </div>
       )}
 
-      {/* Latest position readout */}
-      <p className="text-[11px] text-surface-500 mt-2">
-        Latest ({formatDateShort(lastScan.date)}): FFMI {lastScan.ffmi.toFixed(1)} ·
-        FMI {lastScan.fmi.toFixed(1)} · BF {lastScan.bodyFatPercent.toFixed(1)}%
-      </p>
+      {/* Latest vs Goal summary footer */}
+      <div
+        className="mt-3 grid grid-cols-2 gap-3 p-3 rounded-lg bg-surface-800/60 border border-surface-700"
+        data-testid="map-summary-footer"
+      >
+        <div>
+          <p className="text-xs font-medium text-cyan-300">
+            Latest ({formatDateShort(lastScan.date)})
+          </p>
+          <p className="text-xs text-surface-300 mt-1">
+            FFMI {lastScan.ffmi.toFixed(1)} · FMI {lastScan.fmi.toFixed(1)} · BF{' '}
+            {lastScan.bodyFatPercent.toFixed(1)}%
+          </p>
+          <p className="text-[11px] text-surface-400 mt-0.5">
+            Weight {formatWeightDisplay(lastScan.weightKg)}
+          </p>
+        </div>
+        {targetPoint && targetWeightKg != null ? (
+          <div className="border-l border-surface-700 pl-3">
+            <p className="text-xs font-medium text-success-400">Goal</p>
+            <p className="text-xs text-surface-300 mt-1">
+              FFMI {targetPoint.ffmi.toFixed(1)} · FMI {targetPoint.fmi.toFixed(1)} · BF{' '}
+              {targetBfPercent!.toFixed(1)}%
+            </p>
+            <p className="text-[11px] text-surface-400 mt-0.5">
+              Implied weight ~{formatWeightDisplay(targetWeightKg)}
+            </p>
+          </div>
+        ) : (
+          <div className="border-l border-surface-700 pl-3">
+            <p className="text-xs font-medium text-surface-500">Goal</p>
+            <p className="text-[11px] text-surface-500 mt-1">
+              No target set — add one in Goals to plot it here.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
