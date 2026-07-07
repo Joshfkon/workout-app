@@ -103,8 +103,17 @@ describe('CompositionMap', () => {
     renderMap();
     expect(screen.getByText(/FMI \+ FFMI = BMI/)).toBeInTheDocument();
     expect(screen.getByText(/↑ muscle gained · ← fat lost · ↖ recomp/)).toBeInTheDocument();
-    // Honesty note: with no weigh-ins past the last scan, the map ends there.
+    // A moving trend earns the forecast-cone explanation.
+    expect(screen.getByText(/dotted cone extrapolates your recent scan trend/)).toBeInTheDocument();
+  });
+
+  it('keeps the never-extended honesty note when the trend is flat (no forecast)', () => {
+    // Identical composition on both scans: zero velocity → no cone.
+    renderMap({
+      trend: [scan('2026-01-05', 60, 15, 78), scan('2026-06-01', 60, 15, 78)],
+    });
     expect(screen.getByText(/never extended past your last scan/)).toBeInTheDocument();
+    expect(screen.queryByText(/dotted cone/)).not.toBeInTheDocument();
   });
 
   it('explains the estimate tail when weigh-ins exist past the last scan', () => {
@@ -188,6 +197,24 @@ describe('CompositionMap', () => {
     });
     expect(
       screen.getByText(/Composition progress: \d+(\.\d+)?% toward target/)
+    ).toBeInTheDocument();
+  });
+
+  it('states a trend ETA when the forecast passes through the goal', () => {
+    // Target ~11 weeks along the bulk's current velocity.
+    renderMap({
+      target: { targetWeightKg: 92.7, targetBodyFatPercent: 24.1 },
+    });
+    expect(screen.getByText(/On this trend: goal in ~\d+ wk/)).toBeInTheDocument();
+  });
+
+  it('says so when the trend does not track through the goal', () => {
+    // Goal in the opposite direction of the bulk trend.
+    renderMap({
+      target: { targetWeightKg: 74, targetBodyFatPercent: 15 },
+    });
+    expect(
+      screen.getByText(/Current trend isn't tracking through the goal point/)
     ).toBeInTheDocument();
   });
 
@@ -319,6 +346,7 @@ describe('CompositionMap decorations (direction cues)', () => {
     trailPoints: [],
     estimateTail: [],
     estimateLabel: null,
+    forecast: null,
     targetPoint: null,
     targetLabelLines: null,
     vectorLabel: null,
@@ -524,6 +552,30 @@ describe('CompositionMap decorations (direction cues)', () => {
     renderDecorations();
     expect(screen.queryByTestId('map-estimate-tail')).not.toBeInTheDocument();
     expect(screen.queryByTestId('map-estimate-marker')).not.toBeInTheDocument();
+  });
+
+  it('draws the forecast as a dotted path inside an uncertainty cone', () => {
+    renderDecorations({
+      forecast: {
+        anchor: { fmi: 7.8, ffmi: 23.8 },
+        path: [
+          { weeks: 1, fmi: 7.6, ffmi: 23.85, radius: 0.3 },
+          { weeks: 2, fmi: 7.4, ffmi: 23.9, radius: 0.36 },
+        ],
+      },
+    });
+    const cone = screen.getByTestId('map-forecast-cone');
+    expect(cone.getAttribute('fill-opacity')).toBeTruthy(); // translucent, not solid
+    const path = screen.getByTestId('map-forecast-path');
+    expect(path.getAttribute('stroke-dasharray')).toBe('1 4'); // dotted ≠ tail's dashes
+    expect(screen.getByTestId('map-forecast-label')).toHaveTextContent('Trend · +2 wk');
+    expect(screen.getByTestId('map-forecast-label-pill')).toBeInTheDocument();
+  });
+
+  it('omits forecast artifacts when there is no forecast', () => {
+    renderDecorations();
+    expect(screen.queryByTestId('map-forecast-cone')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-forecast-path')).not.toBeInTheDocument();
   });
 
   it('drops intermediate labels on dense maps (tap-only)', () => {

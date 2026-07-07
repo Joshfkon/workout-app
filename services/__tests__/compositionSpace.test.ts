@@ -21,6 +21,9 @@ import {
   classifyPartitioning,
   getBodyCompLayout,
   computeMapDomain,
+  computeCompositionForecast,
+  FORECAST_HORIZON_WEEKS,
+  FORECAST_NOISE_RADIUS,
   isoBmiSegment,
   visibleIsoBmiSegments,
   LB_TO_KG,
@@ -30,6 +33,7 @@ import {
   OFF_AXIS_NOTE_THRESHOLD,
   MIN_SCANS_FOR_COMPOSITION_MAP,
   type CompositionObservation,
+  type CompositionPoint,
 } from '@/services/compositionSpace';
 import { computeFFMI } from '@/services/bodyCompEngine';
 
@@ -423,6 +427,66 @@ describe('classifyPartitioning', () => {
   it('gives no verdict when the weight moved against the phase', () => {
     // Weight LOSS during a bulk has no lean-fraction-of-gain framing.
     expect(classifyPartitioning(cutPair, 'bulk', 3)).toBeNull();
+  });
+});
+
+// ============ trend forecast ============
+
+describe('computeCompositionForecast', () => {
+  const point = (date: string, fmi: number, ffmi: number): CompositionPoint => ({
+    date,
+    fmi,
+    ffmi,
+    bmi: fmi + ffmi,
+    bodyFatPercent: (fmi / (fmi + ffmi)) * 100,
+    weightKg: 80,
+  });
+
+  // Cutting: −0.2 FMI, +0.1 FFMI per week over the last scan pair (4 weeks).
+  const scans = [point('2026-01-01', 7.6, 19.2), point('2026-01-29', 6.8, 19.6)];
+  const anchor = { fmi: 6.8, ffmi: 19.6 };
+
+  it('extrapolates linearly from the last scan pair', () => {
+    const f = computeCompositionForecast(scans, anchor, null);
+    expect(f.status).toBe('ok');
+    expect(f.velocity.fmi).toBeCloseTo(-0.2, 5);
+    expect(f.velocity.ffmi).toBeCloseTo(0.1, 5);
+    expect(f.path).toHaveLength(FORECAST_HORIZON_WEEKS);
+    expect(f.path[4]).toMatchObject({ weeks: 5, fmi: 5.8, ffmi: 20.1 });
+  });
+
+  it('widens the uncertainty radius with time, from the DEXA noise floor', () => {
+    const f = computeCompositionForecast(scans, anchor, null);
+    expect(f.path[0].radius).toBeGreaterThan(FORECAST_NOISE_RADIUS);
+    for (let i = 1; i < f.path.length; i++) {
+      expect(f.path[i].radius).toBeGreaterThan(f.path[i - 1].radius);
+    }
+  });
+
+  it('reports an ETA when the trend passes through the goal', () => {
+    // Goal sits exactly 10 weeks down the trend line.
+    const f = computeCompositionForecast(scans, anchor, { fmi: 4.8, ffmi: 20.6 });
+    expect(f.goalEtaWeeks).toBe(10);
+  });
+
+  it('reports no ETA when the trend heads away from the goal', () => {
+    // Goal behind the direction of travel: closest approach is t ≤ 0.
+    const f = computeCompositionForecast(scans, anchor, { fmi: 7.8, ffmi: 19.4 });
+    expect(f.goalEtaWeeks).toBeNull();
+  });
+
+  it('reports no ETA when the trend misses the goal by more than the hit radius', () => {
+    const f = computeCompositionForecast(scans, anchor, { fmi: 4.8, ffmi: 23.0 });
+    expect(f.goalEtaWeeks).toBeNull();
+  });
+
+  it('declines to forecast a flat trend (projecting noise)', () => {
+    const flat = [point('2026-01-01', 6.8, 19.6), point('2026-01-29', 6.8, 19.6)];
+    expect(computeCompositionForecast(flat, anchor, null).status).toBe('flat');
+  });
+
+  it('declines to forecast under 2 scans', () => {
+    expect(computeCompositionForecast([scans[0]], anchor, null).status).toBe('insufficient');
   });
 });
 
