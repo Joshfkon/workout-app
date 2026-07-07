@@ -7,6 +7,8 @@
 import {
   __setDriverForTests,
   enqueueSetInsert,
+  enqueueRowUpdate,
+  enqueueRowUpsert,
   listOutbox,
   outboxCount,
   updateQueuedSet,
@@ -28,23 +30,34 @@ function memoryDriver() {
   };
 }
 
-/** Supabase stub whose upsert behavior is scripted per call. */
+/** Supabase stub whose upsert/update behavior is scripted per call. */
 function makeSupabase(script: Array<{ error: { message: string; code?: string } | null; delayMs?: number }>) {
-  const calls: Array<{ table: string; row: Record<string, unknown> }> = [];
+  const calls: Array<{ table: string; op: 'upsert' | 'update'; row: Record<string, unknown>; matchId?: string }> = [];
   let i = 0;
+  type OpResult = { error: { message: string; code?: string } | null };
+  const nextResult = (): PromiseLike<OpResult> => {
+    const step = script[Math.min(i, script.length - 1)];
+    i += 1;
+    const result: OpResult = { error: step?.error ?? null };
+    if (step?.delayMs != null) {
+      // delayMs: -1 = never settles (dead connection)
+      if (step.delayMs < 0) return new Promise<OpResult>(() => {});
+      return new Promise<OpResult>((resolve) => setTimeout(() => resolve(result), step.delayMs));
+    }
+    return Promise.resolve(result);
+  };
   const client: OutboxSupabase = {
     from: (table: string) => ({
       upsert: (row: Record<string, unknown>) => {
-        calls.push({ table, row });
-        const step = script[Math.min(i, script.length - 1)];
-        i += 1;
-        type UpsertResult = { error: { message: string; code?: string } | null };
-        const result: UpsertResult = { error: step?.error ?? null };
-        if (step?.delayMs) {
-          return new Promise<UpsertResult>((resolve) => setTimeout(() => resolve(result), step.delayMs));
-        }
-        return Promise.resolve(result);
+        calls.push({ table, op: 'upsert', row });
+        return nextResult();
       },
+      update: (row: Record<string, unknown>) => ({
+        eq: (_column: string, value: string) => {
+          calls.push({ table, op: 'update', row, matchId: value });
+          return nextResult();
+        },
+      }),
     }),
   };
   return { client, calls };
@@ -186,6 +199,7 @@ describe('setOutbox', () => {
             upsertOptions = options as unknown as Record<string, unknown>;
             return Promise.resolve({ error: null });
           },
+          update: () => ({ eq: () => Promise.resolve({ error: null }) }),
         }),
       };
       await flushSetOutbox(client);
@@ -203,18 +217,22 @@ describe('setOutbox', () => {
     function makeStatefulServer() {
       const committed = new Set<string>();
       let dropNextResponses = 0;
+      const respond = () => {
+        if (dropNextResponses > 0) {
+          dropNextResponses -= 1;
+          return Promise.resolve({ error: { message: 'TypeError: Failed to fetch' } });
+        }
+        return Promise.resolve({ error: null });
+      };
       const client: OutboxSupabase = {
         from: () => ({
           upsert: (row: Record<string, unknown>) => {
             // Server-side apply happens FIRST (the commit)…
             committed.add(row.id as string);
             // …then the response may be lost on the wire.
-            if (dropNextResponses > 0) {
-              dropNextResponses -= 1;
-              return Promise.resolve({ error: { message: 'TypeError: Failed to fetch' } });
-            }
-            return Promise.resolve({ error: null });
+            return respond();
           },
+          update: () => ({ eq: () => respond() }),
         }),
       };
       return { client, committed, dropResponses: (n: number) => { dropNextResponses = n; } };
@@ -280,6 +298,85 @@ describe('setOutbox', () => {
       const allFlushed = new Set([...r1.flushedIds, ...r2.flushedIds]);
       expect(allFlushed).toEqual(new Set(['a', 'b']));
       tabB.__setDriverForTests(null);
+    });
+  });
+
+  describe('update entries and per-table semantics (finish-workout writes)', () => {
+    it('flushes an update entry as .update().eq() on the matched row', async () => {
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+      const { client, calls } = makeSupabase([{ error: null }]);
+
+      const result = await flushSetOutbox(client);
+
+      expect(result.flushedIds).toEqual(['finish:s1']);
+      expect(calls).toEqual([
+        { table: 'workout_sessions', op: 'update', row: { state: 'completed' }, matchId: 's1' },
+      ]);
+      expect(await outboxCount()).toBe(0);
+    });
+
+    it('re-enqueueing the same entry id replaces the payload (no duplicate work)', async () => {
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { session_rpe: 7 });
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { session_rpe: 9 });
+      const entries = await listOutbox();
+      expect(entries).toHaveLength(1);
+      expect(entries[0].row).toEqual({ session_rpe: 9 });
+    });
+
+    it('uses the muscle-feedback conflict key for session_muscle_feedback upserts', async () => {
+      await enqueueRowUpsert('feedback:s1:chest', 'session_muscle_feedback', {
+        session_id: 's1',
+        muscle_group: 'chest',
+        pump: 2,
+      });
+      let seenOptions: Record<string, unknown> | undefined;
+      const client: OutboxSupabase = {
+        from: () => ({
+          upsert: (_row, options) => {
+            seenOptions = options as unknown as Record<string, unknown>;
+            return Promise.resolve({ error: null });
+          },
+          update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+        }),
+      };
+      await flushSetOutbox(client);
+      expect(seenOptions).toEqual({ onConflict: 'session_id,muscle_group', ignoreDuplicates: false });
+    });
+
+    it('a queued set flushes before a later-enqueued completion update', async () => {
+      jest.useFakeTimers({ now: 1000 });
+      await enqueueSetInsert('set-1', { id: 'set-1' });
+      jest.setSystemTime(2000);
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+      jest.useRealTimers();
+
+      const { client, calls } = makeSupabase([{ error: null }]);
+      await flushSetOutbox(client);
+      expect(calls.map((c) => c.op)).toEqual(['upsert', 'update']);
+    });
+
+    it('a hung request times out, keeps the entry, and is treated as a network failure', async () => {
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+      await enqueueSetInsert('later', { id: 'later' });
+      // First op never settles; ordering: finish:s1 enqueued first.
+      const { client, calls } = makeSupabase([{ delayMs: -1, error: null }]);
+
+      const result = await flushSetOutbox(client, { timeoutMs: 25 });
+
+      expect(result.flushedIds).toEqual([]);
+      expect(result.failedIds).toEqual(['finish:s1']); // stopped before 'later'
+      expect(calls).toHaveLength(1);
+      const entries = await listOutbox();
+      expect(entries.map((e) => e.id).sort()).toEqual(['finish:s1', 'later']);
+      expect(entries.find((e) => e.id === 'finish:s1')?.attempts).toBe(1);
+    });
+
+    it('outboxCount(table) filters by table for the "N sets queued" banner', async () => {
+      await enqueueSetInsert('set-1', { id: 'set-1' });
+      await enqueueRowUpdate('finish:s1', 'workout_sessions', 's1', { state: 'completed' });
+      expect(await outboxCount()).toBe(2);
+      expect(await outboxCount('set_logs')).toBe(1);
+      expect(await outboxCount('workout_sessions')).toBe(1);
     });
   });
 
