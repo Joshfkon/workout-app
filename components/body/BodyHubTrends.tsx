@@ -44,6 +44,7 @@ interface DexaRow {
   body_fat_percent: number;
   lean_mass_kg: number;
   fat_mass_kg: number;
+  weight_kg: number | null;
 }
 
 interface BodyHubTrendsProps {
@@ -78,7 +79,7 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
             .order('logged_at', { ascending: true }),
           supabase
             .from('dexa_scans')
-            .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg')
+            .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg')
             .eq('user_id', user.id)
             .order('scan_date', { ascending: true }),
         ]);
@@ -116,6 +117,8 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
           bodyFatPercent: Number(scan.body_fat_percent),
           leanMassKg: Number(scan.lean_mass_kg),
           fatMassKg: Number(scan.fat_mass_kg),
+          // The recorded total (includes bone) anchors bodyweight deltas.
+          weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
         }))
       ),
     [weightRows, scans]

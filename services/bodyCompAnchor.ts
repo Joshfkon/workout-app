@@ -38,6 +38,13 @@ export interface ScanAnchor {
   bodyFatPercent: number;
   leanMassKg: number;
   fatMassKg: number;
+  /**
+   * The scan's recorded total weight. Bodyweight deltas anchor to THIS value
+   * — lean + fat alone understates it by the bone mass, which would make a
+   * weigh-in equal to the scan weight read as a spurious gain. Falls back to
+   * lean + fat when absent.
+   */
+  weightKg?: number;
 }
 
 export interface AnchoredTrendPoint {
@@ -183,9 +190,11 @@ export function buildAnchoredBodyCompTrend(
     .sort((a, b) => a.date.localeCompare(b.date));
   if (sortedScans.length === 0) return [];
 
-  // Scan weight: what the scan itself implies (fat + lean is close enough —
-  // bone is a near-constant offset that cancels in the deltas).
-  const scanWeight = (s: ScanAnchor) => s.leanMassKg + s.fatMassKg;
+  // Anchor weight: the scan's recorded total when available (includes bone),
+  // else fat + lean. Using fat + lean when a real total exists would bias
+  // every subsequent bodyweight delta by the bone mass.
+  const scanWeight = (s: ScanAnchor) =>
+    s.weightKg != null && s.weightKg > 0 ? s.weightKg : s.leanMassKg + s.fatMassKg;
 
   // Deduplicate weights by date (last write wins) and drop entries that
   // collide with a scan date — the scan is authoritative there.
@@ -217,6 +226,11 @@ export function buildAnchoredBodyCompTrend(
     });
   }
 
+  // Non-soft-tissue offset carried by an anchor (bone etc.): the part of the
+  // scan's weight that isn't lean or fat, kept in the BF% denominator so
+  // estimates report BF% the same way the scan does (fat / total weight).
+  const boneOffset = (s: ScanAnchor) => scanWeight(s) - s.leanMassKg - s.fatMassKg;
+
   const firstScan = sortedScans[0];
   const lastScan = sortedScans[sortedScans.length - 1];
   const firstDay = dayNumber(firstScan.date);
@@ -225,13 +239,13 @@ export function buildAnchoredBodyCompTrend(
   // Before the first scan: backcast from it.
   const before = weightPoints.filter((p) => p.day < firstDay);
   projectFromAnchor(before, firstScan, scanWeight(firstScan), pRatio).forEach((p) => {
-    result.push(toEstimated(p));
+    result.push(toEstimated(p, boneOffset(firstScan)));
   });
 
   // After the last scan: project forward from it.
   const after = weightPoints.filter((p) => p.day > lastDay);
   projectFromAnchor(after, lastScan, scanWeight(lastScan), pRatio).forEach((p) => {
-    result.push(toEstimated(p));
+    result.push(toEstimated(p, boneOffset(lastScan)));
   });
 
   // Between each consecutive scan pair: estimate from the earlier scan, then
@@ -281,9 +295,12 @@ export function buildAnchoredBodyCompTrend(
     base.forEach((p, idx) => {
       const lean = leanRescaled[idx + 1]; // offset for the injected A endpoint
       const fat = fatRescaled[idx + 1];
+      // Bone offset interpolates between the two anchors, like the rescale.
+      const t = (p.day - dayA) / (dayB - dayA);
+      const bone = boneOffset(a) + t * (boneOffset(b) - boneOffset(a));
       result.push({
         date: p.date,
-        bodyFatPercent: round1(bfPercent(fat, lean + fat)),
+        bodyFatPercent: round1(bfPercent(fat, lean + fat + bone)),
         leanMassKg: round1(lean),
         fatMassKg: round1(fat),
         weightKg: round1(p.weightKg),
@@ -294,10 +311,10 @@ export function buildAnchoredBodyCompTrend(
 
   return result.sort((x, y) => x.date.localeCompare(y.date));
 
-  function toEstimated(p: BasePoint): AnchoredTrendPoint {
+  function toEstimated(p: BasePoint, boneOffsetKg: number): AnchoredTrendPoint {
     return {
       date: p.date,
-      bodyFatPercent: round1(bfPercent(p.fatEst, p.leanEst + p.fatEst)),
+      bodyFatPercent: round1(bfPercent(p.fatEst, p.leanEst + p.fatEst + boneOffsetKg)),
       leanMassKg: round1(p.leanEst),
       fatMassKg: round1(p.fatEst),
       weightKg: round1(p.weightKg),

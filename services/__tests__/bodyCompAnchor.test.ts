@@ -183,6 +183,32 @@ describe('buildAnchoredBodyCompTrend', () => {
     expect(back!.fatMassKg).toBeCloseTo(15, 1);
   });
 
+  it('anchors deltas to the recorded scan weight, not lean + fat (bone offset)', () => {
+    // Scan reports total 82 kg: 64 lean + 16 fat + 2 bone. A later weigh-in
+    // of exactly 82 kg is NOT a gain — the projection must stay at the
+    // scan's composition instead of splitting a phantom +2 kg.
+    const scanWithBone: ScanAnchor = {
+      date: '2026-06-01',
+      bodyFatPercent: 19.5, // 16 / 82
+      leanMassKg: 64,
+      fatMassKg: 16,
+      weightKg: 82,
+    };
+    const trend = buildAnchoredBodyCompTrend(
+      [{ date: '2026-06-08', weightKg: 82 }],
+      [scanWithBone]
+    );
+
+    const anchor = trend.find((p) => p.kind === 'dexa');
+    expect(anchor!.weightKg).toBe(82); // recorded total, not 80
+
+    const proj = trend.find((p) => p.date === '2026-06-08');
+    expect(proj!.leanMassKg).toBeCloseTo(64, 1);
+    expect(proj!.fatMassKg).toBeCloseTo(16, 1);
+    // BF% keeps the scan's fat-over-total-weight convention (16/82, not 16/80).
+    expect(proj!.bodyFatPercent).toBeCloseTo(19.5, 1);
+  });
+
   it('prefers the scan over a same-day weight entry and stays deterministic', () => {
     const weights: WeightPoint[] = [
       { date: scanB.date, weightKg: 99 }, // conflicting same-day weigh-in
