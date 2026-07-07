@@ -30,7 +30,9 @@ import type { ParsedMealItem } from '@/lib/actions/nutrition-ai';
 import type { SavedMeal, SavedMealItem } from '@/components/nutrition/SavedMealsModal';
 import type { AddFoodTab } from '@/components/nutrition/AddFoodModal';
 import { MacroSummaryCard } from '@/components/nutrition/MacroSummaryCard';
+import { StickyMacroBar } from '@/components/nutrition/StickyMacroBar';
 import { NutritionQuickActions } from '@/components/nutrition/NutritionQuickActions';
+import { useDailyNutritionSummary } from '@/hooks/useDailyNutritionSummary';
 import { recalculateMacrosForWeight } from '@/lib/actions/nutrition';
 import { getAdaptiveTDEE, onWeightLoggedRecalculateTDEE, resetAndRecalculateTDEE, type TDEEData } from '@/lib/actions/tdee';
 import { TDEEDashboard } from '@/components/nutrition/TDEEDashboard';
@@ -198,6 +200,9 @@ export default function NutritionPage() {
 
   // Lazy one-time load of the system food library (only needed once a food modal opens)
   const systemFoodsLoadedRef = useRef(false);
+
+  // Hero macro card wrapper — the sticky bar shows once this scrolls out of view
+  const heroCardRef = useRef<HTMLDivElement>(null);
 
   const supabase = createUntypedClient();
 
@@ -1263,16 +1268,10 @@ export default function NutritionPage() {
     setSelectedDate(getLocalDateString());
   }
 
-  // Calculate daily totals
-  const dailyTotals = foodEntries.reduce(
-    (acc, entry) => ({
-      calories: acc.calories + (entry.calories || 0),
-      protein: acc.protein + (entry.protein || 0),
-      carbs: acc.carbs + (entry.carbs || 0),
-      fat: acc.fat + (entry.fat || 0),
-    }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0 }
-  );
+  // Daily totals + remaining/hit/over verdicts — single source of truth
+  // shared by the hero MacroSummaryCard and the sticky bar
+  const dailySummary = useDailyNutritionSummary(foodEntries, nutritionTargets);
+  const dailyTotals = dailySummary.totals;
 
   // Get meal config with custom names
   const mealConfig = getMealConfig(nutritionTargets?.meal_names);
@@ -1529,14 +1528,20 @@ export default function NutritionPage() {
         </button>
       )}
 
+      {/* Condensed remaining-macros bar, slides in under the app header once
+          the hero card scrolls away (overlays the meal list — no layout shift) */}
+      <StickyMacroBar summary={dailySummary} watchRef={heroCardRef} />
+
       {/* Macro summary (replaces the 4-box grid + remaining-calories section) */}
-      <MacroSummaryCard
-        totals={dailyTotals}
-        targets={nutritionTargets}
-        mealsRemaining={mealsRemaining}
-        onCalculateMacros={() => setShowMacroCalculator(true)}
-        onEnterManually={() => setShowTargetsModal(true)}
-      />
+      <div ref={heroCardRef}>
+        <MacroSummaryCard
+          totals={dailyTotals}
+          targets={nutritionTargets}
+          mealsRemaining={mealsRemaining}
+          onCalculateMacros={() => setShowMacroCalculator(true)}
+          onEnterManually={() => setShowTargetsModal(true)}
+        />
+      </div>
 
       {/* Quick actions: Describe / Scan / Search / Meals */}
       <NutritionQuickActions
