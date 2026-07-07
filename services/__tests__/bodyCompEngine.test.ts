@@ -5,6 +5,8 @@
 
 import {
   calculateFFMI,
+  computeFFM,
+  computeFFMI,
   getNaturalFFMILimit,
   getFFMILabel,
   analyzeBodyCompTrend,
@@ -18,6 +20,7 @@ import {
 } from '../bodyCompEngine';
 
 import type { DexaScan, FFMIClassification, Experience, Goal } from '@/types/schema';
+import { lbsToKg } from '@/lib/utils';
 
 // ============================================
 // TEST FIXTURES
@@ -113,6 +116,59 @@ describe('calculateFFMI', () => {
     const result = calculateFFMI(70, 180);
 
     expect(result.naturalLimit).toBe(25);
+  });
+});
+
+// ============================================
+// SHARED FFM / FFMI (gauge + trend single source of truth)
+// ============================================
+
+describe('computeFFM', () => {
+  it('includes bone mineral content when logged (FFM = lean + BMC)', () => {
+    expect(computeFFM(60, 3)).toBe(63);
+  });
+
+  it('falls back to lean-only when bone mass is absent or invalid', () => {
+    expect(computeFFM(60, null)).toBe(60);
+    expect(computeFFM(60, undefined)).toBe(60);
+    expect(computeFFM(60, 0)).toBe(60);
+    expect(computeFFM(60, -1)).toBe(60);
+  });
+});
+
+describe('computeFFMI', () => {
+  it('matches the known imperial-profile case: 135 lb lean + 7 lb bone at 70.5 in', () => {
+    // Conversions happen at the edges: lb → kg via lib/utils, in → cm × 2.54.
+    // FFM = (135 + 7) lb = 64.410 kg; height 179.07 cm → 1.7907 m² = 3.2066
+    // FFMI = 64.410 / 3.2066 = 20.09 → 20.1
+    const result = computeFFMI(lbsToKg(135), lbsToKg(7), 70.5 * 2.54);
+
+    expect(result.ffmi).toBeCloseTo(20.1, 1);
+    // Normalized = 20.09 + 6.1 × (1.8 − 1.7907) = 20.14 → 20.1
+    expect(result.normalizedFfmi).toBeCloseTo(20.1, 1);
+  });
+
+  it('matches a known metric-profile case: 60 kg lean + 3 kg bone at 180 cm', () => {
+    // FFM = 63 kg; 63 / 1.8² = 63 / 3.24 = 19.444 → 19.4
+    const result = computeFFMI(60, 3, 180);
+
+    expect(result.ffmi).toBe(19.4);
+    // At exactly 1.8 m the normalization term is zero.
+    expect(result.normalizedFfmi).toBe(19.4);
+  });
+
+  it('without bone mass equals calculateFFMI on lean alone', () => {
+    const withNull = computeFFMI(60, null, 180);
+    const leanOnly = calculateFFMI(60, 180);
+
+    expect(withNull).toEqual(leanOnly);
+    expect(withNull.ffmi).toBe(18.5); // 60 / 3.24 = 18.52 → 18.5
+  });
+
+  it('bone inclusion raises FFMI versus lean-only', () => {
+    expect(computeFFMI(60, 3, 180).ffmi).toBeGreaterThan(
+      computeFFMI(60, null, 180).ffmi
+    );
   });
 });
 

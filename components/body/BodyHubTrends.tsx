@@ -4,16 +4,24 @@
  * Body hub trend charts (Progress → Body):
  *
  *   1. Weight trend — the (previously orphaned) WeightGraph over weight_log.
- *   2. Body composition trend — BF% / lean mass over time from
+ *   2. Body composition trend — BF% / lean mass / FFMI over time from
  *      services/bodyCompAnchor: a continuous estimate driven by bodyweight,
  *      re-anchored so it passes EXACTLY through every DEXA scan. DEXA points
  *      render as distinct large markers; everything between them is an
  *      estimate drawn as a plain line.
  *
- * Self-fetching so the (already enormous) analytics page only mounts it.
+ * Data arrives via props (page-level useBodyCompTrend) so the FFMI gauge and
+ * this chart derive from the SAME anchored series. The x-axis is a true time
+ * scale, and estimate segments spanning > LOW_CONFIDENCE_GAP_DAYS without
+ * weigh-ins render dashed at reduced opacity — interpolation across a
+ * months-long void must not look like densely-supported data.
+ *
+ * FFMI here is the RAW value (FFM / height m²), same function as the gauge
+ * (bodyCompEngine.computeFFMI); the height-normalized variant is shown as a
+ * clearly-labeled secondary readout, never silently substituted.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -23,135 +31,127 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
 } from 'recharts';
-import { createUntypedClient } from '@/lib/supabase/client';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui';
 import { WeightGraph } from '@/components/analytics/WeightGraph';
 import {
-  buildAnchoredBodyCompTrend,
+  findLowConfidenceGaps,
+  LOW_CONFIDENCE_GAP_DAYS,
   type AnchoredTrendPoint,
 } from '@/services/bodyCompAnchor';
-import { inputWeightToKg, kgToLbs } from '@/lib/utils';
-
-interface WeightLogRow {
-  logged_at: string;
-  weight: number;
-  unit: 'lb' | 'kg' | null;
-}
-
-interface DexaRow {
-  scan_date: string;
-  body_fat_percent: number;
-  lean_mass_kg: number;
-  fat_mass_kg: number;
-  weight_kg: number | null;
-}
+import { computeFFMI } from '@/services/bodyCompEngine';
+import type { WeightHistoryEntry } from '@/hooks/useBodyCompTrend';
+import { kgToLbs } from '@/lib/utils';
 
 interface BodyHubTrendsProps {
   units: 'lb' | 'kg';
-  /** Bump to refetch after the log sheet saves something. */
-  refreshKey?: number;
+  /** Height from the user profile; without it the FFMI toggle is hidden. */
+  heightCm: number | null;
+  /** Anchored trend from useBodyCompTrend — shared with the FFMI gauge. */
+  trend: AnchoredTrendPoint[];
+  /** Raw weigh-ins for the weight chart. */
+  weightHistory: WeightHistoryEntry[];
+  isLoading: boolean;
 }
 
-type CompMetric = 'bodyFat' | 'leanMass';
+type CompMetric = 'bodyFat' | 'leanMass' | 'ffmi';
 
-export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
-  const [weightRows, setWeightRows] = useState<WeightLogRow[]>([]);
-  const [scans, setScans] = useState<DexaRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+interface ChartRow {
+  ts: number;
+  solid: number | null;
+  anchorValue?: number;
+  [key: `gap${number}`]: number | undefined;
+}
+
+/** Thresholds mirrored from the FFMI gauge's scale markers. */
+const FFMI_THRESHOLDS = [
+  { value: 18, label: '18 avg' },
+  { value: 20, label: '20 above avg' },
+  { value: 22, label: '22 excellent' },
+  { value: 25, label: '25 natural limit' },
+];
+
+function toTs(date: string): number {
+  return new Date(`${date}T00:00:00`).getTime();
+}
+
+export function BodyHubTrends({
+  units,
+  heightCm,
+  trend,
+  weightHistory,
+  isLoading,
+}: BodyHubTrendsProps) {
   const [metric, setMetric] = useState<CompMetric>('bodyFat');
 
-  useEffect(() => {
-    async function fetchAll() {
-      try {
-        const supabase = createUntypedClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+  // Which metric options exist: FFMI needs a profile height.
+  const metricOptions = useMemo(() => {
+    const options: { value: CompMetric; label: string }[] = [
+      { value: 'bodyFat', label: 'BF %' },
+      { value: 'leanMass', label: 'Lean mass' },
+    ];
+    if (heightCm) options.push({ value: 'ffmi', label: 'FFMI' });
+    return options;
+  }, [heightCm]);
 
-        const yearAgo = new Date();
-        yearAgo.setDate(yearAgo.getDate() - 365);
-        const [weightsRes, scansRes] = await Promise.all([
-          supabase
-            .from('weight_log')
-            .select('logged_at, weight, unit')
-            .eq('user_id', user.id)
-            .gte('logged_at', yearAgo.toISOString().slice(0, 10))
-            .order('logged_at', { ascending: true }),
-          supabase
-            .from('dexa_scans')
-            .select('scan_date, body_fat_percent, lean_mass_kg, fat_mass_kg, weight_kg')
-            .eq('user_id', user.id)
-            .order('scan_date', { ascending: true }),
-        ]);
-
-        setWeightRows((weightsRes.data ?? []) as WeightLogRow[]);
-        setScans((scansRes.data ?? []) as DexaRow[]);
-      } catch (err) {
-        console.error('Failed to load body trend data:', err);
-      } finally {
-        setIsLoading(false);
+  const { rows, gapCount } = useMemo(() => {
+    const valueOf = (point: AnchoredTrendPoint): number | null => {
+      switch (metric) {
+        case 'bodyFat':
+          return point.bodyFatPercent;
+        case 'leanMass':
+          return units === 'lb'
+            ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
+            : point.leanMassKg;
+        case 'ffmi':
+          // Same function as the Analytics gauge — single source of truth.
+          return heightCm
+            ? computeFFMI(point.leanMassKg, point.boneMassKg, heightCm).ffmi
+            : null;
       }
-    }
-    fetchAll();
-  }, [refreshKey]);
+    };
 
-  const weightHistory = useMemo(
-    () =>
-      weightRows.map((row) => ({
-        date: row.logged_at,
-        weight: row.weight,
-        unit: (row.unit ?? 'lb') as 'lb' | 'kg',
-      })),
-    [weightRows]
-  );
-
-  const trend = useMemo(
-    () =>
-      buildAnchoredBodyCompTrend(
-        weightRows.map((row) => ({
-          date: row.logged_at,
-          weightKg: inputWeightToKg(row.weight, row.unit ?? 'lb'),
-        })),
-        scans.map((scan) => ({
-          date: scan.scan_date,
-          bodyFatPercent: Number(scan.body_fat_percent),
-          leanMassKg: Number(scan.lean_mass_kg),
-          fatMassKg: Number(scan.fat_mass_kg),
-          // The recorded total (includes bone) anchors bodyweight deltas.
-          weightKg: scan.weight_kg != null ? Number(scan.weight_kg) : undefined,
-        }))
-      ),
-    [weightRows, scans]
-  );
-
-  const chartData = useMemo(
-    () =>
-      trend.map((point) => ({
-        ...point,
-        label: new Date(`${point.date}T00:00:00`).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        }),
-        value:
-          metric === 'bodyFat'
-            ? point.bodyFatPercent
-            : units === 'lb'
-              ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
-              : point.leanMassKg,
+    const dataRows: ChartRow[] = trend.map((point) => {
+      const value = valueOf(point);
+      return {
+        ts: toTs(point.date),
+        solid: value,
         // Scatter series: only DEXA anchors carry a value.
-        anchorValue:
-          point.kind === 'dexa'
-            ? metric === 'bodyFat'
-              ? point.bodyFatPercent
-              : units === 'lb'
-                ? Math.round(kgToLbs(point.leanMassKg) * 10) / 10
-                : point.leanMassKg
-            : undefined,
-      })),
-    [trend, metric, units]
-  );
+        anchorValue: point.kind === 'dexa' && value != null ? value : undefined,
+      };
+    });
 
-  const unitSuffix = metric === 'bodyFat' ? '%' : ` ${units}`;
+    // Long spans without weigh-ins: the solid line breaks there and a dashed
+    // low-confidence segment bridges the two supported endpoints instead.
+    const gaps = findLowConfidenceGaps(trend.map((p) => p.date));
+    const breakers: ChartRow[] = gaps.map((gap, k) => {
+      dataRows[gap.fromIndex][`gap${k}`] = dataRows[gap.fromIndex].solid ?? undefined;
+      dataRows[gap.toIndex][`gap${k}`] = dataRows[gap.toIndex].solid ?? undefined;
+      // Synthetic null point mid-gap so the solid line doesn't span it.
+      return {
+        ts: (dataRows[gap.fromIndex].ts + dataRows[gap.toIndex].ts) / 2,
+        solid: null,
+      };
+    });
+
+    return {
+      rows: [...dataRows, ...breakers].sort((a, b) => a.ts - b.ts),
+      gapCount: gaps.length,
+    };
+  }, [trend, metric, units, heightCm]);
+
+  // Latest FFMI for the labeled normalized readout under the chart.
+  const latestFfmi = useMemo(() => {
+    if (!heightCm || trend.length === 0) return null;
+    const last = trend[trend.length - 1];
+    return computeFFMI(last.leanMassKg, last.boneMassKg, heightCm);
+  }, [trend, heightCm]);
+
+  const unitSuffix = metric === 'bodyFat' ? '%' : metric === 'leanMass' ? ` ${units}` : '';
+
+  const formatTick = (ts: number) =>
+    new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
     <div className="space-y-4">
@@ -160,18 +160,13 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
         <WeightGraph weightHistory={weightHistory} preferredUnit={units} />
       )}
 
-      {/* BF% / lean mass anchored trend */}
+      {/* BF% / lean mass / FFMI anchored trend */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <CardTitle>Body Composition Trend</CardTitle>
             <div className="inline-flex bg-surface-800 rounded-lg p-1">
-              {(
-                [
-                  { value: 'bodyFat', label: 'BF %' },
-                  { value: 'leanMass', label: 'Lean mass' },
-                ] as { value: CompMetric; label: string }[]
-              ).map((option) => (
+              {metricOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -200,13 +195,30 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
             <>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData}>
+                  <ComposedChart data={rows}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} minTickGap={24} />
+                    {/* True time scale: equal durations get equal width. */}
+                    <XAxis
+                      dataKey="ts"
+                      type="number"
+                      scale="time"
+                      domain={['dataMin', 'dataMax']}
+                      tickFormatter={formatTick}
+                      stroke="#9ca3af"
+                      fontSize={11}
+                      minTickGap={24}
+                    />
                     <YAxis
                       stroke="#9ca3af"
                       fontSize={11}
-                      domain={['auto', 'auto']}
+                      domain={
+                        metric === 'ffmi'
+                          ? [
+                              (dataMin: number) => Math.floor(Math.min(dataMin - 0.3, 17.5)),
+                              (dataMax: number) => Math.ceil(Math.max(dataMax + 0.3, 25.2)),
+                            ]
+                          : ['auto', 'auto']
+                      }
                       width={40}
                     />
                     <Tooltip
@@ -219,24 +231,64 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
                       }}
                       formatter={(value: number, name: string) => [
                         `${value}${unitSuffix}`,
-                        name === 'anchorValue' ? 'DEXA scan' : 'Estimate',
+                        name,
                       ]}
-                      labelFormatter={(label) => label}
+                      labelFormatter={(ts: number) =>
+                        new Date(ts).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                      }
                     />
+                    {/* FFMI thresholds — same values as the gauge's scale. */}
+                    {metric === 'ffmi' &&
+                      FFMI_THRESHOLDS.map((threshold) => (
+                        <ReferenceLine
+                          key={threshold.value}
+                          y={threshold.value}
+                          stroke="#6b7280"
+                          strokeDasharray="3 3"
+                          strokeOpacity={0.5}
+                          ifOverflow="hidden"
+                          label={{
+                            value: threshold.label,
+                            position: 'insideBottomRight',
+                            fontSize: 9,
+                            fill: '#6b7280',
+                          }}
+                        />
+                      ))}
                     {/* Estimated trend: plain line, no per-point markers */}
                     <Line
                       type="monotone"
-                      dataKey="value"
-                      name="value"
+                      dataKey="solid"
+                      name="Estimate"
                       stroke="#818cf8"
                       strokeWidth={2}
                       dot={false}
                       isAnimationActive={false}
                     />
+                    {/* Low-confidence bridges across weigh-in gaps */}
+                    {Array.from({ length: gapCount }, (_, k) => (
+                      <Line
+                        key={`gap${k}`}
+                        type="linear"
+                        dataKey={`gap${k}`}
+                        name="Estimate (sparse data)"
+                        stroke="#818cf8"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        strokeOpacity={0.5}
+                        dot={false}
+                        connectNulls
+                        isAnimationActive={false}
+                      />
+                    ))}
                     {/* DEXA anchors: distinct, larger markers */}
                     <Scatter
                       dataKey="anchorValue"
-                      name="anchorValue"
+                      name="DEXA scan"
                       fill="#22d3ee"
                       shape={(props: { cx?: number; cy?: number }) =>
                         props.cx != null && props.cy != null ? (
@@ -259,8 +311,24 @@ export function BodyHubTrends({ units, refreshKey = 0 }: BodyHubTrendsProps) {
               <p className="text-[11px] text-surface-500 mt-2">
                 <span className="inline-block w-2.5 h-2.5 rounded-full bg-cyan-400 align-middle mr-1" />
                 DEXA scans (measured) · line between scans is an estimate
-                re-anchored to pass through every scan.
+                re-anchored to pass through every scan
+                {gapCount > 0 && (
+                  <>
+                    {' '}· dashed = spans &gt;{LOW_CONFIDENCE_GAP_DAYS} days
+                    without weigh-ins (low confidence)
+                  </>
+                )}
+                .
               </p>
+              {metric === 'ffmi' && latestFfmi && (
+                <p className="text-[11px] text-surface-500 mt-1">
+                  Chart shows raw FFMI (fat-free mass / height m²) · latest{' '}
+                  {latestFfmi.ffmi} · height-normalized:{' '}
+                  {latestFfmi.normalizedFfmi}
+                  {trend[trend.length - 1].boneMassKg == null &&
+                    ' · bone mass not logged — FFMI uses lean mass only'}
+                </p>
+              )}
             </>
           )}
         </CardContent>

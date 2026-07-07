@@ -11,6 +11,12 @@ const customJestConfig = {
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    // next/jest applies next.config.js modularizeImports, rewriting
+    // `import { X } from 'recharts'` to 'recharts/es6/X' — a path only the
+    // production build resolves (optimizePackageImports supersedes it there).
+    // Map the rewritten specifiers back to the package so components that
+    // render charts are testable; jest.mock('recharts') also applies to them.
+    '^recharts/es6/.*$': 'recharts',
   },
   testMatch: [
     '**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)',

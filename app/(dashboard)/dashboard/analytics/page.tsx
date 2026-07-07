@@ -12,12 +12,13 @@ import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { DexaScan, Goal, Experience, FFMIResult, ProgressPhoto, MuscleGroup, StandardMuscleGroup } from '@/types/schema';
 import { STANDARD_MUSCLE_DISPLAY_NAMES } from '@/types/schema';
 import {
-  calculateFFMI,
+  computeFFMI,
   analyzeBodyCompTrend,
   generateCoachingRecommendations,
   getFFMILabel,
   getTrendIndicator,
 } from '@/services/bodyCompEngine';
+import { useBodyCompTrend } from '@/hooks/useBodyCompTrend';
 import {
   type StrengthProfile,
   type CalibrationResult,
@@ -405,6 +406,14 @@ function AnalyticsPageContent() {
   // Body hub: unified log sheet + refresh signal for the hub widgets
   const [logSegment, setLogSegment] = useState<BodyLogSegment | null>(null);
   const [bodyRefreshKey, setBodyRefreshKey] = useState(0);
+
+  // DEXA-anchored body comp trend — the single source for both the trend
+  // chart (BodyHubTrends) and the FFMI gauge, so they can never disagree.
+  const {
+    trend: bodyCompTrend,
+    weightHistory: bodyWeightHistory,
+    isLoading: isBodyTrendLoading,
+  } = useBodyCompTrend(bodyRefreshKey);
 
   // Goals tab state
   const [activeMesocycle, setActiveMesocycle] = useState<Mesocycle | null>(null);
@@ -1336,8 +1345,20 @@ function AnalyticsPageContent() {
 
   // Calculated values
   const latestScan = scans[0];
-  const ffmiResult = latestScan && userProfile?.heightCm
-    ? calculateFFMI(latestScan.leanMassKg, userProfile.heightCm)
+  // FFMI comes from the LAST POINT of the anchored trend (the same series the
+  // Body Composition Trend chart plots) via the shared computeFFMI — not from
+  // the raw latest scan, which goes stale as weigh-ins accumulate after it.
+  // While the trend is still loading, fall back to the latest scan through
+  // the same function (lean + bone) so the value definition never changes.
+  const latestTrendPoint = bodyCompTrend.length > 0
+    ? bodyCompTrend[bodyCompTrend.length - 1]
+    : null;
+  const ffmiResult = userProfile?.heightCm
+    ? latestTrendPoint
+      ? computeFFMI(latestTrendPoint.leanMassKg, latestTrendPoint.boneMassKg, userProfile.heightCm)
+      : latestScan
+        ? computeFFMI(latestScan.leanMassKg, latestScan.boneMassKg, userProfile.heightCm)
+        : null
     : null;
   const trend = userProfile?.heightCm
     ? analyzeBodyCompTrend(scans, userProfile.heightCm)
@@ -1461,8 +1482,14 @@ function AnalyticsPageContent() {
             />
           </div>
 
-          {/* Weight trend + DEXA-anchored BF%/lean-mass trend */}
-          <BodyHubTrends units={units} refreshKey={bodyRefreshKey} />
+          {/* Weight trend + DEXA-anchored BF%/lean-mass/FFMI trend */}
+          <BodyHubTrends
+            units={units}
+            heightCm={userProfile?.heightCm ?? null}
+            trend={bodyCompTrend}
+            weightHistory={bodyWeightHistory}
+            isLoading={isBodyTrendLoading}
+          />
 
           {/* Per-site tape trends */}
           <MeasurementTrendCard

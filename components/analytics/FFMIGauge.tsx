@@ -10,7 +10,14 @@ interface FFMIGaugeProps {
 }
 
 export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
-  const { normalizedFfmi, classification, naturalLimit, percentOfLimit } = ffmiResult;
+  const { ffmi, normalizedFfmi, classification, naturalLimit } = ffmiResult;
+
+  // The gauge displays RAW FFMI — the same value the Body Composition Trend
+  // chart plots (both come from bodyCompEngine.computeFFMI) — so the gauge
+  // always equals the last point of the FFMI trend series. The height-
+  // normalized variant is shown below, explicitly labeled, never silently
+  // substituted. Dot position and % of limit follow the displayed raw value.
+  const percentOfLimit = Math.min(Math.round((ffmi / naturalLimit) * 100), 100);
   
   // Size configurations
   const sizeConfig = useMemo(() => {
@@ -162,13 +169,16 @@ export function FFMIGauge({ ffmiResult, size = 'md' }: FFMIGaugeProps) {
       {/* FFMI Value */}
       <div className="text-center -mt-2">
         <div className={`${sizeConfig.fontSize} font-bold ${getFFMIColor(classification)}`}>
-          {normalizedFfmi}
+          {ffmi}
         </div>
         <div className="text-sm text-surface-400 mt-1">
           {getFFMILabel(classification)}
         </div>
         <div className="text-xs text-surface-500 mt-0.5">
           {percentOfLimit}% of natural limit
+        </div>
+        <div className="text-[10px] text-surface-500 mt-0.5">
+          Normalized (height-adj.): {normalizedFfmi}
         </div>
       </div>
     </div>
