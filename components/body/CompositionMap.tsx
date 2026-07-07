@@ -298,42 +298,16 @@ export function buildDecorations(data: DecorationsData) {
           />
         )}
 
-        {/* Goal vector: latest scan → target, dashed, arrowhead at the
-            target end, ring marker, and the progress scalar along the line. */}
-        {showGoalVector && targetPoint && (() => {
+        {/* Target marker: rendered whenever a target composition is set —
+            NOT gated on the goal vector, so a degenerate/suppressed vector
+            never hides where the target sits. */}
+        {targetPoint && (() => {
           const targetPx = px(targetPoint);
-          const arrow = arrowAt(nowPx, targetPx);
-          // Arrowhead just short of the target ring, on the line.
-          const len = Math.hypot(targetPx.x - nowPx.x, targetPx.y - nowPx.y);
-          const ux = len > 0 ? (targetPx.x - nowPx.x) / len : 0;
-          const uy = len > 0 ? (targetPx.y - nowPx.y) / len : 0;
-          const tipX = targetPx.x - ux * 12;
-          const tipY = targetPx.y - uy * 12;
           const targetPlacement = targetLabel
             ? placeLabel(targetPx, plot, targetLabel, { avoidLines })
             : null;
           return (
             <g>
-              <line
-                x1={nowPx.x}
-                y1={nowPx.y}
-                x2={targetPx.x}
-                y2={targetPx.y}
-                stroke={TARGET_COLOR}
-                strokeWidth={1.5}
-                strokeDasharray="6 4"
-                strokeOpacity={0.55}
-              />
-              {arrow && (
-                <path
-                  data-testid="map-goal-arrowhead"
-                  d="M 5 0 L -3.5 -3 L -3.5 3 Z"
-                  transform={`translate(${tipX}, ${tipY}) rotate(${arrow.angleDeg})`}
-                  fill={TARGET_COLOR}
-                  fillOpacity={0.85}
-                />
-              )}
-              {/* Ring marker at the target composition. */}
               <circle
                 data-testid="map-target"
                 cx={targetPx.x}
@@ -355,6 +329,42 @@ export function buildDecorations(data: DecorationsData) {
                 >
                   {targetLabel}
                 </text>
+              )}
+            </g>
+          );
+        })()}
+
+        {/* Goal vector: latest scan → target, dashed, arrowhead at the
+            target end, and the progress scalar along the line. */}
+        {showGoalVector && targetPoint && (() => {
+          const targetPx = px(targetPoint);
+          const arrow = arrowAt(nowPx, targetPx);
+          // Arrowhead just short of the target ring, on the line.
+          const len = Math.hypot(targetPx.x - nowPx.x, targetPx.y - nowPx.y);
+          const ux = len > 0 ? (targetPx.x - nowPx.x) / len : 0;
+          const uy = len > 0 ? (targetPx.y - nowPx.y) / len : 0;
+          const tipX = targetPx.x - ux * 12;
+          const tipY = targetPx.y - uy * 12;
+          return (
+            <g>
+              <line
+                x1={nowPx.x}
+                y1={nowPx.y}
+                x2={targetPx.x}
+                y2={targetPx.y}
+                stroke={TARGET_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="6 4"
+                strokeOpacity={0.55}
+              />
+              {arrow && (
+                <path
+                  data-testid="map-goal-arrowhead"
+                  d="M 5 0 L -3.5 -3 L -3.5 3 Z"
+                  transform={`translate(${tipX}, ${tipY}) rotate(${arrow.angleDeg})`}
+                  fill={TARGET_COLOR}
+                  fillOpacity={0.85}
+                />
               )}
               {/* Progress scalar anchored to the vector it measures. */}
               {progressLabel && arrow && (

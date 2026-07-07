@@ -289,8 +289,21 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(screen.getByTestId('map-progress-label')).toHaveTextContent('62% of the way');
   });
 
-  it('omits the goal vector when disabled', () => {
-    renderDecorations({ showGoalVector: false, targetPoint: { fmi: 6.5, ffmi: 22.5 } });
+  it('keeps the target marker visible even when the vector is suppressed', () => {
+    // A degenerate/suppressed goal vector must not hide WHERE the target is.
+    renderDecorations({
+      showGoalVector: false,
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabel: 'Target · FFMI 22.5 / BF 22%',
+    });
+    expect(screen.getByTestId('map-target')).toBeInTheDocument();
+    expect(screen.getByTestId('map-target-label')).toHaveTextContent('Target ·');
+    expect(screen.queryByTestId('map-goal-arrowhead')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('map-progress-label')).not.toBeInTheDocument();
+  });
+
+  it('omits target artifacts entirely when no target is set', () => {
+    renderDecorations({ targetPoint: null });
     expect(screen.queryByTestId('map-target')).not.toBeInTheDocument();
     expect(screen.queryByTestId('map-goal-arrowhead')).not.toBeInTheDocument();
   });
