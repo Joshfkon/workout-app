@@ -3,6 +3,12 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, Modal } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import {
+  LOCATION_PRESETS,
+  locationIcon,
+  presetUnavailableEquipmentIds,
+  type LocationPreset,
+} from '@/services/locationProfiles';
 
 interface EquipmentType {
   id: string;
@@ -21,6 +27,9 @@ interface GymLocation {
   id: string;
   name: string;
   is_default: boolean;
+  icon?: string | null;
+  preset_kind?: string | null;
+  dumbbell_max_kg?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -47,6 +56,8 @@ export function GymEquipmentSettings() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [editingLocation, setEditingLocation] = useState<GymLocation | null>(null);
   const [locationName, setLocationName] = useState('');
+  const [locationPreset, setLocationPreset] = useState<LocationPreset | null>(null);
+  const [dumbbellMax, setDumbbellMax] = useState('');
   const [isDeletingLocation, setIsDeletingLocation] = useState(false);
   const [openLocationMenuId, setOpenLocationMenuId] = useState<string | null>(null);
 
@@ -314,13 +325,30 @@ export function GymEquipmentSettings() {
   function handleCreateLocation() {
     setEditingLocation(null);
     setLocationName('');
+    setLocationPreset(null);
+    setDumbbellMax('');
     setShowLocationModal(true);
   }
 
   async function handleEditLocation(location: GymLocation) {
     setEditingLocation(location);
     setLocationName(location.name);
+    setLocationPreset(null);
+    setDumbbellMax(location.dumbbell_max_kg != null ? String(location.dumbbell_max_kg) : '');
     setShowLocationModal(true);
+  }
+
+  function handlePickPreset(preset: LocationPreset) {
+    setLocationPreset(preset);
+    // Prefill the name from the preset, but only if the user hasn't typed one.
+    if (!locationName.trim() || LOCATION_PRESETS.some((p) => p.name === locationName)) {
+      setLocationName(preset.name);
+    }
+  }
+
+  function parsedDumbbellMax(): number | null {
+    const value = parseFloat(dumbbellMax);
+    return Number.isFinite(value) && value > 0 ? value : null;
   }
 
   async function handleSaveLocation() {
@@ -330,14 +358,25 @@ export function GymEquipmentSettings() {
     if (!user) return;
 
     if (editingLocation) {
-      // Update existing location
-      const { data, error } = await supabase
+      // Update existing location (retry name-only if the profile columns
+      // haven't been migrated yet)
+      let { data, error } = await supabase
         .from('gym_locations')
-        .update({ name: locationName.trim() })
+        .update({ name: locationName.trim(), dumbbell_max_kg: parsedDumbbellMax() })
         .eq('id', editingLocation.id)
         .eq('user_id', user.id)
         .select()
         .single();
+
+      if (error) {
+        ({ data, error } = await supabase
+          .from('gym_locations')
+          .update({ name: locationName.trim() })
+          .eq('id', editingLocation.id)
+          .eq('user_id', user.id)
+          .select()
+          .single());
+      }
 
       if (!error && data) {
         setLocations(locations.map(l => l.id === data.id ? data : l));
@@ -346,22 +385,54 @@ export function GymEquipmentSettings() {
         setLocationName('');
       }
     } else {
-      // Create new location
-      const { data, error } = await supabase
+      // Create new location, optionally seeded from a preset (icon + a
+      // pre-checked equipment inventory the user can then edit). Retries
+      // without the profile columns if the migration hasn't run yet.
+      let { data, error } = await supabase
         .from('gym_locations')
-        .insert({ 
-          user_id: user.id, 
-          name: locationName.trim(), 
-          is_default: locations.length === 0 
+        .insert({
+          user_id: user.id,
+          name: locationName.trim(),
+          is_default: locations.length === 0,
+          icon: locationPreset?.icon ?? null,
+          preset_kind: locationPreset?.kind ?? 'custom',
+          dumbbell_max_kg: parsedDumbbellMax(),
         })
         .select()
         .single();
 
+      if (error) {
+        ({ data, error } = await supabase
+          .from('gym_locations')
+          .insert({
+            user_id: user.id,
+            name: locationName.trim(),
+            is_default: locations.length === 0,
+          })
+          .select()
+          .single());
+      }
+
       if (!error && data) {
+        if (locationPreset) {
+          const unavailable = presetUnavailableEquipmentIds(locationPreset);
+          if (unavailable.length > 0) {
+            await supabase.from('user_equipment').upsert(
+              unavailable.map((equipmentId) => ({
+                user_id: user.id,
+                equipment_id: equipmentId,
+                is_available: false,
+                location_id: data.id,
+              })),
+              { onConflict: 'user_id,equipment_id,location_id' }
+            );
+          }
+        }
         setLocations([...locations, data]);
         setSelectedLocationId(data.id);
         setShowLocationModal(false);
         setLocationName('');
+        setLocationPreset(null);
       }
     }
   }
@@ -508,6 +579,14 @@ export function GymEquipmentSettings() {
                           : 'bg-surface-800 text-surface-300 hover:bg-surface-700'
                       }`}
                     >
+                      <span aria-hidden="true">
+                        {locationIcon({
+                          icon: location.icon ?? null,
+                          presetKind:
+                            (location.preset_kind as 'gym' | 'home' | 'travel' | 'custom' | null) ??
+                            null,
+                        })}
+                      </span>{' '}
                       {location.name}
                       {location.is_default && (
                         <span className="ml-1 text-xs opacity-75">(Default)</span>
@@ -680,6 +759,43 @@ export function GymEquipmentSettings() {
         title={editingLocation ? 'Edit Location' : 'Add New Location'}
       >
         <div className="space-y-4">
+          {!editingLocation && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-surface-200">
+                Start from a preset
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {LOCATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.kind}
+                    onClick={() => handlePickPreset(preset)}
+                    className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                      locationPreset?.kind === preset.kind
+                        ? 'bg-primary-500/20 border border-primary-500 text-primary-300'
+                        : 'bg-surface-800 border border-transparent text-surface-300 hover:bg-surface-700'
+                    }`}
+                  >
+                    {preset.icon} {preset.name}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setLocationPreset(null)}
+                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                    locationPreset === null
+                      ? 'bg-primary-500/20 border border-primary-500 text-primary-300'
+                      : 'bg-surface-800 border border-transparent text-surface-300 hover:bg-surface-700'
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+              <p className="text-xs text-surface-500">
+                Presets pre-check the equipment checklist (Gym: everything; Home: dumbbells,
+                bands, bench, pull-up bar; Hotel: dumbbells + bands). You can edit it after.
+              </p>
+            </div>
+          )}
+
           <Input
             label="Location Name"
             value={locationName}
@@ -690,6 +806,14 @@ export function GymEquipmentSettings() {
                 handleSaveLocation();
               }
             }}
+          />
+
+          <Input
+            label="Heaviest dumbbell (kg, optional)"
+            type="number"
+            value={dumbbellMax}
+            onChange={(e) => setDumbbellMax(e.target.value)}
+            placeholder="e.g., 25"
           />
           
           <div className="flex gap-3 justify-end">
