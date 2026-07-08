@@ -7,5 +7,6 @@ export { useBestLifts } from './useBestLifts';
 export { useDurationTimer } from './useDurationTimer';
 export { useDailyNutritionSummary, computeDailyNutritionSummary } from './useDailyNutritionSummary';
 export { useKeyboardInset } from './useKeyboardInset';
+export { useKeyboardOpen } from './useKeyboardOpen';
 export { useBodyCompTrend } from './useBodyCompTrend';
 

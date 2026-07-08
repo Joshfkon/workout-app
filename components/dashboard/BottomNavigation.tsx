@@ -11,6 +11,7 @@ import {
   IconDots,
 } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
+import { useKeyboardOpen } from '@/hooks/useKeyboardOpen';
 
 interface NavItem {
   name: string;
@@ -75,19 +76,24 @@ interface BottomNavigationProps {
 
 export function BottomNavigation({ volumeGoalsMet = false }: BottomNavigationProps) {
   const pathname = usePathname();
+  const keyboardOpen = useKeyboardOpen();
 
   // Hide bottom nav only while on the active workout page itself.
   // An in-progress session alone must not hide the nav — the user can
   // navigate away (e.g. back to Home) and still needs the tab bar.
   const isInActiveWorkoutPage = pathname?.match(/^\/dashboard\/workout\/[^/]+$/);
 
-  if (isInActiveWorkoutPage) {
+  // While the on-screen keyboard is up, iOS unpins fixed-bottom elements
+  // from the screen edge and lets them float mid-page over content — so the
+  // tab bar hides until the keyboard is dismissed. The unmount/remount also
+  // forces WebKit to re-anchor it at the true bottom afterwards.
+  if (isInActiveWorkoutPage || keyboardOpen) {
     return null;
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface-900 border-t border-surface-800 lg:hidden">
-      <div className="flex items-center h-16 safe-area-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-surface-900 border-t border-surface-800 pb-safe-bottom lg:hidden">
+      <div className="flex items-center h-16">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = item.exact

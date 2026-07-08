@@ -84,7 +84,7 @@ export function DashboardLayoutClient({ children }: DashboardLayoutClientProps) 
         </header>
 
         {/* Page content */}
-        <main className="p-4 pb-20 lg:p-6 lg:pb-6 overflow-x-hidden">{children}</main>
+        <main className="p-4 pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6 overflow-x-hidden">{children}</main>
       </div>
 
       {/* Bottom navigation for mobile */}
