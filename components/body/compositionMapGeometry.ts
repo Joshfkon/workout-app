@@ -147,6 +147,11 @@ export function rectIntersectsCircle(rect: LabelBox, c: PxPoint, r: number): boo
   return (nx - c.x) ** 2 + (ny - c.y) ** 2 <= r * r;
 }
 
+/** Do two axis-aligned rectangles overlap? */
+export function rectsOverlap(a: LabelBox, b: LabelBox): boolean {
+  return a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
+}
+
 export interface LabelPlacement {
   x: number;
   y: number;
@@ -163,6 +168,9 @@ export interface PlaceLabelOptions {
   avoidSegments?: AvoidLine[];
   /** Circular markers the label must not touch. */
   avoidPoints?: AvoidPoint[];
+  /** Rectangles the label must not overlap: other labels ("BMI 22",
+   * "FFMI 18" reference text). */
+  avoidRects?: LabelBox[];
   fontSize?: number;
   /** Padding added around the label box before intersection tests. */
   clearance?: number;
@@ -213,6 +221,7 @@ export function placeLabel(
   const clearance = options.clearance ?? 3;
   const avoidSegments = options.avoidSegments ?? [];
   const avoidPoints = options.avoidPoints ?? [];
+  const avoidRects = options.avoidRects ?? [];
   const lineCount = Math.max(1, options.lineCount ?? 1);
   const lineHeight = fontSize + 2;
   const width = estimateTextWidth(text, fontSize);
@@ -249,6 +258,9 @@ export function placeLabel(
     }
     for (const p of avoidPoints) {
       if (rectIntersectsCircle(inflated, p, p.r + 1)) collisions++;
+    }
+    for (const r of avoidRects) {
+      if (rectsOverlap(inflated, r)) collisions++;
     }
 
     if (insidePlot && collisions === 0) {
