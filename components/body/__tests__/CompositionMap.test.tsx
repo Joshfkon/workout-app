@@ -728,6 +728,27 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(screen.getByTestId('map-start-indicator')).toHaveTextContent(/start [↙↘←↖→↗↑↓]/);
   });
 
+  it('keeps the Fit-data pill cap even with the Start indicator and a target (Codex P2)', () => {
+    const { container } = renderDecorations({
+      viewMode: 'recent',
+      domain: { x: [4, 8] as [number, number], y: [18, 24] as [number, number] },
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabelLines: ['GOAL', 'FFMI 22.5', 'BF 22%', 'FMI 6.5'],
+      zone: {
+        polygon: athleticZonePolygon(ATHLETIC_ZONE_MALE),
+        overlapsViewport: false,
+        dimmed: true,
+        directionArrow: '↖',
+      },
+    });
+    // Indicators are plain text — pills stay Latest + Target exactly.
+    expect(container.querySelectorAll('[data-testid$="-pill"]')).toHaveLength(2);
+    expect(container.querySelector('[data-testid="map-start-indicator-pill"]')).toBeFalsy();
+    expect(
+      container.querySelector('[data-testid="map-zone-indicator-label-pill"]')
+    ).toBeFalsy();
+  });
+
   it('reveals the Est label only on tap (estimateLabelVisible)', () => {
     const tail = [point('2026-06-20', 7.9, 23.6), point('2026-07-05', 8.0, 23.4)];
     const { unmount } = renderDecorations({ estimateTail: tail, estimateLabel: 'Est. · Jul 5' });

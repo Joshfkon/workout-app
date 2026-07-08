@@ -859,7 +859,9 @@ export function buildDecorations(data: DecorationsData) {
               lines={[text]}
               fill={START_LABEL_COLOR}
               fontSize={9}
-              pill
+              // Plain text — indicators never add pills, so the Fit-data
+              // cap (Latest + Target) holds even with Start clipped out.
+              pill={false}
               testid="map-start-indicator"
             />
           );
@@ -891,7 +893,8 @@ export function buildDecorations(data: DecorationsData) {
                 lines={[text]}
                 fill={GOAL_COLOR}
                 fontSize={9}
-                pill
+                // Plain text, like every edge indicator (pill cap).
+                pill={false}
                 testid="map-zone-indicator-label"
               />
             </g>

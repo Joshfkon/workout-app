@@ -627,6 +627,42 @@ describe('computeCompositionForecast', () => {
       });
       expect(f.basis).toBe('scans');
     });
+
+    it('never treats pre-phase weigh-ins as the new phase direction', () => {
+      // Codex P1 regression: weeks of CUT weigh-ins after the last scan,
+      // then a bulk target created yesterday. Maturity must be measured
+      // from the phase start — with ~1 day of post-phase data the forecast
+      // stays scan-based rather than projecting the cut under 'weigh-ins'.
+      const cutTail = [
+        point('2026-02-05', 6.6, 19.65),
+        point('2026-02-19', 6.3, 19.75),
+        point('2026-03-04', 6.0, 19.85),
+      ];
+      const f = computeCompositionForecast(scans, cutTail[cutTail.length - 1], null, {
+        tail: cutTail,
+        phaseStartDate: '2026-03-03',
+      });
+      expect(f.basis).toBe('scans');
+    });
+
+    it('samples only post-phase tail points once the phase matures', () => {
+      // Phase starts mid-tail: earlier (old-phase) points must not feed the
+      // direction even though they sit inside the 21-day window.
+      const mixedTail = [
+        point('2026-02-05', 6.6, 19.55), // pre-phase (still cutting)
+        point('2026-02-12', 6.7, 19.65), // post-phase (bulk begins)
+        point('2026-02-26', 6.9, 19.85),
+      ];
+      const f = computeCompositionForecast(scans, mixedTail[mixedTail.length - 1], null, {
+        tail: mixedTail,
+        phaseStartDate: '2026-02-10',
+      });
+      expect(f.basis).toBe('weigh-ins');
+      // Direction from the 02-12 point (first at/after phase start), not
+      // the pre-phase 02-05 point: (0.2, 0.2) over 2 weeks → (0.1, 0.1).
+      expect(f.velocity.fmi).toBeCloseTo(0.1, 5);
+      expect(f.velocity.ffmi).toBeCloseTo(0.1, 5);
+    });
   });
 
   it('declines to forecast under 2 scans', () => {
