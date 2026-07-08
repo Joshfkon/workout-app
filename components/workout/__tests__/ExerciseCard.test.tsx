@@ -644,16 +644,16 @@ describe('ExerciseCard', () => {
       expect(screen.getByText('stimulative')).toBeInTheDocument();
     });
 
-    it('shows the logged RIR from feedback, not the lossy RPE-derived bucket', () => {
-      // RIR 3 is stored as RPE 7; bucketed rpeToRir(7) = 2, so the display
-      // must prefer feedback.repsInTank or a logged 3 renders as 2.
+    it('shows the logged RIR from feedback, not the RPE-derived value', () => {
+      // The display must prefer feedback.repsInTank over rpeToRir(set.rpe)
+      // whenever the two disagree (rpeToRir(8) = 2, but the user logged 3).
       const sets = [
         createMockSetLog({
           id: 'set-1',
           setNumber: 1,
           weightKg: 100,
           reps: 10,
-          rpe: 7,
+          rpe: 8,
           quality: 'effective',
           feedback: { repsInTank: 3, form: 'clean' },
         }),
