@@ -123,12 +123,18 @@ export async function fetchUnavailableEquipmentForLocation(
 ): Promise<string[]> {
   const supabase = await createUntypedServerClient();
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_equipment')
     .select('equipment_id')
     .eq('user_id', userId)
     .eq('location_id', locationId)
     .eq('is_available', false);
+
+  if (error) {
+    // Swallowing this would silently fail open (no equipment constraint) —
+    // let the caller decide how to degrade.
+    throw new Error(`fetchUnavailableEquipmentForLocation failed: ${error.message}`);
+  }
 
   return data?.map((e: { equipment_id: string }) => e.equipment_id) ?? [];
 }

@@ -202,3 +202,194 @@ describe('equipmentFilter', () => {
     });
   });
 });
+
+// ============================================================
+// Fail-closed contract (see the module doc in equipmentFilter.ts)
+// ============================================================
+
+import {
+  checkExerciseEquipment,
+  enforceEquipmentInvariant,
+  getUntaggedExercises,
+  unavailableIdsFromLegacyAllowlist,
+  KNOWN_EQUIPMENT_IDS,
+} from '../equipmentFilter';
+
+/** "Attic" repro inventory: all three benches + dumbbells, nothing else. */
+const ATTIC_AVAILABLE = new Set(['flat_bench', 'incline_bench', 'decline_bench', 'dumbbells']);
+const ATTIC_BLOCKLIST = KNOWN_EQUIPMENT_IDS.filter((id) => !ATTIC_AVAILABLE.has(id));
+
+describe('fail-closed contract', () => {
+  it('excludes untagged non-bodyweight exercises when a blocklist exists', () => {
+    const check = checkExerciseEquipment({ name: 'Mystery Movement' }, ['barbell']);
+    expect(check.available).toBe(false);
+    expect(check.reason).toBe('missing_equipment_tags');
+  });
+
+  it('allows untagged exercises flagged is_bodyweight', () => {
+    expect(
+      checkExerciseEquipment({ name: 'Nordic-Free Leg Thing', isBodyweight: true }, ['barbell'])
+        .available
+    ).toBe(true);
+  });
+
+  it('excludes exercises whose tags name no known equipment', () => {
+    const check = checkExerciseEquipment(
+      { name: 'Weird Lift', equipment: ['antigravity treadmill'] },
+      ['barbell']
+    );
+    expect(check.available).toBe(false);
+    expect(check.reason).toBe('unknown_requirement');
+  });
+
+  it('does not filter at all when no blocklist is configured', () => {
+    expect(checkExerciseEquipment({ name: 'Mystery Movement' }, []).available).toBe(true);
+  });
+
+  it('requires EVERY tag to be satisfiable (subset semantics)', () => {
+    const exercise = { name: 'Incline Press', equipment: ['dumbbells', 'incline bench'] };
+    expect(checkExerciseEquipment(exercise, ['incline_bench']).available).toBe(false);
+    expect(checkExerciseEquipment(exercise, ['barbell']).available).toBe(true);
+  });
+
+  it("generic 'bench' tag is satisfied by any bench", () => {
+    const exercise = { name: 'Some Press', equipment: ['dumbbells', 'bench'] };
+    expect(checkExerciseEquipment(exercise, ['flat_bench']).available).toBe(true);
+    expect(
+      checkExerciseEquipment(exercise, ['flat_bench', 'incline_bench', 'decline_bench']).available
+    ).toBe(false);
+  });
+
+  it("generic 'machine' tag is satisfied by any machine but fails with none", () => {
+    const exercise = { name: 'Mystery Press', equipment: ['mts machine'] };
+    expect(checkExerciseEquipment(exercise, ['leg_press']).available).toBe(true);
+    expect(checkExerciseEquipment(exercise, ATTIC_BLOCKLIST).available).toBe(false);
+  });
+});
+
+describe('Attic repro (benches + dumbbells only)', () => {
+  it('excludes the three offending exercises from the live repro', () => {
+    // Nordic Curl: tagged bodyweight in old data — the name implies a foot anchor.
+    const nordic = checkExerciseEquipment(
+      { name: 'Nordic Curl', equipment: ['bodyweight'], isBodyweight: true },
+      ATTIC_BLOCKLIST
+    );
+    expect(nordic.available).toBe(false);
+
+    // Plate-loaded machine work: needs plates (bundled with bars) + a machine.
+    const seatedCalf = checkExerciseEquipment(
+      { name: 'Seated Calf Raise (Plate Loaded)', equipment: [] },
+      ATTIC_BLOCKLIST
+    );
+    expect(seatedCalf.available).toBe(false);
+
+    // Barbell-tagged Jefferson Curl (live-DB style) is excluded; the seeded
+    // dumbbell+bench version is honestly performable at the Attic.
+    expect(
+      checkExerciseEquipment({ name: 'Jefferson Curl', equipment: ['barbell'] }, ATTIC_BLOCKLIST)
+        .available
+    ).toBe(false);
+    expect(
+      checkExerciseEquipment(
+        { name: 'Jefferson Curl', equipment: ['dumbbells', 'bench'] },
+        ATTIC_BLOCKLIST
+      ).available
+    ).toBe(true);
+  });
+
+  it('keeps dumbbell/bodyweight alternatives available', () => {
+    const alternatives = [
+      { name: 'Dumbbell Romanian Deadlift', equipment: ['dumbbells'] },
+      { name: 'Single Leg Calf Raise', equipment: [], isBodyweight: true },
+      { name: 'Back Extension', equipment: ['bodyweight'] },
+      { name: 'Dumbbell Bench Press', equipment: ['dumbbells', 'bench'] },
+    ];
+    for (const ex of alternatives) {
+      expect(checkExerciseEquipment(ex, ATTIC_BLOCKLIST).available).toBe(true);
+    }
+  });
+
+  it("tags the derived 'nordic anchor' requirement as satisfiable where an anchor exists", () => {
+    const nordic = { name: 'Nordic Curl', equipment: ['nordic anchor'] };
+    expect(checkExerciseEquipment(nordic, ATTIC_BLOCKLIST).available).toBe(false);
+    // A gym missing only dumbbells still has racks/lat pulldowns to anchor under.
+    expect(checkExerciseEquipment(nordic, ['dumbbells']).available).toBe(true);
+  });
+
+  it("derives 'weight plates' from bar ownership", () => {
+    const plateRaise = { name: 'Plate Front Raise', equipment: ['weight plates'] };
+    expect(checkExerciseEquipment(plateRaise, ATTIC_BLOCKLIST).available).toBe(false);
+    expect(checkExerciseEquipment(plateRaise, ['dumbbells']).available).toBe(true);
+  });
+});
+
+describe('getUntaggedExercises', () => {
+  it('reports untagged and unknown-tagged exercises', () => {
+    const report = getUntaggedExercises([
+      { name: 'Fine Lift', equipment: ['barbell'] },
+      { name: 'Fine Bodyweight', isBodyweight: true },
+      { name: 'No Tags' },
+      { name: 'Alien Tech', equipment: ['quantum flywheel'] },
+    ]);
+    expect(report.map((r) => r.exercise.name).sort()).toEqual(['Alien Tech', 'No Tags']);
+    expect(report.find((r) => r.exercise.name === 'No Tags')?.reason).toBe(
+      'missing_equipment_tags'
+    );
+    expect(report.find((r) => r.exercise.name === 'Alien Tech')?.reason).toBe(
+      'unknown_requirement'
+    );
+  });
+});
+
+describe('enforceEquipmentInvariant', () => {
+  const violating = { name: 'Barbell Squat', equipment: ['barbell'] };
+  const fine = { name: 'Dumbbell Squat', equipment: ['dumbbells'] };
+
+  it('throws in dev builds on a violation', () => {
+    expect(() => enforceEquipmentInvariant([fine, violating], ['barbell'])).toThrow(
+      /invariant violated/
+    );
+  });
+
+  it('drops violations (and keeps the rest) in production builds', () => {
+    const nodeEnv = process.env.NODE_ENV;
+    (process.env as Record<string, string>).NODE_ENV = 'production';
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const kept = enforceEquipmentInvariant([fine, violating], ['barbell']);
+      expect(kept).toEqual([fine]);
+      expect(consoleError).toHaveBeenCalled();
+    } finally {
+      (process.env as Record<string, string>).NODE_ENV = nodeEnv as string;
+      consoleError.mockRestore();
+    }
+  });
+
+  it('keeps user-overridden items without throwing', () => {
+    const kept = enforceEquipmentInvariant([fine, violating], ['barbell'], {
+      isUserOverride: (item) => item.name === 'Barbell Squat',
+    });
+    expect(kept).toHaveLength(2);
+  });
+
+  it('is a no-op without a blocklist', () => {
+    expect(enforceEquipmentInvariant([violating], [])).toHaveLength(1);
+  });
+});
+
+describe('unavailableIdsFromLegacyAllowlist', () => {
+  it('blocks the ids of equipment classes missing from the allowlist', () => {
+    const blocked = unavailableIdsFromLegacyAllowlist(['dumbbell', 'bodyweight']);
+    expect(blocked).toContain('barbell');
+    expect(blocked).toContain('cable_machine');
+    expect(blocked).toContain('leg_press');
+    expect(blocked).not.toContain('dumbbells');
+  });
+
+  it('lets cable availability win over the machine group overlap', () => {
+    const blocked = unavailableIdsFromLegacyAllowlist(['cable']);
+    expect(blocked).not.toContain('cable_machine');
+    expect(blocked).not.toContain('lat_pulldown');
+    expect(blocked).toContain('leg_press');
+  });
+});

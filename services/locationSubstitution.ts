@@ -22,7 +22,10 @@
  */
 
 import { resolveMuscleToStandard } from '@/types/schema';
-import { exerciseRequiresUnavailableEquipment } from '@/services/equipmentFilter';
+import {
+  enforceEquipmentInvariant,
+  exerciseRequiresUnavailableEquipment,
+} from '@/services/equipmentFilter';
 import { getRelatedPatterns } from '@/services/exerciseSwapper';
 import { plannedSetsForDuration, type SuggestedWorkoutPick, type SuggestedWorkoutPlan } from '@/services/suggestedWorkout';
 import type { MovementPattern } from '@/types/schema';
@@ -40,8 +43,10 @@ export interface LocationSubstitutionExercise {
   mechanic: 'compound' | 'isolation' | null;
   /** Hypertrophy tier S-F (missing treated as C). */
   tier?: string | null;
-  /** Equipment tag string for the availability filter. */
-  equipment?: string | null;
+  /** Equipment tags for the availability filter. */
+  equipment?: string | string[] | null;
+  /** Bodyweight flag — untagged bodyweight exercises pass the equipment filter. */
+  isBodyweight?: boolean | null;
 }
 
 export interface PickSubstitution {
@@ -99,10 +104,7 @@ function isAvailable(
   exercise: LocationSubstitutionExercise,
   unavailableEquipmentIds: string[]
 ): boolean {
-  return !exerciseRequiresUnavailableEquipment(
-    { name: exercise.name, equipment: exercise.equipment ?? undefined },
-    unavailableEquipmentIds
-  );
+  return !exerciseRequiresUnavailableEquipment(exercise, unavailableEquipmentIds);
 }
 
 function sharesStandardMuscle(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -113,7 +115,10 @@ function sharesStandardMuscle(a: string | null | undefined, b: string | null | u
 }
 
 function isBodyweightish(exercise: LocationSubstitutionExercise): boolean {
-  const equipment = (exercise.equipment ?? '').toLowerCase();
+  if (exercise.isBodyweight === true) return true;
+  const equipment = (
+    Array.isArray(exercise.equipment) ? exercise.equipment.join(' ') : exercise.equipment ?? ''
+  ).toLowerCase();
   return equipment.includes('bodyweight') || equipment.includes('band') || equipment === '';
 }
 
@@ -254,4 +259,49 @@ export function applyLocationSubstitutions(
 /** Count of picks that were swapped (for the sheet's summary line). */
 export function countSubstitutions(plan: SubstitutedWorkoutPlan): number {
   return plan.exercises.filter((p) => p.substitution).length;
+}
+
+/**
+ * Post-generation invariant: every pick in the plan must be performable with
+ * the location's equipment. Picks flagged `noSubstituteAvailable` are exempt
+ * (they're a visible, deliberate exception the UI surfaces), as are picks
+ * the user explicitly reverted to the original despite the equipment gap.
+ *
+ * Any OTHER violation means a generation path bypassed the shared filter:
+ * in dev this throws (via enforceEquipmentInvariant); in production the
+ * offending pick is dropped and logged, never silently started.
+ */
+export function enforcePlanEquipmentInvariant(
+  plan: SubstitutedWorkoutPlan,
+  exercises: LocationSubstitutionExercise[],
+  unavailableEquipmentIds: string[]
+): SubstitutedWorkoutPlan {
+  if (unavailableEquipmentIds.length === 0) return plan;
+  const exerciseById = new Map(exercises.map((ex) => [ex.id, ex]));
+
+  const checkable = plan.exercises.map((pick) => ({
+    pick,
+    exercise: exerciseById.get(pick.exerciseId),
+  }));
+
+  const enforced = enforceEquipmentInvariant(
+    checkable.map(({ pick, exercise }) => ({
+      name: exercise?.name ?? pick.exerciseId,
+      equipment: exercise?.equipment,
+      isBodyweight: exercise?.isBodyweight,
+      pick,
+    })),
+    unavailableEquipmentIds,
+    {
+      context: 'suggested workout plan',
+      isUserOverride: (item) =>
+        item.pick.noSubstituteAvailable === true ||
+        // Reverted-to-original picks carry substitution metadata pointing at
+        // themselves — the user chose to keep the exercise despite the gap.
+        (!!item.pick.substitution &&
+          item.pick.exerciseId === item.pick.substitution.originalExerciseId),
+    }
+  );
+
+  return { ...plan, exercises: enforced.map((item) => item.pick) };
 }

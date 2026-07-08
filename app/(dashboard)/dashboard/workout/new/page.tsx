@@ -17,57 +17,13 @@ import { getVarietyPreferences, saveVarietyPreferences } from '@/services/exerci
 import type { ExerciseVarietyLevel } from '@/types/user-exercise-preferences';
 import { VARIETY_LEVEL_DEFAULTS } from '@/types/user-exercise-preferences';
 import { checkExerciseSafety } from '@/lib/training/exercise-safety';
+import {
+  filterExercisesByEquipment,
+  unavailableIdsFromLegacyAllowlist,
+} from '@/services/equipmentFilter';
 import type { UserInjury } from '@/lib/training/injury-types';
 import type { Exercise as ExerciseType } from '@/services/exerciseService';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
-
-// Equipment mapping from equipmentFilter service
-const EQUIPMENT_MAPPING: Record<string, string[]> = {
-  // Machines
-  leg_press: ['leg press', 'machine'],
-  leg_extension: ['leg extension', 'machine'],
-  leg_curl: ['leg curl', 'machine'],
-  hack_squat: ['hack squat', 'machine'],
-  smith_machine: ['smith machine', 'smith'],
-  chest_press: ['chest press machine', 'machine'],
-  pec_deck: ['pec deck', 'fly machine', 'machine'],
-  shoulder_press_machine: ['shoulder press machine', 'machine'],
-  lat_pulldown: ['lat pulldown', 'cable'],
-  seated_row: ['seated row', 'cable row', 'machine'],
-  cable_machine: ['cable', 'pulley'],
-  assisted_dip: ['assisted'],
-  preacher_curl: ['preacher'],
-  calf_raise: ['calf raise machine', 'machine'],
-  hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
-  glute_kickback: ['glute kickback', 'cable'],
-  reverse_hyper: ['reverse hyper'],
-  
-  // Free Weights
-  barbell: ['barbell', 'bar'],
-  dumbbells: ['dumbbell', 'db'],
-  dumbbell: ['dumbbell', 'db'],
-  kettlebells: ['kettlebell', 'kb'],
-  kettlebell: ['kettlebell', 'kb'],
-  ez_bar: ['ez bar', 'ez curl', 'curl bar'],
-  trap_bar: ['trap bar', 'hex bar'],
-  
-  // Benches & Racks
-  flat_bench: ['flat bench', 'bench'],
-  incline_bench: ['incline bench', 'incline'],
-  decline_bench: ['decline bench', 'decline'],
-  squat_rack: ['squat rack', 'power rack', 'rack'],
-  dip_station: ['dip', 'parallel bars'],
-  pull_up_bar: ['pull-up', 'pullup', 'chin-up', 'chinup'],
-  
-  // Other
-  resistance_bands: ['band', 'resistance band'],
-  trx: ['trx', 'suspension'],
-  ab_wheel: ['ab wheel', 'rollout'],
-  medicine_ball: ['medicine ball', 'med ball'],
-  battle_ropes: ['battle ropes', 'rope'],
-  landmine: ['landmine'],
-  bodyweight: ['bodyweight'],
-};
 
 interface Exercise {
   id: string;
@@ -76,6 +32,7 @@ interface Exercise {
   mechanic: 'compound' | 'isolation';
   hypertrophy_tier?: 'S' | 'A' | 'B' | 'C' | 'D' | 'F';
   equipment_required?: string[];
+  is_bodyweight?: boolean | null;
 }
 
 interface CustomExerciseForm {
@@ -385,73 +342,42 @@ function NewWorkoutContent() {
         .eq('id', user.id)
         .single();
       
-      // Get equipment availability from selected location
-      let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
-      
+      // Equipment blocklist for the shared fail-closed filter: the selected
+      // location's user_equipment rows marked unavailable, falling back to
+      // the legacy users.available_equipment allowlist when no location is
+      // selected (or its inventory can't be loaded).
+      const legacyBlocklist = () => {
+        const available = userData?.available_equipment as string[] | null | undefined;
+        return available && available.length > 0
+          ? unavailableIdsFromLegacyAllowlist(available)
+          : [];
+      };
+      let unavailableEquipmentIds: string[] = [];
+
       if (selectedLocationId && selectedLocationId !== 'fallback') {
         try {
-          // Load equipment for the selected location
-          const { data: locationEquipment, error: equipmentError } = await supabase
+          const { data: blockedEq, error: equipmentError } = await supabase
             .from('user_equipment')
-            .select('equipment_id, is_available')
+            .select('equipment_id')
             .eq('user_id', user.id)
             .eq('location_id', selectedLocationId)
-            .eq('is_available', true);
-          
+            .eq('is_available', false);
+
           if (equipmentError) {
-            // Fall through to use general equipment
-            availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
-          } else if (locationEquipment && locationEquipment.length > 0) {
-            // Get equipment type names from equipment_types table
-            const equipmentIds = locationEquipment.map((eq: any) => eq.equipment_id);
-            const { data: equipmentTypes, error: typesError } = await supabase
-              .from('equipment_types')
-              .select('id, name')
-              .in('id', equipmentIds);
-            
-            if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
-              // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
-              const equipmentNames = new Set<string>();
-              equipmentTypes.forEach((et: any) => {
-                const name = et.name.toLowerCase();
-                equipmentNames.add(name);
-
-                // Also add mapped variations (e.g., 'dumbbells' -> ['dumbbell', 'db'])
-                const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
-                if (mapping) {
-                  mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-                }
-              });
-
-              availableEquipment = Array.from(equipmentNames);
-            } else {
-              // If equipment_types lookup fails, try using equipment_id directly
-              // and expand using EQUIPMENT_MAPPING
-              const equipmentNames = new Set<string>();
-              equipmentIds.forEach((id: string) => {
-                const idLower = id.toLowerCase();
-                equipmentNames.add(idLower);
-                
-                // Expand using mapping
-                const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
-                if (mapping) {
-                  mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-                }
-              });
-              
-              availableEquipment = Array.from(equipmentNames);
-            }
+            console.error(
+              '[workout/new] failed to load location equipment blocklist; using legacy equipment preference:',
+              equipmentError
+            );
+            unavailableEquipmentIds = legacyBlocklist();
           } else {
-            // No equipment found for location, use general preference
-            availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+            unavailableEquipmentIds = (blockedEq ?? []).map((eq: any) => eq.equipment_id);
           }
-        } catch {
-          // Fall through to use general equipment
-          availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+        } catch (err) {
+          console.error('[workout/new] failed to load location equipment blocklist:', err);
+          unavailableEquipmentIds = legacyBlocklist();
         }
       } else {
-        // Fallback to user's general equipment preference
-        availableEquipment = (userData?.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+        unavailableEquipmentIds = legacyBlocklist();
       }
 
       // Get active injuries from multiple sources
@@ -642,115 +568,30 @@ function NewWorkoutContent() {
       
       const { data: exercisesData } = await supabase
         .from('exercises')
-        .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required')
+        .select('id, name, primary_muscle, mechanic, hypertrophy_tier, movement_pattern, equipment_required, is_bodyweight')
         .in('primary_muscle', suggestedMuscles.flatMap(expandMuscleGroupForFilter))
         .order('name');
-      
+
       if (!exercisesData || exercisesData.length === 0) {
         setError('No exercises found for suggested muscles');
         return;
       }
-      
+
       // Filter by preferences (exclude archived and do_not_suggest)
       let candidateExercises = exercisesData.filter((e: any) => !excludedExerciseIds.has(e.id));
-      
-      // Filter by equipment availability (basic equipment types)
-      // Normalize equipment names for comparison (case-insensitive, handle variations)
-      const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
 
-      candidateExercises = candidateExercises.filter((e: any) => {
-        // If exercise has no equipment_required, check the name for equipment hints
-        if (!e.equipment_required || e.equipment_required.length === 0) {
-          const exerciseNameLower = e.name.toLowerCase();
-          
-          // Check if exercise name indicates it requires specific equipment
-          const requiresCable = exerciseNameLower.includes('cable') || exerciseNameLower.includes('pully') || exerciseNameLower.includes('pushdown');
-          const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-          const requiresMachine = exerciseNameLower.includes('machine') && !exerciseNameLower.includes('smith machine');
-          const requiresDipBars = exerciseNameLower.includes('dip') && !exerciseNameLower.includes('assisted');
-          
-          // If name indicates equipment but it's not available, filter it out
-          if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) {
-            return false;
-          }
-          if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell'))) {
-            return false;
-          }
-          if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) {
-            return false;
-          }
-          if (requiresDipBars && !normalizedAvailable.some(a => a.includes('dip'))) {
-            return false;
-          }
+      // Filter by equipment availability with the shared fail-closed filter:
+      // an exercise passes only when its requirements are known and none of
+      // them need blocked equipment. Exclusions are debug-logged upstream.
+      candidateExercises = filterExercisesByEquipment(
+        candidateExercises.map((e: any) => ({
+          ...e,
+          equipment: e.equipment_required,
+          isBodyweight: e.is_bodyweight,
+        })),
+        unavailableEquipmentIds
+      );
 
-          // If no equipment hints or equipment is available, allow it
-          return true;
-        }
-        
-        // For exercises with equipment_required, check if ALL required equipment is available
-        // (Changed from OR to AND logic - if exercise requires [barbell, bench], need both)
-        const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
-
-        return requiredEquipment.every((reqEq: string) => {
-          // Direct match
-          if (normalizedAvailable.includes(reqEq)) {
-            return true;
-          }
-
-          // Partial match (e.g., "cable" matches "cable machine")
-          return normalizedAvailable.some((avail: string) => {
-            return avail.includes(reqEq) || reqEq.includes(avail);
-          });
-        });
-      });
-
-      // Additional filtering by equipment_types (if location is selected and not fallback)
-      if (selectedLocationId && selectedLocationId !== 'fallback') {
-        // Get unavailable equipment IDs for this location
-        const { data: unavailableEquipment } = await supabase
-          .from('user_equipment')
-          .select('equipment_id')
-          .eq('user_id', user.id)
-          .eq('location_id', selectedLocationId)
-          .eq('is_available', false);
-        
-        if (unavailableEquipment && unavailableEquipment.length > 0) {
-          const unavailableIds = new Set(unavailableEquipment.map((eq: any) => eq.equipment_id));
-          
-          // Get equipment_types to check which exercises require unavailable equipment
-          const { data: equipmentTypes } = await supabase
-            .from('equipment_types')
-            .select('id, name')
-            .in('id', Array.from(unavailableIds));
-          
-          if (equipmentTypes) {
-            const unavailableNames = new Set<string>(equipmentTypes.map((et: any) => String(et.name).toLowerCase()));
-            
-            // Filter out exercises that require unavailable equipment
-            candidateExercises = candidateExercises.filter((e: any) => {
-              // Check if exercise name or equipment_required mentions unavailable equipment
-              const exerciseNameLower = String(e.name).toLowerCase();
-              const unavailableNamesArray = Array.from(unavailableNames);
-              const hasUnavailable = unavailableNamesArray.some((name: string) => 
-                exerciseNameLower.includes(name)
-              );
-              
-              if (hasUnavailable) return false;
-              
-              // Also check equipment_required array
-              if (e.equipment_required) {
-                const hasUnavailableInRequired = e.equipment_required.some((req: string) => 
-                  unavailableNamesArray.some((name: string) => String(req).toLowerCase().includes(name))
-                );
-                if (hasUnavailableInRequired) return false;
-              }
-              
-              return true;
-            });
-          }
-        }
-      }
-      
       // Filter by injury safety (exclude 'avoid' exercises)
       const safeExercises: any[] = [];
       const cautionExercises: any[] = [];
@@ -1170,136 +1011,61 @@ function NewWorkoutContent() {
           return;
         }
 
-        // Get available equipment for selected location
-        let availableEquipment: string[] = ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
-        
+        // Equipment blocklist for the shared fail-closed filter (same source
+        // as the AI suggester above).
+        let unavailableEquipmentIds: string[] = [];
+
         if (selectedLocationId && selectedLocationId !== 'fallback') {
           try {
-            // Load equipment for the selected location
-            const { data: locationEquipment, error: equipmentError } = await supabase
+            const { data: blockedEq, error: equipmentError } = await supabase
               .from('user_equipment')
-              .select('equipment_id, is_available')
+              .select('equipment_id')
               .eq('user_id', user.id)
               .eq('location_id', selectedLocationId)
-              .eq('is_available', true);
-            
-            if (!equipmentError && locationEquipment && locationEquipment.length > 0) {
-              // Get equipment type names from equipment_types table
-              const equipmentIds = locationEquipment.map((eq: any) => eq.equipment_id);
-              const { data: equipmentTypes, error: typesError } = await supabase
-                .from('equipment_types')
-                .select('id, name')
-                .in('id', equipmentIds);
-              
-              if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
-                // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
-                const equipmentNames = new Set<string>();
-                equipmentTypes.forEach((et: any) => {
-                  const name = et.name.toLowerCase();
-                  equipmentNames.add(name);
-                  
-                  // Also add mapped variations (e.g., 'dumbbells' -> ['dumbbell', 'db'])
-                  const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
-                  if (mapping) {
-                    mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-                  }
-                });
-                
-                availableEquipment = Array.from(equipmentNames);
-              } else {
-                // If equipment_types lookup fails, try using equipment_id directly
-                const equipmentNames = new Set<string>();
-                equipmentIds.forEach((id: string) => {
-                  const idLower = id.toLowerCase();
-                  equipmentNames.add(idLower);
-                  
-                  // Expand using mapping
-                  const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
-                  if (mapping) {
-                    mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-                  }
-                });
-                
-                availableEquipment = Array.from(equipmentNames);
-              }
+              .eq('is_available', false);
+
+            if (equipmentError) {
+              console.error(
+                '[workout/new] failed to load location equipment blocklist:',
+                equipmentError
+              );
             } else {
-              // Fallback to user's general equipment preference
-              const { data: userData } = await supabase
-                .from('users')
-                .select('available_equipment')
-                .eq('id', user.id)
-                .single();
-              
-              if (userData?.available_equipment) {
-                availableEquipment = (userData.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
-              }
+              unavailableEquipmentIds = (blockedEq ?? []).map((eq: any) => eq.equipment_id);
             }
           } catch (err) {
-            console.warn('Error loading location equipment:', err);
-            // Fall through to default equipment
+            console.error('[workout/new] failed to load location equipment blocklist:', err);
           }
         } else {
-          // Fallback to user's general equipment preference
+          // Fallback to the legacy users.available_equipment allowlist
           const { data: userData } = await supabase
             .from('users')
             .select('available_equipment')
             .eq('id', user.id)
             .single();
-          
-          if (userData?.available_equipment) {
-            availableEquipment = (userData.available_equipment as string[]) || ['barbell', 'dumbbell', 'cable', 'machine', 'bodyweight'];
+
+          const available = userData?.available_equipment as string[] | null | undefined;
+          if (available && available.length > 0) {
+            unavailableEquipmentIds = unavailableIdsFromLegacyAllowlist(available);
           }
         }
 
         // Fetch exercises
         const { data, error } = await supabase
           .from('exercises')
-          .select('id, name, primary_muscle, mechanic, hypertrophy_tier, equipment_required')
+          .select('id, name, primary_muscle, mechanic, hypertrophy_tier, equipment_required, is_bodyweight')
           .in('primary_muscle', selectedMuscles.flatMap(expandMuscleGroupForFilter))
           .order('name');
 
         if (data && !error) {
-          // Filter by equipment availability
-          const normalizedAvailable = availableEquipment.map((eq: string) => eq.toLowerCase().trim());
-
-          let filteredExercises = data.filter((e: any) => {
-            // If exercise has no equipment_required, check the name for equipment hints
-            if (!e.equipment_required || e.equipment_required.length === 0) {
-              const exerciseNameLower = e.name.toLowerCase();
-
-              // Check if exercise name indicates it requires specific equipment
-              const requiresCable = exerciseNameLower.includes('cable') || exerciseNameLower.includes('pully') || exerciseNameLower.includes('pushdown');
-              const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-              const requiresMachine = exerciseNameLower.includes('machine') && !exerciseNameLower.includes('smith machine');
-              const requiresDipBars = exerciseNameLower.includes('dip') && !exerciseNameLower.includes('assisted');
-
-              // If name indicates equipment but it's not available, filter it out
-              if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) {
-                return false;
-              }
-              if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell'))) {
-                return false;
-              }
-              if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) {
-                return false;
-              }
-              if (requiresDipBars && !normalizedAvailable.some(a => a.includes('dip'))) {
-                return false;
-              }
-
-              return true;
-            }
-
-            // For exercises with equipment_required, check if ALL required equipment is available
-            const requiredEquipment = e.equipment_required.map((eq: string) => eq.toLowerCase().trim());
-            return requiredEquipment.every((reqEq: string) => {
-              // Direct match
-              if (normalizedAvailable.includes(reqEq)) return true;
-
-              // Partial match (e.g., "cable" matches "cable machine")
-              return normalizedAvailable.some((avail: string) => reqEq.includes(avail) || avail.includes(reqEq));
-            });
-          });
+          // Filter by equipment availability (shared fail-closed filter)
+          const filteredExercises = filterExercisesByEquipment(
+            (data as Exercise[]).map((e) => ({
+              ...e,
+              equipment: e.equipment_required,
+              isBodyweight: e.is_bodyweight,
+            })),
+            unavailableEquipmentIds
+          );
 
           // Sort: frequently used first, then by hypertrophy tier, then alphabetically
           const tierRank: Record<string, number> = { 'S': 0, 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'F': 5 };

@@ -90,6 +90,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/equipmentFilter.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 85,
+      statements: 90,
+    },
     'services/mesocycleBuilder.ts': {
       lines: 70,
       functions: 60,

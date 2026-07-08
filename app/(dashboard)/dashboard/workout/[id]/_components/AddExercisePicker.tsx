@@ -10,24 +10,27 @@
  * adjustments toggle hiding the sort + location controls. Typing collapses
  * everything into one ranked result list across the full library.
  *
- * Two variants are preserved from the Phase 0.2 decomposition:
- *   - variant="empty"   — the empty-workout branch: richer location-equipment
- *     filtering (user-marked unavailable exercises, machine brand/term
- *     detection, bodyweight-only fallback).
- *   - variant="workout" — the main branch: simpler location filtering, plus
- *     the "Create custom exercise" button, inline error display, and
- *     plan-muscle context for the Suggested section.
- * Both location-filter behaviors are preserved exactly.
+ * Location-equipment handling: availability is decided by the SHARED
+ * fail-closed equipment filter (services/equipmentFilter.ts) against the
+ * selected location's blocklist — the same filter every generation path
+ * uses. Unavailable exercises are NOT hidden: the user may know better
+ * (odd home setups, borrowed gear), so they are flagged with a badge and
+ * sorted below available exercises instead.
+ *
+ * The two variants differ only in chrome now (variant="workout" adds the
+ * "Create custom exercise" button, inline error display, and plan-muscle
+ * context for the Suggested section).
  *
  * All filter/search state stays in the page (several pieces outlive the
  * modal); only ephemeral UI state (adjustments panel) is local.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { IconAdjustments, IconCheck, IconPlus, IconX } from '@tabler/icons-react';
 import type { AvailableExercise, GymLocation } from '../_lib/types';
 import { formatMuscleName } from '@/lib/utils';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { checkExerciseEquipment } from '@/services/equipmentFilter';
 
 // Normalize exercise search terms for better matching
 // Handles variations like "situps" vs "sit up" vs "sit-up"
@@ -93,7 +96,9 @@ export interface AddExercisePickerProps {
   gymLocations: GymLocation[];
   selectedLocationFilter: string | null;
   onSelectedLocationFilterChange: (value: string | null) => void;
-  locationEquipment: string[];
+  /** equipment_types ids the selected location lacks (fail-closed blocklist). */
+  unavailableEquipmentIds: string[];
+  /** Exercises the user explicitly marked unavailable at this location. */
   unavailableExerciseIds: Set<string>;
   // Usage data for sorting / default visibility
   stapleExerciseIds: Set<string>;
@@ -132,7 +137,7 @@ export function AddExercisePicker({
   gymLocations,
   selectedLocationFilter,
   onSelectedLocationFilterChange,
-  locationEquipment,
+  unavailableEquipmentIds,
   unavailableExerciseIds,
   stapleExerciseIds,
   frequentExerciseIds,
@@ -153,108 +158,37 @@ export function AddExercisePicker({
 
   const isSearching = exerciseSearch.trim().length > 0;
 
-  // --- Location filtering (kept per-variant: the two inline copies had drifted) ---
-  const applyLocationFilterEmptyVariant = (exercises: AvailableExercise[]): AvailableExercise[] => {
-    let filteredExercises = exercises;
+  // --- Location availability (shared fail-closed filter; flag + sort, never hide) ---
+  const locationFilterActive = selectedLocationFilter !== null;
 
-    // First, filter out exercises the user explicitly marked as unavailable
-    if (unavailableExerciseIds.size > 0) {
-      filteredExercises = filteredExercises.filter(ex => !unavailableExerciseIds.has(ex.id));
-    }
-
-    const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
-
-    // Machine brand prefixes and machine-specific terms that indicate machine exercises
-    const machineBrands = ['mts', 'iso-lateral', 'iso lateral', 'hammer strength', 'nautilus', 'cybex', 'life fitness', 'technogym', 'matrix', 'precor', 'hoist', 'star trac', 'freemotion', 'prime', 'arsenal', 'atlantis', 'body-solid', 'icarian', 'strive', 'magnum', 'panatta'];
-    const machineTerms = ['leg press', 'leg extension', 'leg curl', 'hack squat', 'pendulum', 'seated row', 'chest press', 'shoulder press machine', 'lat pulldown', 'pec deck', 'fly machine', 'hip abductor', 'hip adductor', 'glute drive', 'calf raise machine', 'reverse hyper', 'back extension machine', 'ab crunch machine', 'torso rotation', 'inner thigh', 'outer thigh', 'belt squat'];
-
-    return filteredExercises.filter(ex => {
-      const exerciseNameLower = ex.name.toLowerCase();
-
-      // If location has no equipment, only allow bodyweight exercises
-      if (normalizedAvailable.length === 0) {
-        return ex.is_bodyweight === true;
+  /** Exercise ids the selected location can't support (equipment or explicit mark). */
+  const unavailableAtLocation = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!locationFilterActive) return map;
+    for (const ex of availableExercises) {
+      if (unavailableExerciseIds.has(ex.id)) {
+        map.set(ex.id, 'Marked unavailable here');
+        continue;
       }
-
-      // Check if exercise requires a machine (by brand or term)
-      const isMachineExercise =
-        machineBrands.some(brand => exerciseNameLower.includes(brand)) ||
-        machineTerms.some(term => exerciseNameLower.includes(term));
-
-      // If it's a machine exercise, check if user has machine equipment available
-      if (isMachineExercise) {
-        const hasMachineEquipment = normalizedAvailable.some(a =>
-          a.includes('machine') || a.includes('press') || a.includes('pulldown') ||
-          a.includes('leg extension') || a.includes('leg curl') || a.includes('hack') ||
-          a.includes('cable') || a.includes('lat pulldown') || a.includes('seated row')
+      const check = checkExerciseEquipment(
+        { name: ex.name, equipment: ex.equipment_required, isBodyweight: ex.is_bodyweight },
+        unavailableEquipmentIds
+      );
+      if (!check.available) {
+        map.set(
+          ex.id,
+          check.reason === 'unavailable_equipment' ? 'Missing equipment here' : 'Equipment unknown'
         );
-        if (!hasMachineEquipment) return false;
       }
+    }
+    return map;
+  }, [locationFilterActive, availableExercises, unavailableExerciseIds, unavailableEquipmentIds]);
 
-      // If exercise has no equipment requirement, check name for equipment hints
-      if (!ex.equipment_required || ex.equipment_required.length === 0) {
-        // Check if exercise name indicates specific equipment
-        const requiresCable = exerciseNameLower.includes('cable');
-        const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-        const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
-        const requiresMachine = exerciseNameLower.includes('machine');
-        const requiresSmith = exerciseNameLower.includes('smith');
-        const requiresKettlebell = exerciseNameLower.includes('kettlebell') || exerciseNameLower.includes('kb ');
-        const requiresBand = exerciseNameLower.includes('band') || exerciseNameLower.includes('resistance band');
+  const isUnavailableHere = (ex: AvailableExercise) => unavailableAtLocation.has(ex.id);
+  /** Available exercises first; the user may still pick a flagged one. */
+  const availabilityRank = (ex: AvailableExercise) => (isUnavailableHere(ex) ? 1 : 0);
 
-        if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
-        if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
-        if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
-        if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
-        if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
-        if (requiresKettlebell && !normalizedAvailable.some(a => a.includes('kettlebell') || a.includes('kb'))) return false;
-        if (requiresBand && !normalizedAvailable.some(a => a.includes('band'))) return false;
-
-        return true;
-      }
-
-      // For exercises with equipment_required, check if ALL required equipment is available
-      const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
-      return requiredEquipment.every(reqEq => {
-        if (normalizedAvailable.includes(reqEq)) return true;
-        return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
-      });
-    });
-  };
-
-  const applyLocationFilterWorkoutVariant = (exercises: AvailableExercise[]): AvailableExercise[] => {
-    const normalizedAvailable = locationEquipment.map(eq => eq.toLowerCase().trim());
-    return exercises.filter(ex => {
-      // If exercise has no equipment requirement, check name for equipment hints
-      if (!ex.equipment_required || ex.equipment_required.length === 0) {
-        const exerciseNameLower = ex.name.toLowerCase();
-
-        // Check if exercise name indicates specific equipment
-        const requiresCable = exerciseNameLower.includes('cable');
-        const requiresBarbell = exerciseNameLower.includes('barbell') && !exerciseNameLower.includes('dumbbell');
-        const requiresDumbbell = exerciseNameLower.includes('dumbbell') || exerciseNameLower.includes('db ');
-        const requiresMachine = exerciseNameLower.includes('machine');
-        const requiresSmith = exerciseNameLower.includes('smith');
-
-        if (requiresCable && !normalizedAvailable.some(a => a.includes('cable'))) return false;
-        if (requiresBarbell && !normalizedAvailable.some(a => a.includes('barbell') || a.includes('bar'))) return false;
-        if (requiresDumbbell && !normalizedAvailable.some(a => a.includes('dumbbell') || a.includes('db'))) return false;
-        if (requiresMachine && !normalizedAvailable.some(a => a.includes('machine'))) return false;
-        if (requiresSmith && !normalizedAvailable.some(a => a.includes('smith'))) return false;
-
-        return true;
-      }
-
-      // For exercises with equipment_required, check if ALL required equipment is available
-      const requiredEquipment = ex.equipment_required.map(eq => eq.toLowerCase().trim());
-      return requiredEquipment.every(reqEq => {
-        if (normalizedAvailable.includes(reqEq)) return true;
-        return normalizedAvailable.some(avail => reqEq.includes(avail) || avail.includes(reqEq));
-      });
-    });
-  };
-
-  /** Muscle chip + location-equipment filters applied (per-variant behavior preserved). */
+  /** Muscle chip filter applied; location availability only flags and sorts. */
   const getBasePool = (): AvailableExercise[] => {
     let filteredExercises = availableExercises;
 
@@ -262,19 +196,13 @@ export function AddExercisePicker({
       filteredExercises = filteredExercises.filter(ex => ex.primary_muscle === selectedMuscleFilter);
     }
 
-    if (variant === 'empty') {
-      if (selectedLocationFilter) {
-        filteredExercises = applyLocationFilterEmptyVariant(filteredExercises);
-      }
-    } else if (selectedLocationFilter && locationEquipment.length > 0) {
-      filteredExercises = applyLocationFilterWorkoutVariant(filteredExercises);
-    }
-
     return filteredExercises;
   };
 
   const sortByOption = (exercises: AvailableExercise[]): AvailableExercise[] => {
     return [...exercises].sort((a, b) => {
+      const availabilityDiff = availabilityRank(a) - availabilityRank(b);
+      if (availabilityDiff !== 0) return availabilityDiff;
       switch (exerciseSortOption) {
         case 'frequency': {
           // Sort by frequency (highest first), then by name for ties
@@ -306,6 +234,8 @@ export function AddExercisePicker({
     return getBasePool()
       .filter(ex => normalizeForSearch(ex.name).includes(normalizedSearch))
       .sort((a, b) => {
+        const availabilityDiff = availabilityRank(a) - availabilityRank(b);
+        if (availabilityDiff !== 0) return availabilityDiff;
         const aPrefix = normalizeForSearch(a.name).startsWith(normalizedSearch) ? 0 : 1;
         const bPrefix = normalizeForSearch(b.name).startsWith(normalizedSearch) ? 0 : 1;
         if (aPrefix !== bPrefix) return aPrefix - bPrefix;
@@ -342,6 +272,8 @@ export function AddExercisePicker({
     );
     const recent = [...performed]
       .sort((a, b) => {
+        const availabilityDiff = availabilityRank(a) - availabilityRank(b);
+        if (availabilityDiff !== 0) return availabilityDiff;
         const dateDiff =
           (lastDoneExercises.get(b.id)?.getTime() ?? 0) - (lastDoneExercises.get(a.id)?.getTime() ?? 0);
         if (dateDiff !== 0) return dateDiff;
@@ -361,6 +293,9 @@ export function AddExercisePicker({
     const candidatesByMuscle = new Map<string, AvailableExercise[]>();
     for (const ex of pool) {
       if (!stapleExerciseIds.has(ex.id) || recentIds.has(ex.id)) continue;
+      // Suggested = "do this today" — exercises the location can't support
+      // stay reachable via search/browse (flagged), not suggested.
+      if (isUnavailableHere(ex)) continue;
       const muscle = (ex.primary_muscle ?? '').toLowerCase();
       if (!relevantMuscles.includes(muscle)) continue;
       const list = candidatesByMuscle.get(muscle);
@@ -389,6 +324,7 @@ export function AddExercisePicker({
 
   const renderExerciseRow = (exercise: AvailableExercise) => {
     const isSelected = selectedExercisesToAdd.some(e => e.id === exercise.id);
+    const unavailableReason = unavailableAtLocation.get(exercise.id);
     return (
       <button
         key={exercise.id}
@@ -396,13 +332,18 @@ export function AddExercisePicker({
         disabled={isAddingExercise}
         className={`w-full flex items-center justify-between gap-3 px-4 py-1.5 min-h-[44px] transition-colors text-left disabled:opacity-50 border-b border-surface-800/50 ${
           isSelected ? 'bg-primary-500/10' : 'hover:bg-surface-800/50'
-        }`}
+        } ${unavailableReason ? 'opacity-60' : ''}`}
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="text-[13px] leading-5 text-surface-200 truncate">{exercise.name}</span>
             {frequentExerciseIds.has(exercise.id) && (
               <span className="text-amber-400 text-[11px] flex-shrink-0">&#9733;</span>
+            )}
+            {unavailableReason && (
+              <span className="flex-shrink-0 px-1 rounded bg-warning-500/15 border border-warning-500/30 text-[10px] font-medium text-warning-400">
+                {unavailableReason}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1.5 text-[11px] leading-4 text-surface-500">

@@ -511,6 +511,7 @@ describe('equipment filter', () => {
           primaryMuscle: 'biceps',
           tier: 'S',
           mechanic: 'isolation',
+          equipment: ['barbell'],
         }),
         makeExercise({
           id: 'cable-curl',
@@ -518,6 +519,7 @@ describe('equipment filter', () => {
           primaryMuscle: 'biceps',
           tier: 'B',
           mechanic: 'isolation',
+          equipment: ['cable machine'],
         }),
       ],
       unavailableEquipmentIds: ['barbell'],
@@ -526,6 +528,34 @@ describe('equipment filter', () => {
 
     expect(plan.exercises).toHaveLength(1);
     expect(plan.exercises[0].exerciseId).toBe('cable-curl');
+  });
+
+  it('fails closed: untagged non-bodyweight exercises are excluded when a blocklist exists', () => {
+    const plan = build({
+      muscles: [makeMuscle('biceps', { weeklySets: 0, targetSets: 10 })],
+      exercises: [
+        makeExercise({
+          id: 'mystery-curl',
+          name: 'Mystery Curl',
+          primaryMuscle: 'biceps',
+          tier: 'S',
+          mechanic: 'isolation',
+          // no equipment tags, not bodyweight
+        }),
+        makeExercise({
+          id: 'bw-chin-curl',
+          name: 'Towel Curl',
+          primaryMuscle: 'biceps',
+          tier: 'C',
+          mechanic: 'isolation',
+          isBodyweight: true,
+        }),
+      ],
+      unavailableEquipmentIds: ['barbell'],
+      maxExercises: 2,
+    });
+
+    expect(plan.exercises.map((p) => p.exerciseId)).toEqual(['bw-chin-curl']);
   });
 });
 
