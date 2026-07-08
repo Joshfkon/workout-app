@@ -35,6 +35,7 @@ import {
   arrowAt,
   placeLabel,
   estimateTextWidth,
+  labelBox,
   type AvoidLine,
   type AvoidPoint,
   type LabelPlacement,
@@ -56,6 +57,10 @@ import {
   athleticZonePolygon,
   zoneOverlapsDomain,
   zoneDirectionArrow,
+  directionArrowTo,
+  pointInDomain,
+  FIT_DATA_RECENT_SCANS,
+  MAP_PILL_CAP,
   FORECAST_NOISE_RADIUS,
   COMPOSITION_MAP_FFMI_THRESHOLDS,
   type ForecastPathPoint,
@@ -152,6 +157,7 @@ function MapLabel({
       )}
       <text
         data-testid={testid}
+        data-clear={String(placement.clear)}
         x={placement.x}
         y={placement.y}
         textAnchor={placement.anchor}
@@ -260,8 +266,13 @@ export interface DecorationsData {
    * data — an estimate, never a scan point. Empty when no weigh-ins exist
    * past the last scan. */
   estimateTail: CompositionPoint[];
-  /** "Est. · Jul 5" on the tail's endpoint; null when no tail. */
+  /** "Est. · Jul 5" — shown only while tap-revealed (pill policy: the Est
+   * values live in the caption; the marker label is transient). */
   estimateLabel: string | null;
+  estimateLabelVisible: boolean;
+  onEstimateClick?: () => void;
+  /** Active viewport mode — drives the pill policy (see MAP_PILL_CAP). */
+  viewMode: 'recent' | 'all';
   /** Forward extrapolation of the recent scan trend, drawn as a dotted
    * central path inside a widening translucent uncertainty cone. Null when
    * the trend is flat or there aren't enough scans. */
@@ -323,6 +334,9 @@ export function buildDecorations(data: DecorationsData) {
       trailPoints,
       estimateTail,
       estimateLabel,
+      estimateLabelVisible,
+      onEstimateClick,
+      viewMode,
       forecast,
       zone,
       suggestion,
@@ -388,33 +402,62 @@ export function buildDecorations(data: DecorationsData) {
       })),
       ...(suggestion ? [{ ...px(suggestion), r: 6 }] : []),
     ];
-    const avoidOptions = { avoidSegments, avoidPoints };
+    // Reference-line LABELS are avoid-geometry too — edge indicators must
+    // not sit on "BMI 22" / "FFMI 18" text.
+    const refLabelRects = [
+      ...isoSegments.map((seg) =>
+        labelBox(
+          xScale(seg.x1) + 4,
+          yScale(seg.y1) + 10,
+          'start',
+          estimateTextWidth(`BMI ${seg.bmi}`, 9),
+          11
+        )
+      ),
+      ...visibleThresholds.map((t) =>
+        labelBox(xScale(x1) - 30, yScale(t) - 3, 'start', estimateTextWidth(`FFMI ${t}`, 9), 11)
+      ),
+    ];
+    const avoidOptions = { avoidSegments, avoidPoints, avoidRects: refLabelRects };
 
     const startPx = px(scanPoints[0]);
     const nowPx = px(scanPoints[scanPoints.length - 1]);
+    const startInView = pointInDomain(scanPoints[0], domain);
     const startPlacement = placeLabel(startPx, plot, startLabel, avoidOptions);
     const nowPlacement = placeLabel(nowPx, plot, nowLabel, avoidOptions);
 
+    // Pill policy tripwire (MAP_PILL_CAP): persistent pills are Latest,
+    // Target, and (Fit all only) Start. Everything else is plain text,
+    // caption copy, or tap-to-reveal.
+    const startGetsPill = startInView && viewMode === 'all';
+    const pillCount = 1 + (targetPoint && targetLabelLines ? 1 : 0) + (startGetsPill ? 1 : 0);
+    if (process.env.NODE_ENV !== 'production' && pillCount > MAP_PILL_CAP[viewMode]) {
+      console.warn(
+        `CompositionMap: ${pillCount} label pills exceed the '${viewMode}' cap of ${MAP_PILL_CAP[viewMode]} — pill policy regressed.`
+      );
+    }
+
     return (
       <g>
-        {/* Athletic zone: soft green context region, clipped to the plot,
-            drawn FIRST so every other mark sits above it. A destination,
-            not a grade. */}
+        <defs>
+          {/* Everything clips to the plot: in Fit-data mode older geometry
+              extends past the viewport and must not draw over the axes. */}
+          <clipPath id="map-plot-clip">
+            <rect
+              x={plot.left}
+              y={plot.top}
+              width={plot.right - plot.left}
+              height={plot.bottom - plot.top}
+            />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#map-plot-clip)">
+        {/* Athletic zone: soft green context region, drawn FIRST so every
+            other mark sits above it. A destination, not a grade. */}
         {zone && zone.overlapsViewport && (
           <g>
-            <defs>
-              <clipPath id="map-zone-clip">
-                <rect
-                  x={plot.left}
-                  y={plot.top}
-                  width={plot.right - plot.left}
-                  height={plot.bottom - plot.top}
-                />
-              </clipPath>
-            </defs>
             <polygon
               data-testid="map-athletic-zone"
-              clipPath="url(#map-zone-clip)"
               points={zone.polygon.map((p) => `${px(p).x},${px(p).y}`).join(' ')}
               fill={GOAL_COLOR}
               fillOpacity={zone.dimmed ? 0.04 : 0.08}
@@ -436,7 +479,7 @@ export function buildDecorations(data: DecorationsData) {
                   lines={['athletic zone']}
                   fill={GOAL_COLOR}
                   fontSize={8}
-                  pill={!placement.clear}
+                  pill={false}
                   testid="map-zone-label"
                 />
               );
@@ -538,17 +581,8 @@ export function buildDecorations(data: DecorationsData) {
                 strokeOpacity={0.6}
                 strokeLinecap="round"
               />
-              <MapLabel
-                placement={placeLabel(px(end), plot, `Trend · +${end.weeks} wk`, {
-                  ...avoidOptions,
-                  fontSize: 8,
-                })}
-                lines={[`Trend · +${end.weeks} wk`]}
-                fill="#94a3b8"
-                fontSize={8}
-                pill
-                testid="map-forecast-label"
-              />
+              {/* No persistent label — the cone is explained in the caption
+                  (pill policy). */}
             </g>
           );
         })()}
@@ -590,8 +624,12 @@ export function buildDecorations(data: DecorationsData) {
                 stroke={TRAIL_COLOR}
                 strokeWidth={1.5}
                 strokeDasharray="2 2"
+                onClick={onEstimateClick}
+                style={{ cursor: 'pointer' }}
               />
-              {estimateLabel && (
+              {/* Tap-to-reveal only — the Est values live in the caption
+                  (pill policy). */}
+              {estimateLabel && estimateLabelVisible && (
                 <MapLabel
                   placement={placeLabel(end, plot, estimateLabel, {
                     ...avoidOptions,
@@ -735,12 +773,12 @@ export function buildDecorations(data: DecorationsData) {
           );
         })}
 
-        {/* Intermediate scan month labels — only when the map is sparse
-            enough to stay legible (≤5 scans); tap covers the rest. Labels
-            dodge the path/trail/points; a background pill is the fallback
-            when all 8 candidate spots collide. */}
+        {/* Intermediate scan date labels — plain small text, never pills
+            (pill policy); only on sparse maps (≤5 scans) and only for
+            points inside the viewport. */}
         {showIntermediateLabels &&
           scanPoints.slice(1, -1).map((p) => {
+            if (!pointInDomain(p, domain)) return null;
             const text = formatDateShort(p.date);
             const placement = placeLabel(px(p), plot, text, {
               ...avoidOptions,
@@ -753,23 +791,26 @@ export function buildDecorations(data: DecorationsData) {
                 lines={[text]}
                 fill="#9ca3af"
                 fontSize={8}
-                pill={!placement.clear}
+                pill={false}
                 testid="map-month-label"
               />
             );
           })}
 
-        {/* Labeled endpoints: where the journey starts and where it is now.
-            Both always sit on a background pill — the Now label especially
-            must stay full-contrast over the trail or any other geometry. */}
-        <MapLabel
-          placement={startPlacement}
-          lines={[startLabel]}
-          fill={START_LABEL_COLOR}
-          fontWeight={500}
-          pill
-          testid="map-start-label"
-        />
+        {/* Labeled endpoints. Latest is always a pill (the one label that
+            must never lose legibility). Start: pill in Fit all, plain text
+            in Fit data — and when clipped out of a Fit-data viewport it
+            becomes an edge indicator instead (see below). */}
+        {startInView && (
+          <MapLabel
+            placement={startPlacement}
+            lines={[startLabel]}
+            fill={START_LABEL_COLOR}
+            fontWeight={500}
+            pill={startGetsPill}
+            testid="map-start-label"
+          />
+        )}
         <MapLabel
           placement={nowPlacement}
           lines={[nowLabel]}
@@ -779,14 +820,11 @@ export function buildDecorations(data: DecorationsData) {
           testid="map-now-label"
         />
 
-        {/* Suggested next milestone: hollow green dot, tap to reveal the
-            set-as-target card below the chart. */}
+        {/* Suggested next milestone: unlabeled hollow green dot — tap
+            reveals the set-as-target card (pill policy: no persistent
+            label; the caption explains the dot). */}
         {suggestion && (() => {
           const sPx = px(suggestion);
-          const placement = placeLabel(sPx, plot, 'Suggested', {
-            ...avoidOptions,
-            fontSize: 8,
-          });
           return (
             <g
               onClick={onSuggestionClick}
@@ -801,29 +839,47 @@ export function buildDecorations(data: DecorationsData) {
                 stroke={GOAL_COLOR}
                 strokeWidth={2}
               />
-              <MapLabel
-                placement={placement}
-                lines={['Suggested']}
-                fill={GOAL_COLOR}
-                fontSize={8}
-                pill={!placement.clear}
-                testid="map-suggestion-label"
-              />
             </g>
           );
         })()}
 
+        {/* Start clipped out of a Fit-data viewport: edge indicator
+            pointing back at where the journey began. */}
+        {!startInView && (() => {
+          const raw = startPx;
+          const point = {
+            x: Math.max(plot.left + 40, Math.min(plot.right - 40, raw.x)),
+            y: Math.max(plot.top + 14, Math.min(plot.bottom - 10, raw.y)),
+          };
+          const text = `start ${directionArrowTo(scanPoints[0], domain)}`;
+          const placement = placeLabel(point, plot, text, avoidOptions);
+          return (
+            <MapLabel
+              placement={placement}
+              lines={[text]}
+              fill={START_LABEL_COLOR}
+              fontSize={9}
+              pill
+              testid="map-start-indicator"
+            />
+          );
+        })()}
+
         {/* Off-viewport zone: edge indicator instead of stretching the
-            view. Tapping it fits everything. */}
+            view. Tapping it fits everything. Participates in collision
+            avoidance so it can't sit on "BMI 22" etc. */}
         {zone && !zone.overlapsViewport && (() => {
           const centroid = {
             fmi: zone.polygon.reduce((s, p) => s + p.fmi, 0) / zone.polygon.length,
             ffmi: zone.polygon.reduce((s, p) => s + p.ffmi, 0) / zone.polygon.length,
           };
           const raw = px(centroid);
-          const x = Math.max(plot.left + 48, Math.min(plot.right - 48, raw.x));
-          const y = Math.max(plot.top + 14, Math.min(plot.bottom - 8, raw.y));
+          const point = {
+            x: Math.max(plot.left + 48, Math.min(plot.right - 48, raw.x)),
+            y: Math.max(plot.top + 14, Math.min(plot.bottom - 8, raw.y)),
+          };
           const text = `target zone ${zone.directionArrow}`;
+          const placement = placeLabel(point, plot, text, avoidOptions);
           return (
             <g
               onClick={onZoneIndicatorClick}
@@ -831,7 +887,7 @@ export function buildDecorations(data: DecorationsData) {
               data-testid="map-zone-indicator"
             >
               <MapLabel
-                placement={{ x, y, anchor: 'middle', side: 'edge', clear: false }}
+                placement={placement}
                 lines={[text]}
                 fill={GOAL_COLOR}
                 fontSize={9}
@@ -841,6 +897,7 @@ export function buildDecorations(data: DecorationsData) {
             </g>
           );
         })()}
+        </g>
       </g>
     );
   };
@@ -861,9 +918,12 @@ export function CompositionMap({
   const [startMode, setStartMode] = useState<'phase' | 'all-time'>(
     phaseStartDate ? 'phase' : 'all-time'
   );
-  // 'recent' fits the data (default); 'all' also fits the athletic zone.
+  // 'recent' fits the recent data (default); 'all' fits everything
+  // including the athletic zone and the full scan history.
   const [viewMode, setViewMode] = useState<'recent' | 'all'>('recent');
   const [suggestionOpen, setSuggestionOpen] = useState(defaultSuggestionOpen);
+  // Est marker label is tap-to-reveal (pill policy).
+  const [estimateLabelVisible, setEstimateLabelVisible] = useState(false);
   const router = useRouter();
 
   const scanObservations = useMemo<CompositionObservation[]>(
@@ -939,9 +999,14 @@ export function CompositionMap({
     if (scanPoints.length < 2) return null;
     const anchor =
       estimateTail.length > 0 ? estimateTail[estimateTail.length - 1] : scanPoints[scanPoints.length - 1];
-    const result = computeCompositionForecast(scanPoints, anchor, targetPoint);
+    // Phase-aware: a phase started after the last scan redirects the cone
+    // along the recent weigh-in estimate instead of the old scan trend.
+    const result = computeCompositionForecast(scanPoints, anchor, targetPoint, {
+      tail: estimateTail,
+      phaseStartDate,
+    });
     return result.status === 'ok' ? { anchor, ...result } : null;
-  }, [scanPoints, estimateTail, targetPoint]);
+  }, [scanPoints, estimateTail, targetPoint, phaseStartDate]);
 
   const startPoint = useMemo(
     () => selectStartPoint(scanPoints, startMode, phaseStartDate),
@@ -986,14 +1051,23 @@ export function CompositionMap({
       );
     }
     // The suggestion is a nearby waypoint — always in view. The zone only
-    // stretches the viewport in Fit-all; Fit-recent gets an edge indicator.
+    // stretches the viewport in Fit-all; Fit-data gets an edge indicator.
     if (suggestion) extras.push(suggestion);
     if (viewMode === 'all') extras.push(...zonePolygon);
-    return computeMapDomain(
-      [...scanPoints, ...trailPoints, ...estimateTail, ...extras],
-      targetPoint
-    );
+    // Fit data: the viewport fits the RECENT scans; older history clips
+    // out (Start becomes an edge indicator). Fit all: everything.
+    const baseScans =
+      viewMode === 'recent' ? scanPoints.slice(-FIT_DATA_RECENT_SCANS) : scanPoints;
+    const baseTrail = viewMode === 'recent' ? [] : trailPoints;
+    return computeMapDomain([...baseScans, ...baseTrail, ...estimateTail, ...extras], targetPoint);
   }, [scanPoints, trailPoints, estimateTail, forecast, targetPoint, suggestion, viewMode, zonePolygon]);
+
+  // Scatter only plots in-viewport scans — recharts doesn't clip scatter
+  // shapes to the plot area on its own.
+  const visibleScanPoints = useMemo(
+    () => scanPoints.filter((p) => pointInDomain(p, domain)),
+    [scanPoints, domain]
+  );
 
   if (scanPoints.length < 2) {
     return (
@@ -1114,6 +1188,9 @@ export function CompositionMap({
                   estimateTail.length > 0
                     ? `Est. · ${formatDateShort(estimateTail[estimateTail.length - 1].date)}`
                     : null,
+                estimateLabelVisible,
+                onEstimateClick: () => setEstimateLabelVisible((v) => !v),
+                viewMode,
                 forecast: forecast ? { anchor: forecast.anchor, path: forecast.path } : null,
                 zone: {
                   polygon: zonePolygon,
@@ -1132,9 +1209,10 @@ export function CompositionMap({
                 showIntermediateLabels: scanPoints.length > 2 && scanPoints.length <= 5,
               })}
             />
-            {/* Scan points — the emphasis; tap for date + values. */}
+            {/* Scan points — the emphasis; tap for date + values. Only
+                in-viewport scans plot (Fit data clips history out). */}
             <Scatter
-              data={scanPoints}
+              data={visibleScanPoints}
               isAnimationActive={false}
               shape={(props: {
                 cx?: number;
@@ -1210,13 +1288,17 @@ export function CompositionMap({
         FMI + FFMI = BMI — this map decomposes BMI into fat (x) and fat-free
         (y) parts; diagonals are constant BMI. Scan points are the signal;
         the faint trail is the day-to-day estimate, shown for context only.
-        {estimateTail.length > 0
-          ? ' The dashed tail past your last scan is where your weigh-ins suggest you are now — an estimate until the next scan confirms it.'
-          : forecast
-            ? ''
-            : ' The map is never extended past your last scan.'}
+        {/* Est/cone values live HERE, not as chart pills (pill policy);
+            the Est marker reveals its label on tap. */}
+        {estimateTail.length > 0 &&
+          ` Est. today: FFMI ${estimateTail[estimateTail.length - 1].ffmi.toFixed(1)} · FMI ${estimateTail[
+            estimateTail.length - 1
+          ].fmi.toFixed(1)} (weigh-in estimate, dashed tail).`}
         {forecast &&
-          ` The dotted cone extrapolates your recent scan trend ${forecast.path.length} weeks ahead — uncertainty widens the further out you look.`}
+          ` Cone = ${forecast.path.length}-wk projection${
+            forecast.basis === 'weigh-ins' ? ' along your recent weigh-in direction' : ''
+          }.`}
+        {estimateTail.length === 0 && !forecast && ' The map is never extended past your last scan.'}
       </p>
 
       {/* No target yet: zone + suggestion carry the destination until one

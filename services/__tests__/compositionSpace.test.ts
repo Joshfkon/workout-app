@@ -576,6 +576,59 @@ describe('computeCompositionForecast', () => {
     expect(computeCompositionForecast(flat, anchor, null).status).toBe('flat');
   });
 
+  describe('phase-aware direction (phase started after the last scan)', () => {
+    // Cutting scan pair: velocity points up-LEFT (fat down, lean up).
+    // Then a bulk starts post-scan and weigh-ins rise for 3 weeks.
+    const risingTail = [
+      point('2026-02-05', 6.9, 19.7),
+      point('2026-02-19', 7.1, 19.9),
+    ];
+    const tailEnd = risingTail[risingTail.length - 1];
+
+    const angleBetween = (a: { fmi: number; ffmi: number }, b: { fmi: number; ffmi: number }) => {
+      const dot = a.fmi * b.fmi + a.ffmi * b.ffmi;
+      const mags = Math.hypot(a.fmi, a.ffmi) * Math.hypot(b.fmi, b.ffmi);
+      return (Math.acos(Math.max(-1, Math.min(1, dot / mags))) * 180) / Math.PI;
+    };
+
+    it('derives the cone from the recent weigh-in estimate, within ±30° of the Est direction', () => {
+      const f = computeCompositionForecast(scans, tailEnd, null, {
+        tail: risingTail,
+        phaseStartDate: '2026-02-01',
+      });
+      expect(f.status).toBe('ok');
+      expect(f.basis).toBe('weigh-ins');
+      // Sign flip vs the scan pair: the bulk gains fat+lean (up-right).
+      expect(f.velocity.fmi).toBeGreaterThan(0);
+      expect(f.velocity.ffmi).toBeGreaterThan(0);
+      // Cone centerline within ±30° of the Latest→Est direction.
+      const lastScan = scans[scans.length - 1];
+      const estDirection = {
+        fmi: tailEnd.fmi - lastScan.fmi,
+        ffmi: tailEnd.ffmi - lastScan.ffmi,
+      };
+      expect(angleBetween(f.velocity, estDirection)).toBeLessThanOrEqual(30);
+    });
+
+    it('keeps the scan-pair basis when the phase predates the last scan', () => {
+      const f = computeCompositionForecast(scans, tailEnd, null, {
+        tail: risingTail,
+        phaseStartDate: '2026-01-15',
+      });
+      expect(f.basis).toBe('scans');
+      expect(f.velocity.fmi).toBeLessThan(0); // still the cut's direction
+    });
+
+    it('keeps the scan-pair basis until the tail has ≥14 days of weigh-ins', () => {
+      const shortTail = [point('2026-02-05', 6.9, 19.7)]; // 7 days post-scan
+      const f = computeCompositionForecast(scans, shortTail[0], null, {
+        tail: shortTail,
+        phaseStartDate: '2026-02-01',
+      });
+      expect(f.basis).toBe('scans');
+    });
+  });
+
   it('declines to forecast under 2 scans', () => {
     expect(computeCompositionForecast([scans[0]], anchor, null).status).toBe('insufficient');
   });

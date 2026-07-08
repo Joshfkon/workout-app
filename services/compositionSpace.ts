@@ -534,14 +534,11 @@ export function zoneOverlapsDomain(zone: AthleticZone, domain: MapDomain): boole
   );
 }
 
-/** Compass arrow from the viewport center toward the zone centroid — for
- * the "target zone ↖" edge indicator when the zone is off-viewport. */
-export function zoneDirectionArrow(zone: AthleticZone, domain: MapDomain): string {
-  const poly = athleticZonePolygon(zone);
-  const cx = poly.reduce((s, p) => s + p.fmi, 0) / poly.length;
-  const cy = poly.reduce((s, p) => s + p.ffmi, 0) / poly.length;
-  const dx = cx - (domain.x[0] + domain.x[1]) / 2;
-  const dy = cy - (domain.y[0] + domain.y[1]) / 2;
+/** Compass arrow from the viewport center toward an off-viewport point —
+ * shared by the zone and Start edge indicators. */
+export function directionArrowTo(point: CompositionCoords, domain: MapDomain): string {
+  const dx = point.fmi - (domain.x[0] + domain.x[1]) / 2;
+  const dy = point.ffmi - (domain.y[0] + domain.y[1]) / 2;
   // Octant by angle; y up in data space.
   const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
   const arrows: Record<number, string> = {
@@ -557,6 +554,39 @@ export function zoneDirectionArrow(zone: AthleticZone, domain: MapDomain): strin
   };
   return arrows[octant] ?? '→';
 }
+
+/** Compass arrow from the viewport center toward the zone centroid — for
+ * the "target zone ↖" edge indicator when the zone is off-viewport. */
+export function zoneDirectionArrow(zone: AthleticZone, domain: MapDomain): string {
+  const poly = athleticZonePolygon(zone);
+  return directionArrowTo(
+    {
+      fmi: poly.reduce((s, p) => s + p.fmi, 0) / poly.length,
+      ffmi: poly.reduce((s, p) => s + p.ffmi, 0) / poly.length,
+    },
+    domain
+  );
+}
+
+/** Is a point inside the viewport? (For clipping Fit-data geometry.) */
+export function pointInDomain(point: CompositionCoords, domain: MapDomain): boolean {
+  return (
+    point.fmi >= domain.x[0] &&
+    point.fmi <= domain.x[1] &&
+    point.ffmi >= domain.y[0] &&
+    point.ffmi <= domain.y[1]
+  );
+}
+
+/** Fit-data viewport fits this many most-recent scans (older scans clip
+ * out and Start gets an edge indicator). */
+export const FIT_DATA_RECENT_SCANS = 4;
+
+/** Maximum persistent label PILLS per view mode: Fit data = Latest +
+ * Target; Fit all also allows Start. Everything else renders as plain
+ * text, caption copy, or tap-to-reveal. A dev-mode warning fires when the
+ * rendered count exceeds this, so the policy can't silently regress. */
+export const MAP_PILL_CAP: Record<'recent' | 'all', number> = { recent: 2, all: 3 };
 
 // ============================================================
 // Suggested target (next milestone, not the final zone)
@@ -653,6 +683,15 @@ export const FORECAST_GOAL_HIT_RADIUS = 0.35;
  * and there. */
 export const FORECAST_MAX_ETA_WEEKS = 26;
 
+/** Phase-aware direction: when the phase changed AFTER the last scan, the
+ * scan-pair velocity describes the OLD phase. Require at least this many
+ * days of post-scan weigh-ins before trusting the new direction. */
+export const FORECAST_PHASE_MIN_TAIL_DAYS = 14;
+
+/** Weigh-in window for the phase-aware direction — recent enough to
+ * exclude pre-phase data. */
+export const FORECAST_WEIGHIN_WINDOW_DAYS = 21;
+
 export interface ForecastPathPoint {
   /** Weeks ahead of the anchor. */
   weeks: number;
@@ -666,6 +705,9 @@ export interface CompositionForecast {
   status: 'ok' | 'flat' | 'insufficient';
   /** Weekly velocity in composition space (kg/m² per week). */
   velocity: { fmi: number; ffmi: number };
+  /** Where the velocity came from: the last scan pair, or (phase-aware)
+   * the recent weigh-in-driven estimate. */
+  basis: 'scans' | 'weigh-ins';
   /** Central extrapolated path, 1-week steps from the anchor (exclusive). */
   path: ForecastPathPoint[];
   /** Weeks until the central path passes within FORECAST_GOAL_HIT_RADIUS of
@@ -675,41 +717,96 @@ export interface CompositionForecast {
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const FORECAST_DAY_MS = 24 * 60 * 60 * 1000;
+
+function forecastDay(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getTime() / FORECAST_DAY_MS;
+}
+
+export interface ForecastOptions {
+  /** Post-scan weigh-in estimate points (the map's dashed tail). */
+  tail?: CompositionPoint[];
+  /** When the current phase began (active target's createdAt). */
+  phaseStartDate?: string | null;
+  horizonWeeks?: number;
+}
 
 /**
  * Extrapolate the recent trend forward.
  *
- * Velocity comes from the LAST TWO SCANS (measured data, not the
- * assumption-driven daily estimate); the path projects from `anchor` — the
- * current estimated position when weigh-ins exist past the last scan, else
- * the last scan itself. Uncertainty widens linearly: DEXA noise at t=0 plus
- * a fraction of the traveled distance (partitioning variance dominates the
- * further out you look). This is an "if the trend holds" statement, never a
- * promise — render it visually distinct from measured data.
+ * Velocity normally comes from the LAST TWO SCANS (measured data). The one
+ * exception is phase-aware: when the phase changed AFTER the last scan and
+ * at least FORECAST_PHASE_MIN_TAIL_DAYS of post-scan weigh-ins exist, the
+ * scan pair describes the OLD phase (a cut's down-left trend must not fan
+ * the cone during a new bulk) — so the direction comes from the last
+ * ≤FORECAST_WEIGHIN_WINDOW_DAYS of the weigh-in estimate instead.
+ *
+ * The path projects from `anchor` — the current estimated position when
+ * weigh-ins exist past the last scan, else the last scan itself.
+ * Uncertainty widens linearly: DEXA noise at t=0 plus a fraction of the
+ * traveled distance (partitioning variance dominates the further out you
+ * look). "If the trend holds", never a promise.
  */
 export function computeCompositionForecast(
   scanPoints: CompositionPoint[],
   anchor: CompositionCoords,
   target: CompositionCoords | null,
-  horizonWeeks: number = FORECAST_HORIZON_WEEKS
+  options: ForecastOptions = {}
 ): CompositionForecast {
-  const none = { velocity: { fmi: 0, ffmi: 0 }, path: [], goalEtaWeeks: null };
+  const horizonWeeks = options.horizonWeeks ?? FORECAST_HORIZON_WEEKS;
+  const none = {
+    velocity: { fmi: 0, ffmi: 0 },
+    basis: 'scans' as const,
+    path: [],
+    goalEtaWeeks: null,
+  };
   if (scanPoints.length < 2) return { status: 'insufficient', ...none };
 
-  const a = scanPoints[scanPoints.length - 2];
-  const b = scanPoints[scanPoints.length - 1];
-  const weeksBetween =
-    (new Date(`${b.date}T00:00:00Z`).getTime() - new Date(`${a.date}T00:00:00Z`).getTime()) /
-    WEEK_MS;
-  if (weeksBetween <= 0) return { status: 'insufficient', ...none };
+  const lastScan = scanPoints[scanPoints.length - 1];
 
-  const velocity = {
-    fmi: (b.fmi - a.fmi) / weeksBetween,
-    ffmi: (b.ffmi - a.ffmi) / weeksBetween,
-  };
+  // Phase-aware branch: phase started post-scan AND the tail has matured.
+  let velocity: { fmi: number; ffmi: number } | null = null;
+  let basis: 'scans' | 'weigh-ins' = 'scans';
+  const tail = options.tail ?? [];
+  const phaseStart = options.phaseStartDate?.slice(0, 10) ?? null;
+  if (tail.length > 0 && phaseStart && phaseStart > lastScan.date) {
+    const tailEnd = tail[tail.length - 1];
+    const tailSpanDays = forecastDay(tailEnd.date) - forecastDay(lastScan.date);
+    if (tailSpanDays >= FORECAST_PHASE_MIN_TAIL_DAYS) {
+      // Reference point: the start of the recent window — the last scan if
+      // it falls inside, else the earliest tail point within the window.
+      const windowStartDay = forecastDay(tailEnd.date) - FORECAST_WEIGHIN_WINDOW_DAYS;
+      const ref =
+        forecastDay(lastScan.date) >= windowStartDay
+          ? lastScan
+          : (tail.find((p) => forecastDay(p.date) >= windowStartDay) ?? lastScan);
+      const refWeeks = (forecastDay(tailEnd.date) - forecastDay(ref.date)) / 7;
+      if (refWeeks > 0) {
+        velocity = {
+          fmi: (tailEnd.fmi - ref.fmi) / refWeeks,
+          ffmi: (tailEnd.ffmi - ref.ffmi) / refWeeks,
+        };
+        basis = 'weigh-ins';
+      }
+    }
+  }
+
+  if (!velocity) {
+    const a = scanPoints[scanPoints.length - 2];
+    const b = lastScan;
+    const weeksBetween =
+      (new Date(`${b.date}T00:00:00Z`).getTime() - new Date(`${a.date}T00:00:00Z`).getTime()) /
+      WEEK_MS;
+    if (weeksBetween <= 0) return { status: 'insufficient', ...none };
+    velocity = {
+      fmi: (b.fmi - a.fmi) / weeksBetween,
+      ffmi: (b.ffmi - a.ffmi) / weeksBetween,
+    };
+  }
+
   const speed = Math.hypot(velocity.fmi, velocity.ffmi);
   if (speed < FORECAST_MIN_SPEED) {
-    return { status: 'flat', velocity, path: [], goalEtaWeeks: null };
+    return { status: 'flat', velocity, basis, path: [], goalEtaWeeks: null };
   }
 
   const path: ForecastPathPoint[] = [];
@@ -737,7 +834,7 @@ export function computeCompositionForecast(
     }
   }
 
-  return { status: 'ok', velocity, path, goalEtaWeeks };
+  return { status: 'ok', velocity, basis, path, goalEtaWeeks };
 }
 
 // ============================================================

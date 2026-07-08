@@ -110,8 +110,9 @@ describe('CompositionMap', () => {
     renderMap();
     expect(screen.getByText(/FMI \+ FFMI = BMI/)).toBeInTheDocument();
     expect(screen.getByText(/↑ muscle gained · ← fat lost · ↖ recomp/)).toBeInTheDocument();
-    // A moving trend earns the forecast-cone explanation.
-    expect(screen.getByText(/dotted cone extrapolates your recent scan trend/)).toBeInTheDocument();
+    // A moving trend earns the forecast-cone caption (values live here,
+    // not as chart pills).
+    expect(screen.getByText(/Cone = 12-wk projection/)).toBeInTheDocument();
   });
 
   it('keeps the never-extended honesty note when the trend is flat (no forecast)', () => {
@@ -120,7 +121,7 @@ describe('CompositionMap', () => {
       trend: [scan('2026-01-05', 60, 15, 78), scan('2026-06-01', 60, 15, 78)],
     });
     expect(screen.getByText(/never extended past your last scan/)).toBeInTheDocument();
-    expect(screen.queryByText(/dotted cone/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Cone =/)).not.toBeInTheDocument();
   });
 
   it('explains the estimate tail when weigh-ins exist past the last scan', () => {
@@ -130,9 +131,7 @@ describe('CompositionMap', () => {
         { ...scan('2026-06-20', 65.2, 20.3, 88.5), kind: 'estimated' as const },
       ],
     });
-    expect(
-      screen.getByText(/dashed tail past your last scan is where your weigh-ins suggest/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Est\. today: FFMI \d+(\.\d+)? · FMI \d+(\.\d+)?/)).toBeInTheDocument();
     expect(screen.queryByText(/never extended past your last scan/)).not.toBeInTheDocument();
   });
 
@@ -393,6 +392,8 @@ describe('CompositionMap decorations (direction cues)', () => {
     trailPoints: [],
     estimateTail: [],
     estimateLabel: null,
+    estimateLabelVisible: false,
+    viewMode: 'all' as const,
     forecast: null,
     zone: null,
     suggestion: null,
@@ -518,6 +519,7 @@ describe('CompositionMap decorations (direction cues)', () => {
       const testid = el.getAttribute('data-testid')!;
       const hasPill = el.parentElement?.querySelector(`[data-testid="${testid}-pill"]`);
       if (hasPill) continue; // pill guarantees legibility wherever it sits
+      if (el.getAttribute('data-clear') === 'false') continue; // declared fallback
       const fontSize = Number(el.getAttribute('font-size') ?? 9);
       const box = labelBox(
         Number(el.getAttribute('x')),
@@ -590,9 +592,8 @@ describe('CompositionMap decorations (direction cues)', () => {
     // Dashed + faint: an estimate, never mistakable for the scan path.
     expect(tail.getAttribute('stroke-dasharray')).toBeTruthy();
     expect(screen.getByTestId('map-estimate-marker')).toBeInTheDocument();
-    const label = screen.getByTestId('map-estimate-label');
-    expect(label).toHaveTextContent('Est. · Jul 5');
-    expect(screen.getByTestId('map-estimate-label-pill')).toBeInTheDocument();
+    // Pill policy: the Est label is tap-to-reveal, not persistent.
+    expect(screen.queryByTestId('map-estimate-label')).not.toBeInTheDocument();
     // The scan path itself is unchanged — no extra arrowheads from the tail.
     expect(screen.getAllByTestId('map-arrowhead')).toHaveLength(4);
   });
@@ -617,8 +618,8 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(cone.getAttribute('fill-opacity')).toBeTruthy(); // translucent, not solid
     const path = screen.getByTestId('map-forecast-path');
     expect(path.getAttribute('stroke-dasharray')).toBe('1 4'); // dotted ≠ tail's dashes
-    expect(screen.getByTestId('map-forecast-label')).toHaveTextContent('Trend · +2 wk');
-    expect(screen.getByTestId('map-forecast-label-pill')).toBeInTheDocument();
+    // Pill policy: no persistent Trend pill — the caption explains the cone.
+    expect(screen.queryByTestId('map-forecast-label')).not.toBeInTheDocument();
   });
 
   it('omits forecast artifacts when there is no forecast', () => {
@@ -637,12 +638,13 @@ describe('CompositionMap decorations (direction cues)', () => {
       },
     });
     const zoneEl = screen.getByTestId('map-athletic-zone');
-    expect(zoneEl.getAttribute('clip-path')).toContain('map-zone-clip');
     expect(Number(zoneEl.getAttribute('fill-opacity'))).toBeCloseTo(0.08, 5);
     expect(screen.getByTestId('map-zone-label')).toHaveTextContent('athletic zone');
-    // Drawn first: the zone lives inside the root group's first child.
-    const root = container.querySelector('svg > g');
-    expect(root?.firstElementChild?.contains(zoneEl)).toBe(true);
+    // Everything clips to the plot; the zone is the clipped group's first
+    // child so every other mark draws above it.
+    const clipped = container.querySelector('svg > g > g[clip-path]');
+    expect(clipped?.getAttribute('clip-path')).toContain('map-plot-clip');
+    expect(clipped?.firstElementChild?.contains(zoneEl)).toBe(true);
     expect(screen.queryByTestId('map-zone-indicator')).not.toBeInTheDocument();
   });
 
@@ -677,15 +679,67 @@ describe('CompositionMap decorations (direction cues)', () => {
     expect(onZoneIndicatorClick).toHaveBeenCalled();
   });
 
-  it('renders the suggestion as a tappable hollow dot with a label', () => {
+  it('renders the suggestion as an unlabeled tappable hollow dot (pill policy)', () => {
     const onSuggestionClick = jest.fn();
     renderDecorations({
       suggestion: { fmi: 5.5, ffmi: 18.4 },
       onSuggestionClick,
     });
-    expect(screen.getByTestId('map-suggestion-label')).toHaveTextContent('Suggested');
+    expect(screen.queryByTestId('map-suggestion-label')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('map-suggestion'));
     expect(onSuggestionClick).toHaveBeenCalled();
+  });
+
+  it('enforces the pill cap: exactly 1 pill (Latest) in Fit data, 2 with a target', () => {
+    const { container, unmount } = renderDecorations({ viewMode: 'recent' });
+    const pills = () => container.querySelectorAll('[data-testid$="-pill"]');
+    expect(pills()).toHaveLength(1);
+    expect(container.querySelector('[data-testid="map-now-label-pill"]')).toBeTruthy();
+    unmount();
+
+    const withTarget = renderDecorations({
+      viewMode: 'recent',
+      targetPoint: { fmi: 6.5, ffmi: 22.5 },
+      targetLabelLines: ['GOAL', 'FFMI 22.5', 'BF 22%', 'FMI 6.5'],
+    });
+    expect(withTarget.container.querySelectorAll('[data-testid$="-pill"]')).toHaveLength(2);
+  });
+
+  it('allows the Start pill only in Fit all; scan dates are never pills', () => {
+    const { container } = renderDecorations({ viewMode: 'all' });
+    expect(container.querySelector('[data-testid="map-start-label-pill"]')).toBeTruthy();
+    expect(container.querySelectorAll('[data-testid="map-month-label-pill"]')).toHaveLength(0);
+
+    const recent = renderDecorations({ viewMode: 'recent' });
+    expect(
+      recent.container.querySelector('[data-testid="map-start-label-pill"]')
+    ).toBeFalsy();
+    // Start still labeled, just plain text.
+    expect(recent.container.querySelector('[data-testid="map-start-label"]')).toBeTruthy();
+  });
+
+  it('replaces the Start label with an edge indicator when clipped out of view', () => {
+    // Viewport excludes the start point (fmi 3.0, ffmi 17).
+    renderDecorations({
+      viewMode: 'recent',
+      domain: { x: [4, 8] as [number, number], y: [18, 24] as [number, number] },
+    });
+    expect(screen.queryByTestId('map-start-label')).not.toBeInTheDocument();
+    expect(screen.getByTestId('map-start-indicator')).toHaveTextContent(/start [↙↘←↖→↗↑↓]/);
+  });
+
+  it('reveals the Est label only on tap (estimateLabelVisible)', () => {
+    const tail = [point('2026-06-20', 7.9, 23.6), point('2026-07-05', 8.0, 23.4)];
+    const { unmount } = renderDecorations({ estimateTail: tail, estimateLabel: 'Est. · Jul 5' });
+    expect(screen.queryByTestId('map-estimate-label')).not.toBeInTheDocument();
+    unmount();
+
+    renderDecorations({
+      estimateTail: tail,
+      estimateLabel: 'Est. · Jul 5',
+      estimateLabelVisible: true,
+    });
+    expect(screen.getByTestId('map-estimate-label')).toHaveTextContent('Est. · Jul 5');
   });
 
   it('drops intermediate labels on dense maps (tap-only)', () => {
