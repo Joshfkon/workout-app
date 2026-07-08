@@ -20,9 +20,11 @@ import {
   isStandardMuscle,
   legacyToStandardMuscles,
 } from '@/types/schema';
-import { formatDuration, formatWeight, estimateE1RM } from '@/lib/utils';
+import { formatDuration, formatWeight, estimateE1RM, deriveWorkoutLabel } from '@/lib/utils';
 import { getFormLabel, getFormColorClass } from '@/services/progressionEngine';
 import { getCalibrationVerdict, type CalibrationMethod } from '@/services/rpeCalibration';
+import type { ShareExercise, WorkoutShareTextInput } from '@/services/workoutShareText';
+import { ShareWorkoutText } from './ShareWorkoutText';
 
 /** Per-muscle end-of-session feedback captured in the summary (0-3 scales). */
 export interface SessionMuscleFeedbackEntry {
@@ -86,6 +88,8 @@ interface AMRAPCalibration {
 interface SessionSummaryProps {
   session: WorkoutSession;
   exerciseBlocks: ExerciseBlock[];
+  /** Blocks the user skipped entirely — rendered as ⬛ rows in the text share. */
+  skippedBlocks?: ExerciseBlock[];
   allSets: SetLog[];
   exerciseHistories?: Record<string, ExerciseWithHistory>;
   amrapCalibrations?: AMRAPCalibration[];
@@ -115,6 +119,7 @@ function estimateCaloriesBurned(durationMinutes: number, totalSets: number, avgR
 export function SessionSummary({
   session,
   exerciseBlocks,
+  skippedBlocks = [],
   allSets,
   exerciseHistories,
   amrapCalibrations = [],
@@ -192,6 +197,7 @@ export function SessionSummary({
   // Detect Personal Records (PRs) - now incorporates form quality
   const personalRecords = useMemo(() => {
     const prs: {
+      blockId: string;
       exerciseName: string;
       type: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form';
       value: number;
@@ -259,6 +265,7 @@ export function SessionSummary({
       // Check for E1RM PR (most meaningful)
       if (bestE1RM > history.previousBest.e1rm) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'e1rm',
           value: bestE1RM,
@@ -272,6 +279,7 @@ export function SessionSummary({
       // Check for weight PR
       else if (bestWeight > history.previousBest.weight) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'weight',
           value: bestWeight,
@@ -285,6 +293,7 @@ export function SessionSummary({
       // Check for reps PR (at same or higher weight)
       else if (bestReps > history.previousBest.reps && bestWeight >= history.previousBest.weight * 0.95) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'reps',
           value: bestReps,
@@ -297,6 +306,84 @@ export function SessionSummary({
 
     return prs;
   }, [workingSets, exerciseBlocks, exerciseHistories]);
+
+  // Wordle-style text share input (performed order, skipped blocks included)
+  const shareInput = useMemo<Omit<WorkoutShareTextInput, 'cryptic'>>(() => {
+    const entries: { order: number; exercise: ShareExercise }[] = [];
+
+    exerciseBlocks.forEach((block) => {
+      const exercise = (block as any).exercise;
+      const name = exercise?.name || 'Exercise';
+      const sets = workingSets.filter((s) => s.exerciseBlockId === block.id);
+      const amrap = amrapCalibrations.find((c) =>
+        c.exerciseId ? c.exerciseId === block.exerciseId : c.exerciseName === name
+      );
+      // The AMRAP set is the last performed set matching the calibration record.
+      const amrapIndex = amrap
+        ? sets.map((s) => s.weightKg === amrap.weightKg && s.reps === amrap.actualMaxReps).lastIndexOf(true)
+        : -1;
+
+      entries.push({
+        order: block.order,
+        exercise: {
+          name,
+          primaryMuscle: exercise?.primaryMuscle,
+          targetSets: block.targetSets,
+          skipped: sets.length === 0,
+          // Match by block, not name — the same exercise can appear in
+          // multiple blocks and only the record-setting one gets the 🔥.
+          hasPR: personalRecords.some((pr) => pr.blockId === block.id),
+          sets: sets.map((set, index) => ({
+            quality: set.quality,
+            reps: set.reps,
+            weightKg: set.weightKg,
+            isDropset: set.setType === 'dropset',
+            isAmrap: index === amrapIndex,
+          })),
+        },
+      });
+    });
+
+    skippedBlocks.forEach((block) => {
+      const exercise = (block as any).exercise;
+      entries.push({
+        order: block.order,
+        exercise: {
+          name: exercise?.name || 'Exercise',
+          primaryMuscle: exercise?.primaryMuscle,
+          targetSets: block.targetSets,
+          skipped: true,
+          sets: [],
+        },
+      });
+    });
+
+    entries.sort((a, b) => a.order - b.order);
+
+    const performedMuscles = exerciseBlocks
+      .filter((block) => workingSets.some((s) => s.exerciseBlockId === block.id))
+      .map((block) => (block as any).exercise?.primaryMuscle)
+      .filter((m): m is string => !!m);
+
+    const completedDate = session.completedAt ? new Date(session.completedAt) : new Date();
+
+    return {
+      title: deriveWorkoutLabel(performedMuscles),
+      subtitle: completedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      exercises: entries.map((e) => e.exercise),
+      durationSeconds: duration,
+      unit,
+    };
+  }, [
+    exerciseBlocks,
+    skippedBlocks,
+    workingSets,
+    amrapCalibrations,
+    personalRecords,
+    session.completedAt,
+    duration,
+    unit,
+  ]);
 
   // Volume by muscle group
   const volumeByMuscle = useMemo(() => {
@@ -478,10 +565,13 @@ export function SessionSummary({
             ? session.completedAt 
               ? `Completed ${new Date(session.completedAt).toLocaleDateString()}`
               : 'Viewing past workout'
-            : personalRecords.length > 0 
-            ? "You're getting stronger! 💪" 
+            : personalRecords.length > 0
+            ? "You're getting stronger! 💪"
             : 'Great job finishing your session'}
         </p>
+        <div className="mt-4 flex justify-center">
+          <ShareWorkoutText input={shareInput} />
+        </div>
       </div>
 
       {/* Personal Records Celebration */}

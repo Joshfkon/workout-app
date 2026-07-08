@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`formatWorkoutShareText matches snapshot for a full session with multiple PRs 1`] = `
+"HyperTrack 💪 Pull
+Jul 8
+
+🟩🟩🟩  Deadlift 🔥
+🟩🟩🟩  Barbell Row
+🟩🟩🟩  Lat Pulldown 🔥
+🟩🟩🟩  Curl (EZ bar)
+
+12 sets · 12,000 kg · 72 min · 🔥2 PRs"
+`;
+
+exports[`formatWorkoutShareText matches snapshot for a session with partial and full skips 1`] = `
+"HyperTrack 💪 Push
+
+🟩🟩⬜⬜⬜  Squat
+⬛⬛⬛  Leg Press
+⬛⬛  Leg Curl
+
+2 sets · 2,000 kg · 60 min"
+`;
+
+exports[`formatWorkoutShareText matches snapshot in cryptic mode 1`] = `
+"HyperTrack 💪 Push
+
+🟩🟩🟩  🏋️ 🔥
+🟩🟩🟩  🦵
+🟩🟩🟩  💪
+
+9 sets · 9,000 kg · 60 min · 🔥1 PR"
+`;
+
+exports[`formatWorkoutShareText with more than 8 exercises matches snapshot 1`] = `
+"HyperTrack 💪 Push
+
+🟩🟩  Exercise 1
+🟩🟩  Exercise 2
+🟩🟩  Exercise 3
+🟩🟩  Exercise 4
+🟩🟩  Exercise 5
+🟩🟩  Exercise 6
+🟩🟩  Exercise 7
++3 more · 🟩🟩🟩🟩🟩🟩
+
+20 sets · 11,000 kg · 60 min"
+`;
