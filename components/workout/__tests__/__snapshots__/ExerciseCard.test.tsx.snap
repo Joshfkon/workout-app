@@ -1239,7 +1239,7 @@ exports[`ExerciseCard Snapshot Tests renders with completed sets 1`] = `
         <span
           class="ml-auto flex-shrink-0 text-[11px] text-surface-500"
         >
-          2
+          3
            RIR · 
           <span
             class="text-success-400"

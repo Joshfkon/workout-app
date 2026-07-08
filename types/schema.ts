@@ -2251,9 +2251,14 @@ export function rirToRpe(rir: RepsInTank): number {
 
 /**
  * Convert RPE to approximate Reps In Reserve
+ *
+ * Exact inverse of `rirToRpe` for every RepsInTank value (4→6, 3→7, 2→7.5,
+ * 1→9, 0→10), so a logged RIR survives the RIR→RPE→RIR round trip — without
+ * the RIR-3 bucket, a stored RPE 7 (logged RIR 3) read back as 2.
  */
 export function rpeToRir(rpe: number): RepsInTank {
   if (rpe <= 6) return 4;
+  if (rpe <= 7) return 3;
   if (rpe <= 8) return 2;
   if (rpe <= 9) return 1;
   return 0;

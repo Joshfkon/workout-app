@@ -130,8 +130,17 @@ describe('RPE/RIR Conversion', () => {
       expect(rpeToRir(10)).toBe(0);
       expect(rpeToRir(9)).toBe(1);
       expect(rpeToRir(8)).toBe(2);
-      expect(rpeToRir(7)).toBe(2); // <= 8 bucket
+      expect(rpeToRir(7.5)).toBe(2);
+      expect(rpeToRir(7)).toBe(3);
       expect(rpeToRir(6)).toBe(4);
+    });
+
+    it('round-trips every loggable RIR through rirToRpe', () => {
+      // A logged RIR must survive RIR -> stored RPE -> displayed RIR; a
+      // missing RIR-3 bucket previously showed a logged 3 as 2.
+      for (const rir of [0, 1, 2, 3, 4] as const) {
+        expect(rpeToRir(rirToRpe(rir))).toBe(rir);
+      }
     });
   });
 
