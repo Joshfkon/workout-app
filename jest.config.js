@@ -120,6 +120,18 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/locationSubstitution.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
+    'services/locationProfiles.ts': {
+      lines: 70,
+      functions: 60,
+      branches: 50,
+      statements: 70,
+    },
   },
 };
 

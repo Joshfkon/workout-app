@@ -682,7 +682,9 @@ export default function SettingsPage() {
       </Card>
 
       {/* Detailed Gym Equipment */}
-      <GymEquipmentSettings />
+      <div id="gym-equipment">
+        <GymEquipmentSettings />
+      </div>
 
       {/* Exercise Variety Settings */}
       {userId && (
