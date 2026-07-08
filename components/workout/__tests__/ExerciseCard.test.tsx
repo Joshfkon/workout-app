@@ -481,6 +481,55 @@ describe('ExerciseCard', () => {
       expect(screen.queryByText(/999 kg ×/)).not.toBeInTheDocument();
     });
 
+    it('labels the banner RIR as a target and reports the logged RIR honestly on a within-deadband hold', () => {
+      // Logged 3 RIR (feedback) against a 2 RIR target: still a hold (inside
+      // the deadband), but the copy must NOT claim the set "matched the
+      // target effort" — users read that as the AI mis-recording their RIR.
+      const sets = [
+        createMockSetLog({
+          id: 'set-1',
+          setNumber: 1,
+          weightKg: 100,
+          reps: 10,
+          rpe: 7,
+          feedback: { repsInTank: 3, form: 'clean' },
+        }),
+      ];
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={sets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(screen.getByText(/100 kg × 9 @ 2 RIR target/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/your 3 RIR set was close enough to the 2 RIR target/)
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/matched the target effort/)).not.toBeInTheDocument();
+    });
+
+    it('says the last set hit the target when the logged RIR equals the target RIR', () => {
+      // RPE 8 with no chip feedback displays as 2 RIR — an exact match.
+      const sets = [
+        createMockSetLog({ id: 'set-1', setNumber: 1, weightKg: 100, reps: 10, rpe: 8 }),
+      ];
+
+      render(
+        <ExerciseCard
+          {...defaultProps}
+          sets={sets}
+          isActive={true}
+          onSetComplete={jest.fn().mockResolvedValue('id')}
+        />
+      );
+
+      expect(screen.getByText(/your last set hit the 2 RIR target/)).toBeInTheDocument();
+    });
+
     it('shows the suggestion banner with a reason', () => {
       render(<ExerciseCard {...defaultProps} isActive={true} />);
       // No history and a target weight -> profile-based starting point reason

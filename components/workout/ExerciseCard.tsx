@@ -1105,15 +1105,23 @@ export const ExerciseCard = memo(function ExerciseCard({
         reps = Math.max(amrapReps(lastSetData), reps);
       }
       const deltaText = deltaLabel(lastCompleted.weightKg, weight);
+      // Same RIR source as the completed-set line above the banner
+      // (feedback.repsInTank first), so the two can never disagree on screen.
+      const lastShownRir = lastCompleted.feedback?.repsInTank ?? rpeToRir(lastCompleted.rpe);
       if (rec.rationale === 'increase_load') {
         reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
       } else if (rec.rationale === 'reduce_load') {
         reason = `down ${deltaText || 'slightly'} — last set was harder than the target effort`;
+      } else if (lastShownRir === effectiveTargetRir) {
+        reason = `holding the weight — your last set hit the ${effectiveTargetRir} RIR target`;
       } else {
-        reason = 'holding the weight — your last set matched the target effort';
+        // Within the hold deadband but not an exact match — say so instead of
+        // claiming the set "matched" (a 3 RIR set against a 2 RIR target read
+        // as the AI mis-recording the logged RIR).
+        reason = `holding the weight — your ${lastShownRir} RIR set was close enough to the ${effectiveTargetRir} RIR target`;
       }
       explanation.push(
-        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prediction works back from.`
+        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at ${lastShownRir} RIR. Its estimated 1RM sets the capacity this prediction works back from.`
       );
     } else {
       // Mirror the pending-input seed: previous-session set for this slot

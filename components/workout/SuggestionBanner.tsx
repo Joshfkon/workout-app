@@ -35,8 +35,10 @@ export function SuggestionBanner({
     <div className="flex items-start gap-2 rounded-lg bg-primary-500/10 px-3 py-2">
       <IconSparkles size={16} className="text-primary-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
       <p className="flex-1 text-[12px] leading-snug text-primary-400">
+        {/* "target" disambiguates the prescription from the logged-set RIR
+            shown on the completed lines above (user-reported confusion). */}
         <span className="font-medium">
-          {weightLabel} × {repsLabel} @ {rir} RIR
+          {weightLabel} × {repsLabel} @ {rir} RIR target
         </span>
         {reason ? <span> — {reason}</span> : null}
       </p>
