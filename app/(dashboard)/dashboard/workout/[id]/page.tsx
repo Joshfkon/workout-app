@@ -77,6 +77,7 @@ import {
   type InjuryContext,
   type InjuryRisk
 } from '@/services/injuryAwareSwapper';
+import { exerciseRequiresUnavailableEquipment } from '@/services/equipmentFilter';
 import { CreateCustomExercise } from '@/components/exercises/CreateCustomExercise';
 import { ShareWorkoutModal } from '@/components/social/sharing/ShareWorkoutModal';
 import { checkSetSanity, type SanityCheckResult } from '@/services/sanityChecks';
@@ -131,48 +132,9 @@ import type {
   WorkoutPhase,
 } from './_lib/types';
 
-// Equipment mapping for filtering exercises based on available equipment at a location
-const EQUIPMENT_MAPPING: Record<string, string[]> = {
-  // Machines
-  leg_press: ['leg press', 'machine'],
-  leg_extension: ['leg extension', 'machine'],
-  leg_curl: ['leg curl', 'machine'],
-  hack_squat: ['hack squat', 'machine'],
-  smith_machine: ['smith machine', 'smith'],
-  chest_press: ['chest press machine', 'machine'],
-  pec_deck: ['pec deck', 'fly machine', 'machine'],
-  shoulder_press_machine: ['shoulder press machine', 'machine'],
-  lat_pulldown: ['lat pulldown', 'cable'],
-  seated_row: ['seated row', 'cable row', 'machine'],
-  cable_machine: ['cable', 'pulley'],
-  assisted_dip: ['assisted'],
-  preacher_curl: ['preacher'],
-  calf_raise: ['calf raise machine', 'machine'],
-  hip_abductor: ['hip abductor', 'hip adductor', 'machine'],
-  glute_kickback: ['glute kickback', 'cable'],
-  reverse_hyper: ['reverse hyper'],
-  // Free Weights
-  barbell: ['barbell', 'bar', 'olympic bar'],
-  dumbbells: ['dumbbell', 'db'],
-  kettlebells: ['kettlebell', 'kb'],
-  ez_bar: ['ez bar', 'curl bar', 'ez curl bar'],
-  weight_plates: ['plate', 'weight plate'],
-  // Benches
-  flat_bench: ['flat bench', 'bench'],
-  adjustable_bench: ['adjustable bench', 'incline bench', 'decline bench', 'bench'],
-  preacher_bench: ['preacher bench', 'preacher'],
-  // Racks
-  squat_rack: ['squat rack', 'power rack', 'rack'],
-  power_rack: ['power rack', 'squat rack', 'rack', 'cage'],
-  // Stations
-  pull_up_bar: ['pull up bar', 'pullup bar', 'chin up bar', 'bar'],
-  dip_station: ['dip station', 'dip bars', 'parallel bars'],
-  // Other
-  resistance_bands: ['resistance band', 'band'],
-  trx: ['trx', 'suspension trainer'],
-  ab_wheel: ['ab wheel', 'ab roller'],
-  foam_roller: ['foam roller', 'roller'],
-};
+// Equipment availability is checked through the shared fail-closed filter
+// (services/equipmentFilter.ts) against the location's blocklist of
+// equipment_types ids — no inline keyword mapping.
 
 // Wrapper to convert injuries array to get risk info using new intelligent swapper
 function getExerciseInjuryRisk(
@@ -449,7 +411,9 @@ export default function WorkoutPage() {
   const [gymLocations, setGymLocations] = useState<GymLocation[]>([]);
   const [selectedLocationFilter, setSelectedLocationFilter] = useState<string | null>(null);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
-  const [locationEquipment, setLocationEquipment] = useState<string[]>([]);
+  // Blocklist of equipment_types ids the selected location lacks; consumed by
+  // the shared fail-closed equipment filter (picker, swaps, injury adjuster).
+  const [locationUnavailableEquipmentIds, setLocationUnavailableEquipmentIds] = useState<string[]>([]);
   const [unavailableExerciseIds, setUnavailableExerciseIds] = useState<Set<string>>(new Set());
 
   // Share workout modal state
@@ -1224,11 +1188,12 @@ export default function WorkoutPage() {
     loadGymLocations();
   }, []);
 
-  // Load equipment and exercise availability when location filter changes
+  // Load the equipment blocklist and per-exercise availability overrides
+  // when the location filter changes.
   useEffect(() => {
     async function loadLocationEquipment() {
       if (!selectedLocationFilter) {
-        setLocationEquipment([]);
+        setLocationUnavailableEquipmentIds([]);
         setUnavailableExerciseIds(new Set());
         return;
       }
@@ -1252,58 +1217,29 @@ export default function WorkoutPage() {
           setUnavailableExerciseIds(new Set());
         }
 
-        // Load available equipment for the selected location
-        const { data: locationEq, error: equipmentError } = await supabase
+        // Load the equipment the location LACKS — the blocklist the shared
+        // fail-closed filter consumes.
+        const { data: blockedEq, error: equipmentError } = await supabase
           .from('user_equipment')
-          .select('equipment_id, is_available')
+          .select('equipment_id')
           .eq('user_id', user.id)
           .eq('location_id', selectedLocationFilter)
-          .eq('is_available', true);
+          .eq('is_available', false);
 
-        if (!equipmentError && locationEq && locationEq.length > 0) {
-          // Get equipment type names from equipment_types table
-          const equipmentIds = locationEq.map((eq: { equipment_id: string }) => eq.equipment_id);
-          const { data: equipmentTypes, error: typesError } = await supabase
-            .from('equipment_types')
-            .select('id, name')
-            .in('id', equipmentIds);
-
-          if (!typesError && equipmentTypes && equipmentTypes.length > 0) {
-            // Map equipment IDs to names and expand using EQUIPMENT_MAPPING
-            const equipmentNames = new Set<string>();
-            equipmentTypes.forEach((et: { id: string; name: string }) => {
-              const name = et.name.toLowerCase();
-              equipmentNames.add(name);
-
-              // Also add mapped variations
-              const mapping = EQUIPMENT_MAPPING[et.id] || EQUIPMENT_MAPPING[name];
-              if (mapping) {
-                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-              }
-            });
-
-            setLocationEquipment(Array.from(equipmentNames));
-          } else {
-            // Fallback: use equipment_id directly with mapping
-            const equipmentNames = new Set<string>();
-            equipmentIds.forEach((id: string) => {
-              const idLower = id.toLowerCase();
-              equipmentNames.add(idLower);
-
-              const mapping = EQUIPMENT_MAPPING[id] || EQUIPMENT_MAPPING[idLower];
-              if (mapping) {
-                mapping.forEach((variant: string) => equipmentNames.add(variant.toLowerCase()));
-              }
-            });
-
-            setLocationEquipment(Array.from(equipmentNames));
-          }
+        if (equipmentError) {
+          console.error(
+            '[workout] failed to load location equipment blocklist; exercises will NOT be equipment-constrained:',
+            equipmentError
+          );
+          setLocationUnavailableEquipmentIds([]);
         } else {
-          setLocationEquipment([]);
+          setLocationUnavailableEquipmentIds(
+            (blockedEq ?? []).map((eq: { equipment_id: string }) => eq.equipment_id)
+          );
         }
       } catch (err) {
-        console.warn('Error loading location equipment:', err);
-        setLocationEquipment([]);
+        console.error('Error loading location equipment:', err);
+        setLocationUnavailableEquipmentIds([]);
       }
     }
     loadLocationEquipment();
@@ -2405,12 +2341,20 @@ export default function WorkoutPage() {
       commonMistakes: [],
       setupNote: '',
       movementPattern: '',
-      equipmentRequired: [],
+      equipmentRequired: ex.equipment_required || [],
+      isBodyweight: ex.is_bodyweight ?? undefined,
     }));
-    
-    // Get auto-swap results from the intelligent swapper
+
+    // Get auto-swap results from the intelligent swapper, constrained to the
+    // selected location's equipment so a swap never lands on gear the user
+    // doesn't have.
     const workoutExercises = blocks.map(b => ({ id: b.id, exercise: b.exercise }));
-    const swapResults = autoSwapForInjuries(workoutExercises, fullExercises, injuryContexts);
+    const swapResults = autoSwapForInjuries(
+      workoutExercises,
+      fullExercises,
+      injuryContexts,
+      locationUnavailableEquipmentIds
+    );
     
     if (swapResults.length === 0) return;
     
@@ -4022,7 +3966,7 @@ export default function WorkoutPage() {
             gymLocations={gymLocations}
             selectedLocationFilter={selectedLocationFilter}
             onSelectedLocationFilterChange={setSelectedLocationFilter}
-            locationEquipment={locationEquipment}
+            unavailableEquipmentIds={locationUnavailableEquipmentIds}
             unavailableExerciseIds={unavailableExerciseIds}
             stapleExerciseIds={stapleExerciseIds}
             frequentExerciseIds={frequentExerciseIds}
@@ -4567,9 +4511,11 @@ export default function WorkoutPage() {
                         commonMistakes: [],
                         setupNote: '',
                         movementPattern: '',
-                        equipmentRequired: [],
+                        equipmentRequired: ex.equipment_required || [],
+                        isBodyweight: ex.is_bodyweight ?? undefined,
                       }))
                     )}
+                    unavailableEquipmentIds={locationUnavailableEquipmentIds}
                     isActive={isCurrent}
                     onActiveSuggestionChange={isCurrent ? setActiveSuggestionLabel : undefined}
                     unit={preferences.units}
@@ -5020,7 +4966,7 @@ export default function WorkoutPage() {
           gymLocations={gymLocations}
           selectedLocationFilter={selectedLocationFilter}
           onSelectedLocationFilterChange={setSelectedLocationFilter}
-          locationEquipment={locationEquipment}
+          unavailableEquipmentIds={locationUnavailableEquipmentIds}
           unavailableExerciseIds={unavailableExerciseIds}
           stapleExerciseIds={stapleExerciseIds}
           frequentExerciseIds={frequentExerciseIds}
@@ -5311,6 +5257,13 @@ export default function WorkoutPage() {
             if (ex.id === targetBlock.exercise.id) return false;
             // Must not already be in workout
             if (blocks.some(b => b.exercise.id === ex.id)) return false;
+            // Must be performable with the selected location's equipment
+            if (
+              exerciseRequiresUnavailableEquipment(
+                { name: ex.name, equipment: ex.equipment_required, isBodyweight: ex.is_bodyweight },
+                locationUnavailableEquipmentIds
+              )
+            ) return false;
             // Check search filter
             if (swapSearchQuery && !ex.name.toLowerCase().includes(swapSearchQuery.toLowerCase())) return false;
             // Check if safe for injuries

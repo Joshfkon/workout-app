@@ -37,6 +37,7 @@ import {
 import {
   applyLocationSubstitutions,
   buildSubstitutedPick,
+  enforcePlanEquipmentInvariant,
   type LocationSubstitutionExercise,
   type SubstitutedPick,
   type SubstitutedWorkoutPlan,
@@ -67,6 +68,7 @@ interface SheetExercise {
   default_rir: number | null;
   hypertrophy_tier: string | null;
   equipment_required: string[] | null;
+  is_bodyweight: boolean | null;
 }
 
 /** Shape the location substitution pass consumes. */
@@ -79,7 +81,8 @@ function toSubstitutionExercise(ex: SheetExercise): LocationSubstitutionExercise
     movementPattern: ex.movement_pattern,
     mechanic: ex.mechanic,
     tier: ex.hypertrophy_tier,
-    equipment: (ex.equipment_required ?? []).join(' ') || null,
+    equipment: ex.equipment_required,
+    isBodyweight: ex.is_bodyweight,
   };
 }
 
@@ -156,7 +159,7 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
           supabase
             .from('exercises')
             .select(
-              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required'
+              'id, name, primary_muscle, secondary_muscles, movement_pattern, mechanic, default_rep_range, default_rir, hypertrophy_tier, equipment_required, is_bodyweight'
             )
             .order('name'),
           supabase
@@ -242,9 +245,16 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
       if (!user || cancelled) return;
       const entries = await Promise.all(
         neededIds.map(async (id) => {
-          const ids = await fetchUnavailableEquipmentForLocation(user.id, id).catch(
-            () => [] as string[]
-          );
+          const ids = await fetchUnavailableEquipmentForLocation(user.id, id).catch((err) => {
+            // Degrading to "no blocklist" here means the location stops
+            // constraining generation — make that failure loud.
+            console.error(
+              `[SuggestedWorkoutSheet] failed to load equipment blocklist for location ${id}; ` +
+                'suggestions will NOT be equipment-constrained:',
+              err
+            );
+            return [] as string[];
+          });
           return [id, ids] as const;
         })
       );
@@ -301,7 +311,8 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
         mechanic: ex.mechanic,
         defaultRepRange: ex.default_rep_range,
         defaultRir: ex.default_rir,
-        equipment: (ex.equipment_required ?? []).join(' ') || null,
+        equipment: ex.equipment_required,
+        isBodyweight: ex.is_bodyweight,
       })),
       recentExerciseIds,
       maxExercises: maxExercisesForDuration(aiDuration),
@@ -312,16 +323,26 @@ export function SuggestedWorkoutSheet({ isOpen, onClose }: SuggestedWorkoutSheet
 
     // Location pass: swap picks the selected location can't support for
     // same-muscle alternatives (visible as "swapped from ..." notes).
+    const substitutionExercises = exercises.map(toSubstitutionExercise);
     const substituted = applyLocationSubstitutions({
       plan,
-      exercises: exercises.map(toSubstitutionExercise),
+      exercises: substitutionExercises,
       unavailableEquipmentIds: selectedUnavailable ?? [],
       sessionMinutes: aiDuration,
     });
 
+    // Belt-and-braces: no pick may require equipment the selected location
+    // lacks (dev: throws; prod: drops + logs). Exceptions stay visible via
+    // the noSubstituteAvailable flag.
+    const enforced = enforcePlanEquipmentInvariant(
+      substituted,
+      substitutionExercises,
+      selectedUnavailable ?? []
+    );
+
     setAiRequested(false);
     setSwapOptionsFor(null);
-    setAiPlan(substituted);
+    setAiPlan(enforced);
   }, [
     aiRequested,
     recoveryLoading,

@@ -69,8 +69,10 @@ export interface SuggestedExerciseInput {
   /** Library defaults used for the pick's rep/RIR targets. */
   defaultRepRange?: [number, number] | null;
   defaultRir?: number | null;
-  /** Equipment tag for the availability filter (optional). */
-  equipment?: string | null;
+  /** Equipment tags for the availability filter (optional). */
+  equipment?: string | string[] | null;
+  /** Bodyweight flag — untagged bodyweight exercises pass the equipment filter. */
+  isBodyweight?: boolean | null;
 }
 
 export interface BuildSuggestedWorkoutInput {
@@ -405,11 +407,11 @@ export function buildSuggestedWorkout(input: BuildSuggestedWorkoutInput): Sugges
   const sessionMinutes = input.sessionMinutes ?? DEFAULT_SESSION_MINUTES;
   const injuredMuscles = input.injuredMuscles ?? [];
 
-  // Guardrail filters first: equipment (reused machine-level filter), then
+  // Guardrail filters first: equipment (shared fail-closed filter), then
   // the mesocycle generator's muscle-level injury exclusion applied to each
   // exercise's primary muscle.
   const usableExercises = filterExercisesByEquipment(
-    input.exercises.map((ex) => ({ ...ex, equipment: ex.equipment ?? undefined })),
+    input.exercises,
     input.unavailableEquipmentIds ?? []
   ).filter(
     (ex) => !ex.primaryMuscle || !isMuscleExcludedByInjury(ex.primaryMuscle, injuredMuscles)

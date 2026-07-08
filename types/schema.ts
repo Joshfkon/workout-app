@@ -381,7 +381,10 @@ export interface Exercise {
   
   /** Equipment needed for this exercise */
   equipmentRequired: string[];
-  
+
+  /** True when the exercise is loaded by bodyweight (exercises.is_bodyweight) */
+  isBodyweight?: boolean;
+
   /** Hypertrophy effectiveness score based on Nippard methodology (optional) */
   hypertrophyScore?: HypertrophyScore;
 

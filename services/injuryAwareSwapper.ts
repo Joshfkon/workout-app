@@ -11,6 +11,7 @@
 import type { Exercise } from '@/types/schema';
 import { muscleMatchesGroup, toLegacyMuscleGroup } from '@/types/schema';
 import type { InjuryArea } from '@/types/training';
+import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 
 export type { InjuryArea };
 
@@ -593,16 +594,25 @@ export function filterForInjury(
 }
 
 /**
- * Get safe alternatives for an exercise given injuries
+ * Get safe alternatives for an exercise given injuries.
+ *
+ * When `unavailableEquipmentIds` is provided (the training location's
+ * blocklist), candidates the location can't support are excluded via the
+ * shared fail-closed equipment filter — an injury swap must never suggest
+ * an exercise the user has no equipment for.
  */
 export function getSafeAlternatives(
   source: Exercise,
   allExercises: Exercise[],
-  injuries: InjuryContext[]
+  injuries: InjuryContext[],
+  unavailableEquipmentIds: string[] = []
 ): InjurySafeSwap[] {
   // Get exercises that match the same primary muscle (overlap-aware so a
   // legacy 'chest' source still matches precisely-tagged 'chest_upper' etc.)
-  const sameMuscle = allExercises.filter(
+  const sameMuscle = filterExercisesByEquipment(
+    allExercises.map(ex => ({ ...ex, equipment: ex.equipmentRequired })),
+    unavailableEquipmentIds
+  ).filter(
     ex => ex.id !== source.id &&
           muscleMatchesGroup(ex.primaryMuscle, source.primaryMuscle) &&
           ex.name !== source.name
@@ -749,12 +759,15 @@ export interface AutoSwapResult {
 }
 
 /**
- * Automatically swap or remove exercises based on injuries
+ * Automatically swap or remove exercises based on injuries.
+ * Pass the training location's equipment blocklist so replacements are
+ * constrained to equipment the user actually has.
  */
 export function autoSwapForInjuries(
   workoutExercises: { id: string; exercise: Exercise }[],
   allExercises: Exercise[],
-  injuries: InjuryContext[]
+  injuries: InjuryContext[],
+  unavailableEquipmentIds: string[] = []
 ): AutoSwapResult[] {
   const results: AutoSwapResult[] = [];
   const maxSeverity = Math.max(...injuries.map(i => i.severity));
@@ -775,7 +788,12 @@ export function autoSwapForInjuries(
     }
     
     if (needsSwap) {
-      const alternatives = getSafeAlternatives(exercise, allExercises, injuries);
+      const alternatives = getSafeAlternatives(
+        exercise,
+        allExercises,
+        injuries,
+        unavailableEquipmentIds
+      );
       
       // Filter out exercises already in workout
       const usedIds = new Set(workoutExercises.map(w => w.exercise.id));

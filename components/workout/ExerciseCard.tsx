@@ -8,6 +8,7 @@ import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
 import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps } from '@/services/setRecommender';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
+import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import { getExerciseProgression, type ExerciseProgressionInsight } from '@/services/progressionInsights';
 import { useUserStore } from '@/stores';
@@ -157,6 +158,7 @@ interface ExerciseCardProps {
   onBlockNoteUpdate?: (note: string | null) => void;  // Callback to update exercise block note
   onWarmupComplete?: (restSeconds: number) => void;  // Callback when a warmup set is completed
   availableExercises?: Exercise[];  // All exercises for swap suggestions
+  unavailableEquipmentIds?: string[];  // Location equipment blocklist — swap suggestions must respect it
   frequentExerciseIds?: Map<string, number>;  // Exercise usage counts for sorting
   isActive?: boolean;
   unit?: WeightUnit;
@@ -238,6 +240,7 @@ export const ExerciseCard = memo(function ExerciseCard({
   onBlockNoteUpdate,
   onWarmupComplete,
   availableExercises = [],
+  unavailableEquipmentIds = [],
   frequentExerciseIds = new Map(),
   isActive = false,
   unit = 'kg',
@@ -347,11 +350,17 @@ export const ExerciseCard = memo(function ExerciseCard({
     isSwiping: boolean;
   }>({ setId: null, startX: 0, currentX: 0, isSwiping: false });
 
-  // Calculate similar exercises for swap suggestions, filtering out injury-risky ones
+  // Calculate similar exercises for swap suggestions, filtering out injury-risky
+  // ones and exercises the current location has no equipment for
   const similarExercises = useMemo(() => {
     if (availableExercises.length === 0) return [];
-    
-    const similar = findSimilarExercises(exercise, availableExercises)
+
+    const equipmentFeasible = filterExercisesByEquipment(
+      availableExercises.map(ex => ({ ...ex, equipment: ex.equipmentRequired })),
+      unavailableEquipmentIds
+    );
+
+    const similar = findSimilarExercises(exercise, equipmentFeasible)
       .slice(0, 15) // Get more to filter
       .map(ex => {
         const injuryRisk = getExerciseInjuryRiskFromService({ name: ex.name, primaryMuscle: ex.primaryMuscle }, currentInjuries);
@@ -374,7 +383,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       // Then by similarity score
       return b.score - a.score;
     }).slice(0, 8);
-  }, [exercise, availableExercises, currentInjuries]);
+  }, [exercise, availableExercises, unavailableEquipmentIds, currentInjuries]);
   
   // Count safe alternatives
   const safeAlternatives = similarExercises.filter(s => !s.injuryRisk.isRisky);
