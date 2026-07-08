@@ -771,17 +771,22 @@ export function computeCompositionForecast(
   const phaseStart = options.phaseStartDate?.slice(0, 10) ?? null;
   if (tail.length > 0 && phaseStart && phaseStart > lastScan.date) {
     const tailEnd = tail[tail.length - 1];
-    const tailSpanDays = forecastDay(tailEnd.date) - forecastDay(lastScan.date);
-    if (tailSpanDays >= FORECAST_PHASE_MIN_TAIL_DAYS) {
-      // Reference point: the start of the recent window — the last scan if
-      // it falls inside, else the earliest tail point within the window.
-      const windowStartDay = forecastDay(tailEnd.date) - FORECAST_WEIGHIN_WINDOW_DAYS;
-      const ref =
-        forecastDay(lastScan.date) >= windowStartDay
-          ? lastScan
-          : (tail.find((p) => forecastDay(p.date) >= windowStartDay) ?? lastScan);
-      const refWeeks = (forecastDay(tailEnd.date) - forecastDay(ref.date)) / 7;
-      if (refWeeks > 0) {
+    const phaseDay = forecastDay(phaseStart);
+    // Maturity is measured from the PHASE START, not the last scan —
+    // weigh-ins logged before the phase began belong to the OLD phase, and
+    // a bulk target created after weeks of cut weigh-ins must not project
+    // the cut direction under a 'weigh-ins' basis.
+    const postPhaseDays = forecastDay(tailEnd.date) - phaseDay;
+    if (postPhaseDays >= FORECAST_PHASE_MIN_TAIL_DAYS) {
+      // Reference point: inside the recent window AND no earlier than the
+      // phase start — the direction only ever samples post-phase data.
+      const windowStartDay = Math.max(
+        forecastDay(tailEnd.date) - FORECAST_WEIGHIN_WINDOW_DAYS,
+        phaseDay
+      );
+      const ref = tail.find((p) => forecastDay(p.date) >= windowStartDay) ?? null;
+      const refWeeks = ref ? (forecastDay(tailEnd.date) - forecastDay(ref.date)) / 7 : 0;
+      if (ref && refWeeks > 0) {
         velocity = {
           fmi: (tailEnd.fmi - ref.fmi) / refWeeks,
           ffmi: (tailEnd.ffmi - ref.ffmi) / refWeeks,
