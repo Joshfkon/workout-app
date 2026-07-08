@@ -197,6 +197,7 @@ export function SessionSummary({
   // Detect Personal Records (PRs) - now incorporates form quality
   const personalRecords = useMemo(() => {
     const prs: {
+      blockId: string;
       exerciseName: string;
       type: 'weight' | 'reps' | 'e1rm' | 'volume' | 'form';
       value: number;
@@ -264,6 +265,7 @@ export function SessionSummary({
       // Check for E1RM PR (most meaningful)
       if (bestE1RM > history.previousBest.e1rm) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'e1rm',
           value: bestE1RM,
@@ -277,6 +279,7 @@ export function SessionSummary({
       // Check for weight PR
       else if (bestWeight > history.previousBest.weight) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'weight',
           value: bestWeight,
@@ -290,6 +293,7 @@ export function SessionSummary({
       // Check for reps PR (at same or higher weight)
       else if (bestReps > history.previousBest.reps && bestWeight >= history.previousBest.weight * 0.95) {
         prs.push({
+          blockId: block.id,
           exerciseName,
           type: 'reps',
           value: bestReps,
@@ -326,7 +330,9 @@ export function SessionSummary({
           primaryMuscle: exercise?.primaryMuscle,
           targetSets: block.targetSets,
           skipped: sets.length === 0,
-          hasPR: personalRecords.some((pr) => pr.exerciseName === name),
+          // Match by block, not name — the same exercise can appear in
+          // multiple blocks and only the record-setting one gets the 🔥.
+          hasPR: personalRecords.some((pr) => pr.blockId === block.id),
           sets: sets.map((set, index) => ({
             quality: set.quality,
             reps: set.reps,
