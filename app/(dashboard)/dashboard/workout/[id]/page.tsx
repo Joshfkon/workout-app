@@ -3856,6 +3856,7 @@ export default function WorkoutPage() {
             completedAt: new Date().toISOString(),
           }}
           exerciseBlocks={blocks.filter((b) => !skippedBlockIds.has(b.id))}
+          skippedBlocks={blocks.filter((b) => skippedBlockIds.has(b.id))}
           allSets={completedSets}
           exerciseHistories={exerciseHistoriesForSummary}
           amrapCalibrations={sessionCalibrations}
