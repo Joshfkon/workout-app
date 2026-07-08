@@ -108,7 +108,7 @@ export function ResumeWorkoutBanner() {
 
       {/* Resume pill (P0-3, per audit mockup 03): compact, above the bottom
           nav, with live set progress and rest countdown. */}
-      <div className="fixed bottom-20 left-0 right-0 z-50 px-4 lg:left-64 lg:bottom-4">
+      <div className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 px-4 lg:left-64 lg:bottom-4">
         <div className="max-w-md mx-auto">
           <div
             className="bg-surface-900/95 backdrop-blur border-[1.5px] border-primary-500 rounded-full shadow-2xl shadow-black/50 pl-4 pr-2 py-2 cursor-pointer"
