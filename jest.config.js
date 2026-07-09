@@ -114,6 +114,12 @@ const customJestConfig = {
       branches: 50,
       statements: 70,
     },
+    'services/intakePacing.ts': {
+      lines: 90,
+      functions: 80,
+      branches: 80,
+      statements: 90,
+    },
     'services/suggestedWorkout.ts': {
       lines: 70,
       functions: 60,

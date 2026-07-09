@@ -7,10 +7,20 @@
 
 import {
   IconBarbell,
+  IconCheck,
   IconChevronRight,
+  IconScale,
   IconSparkles,
   IconX,
 } from '@tabler/icons-react';
+import {
+  assessIntakePace,
+  DEFAULT_EATING_WINDOW,
+  type EatingWindow,
+  type PaceMacro,
+  type PaceTone,
+  type PacingPhase,
+} from '@/services/intakePacing';
 
 /** Uppercase micro-label above each section ("QUICK LOG", "TODAY SO FAR"). */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -188,6 +198,53 @@ export function QuickLogRow({ icon, title, subtitle, onTap, disabled }: QuickLog
 }
 
 // ============================================================
+// Weight quick-log row
+// ============================================================
+
+interface WeightQuickLogRowProps {
+  /** Display-formatted weight already logged today ("176.6 lb"); null = none yet. */
+  todayLabel: string | null;
+  /** Most recent prior entry line ("Yesterday: 176.6 lb"); null = no history. */
+  lastLabel: string | null;
+  onTap: () => void;
+}
+
+/**
+ * State-aware "Log weight" quick-log row. Before today's weigh-in it prompts
+ * with the last known weight; once logged it shows the value with a checkmark
+ * and taps through to edit (the sheet upserts the same weight_log day-row).
+ */
+export function WeightQuickLogRow({ todayLabel, lastLabel, onTap }: WeightQuickLogRowProps) {
+  const logged = todayLabel !== null;
+  return (
+    <QuickLogRow
+      icon={
+        <span
+          className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+            logged ? 'bg-success-500/15' : 'bg-accent-500/15'
+          }`}
+        >
+          {logged ? (
+            <IconCheck size={22} className="text-success-400" aria-hidden="true" />
+          ) : (
+            <IconScale size={22} className="text-accent-400" aria-hidden="true" />
+          )}
+        </span>
+      }
+      title={logged ? `Weight logged · ${todayLabel}` : 'Log weight'}
+      subtitle={
+        logged
+          ? "Tap to edit today's entry"
+          : lastLabel
+            ? `${lastLabel} · none today`
+            : 'Daily weigh-ins sharpen your body-comp trend'
+      }
+      onTap={onTap}
+    />
+  );
+}
+
+// ============================================================
 // "Today so far" strip
 // ============================================================
 
@@ -197,11 +254,23 @@ export const STEP_GOAL = 10000;
 export interface TodaySoFar {
   calories: number;
   protein: number;
+  carbs: number;
+  fat: number;
   caloriesTarget: number | null;
   proteinTarget: number | null;
+  carbsTarget: number | null;
+  fatTarget: number | null;
   /** null = no activity data for today (tile hidden). */
   steps: number | null;
 }
+
+/** Tile styling per pacing tone (bar fill + status word color). */
+const TONE_STYLES: Record<PaceTone, { bar: string; status: string }> = {
+  green: { bar: 'bg-success-500', status: 'text-success-400' },
+  yellow: { bar: 'bg-warning-500', status: 'text-warning-400' },
+  orange: { bar: 'bg-orange-500', status: 'text-orange-400' },
+  neutral: { bar: 'bg-surface-600', status: 'text-surface-500' },
+};
 
 function StatTile({
   label,
@@ -230,26 +299,121 @@ function StatTile({
   );
 }
 
+/**
+ * One macro tile: consumed of target, progress bar, and (when the pacing
+ * engine has a judgment) a one-word status — the word carries the meaning,
+ * the color just reinforces it.
+ */
+function MacroTile({
+  label,
+  macro,
+  consumed,
+  target,
+  unit,
+  phase,
+  window,
+  now,
+  onTap,
+}: {
+  label: string;
+  macro: PaceMacro;
+  consumed: number;
+  target: number | null;
+  unit: 'kcal' | 'g';
+  phase: PacingPhase;
+  window: EatingWindow;
+  now?: Date;
+  onTap: () => void;
+}) {
+  const verdict = assessIntakePace({ macro, consumed, target, phase, now, window });
+  const tone = TONE_STYLES[verdict.tone];
+  const suffix = unit === 'g' ? 'g' : '';
+  const pct =
+    target && target > 0 ? Math.min(100, Math.round((consumed / target) * 100)) : 0;
+
+  return (
+    <button
+      onClick={onTap}
+      className="p-3 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
+    >
+      <span className="block text-[12px] text-surface-500">{label}</span>
+      <span className="block text-[17px] font-bold text-surface-100 mt-0.5">
+        {consumed.toLocaleString()}
+        {suffix}
+        {target != null && target > 0 && (
+          <span className="text-[11px] font-medium text-surface-500">
+            {' '}
+            of {Math.round(target).toLocaleString()}
+            {suffix}
+          </span>
+        )}
+      </span>
+      {target != null && target > 0 && (
+        <>
+          <span className="block h-1 rounded-full bg-surface-800 mt-2 overflow-hidden">
+            <span
+              className={`block h-full rounded-full ${tone.bar}`}
+              style={{ width: `${pct}%` }}
+            />
+          </span>
+          <span className={`block text-[11px] font-medium mt-1.5 ${tone.status}`}>
+            {verdict.suppressed ? ' ' : verdict.status}
+          </span>
+        </>
+      )}
+    </button>
+  );
+}
+
 export function TodaySoFarStrip({
   data,
+  phase,
+  eatingWindow = DEFAULT_EATING_WINDOW,
+  now,
   onNutritionTap,
 }: {
   data: TodaySoFar;
+  /** Normalized training phase — flips which pacing direction warns. */
+  phase: PacingPhase;
+  eatingWindow?: EatingWindow;
+  /** Injectable clock for tests; defaults to the current time. */
+  now?: Date;
   onNutritionTap: () => void;
 }) {
+  const shared = { phase, window: eatingWindow, now, onTap: onNutritionTap };
   return (
-    <div className={`grid gap-2 ${data.steps != null ? 'grid-cols-3' : 'grid-cols-2'}`}>
-      <StatTile
+    <div className="grid grid-cols-2 gap-2">
+      <MacroTile
         label="Calories"
-        value={data.calories.toLocaleString()}
-        sub={data.caloriesTarget ? `of ${data.caloriesTarget.toLocaleString()}` : ' '}
-        onTap={onNutritionTap}
+        macro="calories"
+        consumed={data.calories}
+        target={data.caloriesTarget}
+        unit="kcal"
+        {...shared}
       />
-      <StatTile
+      <MacroTile
         label="Protein"
-        value={`${data.protein.toLocaleString()}g`}
-        sub={data.proteinTarget ? `of ${Math.round(data.proteinTarget)}g` : ' '}
-        onTap={onNutritionTap}
+        macro="protein"
+        consumed={data.protein}
+        target={data.proteinTarget}
+        unit="g"
+        {...shared}
+      />
+      <MacroTile
+        label="Carbs"
+        macro="carbs"
+        consumed={data.carbs}
+        target={data.carbsTarget}
+        unit="g"
+        {...shared}
+      />
+      <MacroTile
+        label="Fat"
+        macro="fat"
+        consumed={data.fat}
+        target={data.fatTarget}
+        unit="g"
+        {...shared}
       />
       {data.steps != null && (
         <StatTile
