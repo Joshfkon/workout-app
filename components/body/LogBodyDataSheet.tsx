@@ -51,6 +51,12 @@ interface LogBodyDataSheetProps {
   initialSegment?: BodyLogSegment;
   /** App-wide weight unit; drives the tape unit too (lb → in, kg → cm). */
   preferredUnit: 'lb' | 'kg';
+  /**
+   * Prefill for the weight field, in the display unit (e.g. the most recent
+   * weigh-in, so a daily entry is a one-or-two-digit edit). Ignored once the
+   * user has typed.
+   */
+  initialWeight?: number | null;
   /** Called after a successful save so the host can refresh. */
   onSaved?: (detail: BodyLogSavedDetail) => void;
 }
@@ -72,6 +78,7 @@ export function LogBodyDataSheet({
   onClose,
   initialSegment = 'weight',
   preferredUnit,
+  initialWeight = null,
   onSaved,
 }: LogBodyDataSheetProps) {
   const supabase = createUntypedClient();
@@ -81,14 +88,21 @@ export function LogBodyDataSheet({
   const tapeUnit: 'in' | 'cm' = preferredUnit === 'lb' ? 'in' : 'cm';
 
   // ---------------- Weight ----------------
-  const [weightValue, setWeightValue] = useState('');
+  const [weightValue, setWeightValue] = useState(
+    initialWeight != null && initialWeight > 0 ? initialWeight.toFixed(1) : ''
+  );
   const [weightDate, setWeightDate] = useState(getLocalDateString());
   const weightInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen && segment === 'weight') {
-      // Autofocus for the 3-second daily entry.
-      const t = setTimeout(() => weightInputRef.current?.focus(), 150);
+      // Autofocus + select for the 3-second daily entry: with the last
+      // weigh-in prefilled, typing replaces it outright and a small
+      // correction is a one-digit edit.
+      const t = setTimeout(() => {
+        weightInputRef.current?.focus();
+        weightInputRef.current?.select();
+      }, 150);
       return () => clearTimeout(t);
     }
   }, [isOpen, segment]);

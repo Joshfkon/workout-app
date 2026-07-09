@@ -13,11 +13,16 @@
  *      CTA and a sparkle button that opens the AI suggested workout sheet.
  *      On rest days the hero shows the next scheduled day; with no active
  *      mesocycle it prompts to plan one.
- *   4. "Quick log" rows: Log food -> /dashboard/nutrition, and Blank
- *      workout -> creates/reuses today's session (no exercise blocks) and
- *      opens the workout page. Repeat taps reuse the same session.
- *   5. "Today so far" strip: calories + protein from today's food log vs
- *      nutrition targets, and steps from wearable daily activity data
+ *   4. "Quick log" rows: Log food -> /dashboard/nutrition, Blank workout ->
+ *      creates/reuses today's session (no exercise blocks) and opens the
+ *      workout page (repeat taps reuse the same session), and Log weight ->
+ *      opens the shared LogBodyDataSheet prefilled with the latest weigh-in
+ *      (state-aware: once logged today it shows the value + checkmark and
+ *      edits the same weight_log day-row).
+ *   5. "Today so far" grid: calories/protein/carbs/fat from today's food log
+ *      vs nutrition targets, each tile carrying a phase-aware time-of-day
+ *      pacing verdict (services/intakePacing — same engine as the Home
+ *      Nutrition tile), plus steps from wearable daily activity data
  *      (tile hidden when there's no activity row for today).
  *
  * The AI suggested workout flow lives in the shared SuggestedWorkoutSheet
@@ -57,15 +62,28 @@ import {
   SectionLabel,
   TodaySoFarStrip,
   UnfinishedWorkoutBanner,
+  WeightQuickLogRow,
   formatRelativeDay,
   type TodaySoFar,
 } from './_components/LogPageSections';
+import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
+import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
+import { getDisplayWeight } from '@/lib/weightUtils';
+import type { BodyLogSavedDetail } from '@/components/body/LogBodyDataSheet';
 import type { FullProgramRecommendation, WorkoutDay } from '@/types/schema';
 
 // Lazy-load the check-in flow so it only ships when the user opens it
 // (same pattern as the home dashboard's quick-log modals).
 const DailyCheckIn = dynamic(
   () => import('@/components/dashboard/DailyCheckIn').then((mod) => ({ default: mod.DailyCheckIn })),
+  { ssr: false }
+);
+
+// Weight entry uses the same unified sheet as the Home Weight tile's "+ log",
+// so both surfaces share one write path (weight_log via saveWeightLogEntry —
+// per-day upsert, which also feeds the anchored body-comp trend).
+const LogBodyDataSheet = dynamic(
+  () => import('@/components/body/LogBodyDataSheet').then((mod) => ({ default: mod.LogBodyDataSheet })),
   { ssr: false }
 );
 
@@ -138,6 +156,13 @@ export default function LogPage() {
   // AI suggested workout (shared sheet — mounts and fetches on first open)
   const [showAiSheet, setShowAiSheet] = useState(false);
 
+  // Weight quick-log: most recent weight_log row (drives the row's state and
+  // the sheet's prefill), the display unit, and the pacing eating window.
+  const [lastWeight, setLastWeight] = useState<{ date: string; weight: number; unit: 'lb' | 'kg' } | null>(null);
+  const [weightUnit, setWeightUnit] = useState<'lb' | 'kg'>('lb');
+  const [eatingWindow, setEatingWindow] = useState<EatingWindow | undefined>(undefined);
+  const [showWeightSheet, setShowWeightSheet] = useState(false);
+
   useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,6 +182,9 @@ export default function LogPage() {
         foodRes,
         targetsRes,
         activityRes,
+        lastWeightRes,
+        prefsRes,
+        windowRes,
       ] = await Promise.all([
         supabase
           .from('workout_sessions')
@@ -185,12 +213,12 @@ export default function LogPage() {
           .maybeSingle(),
         supabase
           .from('food_log')
-          .select('calories, protein')
+          .select('calories, protein, carbs, fat')
           .eq('user_id', user.id)
           .eq('logged_at', today),
         supabase
           .from('nutrition_targets')
-          .select('calories, protein')
+          .select('calories, protein, carbs, fat')
           .eq('user_id', user.id)
           .maybeSingle(),
         supabase
@@ -199,6 +227,18 @@ export default function LogPage() {
           .eq('user_id', user.id)
           .eq('date', today)
           .maybeSingle(),
+        supabase
+          .from('weight_log')
+          .select('logged_at, weight, unit')
+          .eq('user_id', user.id)
+          .order('logged_at', { ascending: false })
+          .limit(1),
+        supabase
+          .from('user_preferences')
+          .select('weight_unit')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        fetchEatingWindow(supabase, user.id),
       ]);
 
       setCheckInUserId(user.id);
@@ -233,16 +273,52 @@ export default function LogPage() {
 
       // "Today so far" strip. food_log rows can be missing entirely (nothing
       // logged) and the activity row only exists when a wearable synced.
-      const foodRows = (foodRes.data ?? []) as { calories: number | null; protein: number | null }[];
-      const targets = targetsRes.data as { calories: number | null; protein: number | null } | null;
+      const foodRows = (foodRes.data ?? []) as {
+        calories: number | null;
+        protein: number | null;
+        carbs: number | null;
+        fat: number | null;
+      }[];
+      const targets = targetsRes.data as {
+        calories: number | null;
+        protein: number | null;
+        carbs: number | null;
+        fat: number | null;
+      } | null;
       const activity = activityRes.data as { steps_total: number | null } | null;
+      const sumOf = (key: 'calories' | 'protein' | 'carbs' | 'fat') =>
+        Math.round(foodRows.reduce((sum, r) => sum + (r[key] || 0), 0));
       setTodaySoFar({
-        calories: Math.round(foodRows.reduce((sum, r) => sum + (r.calories || 0), 0)),
-        protein: Math.round(foodRows.reduce((sum, r) => sum + (r.protein || 0), 0)),
+        calories: sumOf('calories'),
+        protein: sumOf('protein'),
+        carbs: sumOf('carbs'),
+        fat: sumOf('fat'),
         caloriesTarget: targets?.calories ?? null,
         proteinTarget: targets?.protein ?? null,
+        carbsTarget: targets?.carbs ?? null,
+        fatTarget: targets?.fat ?? null,
         steps: activity?.steps_total ?? null,
       });
+
+      // Weight quick-log state: preferred display unit, newest weigh-in, and
+      // the eating window that shapes the macro tiles' pacing verdicts.
+      const preferredUnit =
+        ((prefsRes.data as { weight_unit: string | null } | null)?.weight_unit as 'lb' | 'kg') ||
+        'lb';
+      setWeightUnit(preferredUnit);
+      const lastWeightRow = (lastWeightRes.data?.[0] ?? null) as {
+        logged_at: string;
+        weight: number;
+        unit: 'lb' | 'kg' | null;
+      } | null;
+      if (lastWeightRow) {
+        setLastWeight({
+          date: lastWeightRow.logged_at,
+          weight: lastWeightRow.weight,
+          unit: lastWeightRow.unit || preferredUnit,
+        });
+      }
+      setEatingWindow(windowRes);
 
       // Hero meta (exercise count / est. duration / last done) from the
       // mesocycle's program_data at today's session index. The session index
@@ -406,6 +482,34 @@ export default function LogPage() {
     day: 'numeric',
   });
 
+  // Weight quick-log row state: today's entry (checkmark + edit-on-tap) vs
+  // the most recent prior entry (prompt with last weight). Values render in
+  // the preferred unit regardless of the unit they were logged in.
+  const weightDisplayValue = lastWeight
+    ? getDisplayWeight(lastWeight.weight, lastWeight.unit, weightUnit)
+    : null;
+  const weightLoggedToday = lastWeight?.date === getLocalDateString();
+  const todayWeightLabel =
+    weightLoggedToday && weightDisplayValue != null
+      ? `${weightDisplayValue.toFixed(1)} ${weightUnit}`
+      : null;
+  const lastWeightLabel = (() => {
+    if (weightLoggedToday || !lastWeight || weightDisplayValue == null) return null;
+    const day = formatRelativeDay(new Date(`${lastWeight.date}T00:00:00`));
+    return `${day.charAt(0).toUpperCase()}${day.slice(1)}: ${weightDisplayValue.toFixed(1)} ${weightUnit}`;
+  })();
+
+  // The sheet upserts weight_log's day-row (no duplicate same-day entries);
+  // mirror the saved value locally so the row flips to its logged state.
+  const handleWeightSaved = (detail: BodyLogSavedDetail) => {
+    if (detail.kind !== 'weight' || detail.weight == null) return;
+    setLastWeight((prev) =>
+      prev && prev.date > detail.date
+        ? prev
+        : { date: detail.date, weight: detail.weight!, unit: detail.unit ?? weightUnit }
+    );
+  };
+
   const openAiSheet = () => setShowAiSheet(true);
 
   const startedAtLabel = inProgress?.startedAt
@@ -545,6 +649,12 @@ export default function LogPage() {
           onTap={handleStartBlank}
           disabled={isStartingBlank}
         />
+
+        <WeightQuickLogRow
+          todayLabel={todayWeightLabel}
+          lastLabel={lastWeightLabel}
+          onTap={() => setShowWeightSheet(true)}
+        />
       </div>
 
       {/* Today so far */}
@@ -553,9 +663,23 @@ export default function LogPage() {
           <SectionLabel>Today so far</SectionLabel>
           <TodaySoFarStrip
             data={todaySoFar}
+            phase={normalizePacingPhase(userGoal)}
+            eatingWindow={eatingWindow}
             onNutritionTap={() => router.push('/dashboard/nutrition')}
           />
         </div>
+      )}
+
+      {/* Weight quick-log sheet (shared with the Home Weight tile's "+ log");
+          prefilled with the latest weight for single-digit edits */}
+      {showWeightSheet && (
+        <LogBodyDataSheet
+          isOpen
+          onClose={() => setShowWeightSheet(false)}
+          preferredUnit={weightUnit}
+          initialWeight={weightDisplayValue}
+          onSaved={handleWeightSaved}
+        />
       )}
 
       {/* AI suggested workout (shared with the Train tab): time question

@@ -1,17 +1,46 @@
 /**
- * Whether intake (calories or protein) is keeping pace with the day,
- * assuming an eating window of 7:00–21:00. More than 15 percentage points
- * behind the expected fraction of the target reads "behind".
- * Shared by the Nutrition glance tile and the "Log dinner" hero.
+ * Thin wrapper around the shared intake pacing engine
+ * (services/intakePacing) for the Home surfaces. Kept so existing callers
+ * (Nutrition glance tile, "Log dinner" meal hero) have a one-line API while
+ * the Log page's macro grid calls assessIntakePace directly — one source of
+ * truth, so both pages always show the same verdict for the same state.
  */
+
+import {
+  assessIntakePace,
+  DEFAULT_EATING_WINDOW,
+  type EatingWindow,
+  type PaceMacro,
+  type PaceStatus,
+  type PaceVerdict,
+  type PacingPhase,
+} from '@/services/intakePacing';
+
+export type { PaceStatus, PaceVerdict };
+
+/**
+ * Phase-aware pacing verdict for one macro. Defaults to calories on
+ * maintenance over the 07:00–21:00 window when the caller has no better
+ * context.
+ */
+export function intakePaceVerdict(
+  consumed: number,
+  target: number | null | undefined,
+  now: Date = new Date(),
+  phase: PacingPhase = 'maintenance',
+  window: EatingWindow = DEFAULT_EATING_WINDOW,
+  macro: PaceMacro = 'calories'
+): PaceVerdict {
+  return assessIntakePace({ macro, consumed, target, phase, now, window });
+}
+
+/** One-word status ('on pace' | 'behind' | 'ahead') from the shared engine. */
 export function intakePaceLabel(
   consumed: number,
   target: number,
-  now: Date = new Date()
-): 'on pace' | 'behind' {
-  if (target <= 0) return 'on pace';
-  const hourOfDay = now.getHours() + now.getMinutes() / 60;
-  const expectedPercent = Math.max(0, Math.min(100, ((hourOfDay - 7) / (21 - 7)) * 100));
-  const actualPercent = (consumed / target) * 100;
-  return actualPercent < expectedPercent - 15 ? 'behind' : 'on pace';
+  now: Date = new Date(),
+  phase: PacingPhase = 'maintenance',
+  window: EatingWindow = DEFAULT_EATING_WINDOW
+): PaceStatus {
+  return intakePaceVerdict(consumed, target, now, phase, window).status;
 }

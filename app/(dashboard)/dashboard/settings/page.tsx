@@ -22,6 +22,7 @@ import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteMo
 import { ImportExportSettings } from '@/components/settings/ImportExportSettings';
 import { MusclePrioritySettings } from '@/components/settings/MusclePrioritySettings';
 import { ExerciseVarietySettings } from '@/components/settings/ExerciseVarietySettings';
+import { EatingWindowSettings } from '@/components/settings/EatingWindowSettings';
 import { ThemeToggle } from '@/components/settings/ThemeToggle';
 import { AddToHomescreenGuide } from '@/components/onboarding/AddToHomescreenGuide';
 import { useEducationStore } from '@/hooks/useEducationPreferences';
@@ -826,6 +827,9 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Eating window (drives nutrition pacing verdicts) */}
+      <EatingWindowSettings />
 
       {/* Education & Tips */}
       <EducationPreferencesCard />

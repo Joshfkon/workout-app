@@ -35,6 +35,8 @@ import {
   type DeloadRecommendation,
 } from '@/lib/training/deloadRecommendation';
 import { GlanceHeader, TodayHeroCard, MetricTileGrid, QuickLogRow, PhaseSelector, VolumeRampBanner, intakePaceLabel } from '@/components/dashboard/home';
+import { normalizePacingPhase, type EatingWindow } from '@/services/intakePacing';
+import { fetchEatingWindow } from '@/lib/nutrition/eatingWindow';
 import type { TodaysWorkout, GlanceVolumeSummary, GlanceWeightRate, MealHeroSuggestion } from '@/components/dashboard/home';
 import type { TrainingPhase, UpdatePhaseResult } from '@/lib/actions/phase';
 
@@ -308,6 +310,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
   const [weightHistory, setWeightHistory] = useState<{ date: string; weight: number; unit: string }[]>(initialData?.weightHistory ?? []);
   const [userId, setUserId] = useState<string | null>(initialData?.userId ?? null);
   const [userGoal, setUserGoal] = useState<'bulk' | 'cut' | 'recomp' | 'maintain' | 'maintenance'>(initialData?.userGoal ?? 'maintain');
+  // Eating window for intake pacing (07:00–21:00 until the user's row loads).
+  const [eatingWindow, setEatingWindow] = useState<EatingWindow | undefined>(undefined);
 
   // Which quick-log modal is open (the old scroll-to detail cards were removed).
   const [activeModal, setActiveModal] = useState<QuickLogModal | null>(null);
@@ -560,15 +564,21 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
     const kcalLeft = Math.round(nutritionTargets.calories - nutritionTotals.calories);
     if (kcalLeft < 100) return null;
     const proteinLeft = Math.round(nutritionTargets.protein - nutritionTotals.protein);
-    const pace = intakePaceLabel(nutritionTotals.calories, nutritionTargets.calories, clientNow);
+    const pace = intakePaceLabel(
+      nutritionTotals.calories,
+      nutritionTargets.calories,
+      clientNow,
+      normalizePacingPhase(userGoal),
+      eatingWindow
+    );
     return {
       title: `Log ${inferMealType(clientNow)}`,
       timeLabel: clientNow.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
       meta: `${kcalLeft.toLocaleString()} kcal${proteinLeft > 0 ? ` and ${proteinLeft}g protein` : ''} still to go — you're ${
-        pace === 'behind' ? 'behind pace' : 'on pace'
+        pace === 'behind' ? 'behind pace' : pace === 'ahead' ? 'ahead of pace' : 'on pace'
       }`,
     };
-  }, [clientNow, nutritionTargets, nutritionTotals]);
+  }, [clientNow, nutritionTargets, nutritionTotals, userGoal, eatingWindow]);
 
   // Weekly weight-change rate (regression over the last ~3 weeks) vs the
   // goal-implied target rate, in the preferred display unit. Shared with the
@@ -813,6 +823,10 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         setUserId(user.id);
+
+        // Eating window for pacing verdicts (defaults inside the helper when
+        // unset/unmigrated); loads in the background, default until then.
+        fetchEatingWindow(supabase, user.id).then(setEatingWindow).catch(() => {});
 
         const today = new Date();
         const todayStr = getLocalDateString(today);
@@ -1444,6 +1458,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         weightRate={weightRate}
         bodyComp={initialData?.bodyCompGlance ?? null}
         onLogWeight={() => setActiveModal('weight')}
+        phase={normalizedGoal}
+        eatingWindow={eatingWindow}
       />
 
       {/* Early-week volume ramp insight (links to the volume page) */}

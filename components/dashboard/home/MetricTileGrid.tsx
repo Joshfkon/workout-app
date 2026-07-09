@@ -6,7 +6,8 @@ import type { LiftTrendsSummary } from '@/app/(dashboard)/dashboard/_lib/liftTre
 import type { BodyCompGlance } from '@/lib/actions/dashboard';
 import { BODY_COMP_TREND_SECTION_ID } from '@/services/compositionSpace';
 import { MetricTile } from './MetricTile';
-import { intakePaceLabel } from './intakePace';
+import { intakePaceVerdict } from './intakePace';
+import type { EatingWindow, PacingPhase } from '@/services/intakePacing';
 
 /** Today's macro totals (as summed from the food log). */
 export interface GlanceNutritionTotals {
@@ -48,6 +49,10 @@ interface MetricTileGridProps {
   bodyComp?: BodyCompGlance | null;
   /** Opens the weight-log modal ("+ log" on the Weight tile). */
   onLogWeight: () => void;
+  /** Training phase — flips which pacing direction warns (default maintenance). */
+  phase?: PacingPhase;
+  /** User's eating window; defaults to 07:00–21:00 inside the engine. */
+  eatingWindow?: EatingWindow;
 }
 
 /**
@@ -107,6 +112,8 @@ export function MetricTileGrid({
   weightRate,
   bodyComp = null,
   onLogWeight,
+  phase = 'maintenance',
+  eatingWindow,
 }: MetricTileGridProps) {
   // Show the tile when anything was classified OR lifts are accruing history
   // (a brand-new program should read "rebuilding", not vanish).
@@ -122,9 +129,20 @@ export function MetricTileGrid({
   // Nutrition: what's LEFT for the day (the actionable number), not consumed.
   const kcalLeft = nutritionTargets ? Math.round(nutritionTargets.calories - nutritionTotals.calories) : 0;
   const proteinLeft = nutritionTargets ? Math.round(nutritionTargets.protein - nutritionTotals.protein) : 0;
-  const kcalPace = nutritionTargets
-    ? intakePaceLabel(nutritionTotals.calories, nutritionTargets.calories)
-    : 'on pace';
+  // Same engine as the Log page's macro grid, so both surfaces agree.
+  const kcalVerdict = intakePaceVerdict(
+    nutritionTotals.calories,
+    nutritionTargets?.calories ?? null,
+    undefined,
+    phase,
+    eatingWindow
+  );
+  const kcalPaceColor =
+    kcalVerdict.tone === 'yellow'
+      ? 'text-warning-400'
+      : kcalVerdict.tone === 'orange'
+        ? 'text-orange-400'
+        : 'text-surface-500';
 
   // Lifts sub-line: "3 flat · 2 down · Bench stalled 3 wks" (zero parts omitted).
   const liftParts: string[] = [];
@@ -174,8 +192,10 @@ export function MetricTileGrid({
               style={{ width: `${Math.min(100, (nutritionTotals.calories / Math.max(1, nutritionTargets.calories)) * 100)}%` }}
             />
           </div>
-          <div className={`text-[11px] mt-1.5 ${kcalPace === 'behind' ? 'text-warning-400' : 'text-surface-500'}`}>
-            {proteinLeft > 0 ? `${proteinLeft}g protein to go` : 'protein target hit'} · {kcalPace === 'behind' ? 'behind' : 'on pace'}
+          <div className={`text-[11px] mt-1.5 ${kcalPaceColor}`}>
+            {proteinLeft > 0 ? `${proteinLeft}g protein to go` : 'protein target hit'}
+            {/* No pace judgment before/at the start of the eating window */}
+            {!kcalVerdict.suppressed && <> · {kcalVerdict.status}</>}
           </div>
         </MetricTile>
       )}
