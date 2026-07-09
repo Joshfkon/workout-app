@@ -54,8 +54,9 @@ import type { EnhancedProportionsAnalysis } from '@/services/bodyProportionsAnal
 import { analyzeEnhancedProportions } from '@/services/bodyProportionsAnalytics';
 import { analyzeAllExercises, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
 import { PlateauAlertList } from '@/components/analytics/PlateauAlert';
-import { getMuscleGroupProgression } from '@/services/progressionInsights';
+import { getMuscleGroupProgression, type MuscleGroupProgression } from '@/services/progressionInsights';
 import { MuscleProgressionCard } from '@/components/analytics/MuscleProgressionCard';
+import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
 import { BodyHubTrends } from '@/components/body/BodyHubTrends';
 import { BodyHubNudges } from '@/components/body/BodyHubNudges';
 import { MeasurementTrendCard } from '@/components/body/MeasurementTrendCard';
@@ -149,19 +150,34 @@ const MuscleRecoveryCard = dynamic(
   { ssr: false, loading: () => <div className="h-40 animate-pulse bg-surface-700 rounded-xl" /> }
 );
 
-// Tab types
-type TabType = 'body-composition' | 'goals' | 'strength' | 'volume' | 'wellness';
+// Tab types. The page reorganized from five topic tabs (Body / Goals /
+// Strength / Volume / Wellness) to four question-driven tabs led by an
+// Overview: Overview / Training / Body / Wellness.
+type TabType = 'overview' | 'training' | 'body' | 'wellness';
 
 // Valid ?tab= values — tab targeting is a route parameter so any surface
 // (home tiles, notifications, weekly summary) can deep-link a specific tab,
-// e.g. /dashboard/analytics?tab=strength&section=lift-trends.
-const TAB_IDS: readonly TabType[] = ['body-composition', 'goals', 'strength', 'volume', 'wellness'];
+// e.g. /dashboard/analytics?tab=training&section=lift-trends.
+const TAB_IDS: readonly TabType[] = ['overview', 'training', 'body', 'wellness'];
+
+// Legacy ?tab= aliases → their new home, so existing deep links (home tiles,
+// notifications, the weekly summary, bookmarks) keep landing on real content
+// after the reorg:
+//   body-composition / body → body
+//   strength / volume        → training
+//   goals                    → body (targets + goal progress live there now)
+const LEGACY_TAB_ALIASES: Record<string, TabType> = {
+  'body-composition': 'body',
+  body: 'body',
+  strength: 'training',
+  volume: 'training',
+  goals: 'body',
+};
 
 function parseTabParam(value: string | null): TabType | null {
-  // 'body' is the friendly alias the Home Weight tile links to (the tab is
-  // labelled "Body" — it's the Body data hub).
-  if (value === 'body') return 'body-composition';
-  return value && (TAB_IDS as readonly string[]).includes(value) ? (value as TabType) : null;
+  if (!value) return null;
+  if ((TAB_IDS as readonly string[]).includes(value)) return value as TabType;
+  return LEGACY_TAB_ALIASES[value] ?? null;
 }
 
 /** Get display name for a muscle group */
@@ -375,13 +391,213 @@ function PercentileBar({ percentile, label, showValue = true }: { percentile: nu
   );
 }
 
+/** Compact "12.3k lbs"-style total-volume label for the stat row. */
+function formatTotalVolume(volumeKg: number, units: 'kg' | 'lb'): string {
+  const vol = units === 'lb' ? kgToLbs(volumeKg) : volumeKg;
+  const unitLabel = units === 'lb' ? 'lbs' : 'kg';
+  return vol >= 1000 ? `${(vol / 1000).toFixed(1)}k ${unitLabel}` : `${Math.round(vol)} ${unitLabel}`;
+}
+
+/** One headline number in the Overview stat row. */
+function StatTile({ label, value, note, tone = 'primary' }: {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: 'primary' | 'success';
+}) {
+  return (
+    <Card className="p-4">
+      <p className="text-xs text-surface-500 uppercase tracking-wider">{label}</p>
+      <p className={`text-2xl font-bold mt-1 ${tone === 'success' ? 'text-success-400' : 'text-primary-400'}`}>
+        {value}
+      </p>
+      {note && <p className="text-xs text-success-400 mt-1">{note}</p>}
+    </Card>
+  );
+}
+
+/** A one-topic summary row on Overview that deep-links into its detail tab. */
+function GlanceCard({ label, value, sub, onClick }: {
+  label: string;
+  value: string;
+  sub?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left">
+      <Card className="p-4 flex items-center gap-3 hover:border-surface-600 transition-colors">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] uppercase tracking-wider text-surface-500 font-semibold">{label}</p>
+          <p className="text-base font-bold text-surface-100 mt-0.5 truncate">{value}</p>
+          {sub && <p className="text-xs text-surface-400 mt-0.5">{sub}</p>}
+        </div>
+        <span aria-hidden="true" className="text-surface-600 text-lg flex-shrink-0">›</span>
+      </Card>
+    </button>
+  );
+}
+
+interface OverviewTabProps {
+  analytics: AnalyticsData | null;
+  liftTrends: LiftTrendsSummary | null;
+  plateauAlerts: Array<{ exerciseId: string; exerciseName: string; result: PlateauDetectionResult }>;
+  muscleProgression: MuscleGroupProgression[];
+  bodyStats: {
+    weightKg: number;
+    bodyFatPercent: number | null;
+    ffmi: number | null;
+    leanTrendPerMonth: number | null;
+  } | null;
+  goal: {
+    name: string;
+    targetBodyFatPercent: number | null;
+    targetWeightKg: number | null;
+    currentBodyFatPercent: number | null;
+    currentWeightKg: number | null;
+  } | null;
+  units: 'kg' | 'lb';
+  timeRangeLabel: string;
+  onGoTab: (tab: TabType) => void;
+}
+
+/**
+ * The default Progress tab: answers "am I progressing?" at a glance before
+ * the detail tabs. Composes data the page already fetches (lift trends,
+ * plateau detection, muscle progression, body-comp trend, active target) —
+ * no new queries — and every card deep-links into its detail tab.
+ */
+function OverviewTab({
+  analytics,
+  liftTrends,
+  plateauAlerts,
+  muscleProgression,
+  bodyStats,
+  goal,
+  units,
+  timeRangeLabel,
+  onGoTab,
+}: OverviewTabProps) {
+  const weightUnit = units === 'lb' ? 'lbs' : 'kg';
+  const displayWeight = (kg: number) => Math.round((units === 'lb' ? kgToLbs(kg) : kg) * 10) / 10;
+
+  const behindPace = muscleProgression.filter((m) => m.pace === 'behind' || m.pace === 'plateaued');
+  const onPace = muscleProgression.filter((m) => m.pace === 'on_track' || m.pace === 'ahead');
+
+  const hasTrainingData = !!analytics && analytics.totalWorkouts > 0;
+
+  // Body glance copy
+  const bodyValue = bodyStats
+    ? `${displayWeight(bodyStats.weightKg)} ${weightUnit}${bodyStats.bodyFatPercent != null ? ` · ${bodyStats.bodyFatPercent}% BF` : ''}`
+    : 'No scan yet';
+  const bodySub = bodyStats?.leanTrendPerMonth != null
+    ? `Lean mass ${bodyStats.leanTrendPerMonth >= 0 ? '+' : ''}${displayWeight(bodyStats.leanTrendPerMonth)} ${weightUnit}/mo`
+    : bodyStats
+      ? 'Log another scan for trends'
+      : 'Log a DEXA scan to track composition';
+
+  // Goal glance copy
+  let goalValue = 'No active goal';
+  let goalSub: string | undefined = 'Set a body target on the Body tab';
+  if (goal) {
+    goalValue = goal.name;
+    if (goal.targetBodyFatPercent != null && goal.currentBodyFatPercent != null) {
+      const diff = Math.round((goal.currentBodyFatPercent - goal.targetBodyFatPercent) * 10) / 10;
+      goalSub = Math.abs(diff) < 0.1
+        ? 'Target reached'
+        : `${Math.abs(diff)}% BF ${diff > 0 ? 'to lose' : 'above target'}`;
+    } else if (goal.targetWeightKg != null && goal.currentWeightKg != null) {
+      const diff = Math.round((goal.currentWeightKg - goal.targetWeightKg) * 10) / 10;
+      goalSub = Math.abs(diff) < 0.05
+        ? 'Target reached'
+        : `${displayWeight(Math.abs(diff))} ${weightUnit} ${diff > 0 ? 'to lose' : 'to gain'}`;
+    } else {
+      goalSub = 'Tracking body target';
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Alerts strip — plateaus surface here, not buried in Training. */}
+      {plateauAlerts.length > 0 && (
+        <button type="button" onClick={() => onGoTab('training')} className="w-full text-left">
+          <Card className="border-warning-500/30 bg-warning-500/5 p-3 flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-warning-400 flex-shrink-0" />
+            <span className="text-sm text-surface-200 flex-1">
+              <span className="font-semibold">{plateauAlerts[0].exerciseName}</span> plateaued
+              {plateauAlerts[0].result?.weeksSinceProgress != null &&
+                ` — no progress in ${Math.max(1, Math.round(plateauAlerts[0].result.weeksSinceProgress))} weeks`}
+              {plateauAlerts.length > 1 && ` · +${plateauAlerts.length - 1} more`}
+            </span>
+            <span aria-hidden="true" className="text-surface-500">›</span>
+          </Card>
+        </button>
+      )}
+
+      {/* This-period stat row */}
+      {hasTrainingData ? (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatTile
+              label="Workouts"
+              value={String(analytics!.totalWorkouts)}
+              note={analytics!.currentStreak > 1 ? `🔥 ${analytics!.currentStreak} streak` : undefined}
+            />
+            <StatTile label="Total Sets" value={String(analytics!.totalSets)} />
+            <StatTile label="Volume" value={formatTotalVolume(analytics!.totalVolume, units)} />
+            <StatTile label="Streak" value={String(analytics!.currentStreak)} tone="success" />
+          </div>
+          <p className="text-xs text-surface-500 -mt-1">Training totals · {timeRangeLabel}</p>
+        </>
+      ) : (
+        <Card className="text-center py-8">
+          <p className="text-surface-300 font-medium">No workouts logged yet</p>
+          <p className="text-surface-500 text-sm mt-1">Your progress summary appears here after your first session.</p>
+        </Card>
+      )}
+
+      {/* One glance card per topic — each taps into its detail tab. */}
+      <div className="space-y-3">
+        {liftTrends && liftTrends.lifts.length > 0 && (
+          <GlanceCard
+            label="Strength"
+            value={`${liftTrends.rising} of ${liftTrends.lifts.length} lifts rising`}
+            sub={
+              liftTrends.stalled
+                ? `${liftTrends.stalled.name} stalled ${liftTrends.stalled.weeks} wk${liftTrends.stalled.weeks === 1 ? '' : 's'}`
+                : `${liftTrends.down} declining · E1RM trend`
+            }
+            onClick={() => onGoTab('training')}
+          />
+        )}
+
+        {muscleProgression.length > 0 && (
+          <GlanceCard
+            label="Volume & pace"
+            value={`${onPace.length} muscle${onPace.length === 1 ? '' : 's'} on pace`}
+            sub={
+              behindPace.length > 0
+                ? `${behindPace.length} behind: ${behindPace.slice(0, 2).map((m) => getMuscleDisplayName(m.muscleGroup)).join(', ')}`
+                : 'All tracked muscles progressing'
+            }
+            onClick={() => onGoTab('training')}
+          />
+        )}
+
+        <GlanceCard label="Body" value={bodyValue} sub={bodySub} onClick={() => onGoTab('body')} />
+
+        <GlanceCard label="Goal" value={goalValue} sub={goalSub} onClick={() => onGoTab('body')} />
+      </div>
+    </div>
+  );
+}
+
 function AnalyticsPageContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { preferences } = useUserPreferences();
   const [activeTab, setActiveTab] = useState<TabType>(
-    () => parseTabParam(searchParams.get('tab')) ?? 'body-composition'
+    () => parseTabParam(searchParams.get('tab')) ?? 'overview'
   );
   const sectionParam = searchParams.get('section');
   const [isLoading, setIsLoading] = useState(true);
@@ -390,14 +606,14 @@ function AnalyticsPageContent() {
   // No/invalid param means the default tab — a base-route navigation (e.g.
   // the Progress nav item) must reset a previously deep-linked tab.
   useEffect(() => {
-    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'body-composition');
+    setActiveTab(parseTabParam(searchParams.get('tab')) ?? 'overview');
   }, [searchParams]);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
     // Keep the URL linkable/shareable without adding history entries per tap.
     router.replace(
-      tab === 'body-composition' ? pathname : `${pathname}?tab=${tab}`,
+      tab === 'overview' ? pathname : `${pathname}?tab=${tab}`,
       { scroll: false }
     );
   };
@@ -1503,46 +1719,51 @@ function AnalyticsPageContent() {
   );
 
   const tabs = [
-    { id: 'body-composition' as TabType, label: 'Body', icon: '📊' },
-    { id: 'goals' as TabType, label: 'Goals', icon: '🎯' },
-    { id: 'strength' as TabType, label: 'Strength', icon: '💪' },
-    { id: 'volume' as TabType, label: 'Volume & Trends', icon: '📈' },
-    { id: 'wellness' as TabType, label: 'Wellness', icon: '💚' },
+    { id: 'overview' as TabType, label: 'Overview' },
+    { id: 'training' as TabType, label: 'Training' },
+    { id: 'body' as TabType, label: 'Body' },
+    { id: 'wellness' as TabType, label: 'Wellness' },
   ];
+
+  // The time range only drives the Training and Wellness queries; on Overview
+  // and Body it was a dead control, so it's scoped to the tabs it affects.
+  const showTimeRange = activeTab === 'training' || activeTab === 'wellness';
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-surface-100">Analytics</h1>
-          <p className="text-surface-400">Track your body composition, strength, and training progress</p>
+          <h1 className="text-2xl font-bold text-surface-100">Progress</h1>
+          <p className="text-surface-400">Your strength, volume, body, and recovery in one place</p>
         </div>
-        <div className="flex gap-2">
-          {/* Time range selector */}
-          <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap">
-            {([
-              { value: '7d', label: '7d' },
-              { value: '30d', label: '30d' },
-              { value: '60d', label: '60d' },
-              { value: '6m', label: '6mo' },
-              { value: '1y', label: '1yr' },
-              { value: 'all', label: 'All' },
-            ] as const).map((range) => (
-              <button
-                key={range.value}
-                onClick={() => setTimeRange(range.value)}
-                className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-                  timeRange === range.value
-                    ? 'bg-primary-500 text-white'
-                    : 'text-surface-400 hover:text-surface-200'
-                }`}
-              >
-                {range.label}
-              </button>
-            ))}
+        {showTimeRange && (
+          <div className="flex gap-2">
+            {/* Time range selector (Training / Wellness only) */}
+            <div className="flex gap-1 bg-surface-800 p-1 rounded-lg flex-wrap">
+              {([
+                { value: '7d', label: '7d' },
+                { value: '30d', label: '30d' },
+                { value: '60d', label: '60d' },
+                { value: '6m', label: '6mo' },
+                { value: '1y', label: '1yr' },
+                { value: 'all', label: 'All' },
+              ] as const).map((range) => (
+                <button
+                  key={range.value}
+                  onClick={() => setTimeRange(range.value)}
+                  className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
+                    timeRange === range.value
+                      ? 'bg-primary-500 text-white'
+                      : 'text-surface-400 hover:text-surface-200'
+                  }`}
+                >
+                  {range.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Tab Navigation */}
@@ -1551,21 +1772,53 @@ function AnalyticsPageContent() {
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 py-2 sm:py-2.5 min-h-[52px] rounded-lg text-sm font-medium transition-all ${
+            className={`flex-1 flex items-center justify-center px-2 sm:px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-surface-700 text-surface-100 shadow-sm'
                 : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
             }`}
           >
-            <span aria-hidden="true">{tab.icon}</span>
-            {/* P1-7: labels always visible — icon-only tabs hid five sections' worth of features */}
-            <span className="text-[10px] leading-tight sm:text-sm text-center">{tab.label}</span>
+            <span className="text-xs sm:text-sm text-center">{tab.label}</span>
           </button>
         ))}
       </div>
 
-      {/* Tab Content */}
-      {activeTab === 'body-composition' && (
+      {/* ===================== OVERVIEW ===================== */}
+      {activeTab === 'overview' && (
+        <OverviewTab
+          analytics={analytics}
+          liftTrends={liftTrendsSummary}
+          plateauAlerts={plateauAlerts}
+          muscleProgression={muscleProgression}
+          bodyStats={
+            latestScan
+              ? {
+                  weightKg: latestTrendPoint?.weightKg ?? latestScan.weightKg,
+                  bodyFatPercent: latestScan.bodyFatPercent,
+                  ffmi: ffmiResult?.ffmi ?? null,
+                  leanTrendPerMonth: trend?.leanMassChangeRate ?? null,
+                }
+              : null
+          }
+          goal={
+            activeTarget
+              ? {
+                  name: activeTarget.name ?? 'Body composition target',
+                  targetBodyFatPercent: activeTarget.targetBodyFatPercent ?? null,
+                  targetWeightKg: activeTarget.targetWeightKg ?? null,
+                  currentBodyFatPercent: latestScan?.bodyFatPercent ?? null,
+                  currentWeightKg: latestTrendPoint?.weightKg ?? latestScan?.weightKg ?? null,
+                }
+              : null
+          }
+          units={units}
+          timeRangeLabel={getTimeRangeLabel(timeRange)}
+          onGoTab={handleTabChange}
+        />
+      )}
+
+      {/* ===================== BODY (composition + goals) ===================== */}
+      {activeTab === 'body' && (
         <div className="space-y-6">
           {/* Body hub front door: one Log button for weight / tape / DEXA */}
           <div className="flex items-center justify-between gap-2">
@@ -1609,19 +1862,18 @@ function AnalyticsPageContent() {
             refreshKey={bodyRefreshKey}
           />
 
-          {/* Muscle Priorities Display - Show at top of body comp tab */}
-          {userId ? (
-            <MusclePrioritiesDisplay userId={userId} />
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle>Muscle Group Priorities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-4 text-surface-400 text-sm">Loading user data...</div>
-              </CardContent>
+          {/* Muscle priorities are program-generation config, not progress
+              data — they now live in Settings. A slim link replaces the
+              full read-only card that used to sit mid-tab. */}
+          <Link href="/dashboard/settings" className="block">
+            <Card className="p-4 flex items-center justify-between hover:border-surface-600 transition-colors">
+              <div>
+                <p className="text-sm font-medium text-surface-200">Muscle group priorities</p>
+                <p className="text-xs text-surface-500 mt-0.5">Influence volume allocation in program generation</p>
+              </div>
+              <span aria-hidden="true" className="text-surface-500 text-sm">Settings ›</span>
             </Card>
-          )}
+          </Link>
 
           {/* Quick Stats */}
           {latestScan && (
@@ -1707,50 +1959,9 @@ function AnalyticsPageContent() {
             </Card>
           )}
 
-          {/* Body Comp Trends Chart */}
-          {scans.length >= 2 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Body Composition Trends</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={[...scans].reverse().map(scan => ({
-                      date: new Date(scan.scanDate).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
-                      leanMass: scan.leanMassKg,
-                      fatMass: scan.fatMassKg,
-                    }))}>
-                      <defs>
-                        <linearGradient id="leanGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                      <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} />
-                      <YAxis stroke="#9ca3af" fontSize={12} />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#1f2937', 
-                          border: '1px solid #374151',
-                          borderRadius: '8px',
-                          color: '#f3f4f6'
-                        }}
-                      />
-                      <Legend />
-                      <Area type="monotone" dataKey="leanMass" name="Lean Mass" stroke="#22c55e" fill="url(#leanGrad)" strokeWidth={2} />
-                      <Area type="monotone" dataKey="fatMass" name="Fat Mass" stroke="#f59e0b" fill="url(#fatGrad)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* The legacy "Body Composition Trends" area chart was removed: it
+              plotted the same lean/fat series as the DEXA-anchored hub trend
+              module above, from a staler source. One trend chart, one source. */}
 
           {/* Recommendations */}
           {recommendations.length > 0 && (
@@ -1810,11 +2021,14 @@ function AnalyticsPageContent() {
         </div>
       )}
 
-      {activeTab === 'goals' && (
+      {/* Goals dissolved into Body: the target editor + goal progress +
+          proportions are body data, so they render on the Body tab below the
+          composition trends. */}
+      {activeTab === 'body' && (
         <div className="space-y-6">
           {/* The target EDITOR (weight / BF% / FFMI — what the Composition
-              Map's goal vector reads). Lives here on Goals, id-anchored so
-              the map's "Set a target" prompt deep-links straight to it. */}
+              Map's goal vector reads). id-anchored so the map's "Set a target"
+              prompt deep-links straight to it. */}
           {userId && (
             <div id="body-targets" className="scroll-mt-4">
               <BodyTargets
@@ -1856,7 +2070,8 @@ function AnalyticsPageContent() {
         </div>
       )}
 
-      {activeTab === 'strength' && (
+      {/* ===================== TRAINING (strength + volume) ===================== */}
+      {activeTab === 'training' && (
         <div className="space-y-6">
           {/* Per-lift trend breakdown (the home "Lifts" tile's detail view).
               First so ?section=lift-trends deep links land above the fold. */}
@@ -1876,8 +2091,21 @@ function AnalyticsPageContent() {
               goal={progressionRaw?.goal}
             />
           )}
+          {/* Strength calibration is one-time onboarding data — demoted here
+              into a collapsed disclosure rather than a headline hero, so the
+              live training data above leads. */}
           {strengthProfile ? (
-            <>
+            <details className="group rounded-xl border border-surface-800 bg-surface-900/40">
+              <summary className="cursor-pointer list-none p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-surface-200">Strength calibration</p>
+                  <p className="text-xs text-surface-500">
+                    From onboarding benchmarks · {formatStrengthLevel(strengthProfile.strengthLevel)} · tap to expand
+                  </p>
+                </div>
+                <span className="text-xs font-medium text-primary-400 flex-shrink-0">View</span>
+              </summary>
+              <div className="space-y-6 p-4 pt-0">
               {/* Overall Score */}
               <Card className="bg-gradient-to-br from-primary-500/10 to-accent-500/10 border-primary-500/30">
                 <CardContent className="p-6">
@@ -2006,31 +2234,33 @@ function AnalyticsPageContent() {
                   </CardContent>
                 </Card>
               )}
-            </>
+              </div>
+            </details>
           ) : (
-            <Card className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary-500/20 flex items-center justify-center">
-                <svg className="w-8 h-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <Card className="text-center py-10">
+              <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-primary-500/20 flex items-center justify-center">
+                <svg className="w-7 h-7 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
               </div>
-              <h2 className="text-lg font-semibold text-surface-200">Calibrate Your Strength</h2>
-              <p className="text-surface-500 mt-2 max-w-md mx-auto">
-                Test your key lifts to get percentile rankings, identify imbalances, and receive personalized weight recommendations.
+              <h2 className="text-base font-semibold text-surface-200">Calibrate your strength</h2>
+              <p className="text-surface-500 mt-1.5 text-sm max-w-md mx-auto">
+                Test your key lifts for percentile rankings and imbalance detection.
               </p>
-              <Button className="mt-6" onClick={() => router.push('/onboarding')}>
-                Start Strength Test
+              <Button className="mt-4" size="sm" onClick={() => router.push('/onboarding')}>
+                Start strength test
               </Button>
             </Card>
           )}
-        </div>
-      )}
 
-      {activeTab === 'volume' && (
-        <div className="space-y-6">
+          {/* Volume vs your personalized MEV–MRV — the adaptive engine that
+              /dashboard/volume uses. Replaces the page's old hardcoded
+              OPTIMAL_WEEKLY_VOLUME table so "enough sets?" has one answer. */}
+          <WeeklyMevSummary />
+
           {analytics && analytics.totalWorkouts > 0 ? (
             <>
-              {/* Quick Stats */}
+              {/* Quick stats for the selected range */}
               <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <Card className="p-4">
                   <p className="text-xs text-surface-500 uppercase tracking-wider">Workouts</p>
@@ -2068,15 +2298,18 @@ function AnalyticsPageContent() {
               </div>
 
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Volume by Muscle */}
+                {/* Volume distribution over the selected range — a drill-down
+                    into sets/exercises per muscle. The authoritative weekly
+                    MEV–MRV check is the adaptive summary above; this card is
+                    the distribution view, so the two no longer compete. */}
                 <Card>
                   <CardHeader>
                     <div className="flex items-center justify-between">
-                      <CardTitle>Volume by Muscle Group</CardTitle>
+                      <CardTitle>Volume distribution</CardTitle>
                       <span className="text-xs text-surface-500">Click to expand</span>
                     </div>
                     <p className="text-xs text-surface-500 mt-1">
-                      Showing {getTimeRangeLabel(timeRange)} • Target = optimal sets for this period
+                      Sets by muscle over {getTimeRangeLabel(timeRange)} · weekly MEV targets are in the summary above
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -2424,11 +2657,19 @@ function AnalyticsPageContent() {
       {/* Wellness Tab */}
       {activeTab === 'wellness' && (
         <div className="space-y-6">
-          {/* Daily tracking — relocated from the home dashboard (Phase 3.3) */}
+          {/* Logging inputs are collapsed so the wellness *trends* lead the
+              tab (inputs shouldn't head an analytics view). "Log today's data"
+              keeps recovery / activity / hydration / cardio one tap away. */}
           {userId && (
-            <div className="space-y-3">
-              <h2 className="text-[15px] font-medium text-surface-100">Daily tracking</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+            <details className="group rounded-xl border border-surface-800 bg-surface-900/40">
+              <summary className="cursor-pointer list-none p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-surface-200">Log today&apos;s data</p>
+                  <p className="text-xs text-surface-500 mt-0.5">Recovery, activity, hydration &amp; cardio</p>
+                </div>
+                <span className="text-xs font-medium text-primary-400 flex-shrink-0">Open</span>
+              </summary>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start p-4 pt-0">
                 <MuscleRecoveryCard />
                 <ActivityCard userId={userId} />
                 <HydrationTracker userId={userId} unit={units === 'kg' ? 'ml' : 'oz'} />
@@ -2440,10 +2681,8 @@ function AnalyticsPageContent() {
                     <CardioTracker userId={userId} />
                   </CardContent>
                 </Card>
-                {/* BodyTargets (the goal editor) moved to the Goals tab —
-                    it was unfindable here under Wellness daily tracking. */}
               </div>
-            </div>
+            </details>
           )}
 
           {/* Hydration Graph */}
