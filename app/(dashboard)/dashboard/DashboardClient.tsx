@@ -759,6 +759,12 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
+        // Eating window for pacing verdicts (defaults inside the helper when
+        // unset/unmigrated). Loaded here — before the initial-data fast path
+        // returns — so a custom window reaches the Home nutrition tile / meal
+        // hero on the normal /dashboard load, not just the full-fetch path.
+        fetchEatingWindow(supabase, user.id).then(setEatingWindow).catch(() => {});
+
         // If we have initial data from server, only fetch supplementary data
         // (deferred queries, muscle volume - things not fetched server-side).
         // Skip this fast path after a midnight rollover (dateKey !== initialDateKey) so the
@@ -823,10 +829,6 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         }
 
         setUserId(user.id);
-
-        // Eating window for pacing verdicts (defaults inside the helper when
-        // unset/unmigrated); loads in the background, default until then.
-        fetchEatingWindow(supabase, user.id).then(setEatingWindow).catch(() => {});
 
         const today = new Date();
         const todayStr = getLocalDateString(today);
