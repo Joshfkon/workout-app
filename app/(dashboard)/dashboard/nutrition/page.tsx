@@ -1313,12 +1313,17 @@ function NutritionPageContent() {
   const mealsLogged = mealGroups.filter((m) => m.entries.length > 0).length;
   const mealsRemaining = Math.max(0, mealsPerDay - mealsLogged);
 
-  // "~X calories available" hint on empty meal cards
+  // "~X calories available" hint on empty meal cards. Split the remaining
+  // daily budget across the meal cards that are still empty (not meals_per_day,
+  // which can leave an empty card showing nothing once that target is reached).
   const remainingCalories = nutritionTargets?.calories
     ? Math.round(nutritionTargets.calories - dailyTotals.calories)
     : 0;
+  const emptyMealCount = mealGroups.filter((m) => m.entries.length === 0).length;
   const perMealAvailable =
-    remainingCalories > 0 && mealsRemaining > 0 ? Math.round(remainingCalories / mealsRemaining) : 0;
+    remainingCalories > 0 && emptyMealCount > 0
+      ? Math.round(remainingCalories / emptyMealCount)
+      : 0;
 
   // Top frequent foods across meals for the one-tap chips row
   const chipMap = new Map<string, { food: FrequentFood; count: number }>();
