@@ -687,13 +687,14 @@ function AnalyticsPageContent() {
     fetchLiftTrendData();
   }, [userId]);
 
-  // Deep-link scroll target (?section=lift-trends): retried as the section's
-  // data lands so a cold load still ends up anchored on the right card.
+  // Deep-link scroll target (?section=lift-trends / muscle-progression):
+  // retried as each section's data lands (they arrive from separate fetches)
+  // so a cold load still ends up anchored on the right card.
   useEffect(() => {
     if (!sectionParam || isLoading) return;
     const el = document.getElementById(sectionParam);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [sectionParam, activeTab, isLoading, liftTrendsSummary]);
+  }, [sectionParam, activeTab, isLoading, liftTrendsSummary, progressionRaw]);
 
   // Fetch goals tab data (mesocycle, targets, weight history, measurements)
   useEffect(() => {

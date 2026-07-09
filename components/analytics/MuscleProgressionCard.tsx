@@ -48,6 +48,10 @@ function formatWeeklyPct(pct: number): string {
  * "Progression by muscle group" — how each muscle's lifts are trending vs
  * the expected E1RM gain rate for the user's experience level. Rows expand
  * to show per-exercise pace.
+ *
+ * Anchored as #muscle-progression for
+ * /dashboard/analytics?tab=strength&section=muscle-progression (the Train
+ * page's Progression card deep-links here).
  */
 export function MuscleProgressionCard({ groups, exerciseNames, goal }: MuscleProgressionCardProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -73,7 +77,7 @@ export function MuscleProgressionCard({ groups, exerciseNames, goal }: MusclePro
         : `E1RM trend vs the ~${expectedPct}%/week expected for your level`;
 
   return (
-    <Card padding="none">
+    <Card id="muscle-progression" padding="none" className="scroll-mt-4">
       <div className="p-4 border-b border-surface-800">
         <h3 className="font-medium text-surface-100">Progression by muscle group</h3>
         <p className="text-xs text-surface-500 mt-0.5">{subtitle}</p>

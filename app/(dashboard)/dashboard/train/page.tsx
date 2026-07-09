@@ -917,9 +917,10 @@ export default function TrainPage() {
         )}
       </div>
 
-      {/* Progression summary */}
+      {/* Progression summary — deep-links to the Strength tab's
+          per-muscle progression card, not just the top of Progress. */}
       <Link
-        href="/dashboard/analytics"
+        href="/dashboard/analytics?tab=strength&section=muscle-progression"
         className="w-full flex items-center gap-3.5 p-4 rounded-2xl bg-surface-900 border border-surface-800 text-left hover:bg-surface-800/70 transition-colors"
       >
         <span className="w-12 h-12 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
