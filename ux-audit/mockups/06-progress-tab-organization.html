@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup 06 — Progress tab reorganization</title>
+<style>
+/* HyperTrack design tokens — inlined from tokens.css so this file is self-contained */
+:root {
+  --primary-300: #7dd3fc; --primary-400: #38bdf8; --primary-500: #0ea5e9; --primary-600: #0284c7;
+  --accent-500: #d946ef;
+  --surface-100: #f4f4f5; --surface-200: #e4e4e7; --surface-300: #d4d4d8; --surface-400: #a1a1aa;
+  --surface-500: #71717a; --surface-600: #52525b; --surface-700: #3f3f46; --surface-800: #27272a;
+  --surface-900: #18181b; --surface-950: #09090b;
+  --success-400: #4ade80; --success-500: #22c55e;
+  --warning-400: #facc15; --warning-500: #eab308;
+  --danger-400: #f87171; --danger-500: #ef4444;
+  --violet-400: #a78bfa;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--surface-950); color: var(--surface-100);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+.phone {
+  width: 390px; min-height: 700px; background: var(--surface-950);
+  border: 1px solid var(--surface-800); border-radius: 24px;
+  overflow: hidden; position: relative; flex-shrink: 0;
+  padding-bottom: 64px; /* room for bottom nav */
+}
+.card { background: var(--surface-900); border: 1px solid var(--surface-800); border-radius: 12px; }
+.muted { color: var(--surface-400); }
+.mono { font-family: var(--font-mono); }
+
+/* mockup page scaffolding (not app UI) */
+.mock-wrap { display: flex; gap: 32px; flex-wrap: wrap; padding: 32px; align-items: flex-start; justify-content: center; }
+.mock-col { display: flex; flex-direction: column; gap: 12px; }
+.mock-label { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--surface-500); font-weight: 700; }
+.mock-label.good { color: var(--success-500); }
+.mock-label.bad { color: var(--danger-500); }
+.mock-note { max-width: 390px; font-size: 13px; color: var(--surface-400); line-height: 1.5; }
+.intro { padding: 24px 32px 0; max-width: 1100px; margin: 0 auto; }
+.intro h1 { font-size: 20px; }
+.intro .mock-note { max-width: 860px; margin-top: 8px; }
+h2.section { font-size: 15px; text-transform: uppercase; letter-spacing: .08em; color: var(--surface-300); padding: 40px 32px 0; max-width: 1100px; margin: 0 auto; }
+
+/* ---------- IA diagram ---------- */
+.ia-wrap { display: flex; gap: 40px; flex-wrap: wrap; justify-content: center; padding: 24px 32px; }
+.ia-col { width: 420px; display: flex; flex-direction: column; gap: 10px; }
+.ia-head { font-size: 14px; font-weight: 700; padding-bottom: 2px; }
+.ia-tab { background: var(--surface-900); border: 1px solid var(--surface-800); border-radius: 12px; padding: 12px 14px; }
+.ia-tab.default { border-color: var(--primary-600); }
+.ia-tab-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.ia-items { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.ia-item { font-size: 12.5px; color: var(--surface-300); line-height: 1.5; }
+.ia-item::before { content: "· "; color: var(--surface-600); }
+.ia-item .tag { display: inline-block; vertical-align: 1px; margin-left: 2px; }
+.tag { font-size: 10px; font-weight: 700; padding: 1.5px 6px; border-radius: 999px; white-space: nowrap; letter-spacing: .02em; }
+.tag.dup    { background: rgba(239,68,68,.14);  color: var(--danger-400); }
+.tag.wrong  { background: rgba(234,179,8,.14);  color: var(--warning-400); }
+.tag.stale  { background: var(--surface-800);   color: var(--surface-400); }
+.tag.new    { background: rgba(34,197,94,.14);  color: var(--success-400); }
+.tag.moved  { background: rgba(14,165,233,.14); color: var(--primary-400); }
+.tag.def    { background: rgba(14,165,233,.14); color: var(--primary-400); }
+
+/* ---------- phone internals ---------- */
+.p-pad { padding: 14px 14px 0; display: flex; flex-direction: column; gap: 12px; }
+.p-header { display: flex; align-items: baseline; justify-content: space-between; padding: 4px 2px 0; }
+.p-title { font-size: 22px; font-weight: 800; }
+.p-tabs { display: flex; gap: 4px; background: var(--surface-900); border: 1px solid var(--surface-800); padding: 4px; border-radius: 12px; }
+.p-tab { flex: 1; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--surface-400); padding: 8px 0; border-radius: 8px; }
+.p-tab.on { background: var(--surface-700); color: var(--surface-100); box-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.chips { display: flex; gap: 4px; background: var(--surface-900); border: 1px solid var(--surface-800); border-radius: 10px; padding: 3px; width: max-content; }
+.chip { font-size: 11px; font-weight: 600; color: var(--surface-400); padding: 4px 9px; border-radius: 7px; }
+.chip.on { background: var(--primary-500); color: #fff; }
+.glance { padding: 13px 14px; display: flex; align-items: center; gap: 12px; }
+.glance .gtxt { flex: 1; min-width: 0; }
+.glance .gname { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--surface-500); font-weight: 700; }
+.glance .gval { font-size: 16px; font-weight: 700; margin-top: 2px; }
+.glance .gsub { font-size: 12px; color: var(--surface-400); margin-top: 1px; }
+.chev { color: var(--surface-600); font-size: 18px; flex-shrink: 0; }
+.statrow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stat { background: var(--surface-900); border: 1px solid var(--surface-800); border-radius: 12px; padding: 9px 10px; }
+.stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--surface-500); font-weight: 700; }
+.stat .v { font-size: 17px; font-weight: 800; margin-top: 2px; }
+.bottom-nav { position: absolute; left: 0; right: 0; bottom: 0; height: 56px; background: var(--surface-900); border-top: 1px solid var(--surface-800); display: flex; }
+.bn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 9.5px; font-weight: 600; color: var(--surface-500); }
+.bn.on { color: var(--primary-400); }
+.bn .ic { width: 18px; height: 18px; border-radius: 5px; background: currentColor; opacity: .85; }
+.liftrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--surface-800); }
+.liftrow:last-child { border-bottom: none; }
+.liftrow .lname { flex: 1; font-size: 13.5px; font-weight: 600; }
+.liftrow .lval { font-size: 13px; color: var(--surface-300); }
+.delta { font-size: 12px; font-weight: 700; min-width: 52px; text-align: right; }
+.delta.up { color: var(--success-400); }
+.delta.dn { color: var(--danger-400); }
+.delta.fl { color: var(--surface-500); }
+.vol { display: flex; flex-direction: column; gap: 10px; }
+.volrow .vh { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 4px; }
+.volbar { position: relative; height: 8px; background: var(--surface-800); border-radius: 999px; overflow: hidden; }
+.volbar .zone { position: absolute; top: 0; bottom: 0; background: rgba(34,197,94,.12); }
+.volbar .mark { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--surface-600); }
+.volbar .fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 999px; }
+.rowlink { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; font-size: 13.5px; font-weight: 600; }
+.spark { display: block; }
+.wgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wtile { background: var(--surface-900); border: 1px solid var(--surface-800); border-radius: 12px; padding: 10px 11px; }
+.wtile .wk { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--surface-500); font-weight: 700; }
+.wtile .wv { font-size: 16px; font-weight: 800; margin-top: 2px; display: flex; align-items: baseline; gap: 6px; }
+.wtile .wd { font-size: 11px; font-weight: 700; }
+.alert { border: 1px solid rgba(234,179,8,.35); background: rgba(234,179,8,.08); border-radius: 12px; padding: 10px 12px; display: flex; gap: 9px; align-items: center; font-size: 12.5px; }
+.alert .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--warning-400); flex-shrink: 0; }
+.metric-toggle { display: flex; gap: 4px; }
+.mt { font-size: 11px; font-weight: 600; color: var(--surface-400); padding: 4px 9px; border-radius: 999px; background: var(--surface-800); }
+.mt.on { background: var(--primary-500); color: #fff; }
+
+/* ---------- moves table ---------- */
+.tbl-wrap { max-width: 1000px; margin: 20px auto 0; padding: 0 32px 8px; overflow-x: auto; }
+table.moves { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.moves th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--surface-500); padding: 8px 12px; border-bottom: 1px solid var(--surface-700); }
+table.moves td { padding: 8px 12px; border-bottom: 1px solid var(--surface-800); color: var(--surface-300); vertical-align: top; line-height: 1.4; }
+table.moves td:first-child { color: var(--surface-100); font-weight: 600; white-space: nowrap; }
+.footer-note { max-width: 860px; margin: 32px auto 48px; padding: 0 32px; font-size: 13px; color: var(--surface-400); line-height: 1.6; }
+a { color: var(--primary-400); }
+</style>
+</head>
+<body>
+
+<div class="intro">
+  <h1>06 · Progress tab — same data, organized around the question "am I progressing?"</h1>
+  <p class="mock-note">
+    The Progress nav item opens a page titled <em>Analytics</em> with five tabs (Body · Goals · Strength ·
+    Volume &amp; Trends · Wellness), defaulting to Body. The data underneath is genuinely strong — lift trends,
+    plateau detection, DEXA-anchored composition trends, adaptive volume — but the organization works against it:
+    duplicate charts, a strength ranking filed under Volume, two contradictory volume-target systems, a
+    settings card in the middle of body-comp analysis, and a global time-range control that silently affects
+    only two of the five tabs. Proposal: four tabs with a new <b>Overview</b> as the default, each detail tab
+    owning one topic and its own controls.
+  </p>
+</div>
+
+<h2 class="section">Information architecture — current vs proposed</h2>
+<div class="ia-wrap">
+  <div class="ia-col">
+    <div class="ia-head" style="color:var(--danger-400)">CURRENT — "Analytics", 5 tabs</div>
+
+    <div class="ia-tab default">
+      <div class="ia-tab-name">📊 Body <span class="tag def">default tab</span></div>
+      <div class="ia-items">
+        <div class="ia-item">Body hub trends (weight / BF% / lean / FFMI + Composition Map)</div>
+        <div class="ia-item">Legacy "Body Composition Trends" area chart <span class="tag dup">duplicates hub chart</span></div>
+        <div class="ia-item">Quick stats: FFMI gauge · BF% · lean · fat <span class="tag dup">re-states hub values</span></div>
+        <div class="ia-item">Muscle Group Priorities (read-only settings) <span class="tag wrong">not progress data</span></div>
+        <div class="ia-item">Measurement trend card + Body Measurements <span class="tag dup">two tape widgets</span></div>
+        <div class="ia-item">Progress photos · nudges · recommendations</div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">🎯 Goals</div>
+      <div class="ia-items">
+        <div class="ia-item">Body targets editor (weight / BF% / FFMI / tape)</div>
+        <div class="ia-item">Goal progress + weight projection</div>
+        <div class="ia-item">Mesocycle status <span class="tag wrong">training, not body</span></div>
+        <div class="ia-item">Proportions analysis</div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">💪 Strength</div>
+      <div class="ia-items">
+        <div class="ia-item">Lift trends · plateau alerts · muscle progression (live, auto)</div>
+        <div class="ia-item">Strength profile hero + calibrated lifts <span class="tag stale">one-time onboarding data, no date shown</span></div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">📈 Volume &amp; Trends</div>
+      <div class="ia-items">
+        <div class="ia-item">Stat row (workouts / sets / volume / duration / RPE)</div>
+        <div class="ia-item">Volume by muscle vs <span class="mono">OPTIMAL_WEEKLY_VOLUME</span> <span class="tag dup">contradicts /volume's adaptive MEV–MRV</span></div>
+        <div class="ia-item">Top Exercises w/ strength standards <span class="tag wrong">strength content</span></div>
+        <div class="ia-item">Recent workouts <span class="tag dup">= History</span></div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">💚 Wellness</div>
+      <div class="ia-items">
+        <div class="ia-item">4 daily-tracking input widgets <span class="tag wrong">inputs on an analytics page</span></div>
+        <div class="ia-item">11 stacked full-height charts (sleep ×2, energy, mood, focus, libido, stress, soreness, hunger, hydration, cardio) — ~5,000&nbsp;px of scroll, mostly empty states</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ia-col">
+    <div class="ia-head" style="color:var(--success-400)">PROPOSED — "Progress", 4 tabs</div>
+
+    <div class="ia-tab default">
+      <div class="ia-tab-name">Overview <span class="tag def">default tab</span> <span class="tag new">new</span></div>
+      <div class="ia-items">
+        <div class="ia-item">Alerts strip — plateaus, staleness nudges (only when present)</div>
+        <div class="ia-item">This-week stat row (workouts · sets · volume · streak)</div>
+        <div class="ia-item">One glance card per topic — Strength, Volume, Body, Goal — each tapping into its detail tab</div>
+        <div class="ia-item">Goal progress + projection <span class="tag moved">from Goals</span></div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">Training <span class="tag moved">Strength + Volume merged</span></div>
+      <div class="ia-items">
+        <div class="ia-item">Time range (scoped here — it actually applies)</div>
+        <div class="ia-item">Lift trends → plateau alerts → muscle progression</div>
+        <div class="ia-item">Volume vs <b>personalized MEV–MRV</b> — single source shared with /volume</div>
+        <div class="ia-item">Top exercises <span class="tag moved">from Volume tab</span> · mesocycle status <span class="tag moved">from Goals</span></div>
+        <div class="ia-item">Calibration demoted to a dated card with a Recalibrate action</div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">Body</div>
+      <div class="ia-items">
+        <div class="ia-item">One trend module (weight / BF% / lean / FFMI / map) — legacy duplicate chart deleted</div>
+        <div class="ia-item">Stat row derived from the same trend series (one source of truth)</div>
+        <div class="ia-item">Tape measurements merged into one card · photos</div>
+        <div class="ia-item">Targets editor + proportions <span class="tag moved">from Goals</span></div>
+        <div class="ia-item">Muscle priorities → link to Settings <span class="tag moved">removed from tab</span></div>
+      </div>
+    </div>
+
+    <div class="ia-tab">
+      <div class="ia-tab-name">Wellness</div>
+      <div class="ia-items">
+        <div class="ia-item">Compact "today" check-in summary; logging stays one tap away, not four cards deep</div>
+        <div class="ia-item">Small-multiples grid — every metric visible in one screen; tap a tile for the full chart</div>
+        <div class="ia-item">Never-logged metrics collapse under "show more"</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="section">Mockup A — Overview: the new default answers the tab's own name</h2>
+<div class="mock-wrap">
+  <div class="mock-col">
+    <span class="mock-label good">Proposed — Overview tab (default)</span>
+    <div class="phone">
+      <div class="p-pad">
+        <div class="p-header">
+          <div>
+            <div class="p-title">Progress</div>
+          </div>
+          <div class="muted" style="font-size:12px">Week of Jul 6</div>
+        </div>
+        <div class="p-tabs">
+          <div class="p-tab on">Overview</div><div class="p-tab">Training</div><div class="p-tab">Body</div><div class="p-tab">Wellness</div>
+        </div>
+
+        <div class="alert">
+          <span class="dot"></span>
+          <span><b>Bench Press plateaued</b> — no E1RM progress in 4 weeks. See options ›</span>
+        </div>
+
+        <div class="statrow">
+          <div class="stat"><div class="k">Workouts</div><div class="v">4</div></div>
+          <div class="stat"><div class="k">Sets</div><div class="v">86</div></div>
+          <div class="stat"><div class="k">Volume</div><div class="v">42.3k</div></div>
+          <div class="stat"><div class="k">Streak</div><div class="v" style="color:var(--success-400)">12</div></div>
+        </div>
+
+        <div class="card glance">
+          <svg class="spark" width="72" height="30" viewBox="0 0 72 30" aria-hidden="true">
+            <polyline points="2,24 14,22 26,23 38,17 50,14 62,10 70,7" fill="none" stroke="var(--primary-400)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="70" cy="7" r="3" fill="var(--primary-400)"/>
+          </svg>
+          <div class="gtxt">
+            <div class="gname">Strength</div>
+            <div class="gval">5 of 7 lifts rising</div>
+            <div class="gsub">30-day E1RM trend · 1 plateaued</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="card glance">
+          <svg class="spark" width="72" height="30" viewBox="0 0 72 30" aria-hidden="true">
+            <rect x="4"  y="8"  width="9" height="18" rx="2" fill="var(--success-500)"/>
+            <rect x="18" y="5"  width="9" height="21" rx="2" fill="var(--success-500)"/>
+            <rect x="32" y="12" width="9" height="14" rx="2" fill="var(--success-500)"/>
+            <rect x="46" y="20" width="9" height="6"  rx="2" fill="var(--surface-600)"/>
+            <rect x="60" y="17" width="9" height="9"  rx="2" fill="var(--warning-500)"/>
+          </svg>
+          <div class="gtxt">
+            <div class="gname">Volume</div>
+            <div class="gval">2 muscles below target</div>
+            <div class="gsub">Biceps and calves under MEV this week</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="card glance">
+          <svg class="spark" width="72" height="30" viewBox="0 0 72 30" aria-hidden="true">
+            <polyline points="2,6 14,8 26,10 38,13 50,15 62,18 70,20" fill="none" stroke="var(--primary-400)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="70" cy="20" r="3" fill="var(--primary-400)"/>
+          </svg>
+          <div class="gtxt">
+            <div class="gname">Body</div>
+            <div class="gval">182.4 lbs · 16.2% BF</div>
+            <div class="gsub">↓ 0.5 lbs/wk · lean mass holding</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+
+        <div class="card glance">
+          <div style="width:72px">
+            <div style="height:8px;background:var(--surface-800);border-radius:999px;overflow:hidden">
+              <div style="height:100%;width:68%;background:linear-gradient(90deg,var(--primary-500),var(--primary-400));border-radius:999px"></div>
+            </div>
+            <div class="muted" style="font-size:10px;margin-top:4px;text-align:center">68%</div>
+          </div>
+          <div class="gtxt">
+            <div class="gname">Goal · Cut to 15% BF</div>
+            <div class="gval">On pace for Sep 12</div>
+            <div class="gsub">1.2% to go at current rate</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="bn"><span class="ic"></span>Home</div><div class="bn"><span class="ic"></span>Train</div>
+        <div class="bn"><span class="ic"></span>Eat</div><div class="bn on"><span class="ic"></span>Progress</div>
+        <div class="bn"><span class="ic"></span>More</div>
+      </div>
+    </div>
+    <p class="mock-note">
+      Header says <b>Progress</b>, matching the nav label (today it says "Analytics"). Every user has workout
+      data, so the default tab always has content — unlike Body, which is empty-ish until a DEXA scan exists.
+      Alerts surface here instead of hiding inside the Strength tab. Each card is one number, one trend,
+      one tap to detail. The glance cards reuse data the page already fetches (liftTrends, adaptive volume,
+      bodyCompTrend, active target) — no new queries.
+    </p>
+  </div>
+
+  <div class="mock-col">
+    <span class="mock-label good">Proposed — Training tab (Strength + Volume merged)</span>
+    <div class="phone">
+      <div class="p-pad">
+        <div class="p-header"><div class="p-title">Progress</div></div>
+        <div class="p-tabs">
+          <div class="p-tab">Overview</div><div class="p-tab on">Training</div><div class="p-tab">Body</div><div class="p-tab">Wellness</div>
+        </div>
+
+        <div class="chips">
+          <div class="chip">7d</div><div class="chip on">30d</div><div class="chip">60d</div><div class="chip">6mo</div><div class="chip">1yr</div><div class="chip">All</div>
+        </div>
+
+        <div class="card" style="padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:14px;font-weight:700">Lift trends</div>
+            <div class="muted" style="font-size:11px">E1RM, last 30 days</div>
+          </div>
+          <div style="margin-top:4px">
+            <div class="liftrow">
+              <div class="lname">Squat</div>
+              <svg class="spark" width="56" height="20" viewBox="0 0 56 20"><polyline points="2,16 15,13 28,12 41,8 54,5" fill="none" stroke="var(--primary-400)" stroke-width="2" stroke-linecap="round"/></svg>
+              <div class="lval">315 lbs</div><div class="delta up">▲ 2.1%</div>
+            </div>
+            <div class="liftrow">
+              <div class="lname">Deadlift</div>
+              <svg class="spark" width="56" height="20" viewBox="0 0 56 20"><polyline points="2,14 15,12 28,11 41,9 54,8" fill="none" stroke="var(--primary-400)" stroke-width="2" stroke-linecap="round"/></svg>
+              <div class="lval">405 lbs</div><div class="delta up">▲ 1.4%</div>
+            </div>
+            <div class="liftrow">
+              <div class="lname">Bench Press</div>
+              <svg class="spark" width="56" height="20" viewBox="0 0 56 20"><polyline points="2,10 15,10 28,11 41,10 54,10" fill="none" stroke="var(--surface-500)" stroke-width="2" stroke-linecap="round"/></svg>
+              <div class="lval">225 lbs</div><div class="delta fl">— 0.0%</div>
+            </div>
+            <div class="liftrow">
+              <div class="lname">Overhead Press</div>
+              <svg class="spark" width="56" height="20" viewBox="0 0 56 20"><polyline points="2,8 15,9 28,11 41,12 54,14" fill="none" stroke="var(--danger-400)" stroke-width="2" stroke-linecap="round"/></svg>
+              <div class="lval">135 lbs</div><div class="delta dn">▼ 1.2%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="alert">
+          <span class="dot"></span>
+          <span><b>Bench Press</b> — 4 weeks without progress. Try a rep-range change or swap ›</span>
+        </div>
+
+        <div class="card" style="padding:12px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:14px;font-weight:700">Volume vs your targets</div>
+            <div class="muted" style="font-size:11px">personalized MEV–MRV</div>
+          </div>
+          <div class="vol" style="margin-top:10px">
+            <div class="volrow">
+              <div class="vh"><span>Chest</span><span class="muted">14 / 10–18 sets</span></div>
+              <div class="volbar">
+                <span class="zone" style="left:45%;width:37%"></span><span class="mark" style="left:45%"></span><span class="mark" style="left:82%"></span>
+                <span class="fill" style="width:64%;background:var(--success-500)"></span>
+              </div>
+            </div>
+            <div class="volrow">
+              <div class="vh"><span>Back</span><span class="muted">16 / 12–20 sets</span></div>
+              <div class="volbar">
+                <span class="zone" style="left:50%;width:33%"></span><span class="mark" style="left:50%"></span><span class="mark" style="left:83%"></span>
+                <span class="fill" style="width:67%;background:var(--success-500)"></span>
+              </div>
+            </div>
+            <div class="volrow">
+              <div class="vh"><span>Biceps</span><span class="muted">6 / 8–14 sets · below MEV</span></div>
+              <div class="volbar">
+                <span class="zone" style="left:40%;width:30%"></span><span class="mark" style="left:40%"></span><span class="mark" style="left:70%"></span>
+                <span class="fill" style="width:30%;background:var(--surface-500)"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card rowlink"><span>Muscle progression · 4 on pace, 2 behind</span><span class="chev">›</span></div>
+        <div class="card rowlink"><span>Top exercises</span><span class="chev">›</span></div>
+        <div class="card rowlink"><span>Recent workouts</span><span class="chev">›</span></div>
+
+        <div class="card" style="padding:11px 14px;display:flex;align-items:center;gap:10px;border-style:dashed">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--surface-300)">Strength calibration</div>
+            <div class="muted" style="font-size:11.5px">From onboarding · Feb 2026 · 5 months old</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--primary-400)">Recalibrate</div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="bn"><span class="ic"></span>Home</div><div class="bn"><span class="ic"></span>Train</div>
+        <div class="bn"><span class="ic"></span>Eat</div><div class="bn on"><span class="ic"></span>Progress</div>
+        <div class="bn"><span class="ic"></span>More</div>
+      </div>
+    </div>
+    <p class="mock-note">
+      Strength and Volume merge — both are views of the same workout sessions, and Top Exercises (an E1RM
+      ranking) was already strength content living on the Volume tab. The time range moves <em>inside</em> the tab:
+      today it sits in the page header but silently does nothing on Body, Goals, or Strength. Volume targets
+      switch from the page's hardcoded <span class="mono">OPTIMAL_WEEKLY_VOLUME</span> table to the adaptive
+      MEV–MRV engine that <span class="mono">/dashboard/volume</span> already uses — one answer to "am I doing
+      enough sets", not two. The one-time onboarding calibration keeps its data but drops to a dated card with
+      an explicit Recalibrate action instead of an undated gradient hero.
+    </p>
+  </div>
+</div>
+
+<h2 class="section">Mockup B — Body slimmed to one source of truth · Wellness as small multiples</h2>
+<div class="mock-wrap">
+  <div class="mock-col">
+    <span class="mock-label good">Proposed — Body tab</span>
+    <div class="phone">
+      <div class="p-pad">
+        <div class="p-header"><div class="p-title">Progress</div></div>
+        <div class="p-tabs">
+          <div class="p-tab">Overview</div><div class="p-tab">Training</div><div class="p-tab on">Body</div><div class="p-tab">Wellness</div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:15px;font-weight:700">Body</div>
+          <div style="background:var(--primary-500);color:#fff;font-size:12.5px;font-weight:700;padding:7px 14px;border-radius:9px">+ Log</div>
+        </div>
+
+        <div class="card" style="padding:12px 14px">
+          <div class="metric-toggle">
+            <span class="mt on">Weight</span><span class="mt">BF%</span><span class="mt">Lean</span><span class="mt">FFMI</span><span class="mt">Map</span>
+          </div>
+          <svg class="spark" width="100%" height="110" viewBox="0 0 340 110" preserveAspectRatio="none" style="margin-top:10px">
+            <line x1="0" y1="30" x2="340" y2="30" stroke="var(--surface-800)" stroke-width="1"/>
+            <line x1="0" y1="60" x2="340" y2="60" stroke="var(--surface-800)" stroke-width="1"/>
+            <line x1="0" y1="90" x2="340" y2="90" stroke="var(--surface-800)" stroke-width="1"/>
+            <polyline points="8,22 50,30 92,38 134,44 176,55 218,62 260,72 302,80 332,84" fill="none" stroke="var(--primary-400)" stroke-width="2.5" stroke-linecap="round"/>
+            <circle cx="92" cy="38" r="4" fill="var(--surface-950)" stroke="var(--accent-500)" stroke-width="2"/>
+            <circle cx="260" cy="72" r="4" fill="var(--surface-950)" stroke="var(--accent-500)" stroke-width="2"/>
+            <circle cx="332" cy="84" r="3.5" fill="var(--primary-400)"/>
+          </svg>
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--surface-500);margin-top:4px">
+            <span>Apr</span><span>May</span><span>Jun</span><span>Jul</span>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:6px">◦ DEXA scans anchor the trend · one chart, one data source</div>
+        </div>
+
+        <div class="statrow" style="grid-template-columns:repeat(3,1fr)">
+          <div class="stat"><div class="k">FFMI</div><div class="v">22.1</div></div>
+          <div class="stat"><div class="k">Body fat</div><div class="v">16.2%</div></div>
+          <div class="stat"><div class="k">Lean</div><div class="v">148 lbs</div></div>
+        </div>
+
+        <div class="card" style="padding:12px 14px">
+          <div style="font-size:14px;font-weight:700">Measurements</div>
+          <div style="margin-top:4px">
+            <div class="liftrow"><div class="lname">Arms</div><div class="lval">15.5 in</div><div class="delta up">▲ 0.2</div></div>
+            <div class="liftrow"><div class="lname">Waist</div><div class="lval">33.1 in</div><div class="delta up">▼ 0.4</div></div>
+            <div class="liftrow"><div class="lname">Chest</div><div class="lval">42.0 in</div><div class="delta fl">— 0.0</div></div>
+          </div>
+        </div>
+
+        <div class="card rowlink"><span>Progress photos</span><span class="chev">›</span></div>
+        <div class="card rowlink"><span>Targets · 15% BF @ 180 lbs</span><span class="chev">›</span></div>
+        <div class="card rowlink"><span>Proportions &amp; symmetry</span><span class="chev">›</span></div>
+
+        <div class="muted" style="font-size:11.5px;text-align:center;padding:2px 8px 10px">
+          Muscle priorities moved to <span style="color:var(--primary-400)">Settings › Training</span>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="bn"><span class="ic"></span>Home</div><div class="bn"><span class="ic"></span>Train</div>
+        <div class="bn"><span class="ic"></span>Eat</div><div class="bn on"><span class="ic"></span>Progress</div>
+        <div class="bn"><span class="ic"></span>More</div>
+      </div>
+    </div>
+    <p class="mock-note">
+      One trend module. Today the tab renders <b>two charts of the same lean/fat series</b> — the DEXA-anchored
+      hub chart and the legacy "Body Composition Trends" area chart below it — plus a quick-stats row computed
+      from a <em>different</em> source (raw latest scan vs anchored trend). Delete the legacy chart, derive the
+      stat row from the trend's last point (the code already does this for FFMI), and merge the two tape-measurement
+      widgets. Targets and proportions move in from the dissolved Goals tab — they're body data. The Muscle
+      Priorities card (a read-only settings view that "influences program generation") leaves the tab entirely.
+    </p>
+  </div>
+
+  <div class="mock-col">
+    <span class="mock-label good">Proposed — Wellness tab</span>
+    <div class="phone">
+      <div class="p-pad">
+        <div class="p-header"><div class="p-title">Progress</div></div>
+        <div class="p-tabs">
+          <div class="p-tab">Overview</div><div class="p-tab">Training</div><div class="p-tab">Body</div><div class="p-tab on">Wellness</div>
+        </div>
+
+        <div class="chips">
+          <div class="chip">7d</div><div class="chip on">30d</div><div class="chip">60d</div><div class="chip">6mo</div>
+        </div>
+
+        <div class="card" style="padding:11px 14px;display:flex;align-items:center;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700">Today</div>
+            <div class="muted" style="font-size:12px">Sleep 7.2 h · Energy 4/5 · Water 1.8 L</div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--primary-400)">Check in ›</div>
+        </div>
+
+        <div class="wgrid">
+          <div class="wtile">
+            <div class="wk">Sleep</div>
+            <div class="wv">7.1 h <span class="wd" style="color:var(--success-400)">▲ 0.3</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <polyline points="4,18 24,20 44,15 64,17 84,12 104,10 124,9 136,8" fill="none" stroke="var(--violet-400)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="136" cy="8" r="2.5" fill="var(--violet-400)"/>
+            </svg>
+          </div>
+          <div class="wtile">
+            <div class="wk">Energy</div>
+            <div class="wv">3.8 /5 <span class="wd" style="color:var(--surface-500)">—</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <polyline points="4,14 24,12 44,15 64,13 84,14 104,12 124,13 136,13" fill="none" stroke="var(--warning-400)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="136" cy="13" r="2.5" fill="var(--warning-400)"/>
+            </svg>
+          </div>
+          <div class="wtile">
+            <div class="wk">Hydration</div>
+            <div class="wv">2.4 L <span class="wd" style="color:var(--danger-400)">▼ 0.3</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <rect x="6"   y="8"  width="10" height="16" rx="2" fill="var(--primary-500)"/>
+              <rect x="24"  y="6"  width="10" height="18" rx="2" fill="var(--primary-500)"/>
+              <rect x="42"  y="10" width="10" height="14" rx="2" fill="var(--primary-500)"/>
+              <rect x="60"  y="8"  width="10" height="16" rx="2" fill="var(--primary-500)"/>
+              <rect x="78"  y="13" width="10" height="11" rx="2" fill="var(--primary-500)"/>
+              <rect x="96"  y="11" width="10" height="13" rx="2" fill="var(--primary-500)"/>
+              <rect x="114" y="15" width="10" height="9"  rx="2" fill="var(--primary-500)"/>
+            </svg>
+          </div>
+          <div class="wtile">
+            <div class="wk">Cardio</div>
+            <div class="wv">86 m/wk <span class="wd" style="color:var(--success-400)">▲ 12</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <rect x="6"   y="16" width="10" height="8"  rx="2" fill="var(--success-500)"/>
+              <rect x="24"  y="18" width="10" height="6"  rx="2" fill="var(--success-500)"/>
+              <rect x="42"  y="12" width="10" height="12" rx="2" fill="var(--success-500)"/>
+              <rect x="60"  y="14" width="10" height="10" rx="2" fill="var(--success-500)"/>
+              <rect x="78"  y="9"  width="10" height="15" rx="2" fill="var(--success-500)"/>
+              <rect x="96"  y="11" width="10" height="13" rx="2" fill="var(--success-500)"/>
+              <rect x="114" y="7"  width="10" height="17" rx="2" fill="var(--success-500)"/>
+            </svg>
+          </div>
+          <div class="wtile">
+            <div class="wk">Stress</div>
+            <div class="wv">2.1 /5 <span class="wd" style="color:var(--success-400)">▼ 0.4</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <polyline points="4,8 24,10 44,9 64,13 84,14 104,16 124,17 136,18" fill="none" stroke="var(--danger-400)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="136" cy="18" r="2.5" fill="var(--danger-400)"/>
+            </svg>
+          </div>
+          <div class="wtile">
+            <div class="wk">Soreness</div>
+            <div class="wv">2.4 /5 <span class="wd" style="color:var(--surface-500)">—</span></div>
+            <svg class="spark" width="100%" height="26" viewBox="0 0 140 26" preserveAspectRatio="none">
+              <polyline points="4,12 24,15 44,11 64,14 84,12 104,15 124,13 136,14" fill="none" stroke="var(--accent-500)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="136" cy="14" r="2.5" fill="var(--accent-500)"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="card rowlink" style="border-style:dashed">
+          <span class="muted" style="font-weight:600">Show 4 more — Mood, Focus, Libido, Hunger</span><span class="chev">＋</span>
+        </div>
+
+        <div class="muted" style="font-size:11.5px;text-align:center;padding:0 8px 10px">
+          Tap any tile for the full chart with target lines and check-in history
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <div class="bn"><span class="ic"></span>Home</div><div class="bn"><span class="ic"></span>Train</div>
+        <div class="bn"><span class="ic"></span>Eat</div><div class="bn on"><span class="ic"></span>Progress</div>
+        <div class="bn"><span class="ic"></span>More</div>
+      </div>
+    </div>
+    <p class="mock-note">
+      Today this tab stacks eleven full-height Recharts cards plus four self-fetching input widgets —
+      roughly 5,000&nbsp;px of scroll where most cards show "No data for this period". Small multiples put
+      every metric on one screen: value, delta, 30-day shape. Tiles the user has never logged collapse under
+      "show more" instead of rendering as empty charts. The input widgets (hydration tracker, cardio log,
+      recovery card) return to a single compact "Today / Check in" row — logging is one tap away without four
+      input cards leading an analytics tab. Bonus: only the tapped metric's full chart needs to mount, cutting
+      most of the tab's render cost.
+    </p>
+  </div>
+</div>
+
+<h2 class="section">Every current card, accounted for</h2>
+<div class="tbl-wrap">
+  <table class="moves">
+    <tr><th>Current (tab · card)</th><th>Proposed home</th><th>Why</th></tr>
+    <tr><td>Page title "Analytics"</td><td>Rename to "Progress"</td><td>Nav item, page title, and back-stack should agree on one name.</td></tr>
+    <tr><td>Header time-range selector</td><td>Inside Training and Wellness tabs</td><td>It currently only affects those two tabs; on Body/Goals/Strength it's a dead control.</td></tr>
+    <tr><td>Body · hub trends + Composition Map</td><td>Body (lead module)</td><td>Keep — this is the good chart.</td></tr>
+    <tr><td>Body · legacy "Body Composition Trends" area chart</td><td><b>Delete</b></td><td>Plots the same lean/fat series as the hub chart, from a different (staler) source.</td></tr>
+    <tr><td>Body · quick stats (FFMI, BF%, lean, fat)</td><td>Body (derived from trend's last point)</td><td>One source of truth; today stats can disagree with the chart.</td></tr>
+    <tr><td>Body · Muscle Group Priorities</td><td>Settings (link only)</td><td>It's program-generation config, not progress data.</td></tr>
+    <tr><td>Body · MeasurementTrendCard + BodyMeasurements</td><td>Body (one merged card)</td><td>Two widgets over the same tape data.</td></tr>
+    <tr><td>Goals · BodyTargets editor, proportions</td><td>Body (anchored sections)</td><td>They edit/analyze body data; Goals dissolves.</td></tr>
+    <tr><td>Goals · goal progress + projection</td><td>Overview (Goal glance card)</td><td>The headline belongs on the default screen.</td></tr>
+    <tr><td>Goals · mesocycle status</td><td>Training</td><td>It's training state.</td></tr>
+    <tr><td>Strength · lift trends, plateaus, muscle progression</td><td>Training (top)</td><td>Keep prominence; also surfaced as Overview alerts/glance.</td></tr>
+    <tr><td>Strength · profile hero + calibrated lifts</td><td>Training (demoted, dated card)</td><td>One-time onboarding data presented as current; show its age + Recalibrate.</td></tr>
+    <tr><td>Volume · stat row</td><td>Overview ("this week") + Training</td><td>Headline stats move up front.</td></tr>
+    <tr><td>Volume · volume by muscle (hardcoded targets)</td><td>Training, using adaptive MEV–MRV</td><td>Two conflicting target systems today (page table vs /volume's engine).</td></tr>
+    <tr><td>Volume · Top Exercises</td><td>Training</td><td>It's a strength ranking; was misfiled under Volume.</td></tr>
+    <tr><td>Volume · Recent Workouts</td><td>Training (link row → History)</td><td>Duplicates History; keep as a link, not a card list.</td></tr>
+    <tr><td>Wellness · 11 stacked charts</td><td>Wellness small-multiples grid</td><td>All metrics visible at once; full chart on tap; empty metrics collapsed.</td></tr>
+    <tr><td>Wellness · 4 daily-tracking input widgets</td><td>Wellness "Today / Check in" row</td><td>Inputs shouldn't lead an analytics tab; logging stays one tap away.</td></tr>
+  </table>
+</div>
+
+<div class="footer-note">
+  <b>Implementation notes.</b> Keep the existing deep-link scheme working: <span class="mono">?tab=body</span>,
+  <span class="mono">?tab=strength&amp;section=lift-trends</span> etc. should map onto the new tabs
+  (<span class="mono">strength</span> and <span class="mono">volume</span> → <span class="mono">training</span>,
+  <span class="mono">goals</span> → <span class="mono">body#targets</span> / overview) so home tiles and
+  notifications don't break. The reorganization is also the natural moment to split the 3,144-line
+  <span class="mono">analytics/page.tsx</span> into per-tab components that fetch on activation — today all five
+  tabs' queries fire on mount regardless of which tab is shown (flagged as P1-2 in the July audit). The Overview
+  tab needs no new data: it composes <span class="mono">computeLiftTrends</span>, the adaptive-volume hook,
+  <span class="mono">useBodyCompTrend</span>, and the active target — all already fetched by this page.
+</div>
+
+</body>
+</html>
