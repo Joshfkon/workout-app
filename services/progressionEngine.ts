@@ -1127,7 +1127,11 @@ export function calculateSetQuality(input: CalculateSetQualityInput): {
  * Detect sets that count as "junk volume" (too easy to stimulate growth)
  */
 export function detectJunkVolume(sets: SetLog[]): SetLog[] {
-  return sets.filter((set) => !set.isWarmup && set.rpe <= SET_QUALITY_THRESHOLDS.junk.maxRpe);
+  // Ramp/feeder sets are intentionally light — they're potentiation, not junk
+  // volume. Only working sets can be "too easy to stimulate growth".
+  return sets.filter(
+    (set) => !set.isWarmup && set.setRole !== 'ramp' && set.rpe <= SET_QUALITY_THRESHOLDS.junk.maxRpe
+  );
 }
 
 /**

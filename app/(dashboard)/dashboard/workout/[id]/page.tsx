@@ -63,6 +63,8 @@ import { generateWarmupProtocol, isMuscleWarmedUp } from '@/services/progression
 import { MUSCLE_GROUPS, muscleMatchesGroup, rirToRpe } from '@/types/schema';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { quickWeightEstimate, quickWeightEstimateWithCalibration, type WorkingWeightRecommendation } from '@/services/weightEstimationEngine';
+import { inferSetRole, sessionTopSetWeightKg } from '@/services/suggestionEngine/setRoles';
+import { SUGGESTION_ENGINE_VERSION } from '@/services/suggestionEngine/constants';
 import { addExerciseOverride, getSessionFromProgramData, applyExerciseOverrides, type ExerciseOverride } from '@/services/mesocycleHelpers';
 import { computeStapleExerciseIds } from '@/services/exerciseStaples';
 import { deriveWorkoutLabel, formatMuscleName, formatWeight, getLocalDateString, inputWeightToKg } from '@/lib/utils';
@@ -1792,6 +1794,17 @@ export default function WorkoutPage() {
         }
       }
 
+      // Infer the set role (working | ramp) from this set's load vs the block's
+      // top working set so far, so ramp/feeder sets aren't graded or counted as
+      // junk volume. Provisional at log time (a heavier later set can't retro-
+      // relabel an earlier row live); the set_roles migration recomputes roles
+      // authoritatively once a session's sets are all known.
+      const blockWorkingSets = completedSets
+        .filter((s) => s.exerciseBlockId === currentBlock.id && !s.isWarmup)
+        .map((s) => ({ weightKg: s.weightKg }));
+      const blockTopKg = sessionTopSetWeightKg([...blockWorkingSets, { weightKg: data.weightKg }]);
+      const setRole = data.weightKg > 0 ? inferSetRole(data.weightKg, blockTopKg) : 'working';
+
       const setId = crypto.randomUUID();
       const row = {
         id: setId,
@@ -1800,6 +1813,8 @@ export default function WorkoutPage() {
         weight_kg: data.weightKg,
         reps: data.reps,
         set_type: setType,
+        set_role: setRole,
+        suggestion_engine_version: SUGGESTION_ENGINE_VERSION,
         parent_set_id: data.parentSetId || null,
         rpe: data.rpe,
         is_warmup: false,
@@ -1821,6 +1836,8 @@ export default function WorkoutPage() {
         restSeconds: null,
         isWarmup: false,
         setType: setType,
+        setRole: setRole,
+        suggestionEngineVersion: SUGGESTION_ENGINE_VERSION,
         parentSetId: data.parentSetId || null,
         quality: quality,
         qualityReason: qualityReason,

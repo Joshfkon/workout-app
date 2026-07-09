@@ -400,6 +400,8 @@ export interface Database {
           quality_reason: string;
           note: string | null;
           logged_at: string;
+          set_role: 'working' | 'ramp' | null;
+          suggestion_engine_version: number | null;
         };
         Insert: {
           id?: string;
@@ -416,6 +418,8 @@ export interface Database {
           quality_reason?: string;
           note?: string | null;
           logged_at?: string;
+          set_role?: 'working' | 'ramp' | null;
+          suggestion_engine_version?: number | null;
         };
         Update: {
           id?: string;
@@ -432,6 +436,8 @@ export interface Database {
           quality_reason?: string;
           note?: string | null;
           logged_at?: string;
+          set_role?: 'working' | 'ramp' | null;
+          suggestion_engine_version?: number | null;
         };
         Relationships: [];
       };

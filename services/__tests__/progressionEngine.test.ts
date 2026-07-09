@@ -578,6 +578,17 @@ describe('detectJunkVolume', () => {
 
     expect(detectJunkVolume(sets)).toHaveLength(0);
   });
+
+  it('excludes ramp/feeder sets (light on purpose, not junk volume)', () => {
+    const sets = [
+      createMockSetLog({ rpe: 4, setRole: 'ramp' }),    // feeder — not junk
+      createMockSetLog({ rpe: 4, setRole: 'working' }), // genuinely too easy — junk
+    ];
+
+    const junk = detectJunkVolume(sets);
+    expect(junk).toHaveLength(1);
+    expect(junk[0].setRole).toBe('working');
+  });
 });
 
 // ============================================

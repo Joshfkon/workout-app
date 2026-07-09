@@ -7,10 +7,18 @@ import { BottomSheet } from './BottomSheet';
 interface SuggestionBannerProps {
   /** Suggested load, already formatted for display (e.g. "62.5 lbs", "BW +10 lbs"). */
   weightLabel: string;
-  /** Suggested reps (or seconds), already formatted (e.g. "8", "30s"). */
+  /** Suggested reps (or seconds), already formatted (e.g. "8–12", "30s"). */
   repsLabel: string;
   /** Target RIR shown to the user. */
   rir: number;
+  /**
+   * Whether to display the RIR target. Ramp/feeder sets carry no effort target,
+   * so the banner must not assert an "@ N RIR" claim on them (Phase 5 honesty).
+   * Defaults to true for backward compatibility.
+   */
+  showRir?: boolean;
+  /** Set role tag to surface (e.g. "ramp"). Null/omitted shows no tag. */
+  roleTag?: string | null;
   /** One-sentence reason for the suggestion. */
   reason: string;
   /** Plain-language explanation lines for the info sheet. */
@@ -26,6 +34,8 @@ export function SuggestionBanner({
   weightLabel,
   repsLabel,
   rir,
+  showRir = true,
+  roleTag = null,
   reason,
   explanation,
 }: SuggestionBannerProps) {
@@ -36,8 +46,14 @@ export function SuggestionBanner({
       <IconSparkles size={16} className="text-primary-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
       <p className="flex-1 text-[12px] leading-snug text-primary-400">
         <span className="font-medium">
-          {weightLabel} × {repsLabel} @ {rir} RIR
+          {weightLabel} × {repsLabel}
+          {showRir ? ` @ ${rir} RIR` : ''}
         </span>
+        {roleTag ? (
+          <span className="ml-1.5 rounded bg-primary-500/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-primary-300">
+            {roleTag}
+          </span>
+        ) : null}
         {reason ? <span> — {reason}</span> : null}
       </p>
       <button

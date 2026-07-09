@@ -20,38 +20,27 @@
  */
 
 import { roundToIncrement, clamp } from '@/lib/utils';
+import {
+  DEADBAND_RIR,
+  MAX_STEP_PCT,
+  MAX_REDUCE_PCT,
+  HOLD_DROP_RATE,
+  FATIGUE_PER_SET,
+  FATIGUE_FLOOR,
+  OVERSHOOT_CEILING,
+  REP_OVERSHOOT,
+  RAMP_LOAD_FRACTION,
+  WORKING_WEIGHT_CLAMP_FRACTION,
+  OVERRIDE_DEVIATION_FRACTION,
+  RECAL_FATIGUE_CORRECTION_PER_SET,
+  RECAL_MAX_FRESHNESS_CORRECTION,
+  SUGGESTION_ENGINE_VERSION,
+} from './suggestionEngine/constants';
+import type { SetRole } from './suggestionEngine/setRoles';
 
-// ============================================
-// TUNABLE CONSTANTS (design doc §4)
-// ============================================
-
-/** How far the last set's RIR must miss target before we touch the weight. */
-const DEADBAND_RIR = 2;
-/** Cap on per-set load increase. */
-const MAX_STEP_PCT = 0.10;
-/**
- * Cap on per-set load reduction. Asymmetric on purpose: increases are capped tight
- * (+10%) to prevent wild jumps, but when the last set proves the load is far too
- * heavy (e.g. 2 reps against a 10–15 range) the correction to mid-range can need a
- * ~30% drop — capping it at 10% used to leave the next suggestion still too heavy,
- * with a predicted rep count below the target range.
- */
-const MAX_REDUCE_PCT = 0.30;
-/** Expected rep decline per set at a fixed load (HOLD case). */
-const HOLD_DROP_RATE = 0.07;
-/** Rep de-rating per already-completed set (weight-CHANGED case). */
-const FATIGUE_PER_SET = 0.05;
-/** Lower bound on the fatigue factor. */
-const FATIGUE_FLOOR = 0.6;
-/** Max reps shown above repMax (prevents absurd "30 reps", keeps honest under-load). */
-const OVERSHOOT_CEILING = 5;
-/**
- * Reps beyond repMax that objectively prove the load is too light, regardless of
- * self-reported RIR. Hitting this many reps over the top of the range is an
- * unambiguous under-load signal even if the RIR rating sits inside the deadband
- * (e.g. 18 reps in a 3-6 range).
- */
-const REP_OVERSHOOT = 2;
+// Tunable constants now live in services/suggestionEngine/constants.ts (one
+// module for the whole suggestion surface — see task constraints). The design
+// doc §4 table documents the within-session dials.
 
 // ============================================
 // TYPES
@@ -271,4 +260,250 @@ export function predictAmrapReps(
   const rir = Math.max(0, lastSet.rir ?? 0);
   const predicted = Math.round(lastSet.reps + rir);
   return clamp(predicted, repMin, repMax + OVERSHOOT_CEILING);
+}
+
+// ============================================
+// SESSION-START PRESCRIPTION BY SET ROLE (Phases 2–3)
+// ============================================
+
+/**
+ * What anchor the prescribed weight was actually computed from — surfaced in the
+ * provenance sheet so we never list a number that didn't influence the output.
+ */
+export type AnchorSource = 'e1rm' | 'last_session' | 'ramp_percent' | 'none';
+
+export interface SeedSlotInput {
+  /** Resolved role for this slot (user tag beats inference — resolve upstream). */
+  role: SetRole;
+  /** Target working rep range [min, max]. */
+  targetRepRange: [number, number];
+  /** Target reps in reserve for WORKING sets. */
+  targetRir: number;
+  /** Smallest load increment for this exercise (kg). */
+  minIncrementKg?: number;
+  /**
+   * The exercise's e1RM capacity anchor (kg) — the stored / session-best e1RM.
+   * This is the number that was being displayed-but-ignored before the fix.
+   */
+  anchorE1RMKg?: number;
+  /**
+   * Best recent same-exercise WORKING weight (kg). The e1RM prescription is
+   * clamped to within ±WORKING_WEIGHT_CLAMP_FRACTION of this so a hot e1RM can't
+   * prescribe a giant jump. Omit → no clamp (nothing recent to bound against).
+   */
+  recentWorkingWeightKg?: number;
+  /**
+   * Today's prescribed top WORKING set (kg) — the reference a ramp set is a
+   * percentage of. When omitted, it's derived from the e1RM working prescription
+   * so ramp/working share one basis.
+   */
+  topWorkingWeightKg?: number;
+  /** Fallback anchor when there's no e1RM: the previous session's set for this slot. */
+  prevWeightKg?: number;
+  prevReps?: number;
+  prevRir?: number;
+}
+
+export interface SeedRecommendation {
+  weightKg: number;
+  /** Prescribe the RANGE, never a copied rep count. */
+  repRange: [number, number];
+  /** Target RIR — only meaningful when `showRirTarget` is true. */
+  rir: number;
+  role: SetRole;
+  /** Ramp sets carry no RIR target and no "too light" nagging. */
+  showRirTarget: boolean;
+  anchorSource: AnchorSource;
+  /** True when the ±clamp bound the e1RM prescription (say so in provenance). */
+  clamped: boolean;
+  engineVersion: number;
+}
+
+/**
+ * Compute the working-set weight from the e1RM anchor for the middle of the rep
+ * range, clamped to ±WORKING_WEIGHT_CLAMP_FRACTION of the best recent working
+ * weight. Returned separately so a ramp slot can base its percentage on the same
+ * working weight the working slots would get.
+ */
+function workingWeightFromAnchor(
+  anchorE1RMKg: number,
+  targetRepRange: [number, number],
+  targetRir: number,
+  inc: number,
+  recentWorkingWeightKg?: number
+): { weightKg: number; clamped: boolean } {
+  const [repMin, repMax] = targetRepRange;
+  const mid = Math.round((repMin + repMax) / 2);
+  const raw = weightForReps(anchorE1RMKg, mid, targetRir);
+
+  let bounded = raw;
+  let clamped = false;
+  if (recentWorkingWeightKg && recentWorkingWeightKg > 0) {
+    const lo = recentWorkingWeightKg * (1 - WORKING_WEIGHT_CLAMP_FRACTION);
+    const hi = recentWorkingWeightKg * (1 + WORKING_WEIGHT_CLAMP_FRACTION);
+    bounded = clamp(raw, lo, hi);
+    clamped = bounded !== raw;
+  }
+
+  return { weightKg: roundToIncrement(bounded, inc), clamped };
+}
+
+/**
+ * Session-START prescription for one set slot, role-aware.
+ *
+ * WORKING slot:
+ *  - weight from the e1RM anchor for the mid of the rep range, clamped ±10% of
+ *    recent working weight; prescribe the rep RANGE.
+ *  - if no e1RM anchor, fall back to the previous-session set via
+ *    recommendSessionStart (still a range, not a copied count).
+ *
+ * RAMP slot:
+ *  - weight = RAMP_LOAD_FRACTION of today's prescribed top working set; no RIR
+ *    target, no "too light" copy.
+ *
+ * This is the fix for the anchor bug: a feeder set never gets working-set
+ * progression, and the working prescription uses the e1RM that was previously
+ * displayed-but-ignored.
+ */
+export function recommendSeedForSlot(input: SeedSlotInput): SeedRecommendation {
+  const inc = input.minIncrementKg && input.minIncrementKg > 0 ? input.minIncrementKg : 2.5;
+  const [repMin, repMax] = input.targetRepRange;
+  const hasAnchor = !!(input.anchorE1RMKg && input.anchorE1RMKg > 0);
+
+  // Establish today's top working weight (the basis for a ramp %). Prefer the
+  // e1RM working prescription; fall back to an explicitly supplied top; last of
+  // all, the previous-session load for this slot.
+  let topWorkingKg = input.topWorkingWeightKg ?? 0;
+  let workingClamped = false;
+  if (topWorkingKg <= 0 && hasAnchor) {
+    const w = workingWeightFromAnchor(
+      input.anchorE1RMKg!,
+      input.targetRepRange,
+      input.targetRir,
+      inc,
+      input.recentWorkingWeightKg
+    );
+    topWorkingKg = w.weightKg;
+    workingClamped = w.clamped;
+  }
+  if (topWorkingKg <= 0 && input.prevWeightKg && input.prevWeightKg > 0) {
+    topWorkingKg = input.prevWeightKg;
+  }
+
+  // ---- RAMP slot ----
+  if (input.role === 'ramp') {
+    const weightKg =
+      topWorkingKg > 0 ? roundToIncrement(topWorkingKg * RAMP_LOAD_FRACTION, inc) : Math.max(0, input.prevWeightKg ?? 0);
+    return {
+      weightKg,
+      repRange: input.targetRepRange,
+      rir: input.targetRir,
+      role: 'ramp',
+      showRirTarget: false,
+      anchorSource: topWorkingKg > 0 ? 'ramp_percent' : 'none',
+      clamped: false,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
+    };
+  }
+
+  // ---- WORKING slot, e1RM anchor available ----
+  if (hasAnchor) {
+    const w = workingWeightFromAnchor(
+      input.anchorE1RMKg!,
+      input.targetRepRange,
+      input.targetRir,
+      inc,
+      input.recentWorkingWeightKg
+    );
+    return {
+      weightKg: w.weightKg,
+      repRange: input.targetRepRange,
+      rir: input.targetRir,
+      role: 'working',
+      showRirTarget: true,
+      anchorSource: 'e1rm',
+      clamped: w.clamped || workingClamped,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
+    };
+  }
+
+  // ---- WORKING slot, no anchor → previous-session fallback ----
+  if (input.prevWeightKg && input.prevWeightKg > 0 && input.prevReps && input.prevReps > 0) {
+    const rec = recommendSessionStart({
+      prevWeightKg: input.prevWeightKg,
+      prevReps: input.prevReps,
+      prevRir: input.prevRir,
+      targetRepRange: input.targetRepRange,
+      targetRir: input.targetRir,
+      minIncrementKg: inc,
+    });
+    return {
+      weightKg: rec.weightKg,
+      repRange: input.targetRepRange,
+      rir: input.targetRir,
+      role: 'working',
+      showRirTarget: true,
+      anchorSource: 'last_session',
+      clamped: false,
+      engineVersion: SUGGESTION_ENGINE_VERSION,
+    };
+  }
+
+  // ---- Nothing to anchor on ----
+  return {
+    weightKg: 0,
+    repRange: [repMin, repMax],
+    rir: input.targetRir,
+    role: 'working',
+    showRirTarget: true,
+    anchorSource: 'none',
+    clamped: false,
+    engineVersion: SUGGESTION_ENGINE_VERSION,
+  };
+}
+
+// ============================================
+// LOGGED-SET OVERRIDE (Phase 4)
+// ============================================
+
+/**
+ * True when a logged load deviates by more than OVERRIDE_DEVIATION_FRACTION from
+ * what was suggested — the signal to treat the logged set as the new anchor and
+ * stop commenting "vs suggestion" off the stale number.
+ */
+export function deviatesFromSuggestion(loggedWeightKg: number, suggestedWeightKg: number): boolean {
+  if (!(suggestedWeightKg > 0) || !(loggedWeightKg > 0)) return false;
+  return Math.abs(loggedWeightKg - suggestedWeightKg) / suggestedWeightKg > OVERRIDE_DEVIATION_FRACTION;
+}
+
+/**
+ * Recalibration weighting hook (Phase 4). Estimate an exercise's session e1RM
+ * from its WORKING sets, crediting each set for the intra-session fatigue that
+ * preceded it: a fresh set-1 near-failure effort is trusted at face value, while
+ * a late grinder at the same weight×reps is corrected upward (it fought through
+ * fatigue, so its raw e1RM under-states capacity).
+ *
+ * `sets` must be in the order performed. Returns the max fatigue-corrected e1RM.
+ * This is the only fatigue-model touch-point the fix introduces; the correction
+ * is small (RECAL_FATIGUE_CORRECTION_PER_SET/set, capped) so it nudges the
+ * estimate rather than dominating it.
+ */
+export function recalibrateSessionE1RM(
+  sets: Array<{ weightKg: number; reps: number; rir?: number }>
+): number {
+  let best = 0;
+  let workingPosition = 0;
+  for (const s of sets) {
+    if (!(s.weightKg > 0) || !(s.reps > 0)) continue;
+    const rir = Math.max(0, s.rir ?? 0);
+    const raw = epleyE1RM(s.weightKg, s.reps, rir);
+    const correction = Math.min(
+      RECAL_MAX_FRESHNESS_CORRECTION,
+      RECAL_FATIGUE_CORRECTION_PER_SET * workingPosition
+    );
+    const corrected = raw * (1 + correction);
+    if (corrected > best) best = corrected;
+    workingPosition += 1;
+  }
+  return Math.round(best * 10) / 10;
 }

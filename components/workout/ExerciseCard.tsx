@@ -6,7 +6,9 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/
 import type { Exercise, ExerciseBlock, SetLog, WeightUnit, SetQuality, SetFeedback, BodyweightData, ExercisePerformanceSnapshot } from '@/types/schema';
 import { rpeToRir, muscleMatchesGroup } from '@/types/schema';
 import { convertWeight, formatMuscleName, formatWeightValue, convertWeightForDisplay, inputWeightToKg, roundToPlateIncrement } from '@/lib/utils';
-import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps } from '@/services/setRecommender';
+import { recommendSet, recommendSessionStart, estimateRepsForWeight, predictAmrapReps, recommendSeedForSlot, type SeedRecommendation } from '@/services/setRecommender';
+import { inferSetRole, type SetRole } from '@/services/suggestionEngine/setRoles';
+import { RAMP_LOAD_FRACTION, WORKING_WEIGHT_CLAMP_FRACTION } from '@/services/suggestionEngine/constants';
 import { findSimilarExercises, calculateSimilarityScore } from '@/services/exerciseSwapper';
 import { filterExercisesByEquipment } from '@/services/equipmentFilter';
 import { detectPlateau, type PlateauDetectionResult, type PlateauGoal } from '@/services/plateauDetector';
@@ -556,6 +558,46 @@ export const ExerciseCard = memo(function ExerciseCard({
     [effectiveTargetRir, exercise.minWeightIncrementKg]
   );
 
+  // Best recent WORKING weight last session (the top set). Doubles as the role-
+  // inference reference AND the ±clamp anchor for the e1RM working prescription.
+  const previousTopSetWeightKg = useMemo(
+    () => previousSets.reduce((m, s) => (s.weightKg > m ? s.weightKg : m), 0),
+    [previousSets]
+  );
+
+  // The exercise's e1RM capacity anchor (kg) — the stored/best est. 1RM. This is
+  // the number that was displayed-but-ignored before the roles fix.
+  const anchorE1RMKg = exerciseHistory?.estimatedE1RM ?? 0;
+
+  // Role-aware session-start seed for one slot (services/setRecommender).
+  // The slot's role is inferred from the PREVIOUS session's set in that slot — a
+  // feeder stays a feeder — so working-set progression never grades a ramp set.
+  // Working slots anchor on the e1RM (clamped ±10% of recent working weight) and
+  // carry a rep RANGE; ramp slots take a fixed % of the top working set with no
+  // RIR claim.
+  const buildSlotSeed = useCallback(
+    (setIndex: number): { seed: SeedRecommendation; prevSet?: { weightKg: number; reps: number; rpe?: number } } => {
+      const prevSet = previousSets[setIndex];
+      const role: SetRole =
+        prevSet && prevSet.weightKg > 0
+          ? inferSetRole(prevSet.weightKg, previousTopSetWeightKg)
+          : 'working';
+      const seed = recommendSeedForSlot({
+        role,
+        targetRepRange: block.targetRepRange,
+        targetRir: effectiveTargetRir,
+        minIncrementKg: exercise.minWeightIncrementKg,
+        anchorE1RMKg,
+        recentWorkingWeightKg: previousTopSetWeightKg || undefined,
+        prevWeightKg: prevSet?.weightKg,
+        prevReps: prevSet?.reps,
+        prevRir: prevSet?.rpe != null ? rpeToRir(prevSet.rpe) : undefined,
+      });
+      return { seed, prevSet };
+    },
+    [previousSets, previousTopSetWeightKg, anchorE1RMKg, block.targetRepRange, effectiveTargetRir, exercise.minWeightIncrementKg]
+  );
+
   // Track the last known completed sets count to detect changes
   const prevCompletedCountRef = useRef(completedSets.length);
 
@@ -699,9 +741,11 @@ export const ExerciseCard = memo(function ExerciseCard({
           defaultWeight = rec.weightKg;
           defaultReps = rec.reps;
         } else if (prevSet) {
-          const seeded = seedFromPreviousSet(prevSet, block.targetRepRange);
-          defaultWeight = seeded.weightKg;
-          defaultReps = seeded.reps;
+          // Role-aware seed so the logger prefill matches the banner exactly
+          // (working slots anchor on the e1RM; ramp slots take a % of top).
+          const { seed } = buildSlotSeed(setIndex);
+          defaultWeight = seed.weightKg > 0 ? seed.weightKg : suggestedWeight;
+          defaultReps = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
         } else {
           defaultWeight = suggestedWeight;
           defaultReps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
@@ -1078,12 +1122,26 @@ export const ExerciseCard = memo(function ExerciseCard({
   // inline and fully explained in the info sheet.
   const buildSuggestionInfo = (
     isAmrap: boolean
-  ): { weight: string; reps: string; reason: string; explanation: string[] } => {
+  ): {
+    weight: string;
+    reps: string;
+    repsLabel: string;
+    reason: string;
+    explanation: string[];
+    showRir: boolean;
+    role: SetRole;
+  } => {
     const lastCompleted = completedSets[completedSets.length - 1];
     const explanation: string[] = [];
     let reason: string;
     let weight = '';
     let reps = Math.round((block.targetRepRange[0] + block.targetRepRange[1]) / 2);
+    // The banner prescribes a rep RANGE, never a copied/predicted single count
+    // presented as if it were the target (Phase 5 honesty).
+    const rangeLabel = `${block.targetRepRange[0]}–${block.targetRepRange[1]}`;
+    let repsLabel = rangeLabel;
+    let showRir = true;
+    let role: SetRole = 'working';
 
     // Delta between the anchor set and the weight the banner actually shows
     // (display units, after plate rounding) so the copy can't contradict the
@@ -1097,6 +1155,9 @@ export const ExerciseCard = memo(function ExerciseCard({
     };
 
     if (lastCompleted) {
+      // Within-session: anchor to the just-completed set. This path already re-
+      // anchors on whatever the user actually logged, so a logged override (Phase 4)
+      // is reflected here with no stale "vs suggestion" commentary.
       const lastSetData = { weightKg: lastCompleted.weightKg, reps: lastCompleted.reps, rpe: lastCompleted.rpe };
       const rec = recommendNext(lastSetData);
       weight = seedWeightString(rec.weightKg, lastCompleted.weightKg);
@@ -1104,6 +1165,10 @@ export const ExerciseCard = memo(function ExerciseCard({
       if (isAmrap && lastCompleted.rpe) {
         reps = Math.max(amrapReps(lastSetData), reps);
       }
+      // A within-session prediction of the likely reps is a genuine forecast of
+      // the fatigue-driven decline (12→11→10→9), not a copied historical target —
+      // show it as the single predicted number.
+      repsLabel = String(reps);
       const deltaText = deltaLabel(lastCompleted.weightKg, weight);
       if (rec.rationale === 'increase_load') {
         reason = `up ${deltaText || 'slightly'} — last set was clearly too light`;
@@ -1113,58 +1178,73 @@ export const ExerciseCard = memo(function ExerciseCard({
         reason = 'holding the weight — your last set matched the target effort';
       }
       explanation.push(
-        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prediction works back from.`
+        `Anchored to your last set: ${displayWeight(lastCompleted.weightKg, true)} ${weightLabel} × ${lastCompleted.reps} at RPE ${lastCompleted.rpe}. Its estimated 1RM sets the capacity this prescription works back from.`
       );
     } else {
-      // Mirror the pending-input seed: previous-session set for this slot
-      // first, then the block/profile-level suggested weight.
-      const prevSet = previousSets[completedSets.length];
-      if (prevSet && prevSet.weightKg > 0) {
-        const rec = seedFromPreviousSet(prevSet, block.targetRepRange);
-        reps = rec.reps;
-        weight = seedWeightString(rec.weightKg, prevSet.weightKg);
-        const deltaText = deltaLabel(prevSet.weightKg, weight);
-        const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
-        explanation.push(
-          `Anchored to your last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
-        );
-        if (rec.rationale === 'increase_load') {
-          reason = `up ${deltaText || 'slightly'} vs last session — it was clearly too light`;
-          explanation.push(
-            `That set cleared the ${block.targetRepRange[0]}-${block.targetRepRange[1]} rep target with effort to spare, so the load steps up to bring the target effort back in range.`
-          );
-        } else if (rec.rationale === 'reduce_load') {
-          reason = `down ${deltaText || 'slightly'} vs last session — it was harder than the target effort`;
-          explanation.push(
-            'That set fell short of the rep target or went too close to failure, so the load steps down toward the middle of the range.'
-          );
-        } else {
-          reason = 'same weight as last session';
-        }
+      // Session start: role-aware seed for this slot (services/setRecommender).
+      // Working slots anchor on the e1RM (clamped ±10% of recent working weight);
+      // ramp/feeder slots take a % of the top working set with no RIR claim.
+      const { seed, prevSet } = buildSlotSeed(completedSets.length);
+      role = seed.role;
+      showRir = seed.showRirTarget;
+      reps = Math.round((seed.repRange[0] + seed.repRange[1]) / 2);
+      repsLabel = `${seed.repRange[0]}–${seed.repRange[1]}`;
+
+      if (seed.weightKg > 0) {
+        weight = seedWeightString(seed.weightKg, prevSet?.weightKg);
       } else if (suggestedWeight > 0) {
         weight = seedWeightString(suggestedWeight);
+      }
+
+      if (seed.role === 'ramp') {
+        const pct = Math.round(RAMP_LOAD_FRACTION * 100);
+        reason = 'ramp set — light feeder for your working sets';
+        explanation.push(
+          `This is a ramp/feeder set (~${pct}% of today's top working set), so there's no RIR target and it isn't counted as junk volume.`
+        );
+        if (anchorE1RMKg > 0) {
+          explanation.push(
+            `Top working set today is prescribed from your best estimated 1RM (${displayWeight(anchorE1RMKg)} ${weightLabel}).`
+          );
+        }
+      } else if (seed.anchorSource === 'e1rm') {
+        reason = seed.clamped
+          ? `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM (held near recent working weight)`
+          : `working weight from your ~${displayWeight(anchorE1RMKg)} ${weightLabel} est. 1RM`;
+        explanation.push(
+          `Prescribed from your best estimated 1RM (${displayWeight(anchorE1RMKg)} ${weightLabel}) for ${seed.repRange[0]}–${seed.repRange[1]} reps at ${effectiveTargetRir} RIR.`
+        );
+        if (seed.clamped) {
+          explanation.push(
+            `Capped to within ±${Math.round(WORKING_WEIGHT_CLAMP_FRACTION * 100)}% of your recent ${displayWeight(previousTopSetWeightKg)} ${weightLabel} working weight — a hot 1RM estimate can't prescribe a big jump in one session.`
+          );
+        }
+      } else if (seed.anchorSource === 'last_session' && prevSet) {
+        const prevRir = prevSet.rpe != null ? rpeToRir(prevSet.rpe) : null;
+        reason = 'starting from last session';
+        explanation.push(
+          `No estimated 1RM on record yet, so the load is anchored to last session: ${displayWeight(prevSet.weightKg, true)} ${weightLabel} × ${prevSet.reps}${prevRir != null ? ` at ${prevRir} RIR` : ''}.`
+        );
+      } else if (weight) {
         reason = 'starting point estimated from your training profile';
         explanation.push('No history for this exercise yet — the starting weight is estimated from your profile and calibrated lifts.');
       } else {
         reason = 'enter your working weight to calibrate';
         explanation.push('Log a first set and future suggestions will anchor to it.');
       }
-      if (exerciseHistory && exerciseHistory.estimatedE1RM > 0) {
-        explanation.push(
-          `Best estimated 1RM on record: ${displayWeight(exerciseHistory.estimatedE1RM)} ${weightLabel}.`
-        );
-      }
     }
 
     explanation.push(
-      `Target: ${block.targetRepRange[0]}-${block.targetRepRange[1]} ${isDurationBased ? 'seconds' : 'reps'} leaving ${effectiveTargetRir} in reserve (RIR ${effectiveTargetRir}).`
+      showRir
+        ? `Target: ${block.targetRepRange[0]}–${block.targetRepRange[1]} ${isDurationBased ? 'seconds' : 'reps'} leaving ${effectiveTargetRir} in reserve (RIR ${effectiveTargetRir}).`
+        : `Target: a controlled ${block.targetRepRange[0]}–${block.targetRepRange[1]} ${isDurationBased ? 'seconds' : 'reps'} — ramp sets have no effort target.`
     );
 
-    if (adjustedRir?.hasAdjustment && adjustedRir.adjustmentReason) {
+    if (showRir && adjustedRir?.hasAdjustment && adjustedRir.adjustmentReason) {
       reason += ' · calibration-adjusted';
       explanation.push(`Calibration: ${adjustedRir.adjustmentReason}.`);
     }
-    if (readinessModulation?.banner) {
+    if (showRir && readinessModulation?.banner) {
       reason += ' · eased for readiness';
       explanation.push(`Readiness: ${readinessModulation.banner}.`);
     }
@@ -1172,7 +1252,7 @@ export const ExerciseCard = memo(function ExerciseCard({
       explanation.push('Last set: push to failure (AMRAP) so the app can calibrate how you rate effort.');
     }
 
-    return { weight, reps: String(reps), reason, explanation };
+    return { weight, reps: String(reps), repsLabel, reason, explanation, showRir, role };
   };
 
   // Report the active set's live suggestion to the parent (the page's sticky
@@ -1206,7 +1286,7 @@ export const ExerciseCard = memo(function ExerciseCard({
           ? 'BW'
           : `BW ${weightMode === 'weighted' ? '+' : '-'}${bwLoadInput || '0'} ${weightLabel}`
         : `${suggestion.weight || '—'} ${weightLabel}`;
-      label = `${bannerWeight} × ${suggestion.reps || '—'}${isDurationBased ? 's' : ''}`;
+      label = `${bannerWeight} × ${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`;
     }
     if (lastReportedSuggestionRef.current !== label) {
       lastReportedSuggestionRef.current = label;
@@ -1996,8 +2076,10 @@ export const ExerciseCard = memo(function ExerciseCard({
             <div className="space-y-2 pt-1">
               <SuggestionBanner
                 weightLabel={bannerWeight}
-                repsLabel={`${suggestion.reps || '—'}${isDurationBased ? 's' : ''}`}
+                repsLabel={`${suggestion.repsLabel || '—'}${isDurationBased ? 's' : ''}`}
                 rir={Math.max(0, Math.min(3, loggerTargetRir))}
+                showRir={suggestion.showRir}
+                roleTag={suggestion.role === 'ramp' ? 'ramp' : null}
                 reason={suggestion.reason}
                 explanation={suggestion.explanation}
               />

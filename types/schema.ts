@@ -827,7 +827,21 @@ export interface SetLog {
 
   /** Bodyweight-specific data for bodyweight exercises */
   bodyweightData?: BodyweightData;
+
+  /**
+   * Suggestion-engine set role: `working` (a stimulative set progression acts
+   * on) vs `ramp` (a feeder/back-off set, excluded from working-set progression
+   * and junk-volume detection). Inferred from load relative to the session top
+   * set; a user tag overrides the inference. See services/suggestionEngine.
+   */
+  setRole?: SetRole;
+
+  /** Version of the suggestion engine that produced this record (auditability). */
+  suggestionEngineVersion?: number;
 }
+
+/** Set role for the suggestion engine — see services/suggestionEngine/setRoles.ts */
+export type SetRole = 'working' | 'ramp';
 
 // ============ ANALYTICS ============
 

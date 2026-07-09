@@ -24,7 +24,9 @@ const customJestConfig = {
   ],
   // Ignore git worktrees (.claude/worktrees/*) which contain full duplicate
   // copies of the repo and otherwise double/triple-count every test.
-  testPathIgnorePatterns: ['/node_modules/', '/.claude/worktrees/'],
+  // fix-suggestion-engine/ is a one-off verification harness (writes artifacts),
+  // not part of the product test suite — run it explicitly, not in CI.
+  testPathIgnorePatterns: ['/node_modules/', '/.claude/worktrees/', '/fix-suggestion-engine/'],
   collectCoverageFrom: [
     'lib/utils.ts',
     'lib/nutrition/**/*.ts',
