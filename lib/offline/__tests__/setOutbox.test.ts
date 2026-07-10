@@ -15,6 +15,8 @@ import {
   removeQueuedSet,
   flushSetOutbox,
   isNetworkError,
+  isMissingColumnError,
+  withoutOptionalSetLogColumns,
   type OutboxEntry,
   type OutboxSupabase,
 } from '../setOutbox';
@@ -65,6 +67,10 @@ function makeSupabase(script: Array<{ error: { message: string; code?: string } 
 
 const NETWORK_ERROR = { message: 'TypeError: Failed to fetch' };
 const RLS_ERROR = { message: 'new row violates row-level security policy', code: '42501' };
+const MISSING_COLUMN_ERROR = {
+  message: "Could not find the 'set_role' column of 'set_logs' in the schema cache",
+  code: 'PGRST204',
+};
 
 describe('setOutbox', () => {
   beforeEach(() => {
@@ -162,6 +168,22 @@ describe('setOutbox', () => {
       const result = await flushSetOutbox(client);
       expect(result.failedIds).toEqual(['bad']);
       expect(result.flushedIds).toEqual(['good']);
+    });
+
+    it('retries without the optional columns when the DB is missing them (migration lag)', async () => {
+      await enqueueSetInsert('a', { id: 'a', reps: 8, set_role: 'working', suggestion_engine_version: 2 });
+      // First upsert: schema-cache column miss. Retry (stripped): succeeds.
+      const { client, calls } = makeSupabase([{ error: MISSING_COLUMN_ERROR }, { error: null }]);
+
+      const result = await flushSetOutbox(client);
+
+      expect(result.flushedIds).toEqual(['a']);
+      expect(calls).toHaveLength(2);
+      expect(calls[0].row).toHaveProperty('set_role'); // first attempt kept the columns
+      expect(calls[1].row).not.toHaveProperty('set_role'); // retry stripped them
+      expect(calls[1].row).not.toHaveProperty('suggestion_engine_version');
+      expect(calls[1].row).toMatchObject({ id: 'a', reps: 8 });
+      expect(await outboxCount()).toBe(0);
     });
 
     it('dedupes concurrent flushes: overlapping calls share one in-flight run', async () => {
@@ -398,6 +420,40 @@ describe('setOutbox', () => {
     it('handles null/undefined', () => {
       expect(isNetworkError(null)).toBe(false);
       expect(isNetworkError(undefined)).toBe(false);
+    });
+  });
+
+  describe('isMissingColumnError', () => {
+    it('detects the PGRST204 schema-cache column miss by code', () => {
+      expect(isMissingColumnError({ message: 'anything', code: 'PGRST204' })).toBe(true);
+    });
+
+    it('detects it by message when the code is absent', () => {
+      expect(
+        isMissingColumnError({
+          message: "Could not find the 'set_role' column of 'set_logs' in the schema cache",
+        })
+      ).toBe(true);
+    });
+
+    it('is false for unrelated errors and null/undefined', () => {
+      expect(isMissingColumnError(RLS_ERROR)).toBe(false);
+      expect(isMissingColumnError(NETWORK_ERROR)).toBe(false);
+      expect(isMissingColumnError(null)).toBe(false);
+      expect(isMissingColumnError(undefined)).toBe(false);
+    });
+  });
+
+  describe('withoutOptionalSetLogColumns', () => {
+    it('strips the migration-gated columns and leaves the rest untouched', () => {
+      const row = { id: 'a', reps: 8, weight_kg: 20, set_role: 'ramp', suggestion_engine_version: 2 };
+      expect(withoutOptionalSetLogColumns(row)).toEqual({ id: 'a', reps: 8, weight_kg: 20 });
+    });
+
+    it('does not mutate the input row', () => {
+      const row = { id: 'a', set_role: 'working' };
+      withoutOptionalSetLogColumns(row);
+      expect(row).toHaveProperty('set_role', 'working');
     });
   });
 });

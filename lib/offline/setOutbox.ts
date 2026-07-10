@@ -223,6 +223,37 @@ export function isNetworkError(err: { message?: string; code?: string } | null |
   return /fetch|network|load failed|timed? ?out|abort|offline/i.test(err.message ?? '');
 }
 
+/**
+ * set_logs columns added by migrations that may not yet exist in a database
+ * running behind the deployed code (e.g. code shipped before the migration was
+ * applied). If PostgREST rejects a write because one of these isn't in its
+ * schema cache, we strip them and retry so the core set still saves — the
+ * classification they carry is non-critical and the set_roles migration
+ * recomputes it on backfill. See supabase/migrations/20260709000002_set_roles.sql.
+ */
+export const OPTIONAL_SET_LOG_COLUMNS = ['set_role', 'suggestion_engine_version'] as const;
+
+/**
+ * True for a PostgREST "column not found in the schema cache" rejection
+ * (code PGRST204) — the database is missing a column the write references.
+ */
+export function isMissingColumnError(
+  err: { message?: string; code?: string } | null | undefined
+): boolean {
+  if (!err) return false;
+  if (err.code === 'PGRST204') return true;
+  return /Could not find the .*column.* in the schema cache/i.test(err.message ?? '');
+}
+
+/** A copy of `row` with the optional (migration-gated) set_logs columns removed. */
+export function withoutOptionalSetLogColumns(
+  row: Record<string, unknown>
+): Record<string, unknown> {
+  const clean = { ...row };
+  for (const col of OPTIONAL_SET_LOG_COLUMNS) delete clean[col];
+  return clean;
+}
+
 let flushInFlight: Promise<FlushResult> | null = null;
 
 /**
@@ -274,16 +305,24 @@ async function doFlush(supabase: OutboxSupabase, timeoutMs: number): Promise<Flu
       // Updates patch a single row by primary key; inserts go through
       // ignoreDuplicates/onConflict upsert so a row that already landed
       // (retry after a lost ack) is a silent no-op instead of an error.
+      const upsertOptions = UPSERT_OPTIONS[entry.table] ?? UPSERT_OPTIONS.set_logs;
       const op =
         entry.op === 'update'
           ? supabase
               .from(entry.table)
               .update(entry.row)
               .eq('id', entry.matchId ?? (entry.row.id as string))
-          : supabase
-              .from(entry.table)
-              .upsert(entry.row, UPSERT_OPTIONS[entry.table] ?? UPSERT_OPTIONS.set_logs);
-      const { error } = await withTimeout(op, timeoutMs);
+          : supabase.from(entry.table).upsert(entry.row, upsertOptions);
+      let { error } = await withTimeout(op, timeoutMs);
+
+      // Schema-cache column miss (migration lag): drop the optional columns and
+      // retry once so the core write still lands instead of wedging the queue.
+      if (error && entry.op !== 'update' && entry.table === 'set_logs' && isMissingColumnError(error)) {
+        const retryOp = supabase
+          .from(entry.table)
+          .upsert(withoutOptionalSetLogColumns(entry.row), upsertOptions);
+        ({ error } = await withTimeout(retryOp, timeoutMs));
+      }
 
       if (!error) {
         await d.delete(entry.id);
