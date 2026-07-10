@@ -102,16 +102,18 @@ export const useExerciseStore = create<ExerciseState>()(
     }),
     {
       name: 'exercise-storage',
-      version: 1,
+      // v2: added the nullable `youtubeVideoId` field to cached exercises.
+      version: 2,
       partialize: (state) => ({
         exercises: state.exercises,
         lastFetched: state.lastFetched,
       }),
-      // Migrate stale persisted shapes forward. Any pre-versioned (version 0)
-      // payload may not match the current Exercise shape, so we discard the
-      // cached library and force a refetch rather than risk corrupt data.
+      // Migrate stale persisted shapes forward. Any older payload (version 0:
+      // pre-versioned; version 1: before `youtubeVideoId` existed) may not
+      // match the current Exercise shape, so we discard the cached library and
+      // force a refetch rather than risk corrupt or incomplete data.
       migrate: (persistedState, version) => {
-        if (version === 0) {
+        if (version < 2) {
           return { exercises: [], lastFetched: null };
         }
         return persistedState as { exercises: Exercise[]; lastFetched: number | null };

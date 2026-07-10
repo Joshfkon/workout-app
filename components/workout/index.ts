@@ -1,6 +1,8 @@
 // Workout Components
 export { ExerciseCard } from './ExerciseCard';
 export { ExerciseDetailsModal } from './ExerciseDetailsModal';
+export { YouTubeEmbed } from './YouTubeEmbed';
+export { MuscleWikiVideo } from './MuscleWikiVideo';
 export { SetLoggerRow } from './SetLoggerRow';
 export { SuggestionBanner } from './SuggestionBanner';
 export { BottomSheet } from './BottomSheet';

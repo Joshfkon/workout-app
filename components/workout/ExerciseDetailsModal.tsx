@@ -20,6 +20,9 @@ import {
 } from 'recharts';
 import Link from 'next/link';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
+import { YouTubeEmbed } from './YouTubeEmbed';
+import { MuscleWikiVideo } from './MuscleWikiVideo';
+import { parseYouTubeVideoId } from '@/lib/youtube';
 
 interface ExerciseDetailsModalProps {
   exercise: Exercise | null;
@@ -121,6 +124,8 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
     defaultRepRangeMax?: number;
     defaultRir?: number;
     setupNote?: string;
+    /** Raw text from the "curated YouTube video" input (URL or ID). */
+    youtubeVideoInput?: string;
   } | null>(null);
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [equipmentTypes, setEquipmentTypes] = useState<Array<{ id: string; name: string }>>([]);
@@ -371,7 +376,8 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
       const defaultRepRange = getExerciseProp(exercise, 'defaultRepRange', 'default_rep_range') || [];
       const defaultRir = getExerciseProp(exercise, 'defaultRir', 'default_rir');
       const setupNote = getExerciseProp(exercise, 'setupNote', 'setup_note');
-      
+      const youtubeVideoId = getExerciseProp(exercise, 'youtubeVideoId', 'youtube_video_id');
+
       setEditData({
         isBodyweight,
         bodyweightType,
@@ -386,6 +392,7 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
         defaultRepRangeMax: Array.isArray(defaultRepRange) && defaultRepRange.length > 1 ? defaultRepRange[1] : undefined,
         defaultRir,
         setupNote,
+        youtubeVideoInput: typeof youtubeVideoId === 'string' ? youtubeVideoId : '',
       });
       setShowAdvancedFields(false);
 
@@ -455,7 +462,12 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
           delete updatePayload[key];
         }
       });
-      
+
+      // Curated YouTube video: parse the pasted URL/ID down to a bare video ID.
+      // Set explicitly (including null to clear) AFTER the null-strip above so
+      // an emptied field actually removes the video.
+      updatePayload.youtube_video_id = parseYouTubeVideoId(editData.youtubeVideoInput);
+
       const { error } = await supabase
         .from('exercises')
         .update(updatePayload)
@@ -632,8 +644,11 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
               return null;
             }
 
-            const isVideo = demoGifUrl && (demoGifUrl.endsWith('.mp4') || demoGifUrl.endsWith('.webm') || demoGifUrl.endsWith('.mov'));
-            const isImage = demoGifUrl && !isVideo;
+            // Normalize the stored value in case a full URL was ever saved.
+            const videoId = youtubeVideoId ? parseYouTubeVideoId(youtubeVideoId) : null;
+            const muscleWikiDemo = demoGifUrl ? (
+              <MuscleWikiVideo src={demoGifUrl} name={exercise.name} />
+            ) : null;
 
             return (
               <div className="space-y-3">
@@ -641,60 +656,18 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   Exercise Demo
                 </p>
 
-                {/* MP4 Video Demo */}
-                {isVideo && (
-                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
-                    <video
-                      src={demoGifUrl}
-                      className="w-full h-auto max-h-64 object-contain"
-                      controls
-                      loop
-                      muted
-                      playsInline
-                      onError={(e) => {
-                        console.error('[ExerciseDetailsModal] Failed to load video:', demoGifUrl, e);
-                        (e.target as HTMLVideoElement).style.display = 'none';
-                      }}
-                    >
-                      Your browser does not support the video tag.
-                    </video>
-                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
-                      MuscleWiki
-                    </div>
-                  </div>
-                )}
-
-                {/* Image/GIF Demo */}
-                {isImage && (
-                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={demoGifUrl.startsWith('http') ? demoGifUrl : demoGifUrl}
-                      alt={`${exercise.name} demonstration`}
-                      className="w-full h-auto max-h-64 object-contain"
-                      loading="lazy"
-                      onError={(e) => {
-                        console.error('[ExerciseDetailsModal] Failed to load image:', demoGifUrl, e);
-                        (e.target as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-surface-300">
-                      MuscleWiki
-                    </div>
-                  </div>
-                )}
-
-                {/* YouTube Embed */}
-                {youtubeVideoId && (
-                  <div className="relative rounded-lg overflow-hidden bg-surface-900 border border-surface-700 aspect-video">
-                    <iframe
-                      src={`https://www.youtube.com/embed/${youtubeVideoId}?rel=0`}
-                      title={`${exercise.name} form video`}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                      className="absolute inset-0 w-full h-full"
-                    />
-                  </div>
+                {/*
+                  Curated YouTube video (facade first, MuscleWiki fallback) when
+                  present; otherwise the MuscleWiki demo unchanged.
+                */}
+                {videoId ? (
+                  <YouTubeEmbed
+                    videoId={videoId}
+                    title={`${exercise.name} form video`}
+                    fallback={muscleWikiDemo}
+                  />
+                ) : (
+                  muscleWikiDemo
                 )}
               </div>
             );
@@ -1015,7 +988,39 @@ export function ExerciseDetailsModal({ exercise, isOpen, onClose, unit = 'kg' }:
                   </div>
                 </div>
               )}
-              
+
+              {/* Curated YouTube Video */}
+              <div>
+                <label className="block text-xs font-medium text-surface-400 mb-1">
+                  Curated video (YouTube URL or ID)
+                </label>
+                <input
+                  type="text"
+                  value={editData.youtubeVideoInput || ''}
+                  onChange={(e) => setEditData({ ...editData, youtubeVideoInput: e.target.value })}
+                  placeholder="https://youtu.be/… or video ID"
+                  className="w-full px-3 py-2 bg-surface-900 border border-surface-600 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+                {(() => {
+                  const trimmed = (editData.youtubeVideoInput || '').trim();
+                  if (!trimmed) {
+                    return (
+                      <p className="mt-1 text-xs text-surface-500">
+                        Shown instead of the MuscleWiki demo. Leave blank to use MuscleWiki.
+                      </p>
+                    );
+                  }
+                  const parsed = parseYouTubeVideoId(trimmed);
+                  return parsed ? (
+                    <p className="mt-1 text-xs text-success-400">Video ID: {parsed}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-danger-400">
+                      Couldn&apos;t find a YouTube video ID in that text.
+                    </p>
+                  );
+                })()}
+              </div>
+
               {/* Error/Success Messages */}
               {saveError && (
                 <div className="p-3 bg-danger-900/30 border border-danger-700 rounded-lg">
