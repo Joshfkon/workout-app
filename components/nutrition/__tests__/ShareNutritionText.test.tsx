@@ -35,7 +35,6 @@ describe('ShareNutritionText', () => {
       configurable: true,
     });
     // Force the clipboard fallback path (no Web Share API in jsdom).
-    // @ts-expect-error — deleting an optional API for the test.
     delete (navigator as { share?: unknown }).share;
     localStorage.clear();
   });

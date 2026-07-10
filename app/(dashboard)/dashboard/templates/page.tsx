@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, useIsRestoring } from '@tanstack/react-query';
 import { Card, CardContent, Button, LoadingAnimation } from '@/components/ui';
 import { createUntypedClient } from '@/lib/supabase/client';
+import { IMMUTABLE_GC_TIME } from '@/lib/query/queryClient';
 import type { WorkoutFolder, WorkoutTemplate, WorkoutTemplateExercise } from '@/types/templates';
+
+const TEMPLATES_LIST_KEY = ['templates', 'list'] as const;
 import Link from 'next/link';
 import { STARTER_TEMPLATES, starterTemplateHref } from '@/lib/content/starterTemplates';
 import { useKeyboardInset } from '@/hooks/useKeyboardInset';
@@ -55,65 +59,65 @@ export default function TemplatesPage() {
     useKeyboardInset<HTMLDivElement>(showCreateTemplate);
 
   const supabase = createUntypedClient();
+  const queryClient = useQueryClient();
+  const isRestoring = useIsRestoring();
 
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function loadData() {
-    setIsLoading(true);
-    try {
+  // Folders + templates cached so returning to this list renders instantly
+  // instead of re-blocking on the min-h-screen spinner. Moderate staleTime:
+  // templates are editable, so revisits revalidate; edits refetch via loadData.
+  const listQuery = useQuery({
+    queryKey: TEMPLATES_LIST_KEY,
+    queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) return { folders: [] as FolderWithTemplates[], unfoldered: [] as (WorkoutTemplate & { exercises: WorkoutTemplateExercise[] })[] };
 
-      // Fetch folders and templates in parallel
       const [foldersResult, templatesResult, exercisesResult] = await Promise.all([
-        supabase
-          .from('workout_folders')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('sort_order', { ascending: true }),
-        supabase
-          .from('workout_templates')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('sort_order', { ascending: true }),
-        supabase
-          .from('workout_template_exercises')
-          .select('*')
-          .order('sort_order', { ascending: true }),
+        supabase.from('workout_folders').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        supabase.from('workout_templates').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        supabase.from('workout_template_exercises').select('*').order('sort_order', { ascending: true }),
       ]);
 
       const foldersData = foldersResult.data || [];
       const templatesData = templatesResult.data || [];
       const exercisesData = exercisesResult.data || [];
 
-      // Map exercises to templates
       const templatesWithExercises = templatesData.map((template: WorkoutTemplate) => ({
         ...template,
         exercises: exercisesData.filter((e: WorkoutTemplateExercise) => e.template_id === template.id),
       }));
 
-      // Group templates into folders
       const foldersWithTemplates: FolderWithTemplates[] = foldersData.map((folder: WorkoutFolder) => ({
         ...folder,
         templates: templatesWithExercises.filter((t: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] }) => t.folder_id === folder.id),
         isExpanded: true,
       }));
 
-      // Get unfoldered templates
-      const unfoldered = templatesWithExercises.filter((t: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] }) => !t.folder_id);
+      const unfoldered = templatesWithExercises.filter(
+        (t: WorkoutTemplate & { exercises: WorkoutTemplateExercise[] }) => !t.folder_id
+      );
 
-      setFolders(foldersWithTemplates);
-      setUnfolderedTemplates(unfoldered);
-    } catch (err) {
-      console.error('Error loading templates:', err);
+      return { folders: foldersWithTemplates, unfoldered };
+    },
+    staleTime: 1000 * 60,
+    gcTime: IMMUTABLE_GC_TIME,
+  });
+
+  // Sync local state from the cached query (runs on load + after each edit).
+  useEffect(() => {
+    if (listQuery.data) {
+      setFolders(listQuery.data.folders);
+      setUnfolderedTemplates(listQuery.data.unfoldered);
+      setIsLoading(false);
+    } else if (listQuery.isError) {
       setError('Failed to load templates');
-    } finally {
       setIsLoading(false);
     }
-  }
+  }, [listQuery.data, listQuery.isError]);
+
+  // Mutations call this to refresh; refetches the cached query → re-syncs.
+  const loadData = useCallback(async () => {
+    await queryClient.refetchQueries({ queryKey: TEMPLATES_LIST_KEY });
+  }, [queryClient]);
 
   // Toggle folder expansion
   function toggleFolder(folderId: string) {
@@ -272,9 +276,11 @@ export default function TemplatesPage() {
     });
   }
 
-  if (isLoading) {
+  // Full-screen loader only on first-ever load with an empty cache. A revisit
+  // (warm cache) or reload (IndexedDB restore) renders the list immediately.
+  if (isLoading && !listQuery.data && !isRestoring) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" data-testid="templates-list-full-loading">
         <LoadingAnimation />
       </div>
     );
