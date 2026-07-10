@@ -10,10 +10,9 @@ import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import { WeeklyMevSummary } from '@/components/dashboard/WeeklyMevSummary';
 import { EnhancedAthleteModeCard } from '@/components/settings/EnhancedAthleteModeCard';
 import { BASELINE_VOLUME_RECOMMENDATIONS } from '@/src/lib/training/adaptive-volume';
-import type { MuscleGroup, StandardMuscleGroup } from '@/types/schema';
-import { MUSCLE_GROUPS } from '@/types/schema';
-import type { MuscleVolumeData } from '@/services/volumeTracker';
-import { toStandardMuscleForVolume } from '@/lib/migrations/muscle-groups';
+import type { MuscleGroup } from '@/types/schema';
+import { useWeeklyMevSummary } from '@/hooks/useWeeklyMevSummary';
+import { mevSummaryToVolumeData } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 
 function VolumeProgressBar({
   muscle,
@@ -142,6 +141,12 @@ export default function VolumeProfilePage() {
   const { user } = useUserStore();
   const userGoal = user?.goal ?? 'maintenance';
 
+  // Below-MEV muscles for the atrophy-risk warning come from the SAME shared
+  // rolling-7-day source as the "This Week vs MEV" card above, so both cards
+  // always agree on the count (previously this list was derived from a separate
+  // adaptive-volume pipeline with a different taxonomy, which under-reported).
+  const { summary: mevSummary } = useWeeklyMevSummary();
+
   // Calculate confidence summary
   const confidenceSummary = useMemo(() => {
     if (!volumeProfile) return { level: 'low', dataPoints: 0, mesocycles: 0 };
@@ -166,32 +171,11 @@ export default function VolumeProfilePage() {
     return [...volumeSummary].sort((a, b) => b.percentOfMRV - a.percentOfMRV);
   }, [volumeSummary]);
 
-  // Find muscles below MEV (for atrophy risk alert)
-  const musclesBelowMev = useMemo((): MuscleVolumeData[] => {
-    const results: MuscleVolumeData[] = [];
-    volumeSummary
-      .filter(summary => summary.status === 'below_mev')
-      .forEach(summary => {
-        // Convert legacy muscle to standard for MuscleVolumeData compatibility
-        const standardMuscle = toStandardMuscleForVolume(summary.muscle);
-        if (standardMuscle) {
-          results.push({
-            muscleGroup: standardMuscle,
-            totalSets: summary.currentSets,
-            directSets: summary.currentSets,
-            indirectSets: 0,
-            landmarks: {
-              mev: summary.estimatedMEV,
-              mav: Math.round((summary.estimatedMEV + summary.estimatedMRV) / 2),
-              mrv: summary.estimatedMRV,
-            },
-            status: 'below_mev' as const,
-            percentOfMrv: summary.percentOfMRV,
-          });
-        }
-      });
-    return results;
-  }, [volumeSummary]);
+  // Find muscles below MEV (for atrophy risk alert) — shared source, see above.
+  const musclesBelowMev = useMemo(
+    () => mevSummaryToVolumeData(mevSummary),
+    [mevSummary]
+  );
 
   if (isLoading) {
     return (

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Card, Badge, InfoTooltip } from '@/components/ui';
 import type { MuscleVolumeData } from '@/services/volumeTracker';
-import type { Goal } from '@/types/schema';
+import { STANDARD_MUSCLE_DISPLAY_NAMES, type Goal, type StandardMuscleGroup } from '@/types/schema';
 
 interface AtrophyRiskAlertProps {
   musclesBelowMev: MuscleVolumeData[];
@@ -30,8 +30,13 @@ export function AtrophyRiskAlert({
     return 'border-warning-500/50 bg-warning-500/5';
   };
 
+  // Match the "This Week vs MEV" card's labels (e.g. glute_med -> "Glute Med",
+  // lats -> "Lats") so the two cards read identically for the same muscle.
   const formatMuscleName = (name: string) => {
-    return name.charAt(0).toUpperCase() + name.slice(1);
+    return (
+      STANDARD_MUSCLE_DISPLAY_NAMES[name as StandardMuscleGroup] ??
+      name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ')
+    );
   };
 
   // Sort muscles by how far below MEV they are (worst first)

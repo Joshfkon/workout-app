@@ -1,4 +1,10 @@
-import { computeWeeklyMevSummary, ALL_MUSCLE_GROUPS, type MuscleVolumeStats } from '../weeklyVolume';
+import {
+  computeWeeklyMevSummary,
+  selectMusclesBelowMev,
+  mevSummaryToVolumeData,
+  ALL_MUSCLE_GROUPS,
+  type MuscleVolumeStats,
+} from '../weeklyVolume';
 
 function stat(muscle: string, sets: number, target: number, status: 'low' | 'optimal' | 'high'): MuscleVolumeStats {
   return { muscle, sets, target, status, exercises: [] };
@@ -46,5 +52,53 @@ describe('computeWeeklyMevSummary', () => {
     expect(untrained).not.toContain('front_delts');
     expect(untrained).not.toContain('lateral_delts');
     expect(untrained).not.toContain('rear_delts');
+  });
+});
+
+describe('shared below-MEV selectors (single source for both progress cards)', () => {
+  const stats = [
+    stat('lats', 5, 6, 'low'), // trained but under MEV
+    stat('quads', 12, 6, 'optimal'), // above MEV
+  ];
+
+  it('selectMusclesBelowMev returns exactly the summary lowCount, both trained-low and untrained', () => {
+    const summary = computeWeeklyMevSummary(stats)!;
+    const below = selectMusclesBelowMev(summary);
+
+    // Same number the "This Week vs MEV" tile shows — never a different count.
+    expect(below).toHaveLength(summary.lowCount);
+    // The trained-but-low muscle is included...
+    expect(below.some((e) => e.muscle === 'lats' && e.sets === 5 && e.mev === 6)).toBe(true);
+    // ...and the above-MEV muscle is not.
+    expect(below.some((e) => e.muscle === 'quads')).toBe(false);
+    // ...and completely-untrained muscles (0 sets) are included by design.
+    expect(below.some((e) => e.muscle === 'hamstrings' && e.sets === 0)).toBe(true);
+  });
+
+  it('selectMusclesBelowMev is null-safe (loading state)', () => {
+    expect(selectMusclesBelowMev(null)).toEqual([]);
+  });
+
+  it('mevSummaryToVolumeData adapts the SAME list to the atrophy-alert shape', () => {
+    const summary = computeWeeklyMevSummary(stats)!;
+    const volumeData = mevSummaryToVolumeData(summary);
+
+    // The warning card renders exactly the shared below-MEV muscles.
+    expect(volumeData).toHaveLength(summary.lowCount);
+
+    const lats = volumeData.find((d) => d.muscleGroup === 'lats')!;
+    expect(lats).toBeDefined();
+    expect(lats.totalSets).toBe(5);
+    expect(lats.landmarks.mev).toBe(6); // MEV carried through, drives sets/mev + deficit sort
+    expect(lats.status).toBe('below_mev');
+
+    // Untrained muscle surfaces at 0 sets with its standard-taxonomy MEV.
+    const hamstrings = volumeData.find((d) => d.muscleGroup === 'hamstrings')!;
+    expect(hamstrings.totalSets).toBe(0);
+    expect(hamstrings.landmarks.mev).toBe(4);
+  });
+
+  it('mevSummaryToVolumeData is null-safe (loading state)', () => {
+    expect(mevSummaryToVolumeData(null)).toEqual([]);
   });
 });
