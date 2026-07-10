@@ -15,11 +15,9 @@ import { AtrophyRiskAlert } from '@/components/analytics/AtrophyRiskAlert';
 import {
   MEV_TARGETS,
   ALL_MUSCLE_GROUPS,
-  getMevForMuscle,
-  accumulateExerciseVolume,
-  volumeAccumulatorToStats,
+  computeWeeklyMuscleVolume,
   computeWeeklyMevSummary,
-  type VolumeAccumulator,
+  weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from './_lib/weeklyVolume';
 import { computeLiftTrends, LIFT_TREND_WINDOW_DAYS, type LiftTrendsSummary } from './_lib/liftTrends';
@@ -835,8 +833,8 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
         const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay();
         const ninetyDaysAgo = new Date(today);
         ninetyDaysAgo.setDate(today.getDate() - 90);
-        const weekStart = new Date(today);
-        weekStart.setDate(today.getDate() - 6); // Rolling 7 days (including today)
+        // Shared local-day-anchored window (matches the server + volume page).
+        const weeklyVolumeStartIso = weeklyVolumeWindowStartISO(today);
 
         // OPTIMIZATION: Split queries into critical (blocks render) and deferred (loads in background)
         // Critical queries - needed for initial content display
@@ -899,7 +897,7 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
               workout_sessions!inner (user_id, completed_at, state)`)
             .eq('workout_sessions.user_id', user.id)
             .eq('workout_sessions.state', 'completed')
-            .gte('workout_sessions.completed_at', weekStart.toISOString()),
+            .gte('workout_sessions.completed_at', weeklyVolumeStartIso),
 
           // Lift-trend history (12 weeks) for the "Lifts" glance tile
           supabase.from('workout_sessions')
@@ -1137,50 +1135,17 @@ export function DashboardClient({ initialData }: DashboardClientProps) {
           }
         }
 
-        // Process weekly volume (accounting for compound exercises - secondary muscles get 0.5x credit)
-        // Aggregate by standard muscle groups for consistent tracking. Legacy
-        // coarse primaries ('chest', 'shoulders') distribute weighted credit
-        // across the standard muscles they cover instead of dumping everything
-        // on the first match (which left chest_lower / lateral_delts / etc.
-        // falsely reported as not worked).
+        // Process weekly volume through the SAME shared pipeline the server
+        // initial-data path and the volume page use (compound-exercise secondary
+        // credit + legacy coarse-primary distribution live inside it). Previously
+        // this block inlined its own accumulation with a DIFFERENT target table
+        // (volumeTargets 8–12) than the server's MEV targets, so a load that took
+        // this path (no initialData, or a post-midnight rollover) rendered a
+        // different denominator / below-MEV count than an SSR load — the exact
+        // "recomputed differently on relaunch" class of bug. One function now.
         const weeklyBlocks = weeklyBlocksResult.data;
         if (weeklyBlocks && weeklyBlocks.length > 0) {
-          const volumeByMuscle: VolumeAccumulator = {};
-
-          weeklyBlocks.forEach((block: any) => {
-            const exercise = block.exercises;
-            if (!exercise) return;
-            const workingSets = (block.set_logs || []).filter((s: any) => !s.is_warmup).length;
-            accumulateExerciseVolume(volumeByMuscle, exercise, workingSets);
-          });
-
-          // Volume targets per standard muscle group
-          const volumeTargets: Record<string, number> = {
-            chest_upper: 8, chest_lower: 8,
-            front_delts: 6, lateral_delts: 10, rear_delts: 8,
-            lats: 10, upper_back: 8, traps: 6,
-            biceps: 10, triceps: 10, forearms: 6,
-            quads: 12, hamstrings: 10, glutes: 10, glute_med: 6, adductors: 6,
-            calves: 8, abs: 8, obliques: 6, erectors: 6,
-          };
-
-          const stats: MuscleVolumeStats[] = Object.entries(volumeByMuscle)
-            .map(([muscle, data]) => {
-              const sets = Math.round(data.sets);
-              const target = volumeTargets[muscle] || 10;
-              const mev = getMevForMuscle(muscle);
-              // Use MEV as the threshold for 'low' status to be consistent with AtrophyRiskAlert
-              const status: 'low' | 'optimal' | 'high' = sets < mev ? 'low' : sets > target * 1.3 ? 'high' : 'optimal';
-              const exercises = Array.from(data.exercises.values())
-                .map((ex) => ({ ...ex, sets: Math.round(ex.sets * 10) / 10 }))
-                .filter((ex) => ex.sets > 0)
-                .sort((a, b) => b.sets - a.sets);
-              return { muscle, sets, target, status, exercises };
-            })
-            .filter((stat) => stat.sets > 0)
-            .sort((a, b) => b.sets - a.sets);
-
-          setMuscleVolume(stats);
+          setMuscleVolume(computeWeeklyMuscleVolume(weeklyBlocks as any));
         }
 
         // Lift trends for the "Lifts" glance tile (same pure helper the

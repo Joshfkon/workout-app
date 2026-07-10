@@ -8,6 +8,7 @@ import { getBodyCompLayout } from '@/services/compositionSpace';
 import { type WorkoutDay } from '@/types/schema';
 import {
   computeWeeklyMuscleVolume,
+  weeklyVolumeWindowStartISO,
   type MuscleVolumeStats,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import {
@@ -381,8 +382,9 @@ export async function fetchLiftTrends(userId: string): Promise<LiftTrendsSummary
  */
 export async function fetchWeeklyMuscleVolume(userId: string): Promise<MuscleVolumeStats[]> {
   const supabase = await createUntypedServerClient();
-  const weekStart = new Date();
-  weekStart.setDate(weekStart.getDate() - 6);
+  // Shared local-day-anchored window (see weeklyVolumeWindowStartISO) so this
+  // server first-paint value matches the client fast-path and the volume page.
+  const weekStartIso = weeklyVolumeWindowStartISO();
 
   const { data } = await supabase
     .from('exercise_blocks')
@@ -390,7 +392,7 @@ export async function fetchWeeklyMuscleVolume(userId: string): Promise<MuscleVol
       workout_sessions!inner (user_id, completed_at, state)`)
     .eq('workout_sessions.user_id', userId)
     .eq('workout_sessions.state', 'completed')
-    .gte('workout_sessions.completed_at', weekStart.toISOString());
+    .gte('workout_sessions.completed_at', weekStartIso);
 
   return computeWeeklyMuscleVolume((data as any) || []);
 }

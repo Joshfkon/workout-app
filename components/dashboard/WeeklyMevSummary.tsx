@@ -6,6 +6,7 @@ import { createUntypedClient } from '@/lib/supabase/client';
 import {
   computeWeeklyMuscleVolume,
   computeWeeklyMevSummary,
+  weeklyVolumeWindowStartISO,
   type WeeklyMevSummary as WeeklyMevSummaryData,
 } from '@/app/(dashboard)/dashboard/_lib/weeklyVolume';
 import { STANDARD_MUSCLE_DISPLAY_NAMES, type StandardMuscleGroup } from '@/types/schema';
@@ -37,16 +38,15 @@ export function WeeklyMevSummary() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - 6);
-
+        // Same shared local-day-anchored window as the home glance tile, so
+        // "87/88 sets · 12 below MEV" on the dashboard is exactly this card.
         const { data } = await supabase
           .from('exercise_blocks')
           .select(`id, exercises (id, name, primary_muscle, secondary_muscles), set_logs (id, is_warmup),
             workout_sessions!inner (user_id, completed_at, state)`)
           .eq('workout_sessions.user_id', user.id)
           .eq('workout_sessions.state', 'completed')
-          .gte('workout_sessions.completed_at', weekStart.toISOString());
+          .gte('workout_sessions.completed_at', weeklyVolumeWindowStartISO());
 
         if (cancelled) return;
         setSummary(computeWeeklyMevSummary(computeWeeklyMuscleVolume((data as any) || [])));
